@@ -1,22 +1,22 @@
-"use client";
-import { useElementSize } from "@mantine/hooks";
-import styles from "./css/Case.module.css";
-import global from "./css/Global.module.css";
-import Circles from "./utils/Circles";
-import Left from "./addons/case/Left.png";
-import Middle from "./addons/case/Middle.png";
-import Right from "./addons/case/Right.png";
-import Image from "next/image";
-import { Arrow } from "./addons/Misc";
+"use client"
+import { useElementSize } from "@mantine/hooks"
+import styles from "./css/Case.module.css"
+import global from "./css/Global.module.css"
+import Circles from "./utils/Circles"
+import Left from "./addons/case/Left.png"
+import Middle from "./addons/case/Middle.png"
+import Right from "./addons/case/Right.png"
+import Image from "next/image"
+import { Arrow } from "./addons/Misc"
 function Case({ width: wd }) {
-  const { ref, width: bop } = useElementSize();
+  const { ref, width: bop } = useElementSize()
   return (
     <div className={global.Container} ref={ref}>
       <div className={global.Side}></div>
       <div className={global.Main}>
         <div className={styles.TextContainer}>
           <div className={global.TinyTitle}>
-            <span className={global.HighLightRed}>features</span>
+            <span className={global.HighLightRed}>Features</span>
           </div>
           <div
             className={global.SectionTitle}
@@ -89,7 +89,7 @@ function Case({ width: wd }) {
         />
       </div>
     </div>
-  );
+  )
 }
 
-export default Case;
+export default Case

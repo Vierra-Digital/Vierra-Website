@@ -1,5 +1,5 @@
-import styles from "./css/Software.module.css";
-import global from "./css/Global.module.css";
+import styles from "./css/Software.module.css"
+import global from "./css/Global.module.css"
 
 function Software({ width }) {
   return (
@@ -10,10 +10,10 @@ function Software({ width }) {
           <span className={global.HighLightRed}>Softwares</span>
         </div>
         <div className={global.SectionTitle}>
-          Launch your products with our{" "}
+          Launch Your Products With Our{" "}
           <span className={global.HighLightRed}>
-            <span className={global.HighLightRed}>top</span> of the line
-            software
+            <span className={global.HighLightRed}>Top</span> Of The Line
+            Software
           </span>
         </div>
         <div className={global.ContextAligned}>
@@ -31,7 +31,7 @@ function Software({ width }) {
       </div>
       <div className={global.Side}></div>
     </div>
-  );
+  )
 }
 
-export default Software;
+export default Software
