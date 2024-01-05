@@ -77,13 +77,13 @@ function Hero({ width }) {
         <Navbar />
         <div className={styles.TextContainer}>
           <div className={global.SectionTitle}>
-            Realtime <span className={global.HighLightPurple}>solution</span>{" "}
-            <span className={global.HighLightSemiPurple}>tools</span> for your
-            entire <div className={styles.Plus}></div> business{" "}
+            Real-Time <span className={global.HighLightPurple}>Solution</span>{" "}
+            <span className={global.HighLightSemiPurple}>Tools</span> For Your
+            Entire <div className={styles.Plus}></div> Business{" "}
             <div className={styles.Factor}></div>
           </div>
           <div className={global.Context}>
-            Our comprehensive tool offers small business owners a one-stop-shop
+            Our comprehensive tools offers small business owners a one-stop-shop
             solution <span className={global.Bolded}>to manage</span> their
             accounting, sales, marketing, outreach efforts, CRM, financial
             models, email campaigns, QuickBooks integration, record-keeping, and

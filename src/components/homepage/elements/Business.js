@@ -1,6 +1,6 @@
-import styles from "./css/Business.module.css";
-import global from "./css/Global.module.css";
-import Circles from "./utils/Circles";
+import styles from "./css/Business.module.css"
+import global from "./css/Global.module.css"
+import Circles from "./utils/Circles"
 
 function Business({ width }) {
   return (
@@ -27,7 +27,7 @@ function Business({ width }) {
         <div className={styles.Container}>
           <div className={styles.LeftSide}>
             <div className={global.TinyTitle}>
-              <span className={global.HighLightRed}>growth</span>
+              <span className={global.HighLightRed}>Growth</span>
             </div>
             <div className={styles.MainTitle}>
               How can we <span className={global.HighLightPurple}>help</span>
@@ -52,8 +52,8 @@ function Business({ width }) {
               <div>B2B</div>
             </div>
             <div className={styles.RightSideContext}>
-              &quot; improving efficienty, reducing errors, and enhancing
-              customer experience. With our high impact tools &quot;
+              &quot;improving efficienty, reducing errors, and enhancing
+              customer experience. With our high impact tools&quot;
             </div>
             <div className={styles.RightSideSlider}>
               <div></div>
@@ -84,7 +84,7 @@ function Business({ width }) {
         />
       </div>
     </div>
-  );
+  )
 }
 
-export default Business;
+export default Business

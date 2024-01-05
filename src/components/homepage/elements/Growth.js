@@ -1,6 +1,6 @@
-import styles from "./css/Growth.module.css";
-import global from "./css/Global.module.css";
-import Circles from "./utils/Circles";
+import styles from "./css/Growth.module.css"
+import global from "./css/Global.module.css"
+import Circles from "./utils/Circles"
 
 function Growth({ width }) {
   return (
@@ -8,10 +8,10 @@ function Growth({ width }) {
       <div className={global.Side}></div>
       <div className={global.Main}>
         <div className={global.TinyTitle}>
-          <span className={global.HighLightRed}>growth</span>
+          <span className={global.HighLightRed}>Growth</span>
         </div>
         <div className={global.SectionTitle} style={{ marginBottom: "30px" }}>
-          Business <span className={global.HighLightSemiPurple}>growth.</span>
+          Business <span className={global.HighLightSemiPurple}>Growth.</span>
         </div>
         <div className={global.Context}>
           According to a study by SCORE, a non-profit association for small
@@ -27,15 +27,15 @@ function Growth({ width }) {
         </div>{" "}
         <div className={styles.Helped}>
           <div className={styles.HelpedNumber}>
-            <span className={styles.SilvedHighlight}>20,000+</span>
+            <span className={styles.SilvedHighlight}>6+</span>
           </div>
-          <div className={styles.HelpedWord}>Business helped</div>
+          <div className={styles.HelpedWord}>Business Helped</div>
         </div>
         <div className={styles.Gained}>
           <div className={styles.HelpedNumber}>
-            <span className={styles.SilvedHighlight}>20M+</span>
+            <span className={styles.SilvedHighlight}>$20k+</span>
           </div>
-          <div className={styles.HelpedWord}>Business revenue gained</div>
+          <div className={styles.HelpedWord}>Business Revenue Gained</div>
         </div>
       </div>
       <div className={global.Side}>
@@ -49,7 +49,7 @@ function Growth({ width }) {
         />
       </div>
     </div>
-  );
+  )
 }
 
-export default Growth;
+export default Growth

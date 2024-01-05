@@ -1,8 +1,8 @@
-import Image from "next/image";
-import styles from "./css/Footer.module.css";
-import global from "./css/Global.module.css";
-import Circles from "./utils/Circles";
-import Logo from "./addons/footer/Logo.png";
+import Image from "next/image"
+import styles from "./css/Footer.module.css"
+import global from "./css/Global.module.css"
+import Circles from "./utils/Circles"
+import Logo from "./addons/footer/Logo.png"
 
 function Footer({ width }) {
   return (
@@ -135,7 +135,7 @@ function Footer({ width }) {
         />
       </div>
     </div>
-  );
+  )
 }
 
-export default Footer;
+export default Footer
