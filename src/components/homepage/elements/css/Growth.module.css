@@ -35,6 +35,38 @@
   font-size: 13.5px;
 }
 
+.Arrivals {
+  position: absolute;
+  width: 80vw;
+  margin-top: 100px;
+  z-index: -1;
+}
+
+.Patients {
+  position: absolute;
+  margin-top: -150px;
+  margin-left: -300px;
+}
+
+.Business {
+  position: absolute;
+  width: 40vw;
+  margin-top: -20px;
+}
+
+.BusinessPic {
+  height: 250px;
+  width: 220px;
+}
+
+.ArrowStatic {
+  position: absolute;
+  height: 80%;
+  width: 100%;
+  margin-right: -500px;
+  z-index: -1;
+}
+
 @media (max-width: 500px) {
   .SilvedHighlight {
     font-size: clamp(25px, 8.2vw, 45px);

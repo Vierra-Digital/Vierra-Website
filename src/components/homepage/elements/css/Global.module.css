@@ -83,4 +83,5 @@
   width: clamp(1px, 95%, 405px);
   line-height: 24px;
   font-size: 14px;
+  backdrop-filter: blur(5px);
 }

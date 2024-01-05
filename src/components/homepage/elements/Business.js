@@ -1,6 +1,6 @@
-import styles from "./css/Business.module.css"
-import global from "./css/Global.module.css"
-import Circles from "./utils/Circles"
+import styles from "./css/Business.module.css";
+import global from "./css/Global.module.css";
+import Circles from "./utils/Circles";
 
 function Business({ width }) {
   return (
@@ -84,7 +84,7 @@ function Business({ width }) {
         />
       </div>
     </div>
-  )
+  );
 }
 
-export default Business
+export default Business;

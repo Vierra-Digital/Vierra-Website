@@ -50,8 +50,7 @@
 }
 
 .LogosContainer {
-  height: 120px;
-  border: 1px solid black;
+  height: max-content;
 }
 
 .SchemaBox {

@@ -8,6 +8,12 @@ import Accounting from "./addons/hero/Accounting.png";
 import Marketing from "./addons/hero/Marketing.png";
 import Outreach from "./addons/hero/Outreach.png";
 import Sales from "./addons/hero/Sales.png";
+import Doctor from "./addons/hero/Doctor.png";
+import Glossy from "./addons/hero/Glossy.png";
+import Cloud from "./addons/hero/Cloud.png";
+import Hues from "./addons/hero/Hues.png";
+import Scale from "./addons/hero/Scale.png";
+import Invert from "./addons/hero/Invert.png";
 
 function Hero({ width }) {
   const list = [
@@ -44,22 +50,22 @@ function Hero({ width }) {
   ];
   const logos = [
     {
-      image: "Doctor",
+      image: Doctor,
     },
     {
-      image: "Glossy",
+      image: Glossy,
     },
     {
-      image: "Cloud",
+      image: Cloud,
     },
     {
-      image: "Hues",
+      image: Hues,
     },
     {
-      image: "Scale",
+      image: Scale,
     },
     {
-      image: "Invert",
+      image: Invert,
     },
   ];
   return (
@@ -115,7 +121,7 @@ function Hero({ width }) {
         <div className={styles.LogosContainer}>
           {logos.map((logos, i) => (
             <div key={i}>
-              {/* <Image src={logos.image} height={75} alt={"image"} /> */}
+              <Image src={logos.image} height={75} alt={"image"} />
             </div>
           ))}
         </div>
