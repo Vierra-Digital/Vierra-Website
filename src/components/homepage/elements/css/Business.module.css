@@ -115,7 +115,7 @@
 
   .MainTitle {
     text-align: center;
-    font-size: clamp(30px, 4vw, 35px);
+    font-size: clamp(32px, 4vw, 35px);
     line-height: 38px;
   }
 

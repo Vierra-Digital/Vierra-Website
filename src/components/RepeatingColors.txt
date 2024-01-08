@@ -1,3 +1,13 @@
 rgba(128, 128, 128, 0.15 OR 0.216) FOR GRAY SHADE BORDER COLOR
 
 Random Thought , basing color shade on fibonacci float numbers (0.236, 0.382, 0.618, 0.786 )
+
+
+
+                <Img
+                  src="https://firebasestorage.googleapis.com/v0/b/picture-host.appspot.com/o/github.png?alt=media&token=9cc2ec8b-b813-409c-810c-7129ba536f67"
+                  alt="Footer"
+                  style={navchild}
+                  width="30"
+                  height="30"
+                ></Img>

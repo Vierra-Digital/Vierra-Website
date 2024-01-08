@@ -1,7 +1,14 @@
-import styles from "./css/Software.module.css"
-import global from "./css/Global.module.css"
+import styles from "./css/Software.module.css";
+import global from "./css/Global.module.css";
+import Image from "next/image";
+import ReactPlayer from "react-player";
+import { useEffect, useState } from "react";
 
 function Software({ width }) {
+  const [state, setState] = useState(false);
+  useEffect(() => {
+    setState(true);
+  }, []);
   return (
     <div className={global.Container} style={{ marginTop: "100px" }}>
       <div className={global.Side}></div>
@@ -27,11 +34,22 @@ function Software({ width }) {
           <div>ONBOARDING</div>
           <div>REVENUE</div>
         </div>
-        <div className={styles.Main}></div>
+        <div className={styles.Main}>
+          {state && (
+            <ReactPlayer
+              url="https://firebasestorage.googleapis.com/v0/b/picture-host.appspot.com/o/dashboard_1.webm?alt=media&token=35b323ab-a3a4-4ad8-9092-2d1284983033"
+              loop={true}
+              playing={true}
+              width={"100%"}
+              height={"100%"}
+              volume={0}
+            />
+          )}
+        </div>
       </div>
       <div className={global.Side}></div>
     </div>
-  )
+  );
 }
 
-export default Software
+export default Software;

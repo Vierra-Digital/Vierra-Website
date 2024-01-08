@@ -21,3 +21,10 @@
     linear-gradient(45deg, #7413d4, #de0691) border-box;
   border: 2px solid transparent;
 }
+
+.Main {
+  max-height: 600px;
+  width: 100%;
+  margin-top: 50px;
+  pointer-events: none;
+}
