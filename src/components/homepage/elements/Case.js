@@ -1,15 +1,15 @@
-"use client"
-import { useElementSize } from "@mantine/hooks"
-import styles from "./css/Case.module.css"
-import global from "./css/Global.module.css"
-import Circles from "./utils/Circles"
-import Left from "./addons/case/Left.png"
-import Middle from "./addons/case/Middle.png"
-import Right from "./addons/case/Right.png"
-import Image from "next/image"
-import { Arrow } from "./addons/Misc"
+"use client";
+import { useElementSize } from "@mantine/hooks";
+import styles from "./css/Case.module.css";
+import global from "./css/Global.module.css";
+import Circles from "./utils/Circles";
+import Left from "./addons/case/Left.png";
+import Middle from "./addons/case/Middle.png";
+import Right from "./addons/case/Right.png";
+import Image from "next/image";
+import { Arrow } from "./addons/Misc";
 function Case({ width: wd }) {
-  const { ref, width: bop } = useElementSize()
+  const { ref, width: bop } = useElementSize();
   return (
     <div className={global.Container} ref={ref}>
       <div className={global.Side}></div>
@@ -36,13 +36,19 @@ function Case({ width: wd }) {
               <div className={styles.CaseCircle}></div>
               <span className={styles.CaseButtonText}>CASE STUDIES</span>
             </div>
-            <div className={styles.ArticleButton}>ARTICLES</div>
+            <div className={styles.ArticleButton}>
+              <div className={global.TextUnderline}>ARTICLES</div>
+            </div>
           </div>
         </div>
         <div className={styles.CardsContainer}>
           <div className={styles.Card}>
             <div className={styles.CardImage}>
-              <Image alt={"Image"} src={Left} className={styles.CardImage} />
+              <Image
+                alt={"Image"}
+                src={Left}
+                className={styles.CardImagePicture}
+              />
             </div>
             <div className={styles.CardTitle}>POLLU</div>
             <div className={styles.CardContext}>
@@ -51,7 +57,11 @@ function Case({ width: wd }) {
           </div>
           <div className={styles.CardMain}>
             <div className={styles.CardImage}>
-              <Image alt={"Image"} src={Middle} className={styles.CardImage} />
+              <Image
+                alt={"Image"}
+                src={Middle}
+                className={styles.CardImagePictureMain}
+              />
             </div>
             <div className={styles.CardTitle}>POLLU</div>
             <div className={styles.CardContext}>
@@ -60,7 +70,11 @@ function Case({ width: wd }) {
           </div>
           <div className={styles.Card}>
             <div className={styles.CardImage}>
-              <Image alt={"Image"} src={Right} className={styles.CardImage} />
+              <Image
+                alt={"Image"}
+                src={Right}
+                className={styles.CardImagePicture}
+              />
             </div>
             <div className={styles.CardTitle}>POLLU</div>
             <div className={styles.CardContext}>
@@ -89,7 +103,7 @@ function Case({ width: wd }) {
         />
       </div>
     </div>
-  )
+  );
 }
 
-export default Case
+export default Case;

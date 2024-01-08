@@ -36,7 +36,6 @@
 .ArticleButton {
   background-color: transparent;
   color: black;
-  border: 1px solid gray;
 }
 
 .CaseButtonText {
@@ -83,6 +82,19 @@
   height: 100%;
   border-radius: 8px;
   overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.CardImagePicture {
+  width: 100%;
+  height: 260%;
+}
+
+.CardImagePictureMain {
+  width: 100%;
+  height: 200%;
 }
 
 .CardTitle {
@@ -101,11 +113,14 @@
     flex-direction: column;
     align-items: center;
   }
+  .CardContext {
+    margin-bottom: 0px;
+  }
   .Card,
   .CardMain {
     flex-grow: 1;
     width: 100%;
-    height: 350px;
+    height: 300px;
   }
 }
 
@@ -113,5 +128,10 @@
   .Card,
   .CardMain {
     height: 500px;
+  }
+  .CardImagePicture,
+  .CardImagePictureMain {
+    width: 100%;
+    height: 100%;
   }
 }
