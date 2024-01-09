@@ -47,6 +47,7 @@
   align-items: center;
   gap: 30px;
   margin-top: 75px;
+  pointer-events: none;
 }
 
 .LogosContainer {

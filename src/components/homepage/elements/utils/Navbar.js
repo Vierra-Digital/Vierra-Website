@@ -5,8 +5,10 @@ import styles from "./css/Navbar.module.css";
 import { motion } from "framer-motion";
 import Image from "next/image";
 import Logo from "../addons/footer/Vierralogo.png";
+import { useRouter } from "next/navigation";
 
 function Navbar() {
+  const router = useRouter();
   const [nav, setNav] = useState(false);
   let bop = {};
   if (typeof window !== "undefined") {
@@ -33,7 +35,12 @@ function Navbar() {
     <div className={styles.Container}>
       <div className={styles.Left}>
         <div className={styles.Logo}>
-          <Image src={Logo} alt={"vierralogo"} height={50} />
+          <Image
+            src={Logo}
+            alt={"vierralogo"}
+            height={50}
+            onClick={() => router.refresh()}
+          />
         </div>
         <div className={styles.Buttons}>
           <div>Features</div>
