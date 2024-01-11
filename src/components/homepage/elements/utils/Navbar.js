@@ -34,12 +34,12 @@ function Navbar() {
   return (
     <div className={styles.Container}>
       <div className={styles.Left}>
-        <div className={styles.Logo}>
+        <div className={styles.Logo} onClick={() => router.refresh()}>
           <Image
             src={Logo}
             alt={"vierralogo"}
             height={50}
-            onClick={() => router.refresh()}
+            className={styles.LogoPicture}
           />
         </div>
         <div className={styles.Buttons}>

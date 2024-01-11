@@ -25,6 +25,7 @@
   height: 42px;
   display: flex;
   flex-wrap: nowrap;
+  pointer-events: none;
 }
 
 .Pic {

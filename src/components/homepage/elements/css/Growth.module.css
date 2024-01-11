@@ -40,17 +40,21 @@
   width: 80vw;
   margin-top: 100px;
   z-index: -1;
+  pointer-events: none;
 }
 
 .Patients {
   position: absolute;
   margin-top: -150px;
   margin-left: -300px;
+  pointer-events: none;
 }
 
 .Business {
   position: absolute;
   width: 40vw;
+  pointer-events: none;
+
   margin-top: -20px;
 }
 
@@ -65,6 +69,7 @@
   width: 100%;
   margin-right: -500px;
   z-index: -1;
+  pointer-events: none;
 }
 
 @media (max-width: 500px) {

@@ -105,6 +105,7 @@
 
 .FooterLogo {
   position: absolute;
+  pointer-events: none;
 }
 
 @media (max-width: 1024px) {

@@ -139,6 +139,7 @@
 .RightSide {
   height: 550px;
   width: clamp(1px, 100%, 750px);
+  pointer-events: none;
 }
 
 .RightButtons {
