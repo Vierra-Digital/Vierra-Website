@@ -9,6 +9,7 @@ import Hero from "@/components/homepage/elements/Hero";
 import Software from "@/components/homepage/elements/Software";
 import Testimonials from "@/components/homepage/elements/Testimonials";
 import { useElementSize } from "@mantine/hooks";
+import styles from "./Main.module.css";
 
 function Page() {
   const main = {
@@ -16,6 +17,7 @@ function Page() {
     justifyContent: "center",
     overflow: "hidden",
   };
+
   const container = {
     display: "flex",
     width: "clamp(1px,100vw,1920px)",
@@ -28,7 +30,7 @@ function Page() {
 
   return (
     <div style={main}>
-      <div style={container} ref={ref}>
+      <div style={container} className={styles.Cont} ref={ref}>
         <Hero width={width} />
         <Business width={width} />
         <Growth width={width} />

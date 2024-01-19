@@ -1,10 +1,13 @@
-import Image from "next/image"
-import styles from "./css/Footer.module.css"
-import global from "./css/Global.module.css"
-import Circles from "./utils/Circles"
-import Logo from "./addons/footer/Logo.png"
-
+import Image from "next/image";
+import styles from "./css/Footer.module.css";
+import global from "./css/Global.module.css";
+import Circles from "./utils/Circles";
+import Logo from "./addons/footer/Logo.png";
+import { useRef } from "react";
+import { useInView } from "framer-motion";
 function Footer({ width }) {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true });
   return (
     <div className={global.Container}>
       <div className={global.Side}>
@@ -34,7 +37,15 @@ function Footer({ width }) {
         />
       </div>
       <div className={global.Main}>
-        <div className={styles.EndCredits}>
+        <div
+          className={styles.EndCredits}
+          ref={ref}
+          style={{
+            transform: isInView ? "none" : "translateY(-200px)",
+            opacity: isInView ? 1 : 0,
+            transition: "all 0.9s cubic-bezier(0.17, 0.55, 0.55, 1) 0.5s",
+          }}
+        >
           <div
             className={global.SectionTitle}
             style={{ width: "clamp(1px, 95%, 620px)" }}
@@ -135,7 +146,7 @@ function Footer({ width }) {
         />
       </div>
     </div>
-  )
+  );
 }
 
-export default Footer
+export default Footer;

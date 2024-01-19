@@ -8,12 +8,24 @@ import Middle from "./addons/case/Middle.png";
 import Right from "./addons/case/Right.png";
 import Image from "next/image";
 import { Arrow } from "./addons/Misc";
+import { useRef } from "react";
+import { useInView } from "framer-motion";
 function Case({ width: wd }) {
   const { ref, width: bop } = useElementSize();
+  const ref1 = useRef(null);
+  const isInView = useInView(ref, { once: true });
   return (
     <div className={global.Container} ref={ref}>
       <div className={global.Side}></div>
-      <div className={global.Main}>
+      <div
+        className={global.Main}
+        ref={ref1}
+        style={{
+          transform: isInView ? "none" : "translateY(-200px)",
+          opacity: isInView ? 1 : 0,
+          transition: "all 0.9s cubic-bezier(0.17, 0.55, 0.55, 1) 0.5s",
+        }}
+      >
         <div className={styles.TextContainer}>
           <div className={global.TinyTitle}>
             <span className={global.HighLightRed}>Features</span>

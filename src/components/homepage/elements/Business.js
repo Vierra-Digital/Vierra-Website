@@ -1,8 +1,12 @@
 import styles from "./css/Business.module.css";
 import global from "./css/Global.module.css";
 import Circles from "./utils/Circles";
+import { useRef } from "react";
+import { useInView } from "framer-motion";
 
 function Business({ width }) {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true });
   return (
     <div className={global.Container}>
       <div className={global.Side}>
@@ -24,8 +28,15 @@ function Business({ width }) {
         />
       </div>
       <div className={global.Main}>
-        <div className={styles.Container}>
-          <div className={styles.LeftSide}>
+        <div className={styles.Container} ref={ref}>
+          <div
+            className={styles.LeftSide}
+            style={{
+              transform: isInView ? "none" : "translateX(-200px)",
+              opacity: isInView ? 1 : 0,
+              transition: "all 0.9s cubic-bezier(0.17, 0.55, 0.55, 1) 0.5s",
+            }}
+          >
             <div className={global.TinyTitle}>
               <span className={global.HighLightRed}>Growth</span>
             </div>
@@ -46,7 +57,14 @@ function Business({ width }) {
               VIEW OUR BUSINESS SOLUTIONS
             </div>
           </div>
-          <div className={styles.RightSide}>
+          <div
+            className={styles.RightSide}
+            style={{
+              transform: isInView ? "none" : "translateX(200px)",
+              opacity: isInView ? 1 : 0,
+              transition: "all 0.9s cubic-bezier(0.17, 0.55, 0.55, 1) 0.5s",
+            }}
+          >
             <div className={styles.RightSideButtons}>
               <div>STARTUPS</div>
               <div>B2B</div>

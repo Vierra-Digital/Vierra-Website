@@ -1,21 +1,24 @@
-"use client"
+"use client";
 
-import Image from "next/image"
-import styles from "./css/Experience.module.css"
-import global from "./css/Global.module.css"
-import Circles from "./utils/Circles"
-import ManOne from "./addons/experience/ManOne.png"
-import ManTwo from "./addons/experience/ManTwo.png"
-import ManThree from "./addons/experience/ManThree.png"
-import ManFour from "./addons/experience/ManFour.png"
-import WomanTwo from "./addons/experience/WomanTwo.png"
-import Woman from "./addons/experience/Woman.png"
-import Clock from "./addons/experience/ClockImage.png"
-import { useElementSize } from "@mantine/hooks"
-import { Arrow, Checkmark, PicturesDropbar } from "./addons/Misc"
-
+import Image from "next/image";
+import styles from "./css/Experience.module.css";
+import global from "./css/Global.module.css";
+import Circles from "./utils/Circles";
+import ManOne from "./addons/experience/ManOne.png";
+import ManTwo from "./addons/experience/ManTwo.png";
+import ManThree from "./addons/experience/ManThree.png";
+import ManFour from "./addons/experience/ManFour.png";
+import WomanTwo from "./addons/experience/WomanTwo.png";
+import Woman from "./addons/experience/Woman.png";
+import Clock from "./addons/experience/ClockImage.png";
+import { useElementSize } from "@mantine/hooks";
+import { Arrow, Checkmark, PicturesDropbar } from "./addons/Misc";
+import { useRef } from "react";
+import { useInView } from "framer-motion";
 function Experience({ width: wd }) {
-  const { ref, width } = useElementSize()
+  const { ref, width } = useElementSize();
+  const ref1 = useRef(null);
+  const isInView = useInView(ref, { once: true });
   return (
     <div className={global.Container} ref={ref}>
       <div className={global.Side}>
@@ -25,7 +28,15 @@ function Experience({ width: wd }) {
           top={"300px"}
         />
       </div>
-      <div className={global.Main}>
+      <div
+        className={global.Main}
+        ref={ref1}
+        style={{
+          transform: isInView ? "none" : "translateY(-200px)",
+          opacity: isInView ? 1 : 0,
+          transition: "all 0.9s cubic-bezier(0.17, 0.55, 0.55, 1) 0.5s",
+        }}
+      >
         <div className={styles.TextContainer}>
           <div className={global.TinyTitle}>
             <span className={global.HighLightSemiPurple}>
@@ -226,7 +237,7 @@ function Experience({ width: wd }) {
       </div>
       <div className={global.Side}></div>
     </div>
-  )
+  );
 }
 
-export default Experience
+export default Experience;

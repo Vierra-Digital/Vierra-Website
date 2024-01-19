@@ -18,7 +18,9 @@
     "react-player": "^2.14.1",
     "sharp": "^0.33.1",
     "swiper": "^11.0.5",
-    "zustand": "^4.4.7"
+    "zustand": "^4.4.7",
+    "react-scroll-parallax": "^3.4.5",
+    "scroll-snap": "^4.0.3"
   },
   "devDependencies": {
     "eslint": "^8",

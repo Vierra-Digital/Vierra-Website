@@ -3,16 +3,27 @@ import global from "./css/Global.module.css";
 import Image from "next/image";
 import ReactPlayer from "react-player";
 import { useEffect, useState } from "react";
-
+import { useRef } from "react";
+import { useInView } from "framer-motion";
 function Software({ width }) {
   const [state, setState] = useState(false);
   useEffect(() => {
     setState(true);
   }, []);
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true });
   return (
     <div className={global.Container} style={{ marginTop: "100px" }}>
       <div className={global.Side}></div>
-      <div className={global.Main}>
+      <div
+        className={global.Main}
+        ref={ref}
+        style={{
+          transform: isInView ? "none" : "translateY(-200px)",
+          opacity: isInView ? 1 : 0,
+          transition: "all 0.9s cubic-bezier(0.17, 0.55, 0.55, 1) 0.5s",
+        }}
+      >
         <div className={global.TinyTitle}>
           <span className={global.HighLightRed}>Softwares</span>
         </div>

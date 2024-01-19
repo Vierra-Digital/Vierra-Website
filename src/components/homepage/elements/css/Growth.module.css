@@ -77,3 +77,9 @@
     font-size: clamp(25px, 8.2vw, 45px);
   }
 }
+
+@media (max-width: 1000px) {
+  .ArrowStatic {
+    display: none;
+  }
+}

@@ -14,6 +14,8 @@ import Cloud from "./addons/hero/Cloud.png";
 import Hues from "./addons/hero/Hues.png";
 import Scale from "./addons/hero/Scale.png";
 import Invert from "./addons/hero/Invert.png";
+import { useRef } from "react";
+import { useInView } from "framer-motion";
 
 function Hero({ width }) {
   const list = [
@@ -68,6 +70,8 @@ function Hero({ width }) {
       image: Invert,
     },
   ];
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true });
   return (
     <div className={global.Container}>
       <div className={global.Side}>
@@ -81,7 +85,15 @@ function Hero({ width }) {
       </div>
       <div className={global.Main}>
         <Navbar />
-        <div className={styles.TextContainer}>
+        <div
+          ref={ref}
+          className={styles.TextContainer}
+          style={{
+            transform: isInView ? "none" : "translateY(-200px)",
+            opacity: isInView ? 1 : 0,
+            transition: "all 0.9s cubic-bezier(0.17, 0.55, 0.55, 1) 0.5s",
+          }}
+        >
           <div className={global.SectionTitle}>
             Real-Time <span className={global.HighLightPurple}>Solution</span>{" "}
             <span className={global.HighLightSemiPurple}>Tools</span> For Your

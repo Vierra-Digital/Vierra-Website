@@ -5,17 +5,28 @@ import Arrivals from "./addons/business/Arrivals.png";
 import Patients from "./addons/business/Patients.png";
 import Arrow from "./addons/business/Arrow.png";
 import Launch from "./addons/business/Launch.png";
-
 import Image from "next/image";
+import { useRef } from "react";
+import { useInView } from "framer-motion";
 
 function Growth({ width }) {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true });
   return (
     <div
       className={global.Container}
       style={{ marginTop: "100px", marginBottom: "150px" }}
     >
       <div className={global.Side}></div>
-      <div className={global.Main}>
+      <div
+        className={global.Main}
+        ref={ref}
+        style={{
+          transform: isInView ? "none" : "translateY(-200px)",
+          opacity: isInView ? 1 : 0,
+          transition: "all 0.9s cubic-bezier(0.17, 0.55, 0.55, 1) 0.5s",
+        }}
+      >
         <div className={global.TinyTitle}>
           <span className={global.HighLightRed}>Growth</span>
         </div>
