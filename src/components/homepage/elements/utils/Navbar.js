@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 function Navbar() {
   const router = useRouter();
   const [nav, setNav] = useState(false);
+  const [hover, setHover] = useState(false);
   let bop = {};
   if (typeof window !== "undefined") {
     bop = document.scrollingElement;
@@ -30,6 +31,11 @@ function Navbar() {
     element: bop,
     disabled: nav,
   });
+
+  const buttonVariant = {
+    hover: { gap: ["5px", "20px", "5px"] },
+    unhover: { gap: ["5px", "20px", "5px"] },
+  };
 
   return (
     <div className={styles.Container}>
@@ -80,10 +86,18 @@ function Navbar() {
             </div>
           </motion.div>
         </div>
-        <div className={styles.Login}>
+        <motion.div
+          className={styles.Login}
+          onMouseEnter={() => setHover(true)}
+          onMouseLeave={() => setHover(false)}
+          initial={{ gap: "5px" }}
+          animate={hover ? "hover" : "unhover"}
+          variants={buttonVariant}
+          transition={{ duration: 1, ease: "easeInOut" }}
+        >
           <div className={styles.LoginCircle}></div>
           <div className={styles.LoginWord}>LOGIN</div>
-        </div>
+        </motion.div>
       </div>
     </div>
   );
