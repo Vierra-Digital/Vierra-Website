@@ -83,6 +83,9 @@ function Hero({ width }) {
           top={"-100px"}
         />
       </div>
+
+
+            
       <div className={global.Main}>
         <Navbar />
         <div
@@ -91,7 +94,7 @@ function Hero({ width }) {
           style={{
             transform: isInView ? "none" : "translateY(-200px)",
             opacity: isInView ? 1 : 0,
-            transition: "all 0.9s cubic-bezier(0.17, 0.55, 0.55, 1) 0.5s",
+            transition: "all 0.4s cubic-bezier(0.17, 0.55, 0.55, 1) 0.4s",
           }}
         >
           <div className={global.SectionTitle}>
@@ -100,6 +103,19 @@ function Hero({ width }) {
             Entire <div className={styles.Plus}></div> Business{" "}
             <div className={styles.Factor}></div>
           </div>
+        </div>
+        
+
+
+        <div
+          ref={ref}
+          className={styles.TextContainer}
+          style={{
+            transform: isInView ? "none" : "translateY(-200px)",
+            opacity: isInView ? 1 : 0,
+            transition: "all 0.5s cubic-bezier(0.17, 0.55, 0.55, 1) 0.5s",
+          }}
+        >
           <div className={global.Context}>
             Our comprehensive tools offers small business owners a one-stop-shop
             solution <span className={global.Bolded}>to manage</span> their
@@ -108,11 +124,27 @@ function Hero({ width }) {
             a range of other{" "}
             <span className={global.Bolded}>crucial business functions.</span>
           </div>
+        </div>
+
+
+
+        <div
+          ref={ref}
+          className={styles.TextContainer}
+          style={{
+            transform: isInView ? "none" : "translateY(-200px)",
+            opacity: isInView ? 1 : 0,
+            transition: "all 0.6s cubic-bezier(0.17, 0.55, 0.55, 1) 0.6s",
+          }}
+        >
           <div className={styles.HeroButton}>
             <div className={styles.HeroButtonCircle}></div>
             <div className={styles.HeroButtonText}>TRY DEMO</div>
           </div>
         </div>
+
+
+
         <div className={styles.SchemasContainer}>
           {list.map((container, i) => (
             <div className={styles.SchemaBox} key={i}>
