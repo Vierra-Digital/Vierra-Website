@@ -1,7 +1,7 @@
 "use client";
 import { motion } from "framer-motion";
-import ImageSection from "./ImageSection";
 import { Play } from "lucide-react";
+import Image from "next/image";
 
 export function ImageComponent() {
   const imageSections = [
@@ -44,7 +44,14 @@ export function ImageComponent() {
               role="img"
               aria-label={imageSections[0].alt}
             >
-              <ImageSection {...imageSections[0]} />
+              <Image
+                src={imageSections[0].src}
+                alt={imageSections[0].alt}
+                height={300}
+                width={716}
+                quality={100}
+                className={imageSections[0].className}
+              />
               {/* Play Button Overlay */}
               <div className="absolute -top-[30px] left-[75px] w-[170px] h-[170px] flex items-center justify-center">
                 {/* Rotating Rings */}
@@ -91,7 +98,14 @@ export function ImageComponent() {
                 role="img"
                 aria-label={imageSections[1].alt}
               >
-                <ImageSection {...imageSections[1]} />
+                <Image
+                  src={imageSections[1].src}
+                  alt={imageSections[1].alt}
+                  height={269}
+                  width={269}
+                  quality={100}
+                  className={imageSections[1].className}
+                />
               </div>
               <div
                 className="flex flex-col w-full sm:w-1/2 lg:w-auto"
@@ -99,7 +113,14 @@ export function ImageComponent() {
                 role="img"
                 aria-label={imageSections[2].alt}
               >
-                <ImageSection {...imageSections[2]} />
+                <Image
+                  src={imageSections[2].src}
+                  alt={imageSections[2].alt}
+                  height={296}
+                  width={470}
+                  quality={100}
+                  className={imageSections[2].className}
+                />
               </div>
             </div>
           </div>
@@ -109,7 +130,14 @@ export function ImageComponent() {
             role="img"
             aria-label={imageSections[3].alt}
           >
-            <ImageSection {...imageSections[3]} />
+            <Image
+              src={imageSections[3].src}
+              alt={imageSections[3].alt}
+              height={391}
+              width={280}
+              quality={100}
+              className={imageSections[3].className}
+            />
           </div>
         </div>
       </div>

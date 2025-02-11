@@ -105,7 +105,7 @@ export function TestimonialsSection() {
           <p
             className={`${bricolage.className} md:text-3xl text-xl font-light md:leading-relaxed leading-relaxed`}
           >
-            "{testimonials[currentTestimonial].text}"
+            &ldquo;{testimonials[currentTestimonial].text}&rdquo;
           </p>
         </div>
       </div>

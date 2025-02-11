@@ -1,12 +1,11 @@
 "use client";
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { Bricolage_Grotesque } from "next/font/google";
 import { SectionTitle } from "../SectionTitle";
 import Image from "next/image";
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
-const inter = Inter({ subsets: ["latin"] });
 
 interface Service {
   id: string;
@@ -21,7 +20,6 @@ const services: Service[] = [
   { id: "04", name: "Enterprise", image: "/assets/Objects/object4.png" },
 ];
 
-// Morphing variants
 const morphVariants = {
   initial: {
     opacity: 0,
@@ -36,7 +34,7 @@ const morphVariants = {
     filter: "brightness(1) blur(0px)",
     transition: {
       duration: 0.6,
-      ease: "easeInOut", // Changed to a valid easing value
+      ease: "easeInOut",
     },
   },
   exit: {
@@ -46,7 +44,7 @@ const morphVariants = {
     filter: "brightness(1.5) blur(20px)",
     transition: {
       duration: 0.4,
-      ease: "easeOut", // Changed to a valid easing value
+      ease: "easeOut",
     },
   },
 };
