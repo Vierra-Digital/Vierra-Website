@@ -1,9 +1,0 @@
-/* .Cont {
-  scroll-snap-type: y mandatory;
-  max-height: 100vh;
-  overflow-y: scroll;
-  overflow-x: hidden;
-}
-.Cont > * {
-  scroll-snap-align: center;
-} */

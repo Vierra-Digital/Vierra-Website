@@ -1,9 +1,0 @@
-.Circle {
-  height: clamp(500px, 50vw, 1000px);
-  width: clamp(500px, 50vw, 1000px);
-  border-radius: 1000px;
-  position: absolute;
-  filter: blur(50px);
-  z-index: 1000;
-  transition: all 0.3s ease-in-out;
-}
