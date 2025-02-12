@@ -5,6 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import { SectionTitle } from "../SectionTitle";
 import { useState } from "react";
+import { motion } from "framer-motion";
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
 const inter = Inter({ subsets: ["latin"] });
@@ -63,50 +64,59 @@ export function TestimonialsSection() {
           </div>
         </div>
 
+        {/* Animated Testimonial */}
         <div className="my-4 md:my-6 mx-4 md:mx-20">
-          <div className="flex items-center gap-4 md:gap-6 mb-6 md:mb-8">
-            <Image
-              src={testimonials[currentTestimonial].image}
-              alt={testimonials[currentTestimonial].name}
-              width={100}
-              height={100}
-              quality={100}
-              className="w-[60px] h-[60px] md:w-[80px] md:h-[80px] object-cover rounded-full"
-            />
-            <div>
-              <h3
-                className={`${bricolage.className} text-xl md:text-2xl font-semibold`}
-              >
-                {testimonials[currentTestimonial].name}
-              </h3>
-              <p
-                className={`${inter.className} text-sm md:text-base text-white/80`}
-              >
-                {testimonials[currentTestimonial].role}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-1 md:gap-2 mb-4 md:mb-6">
-            {[...Array(testimonials[currentTestimonial].rating)].map(
-              (_, index) => (
-                <svg
-                  key={index}
-                  className="w-4 h-4 md:w-6 md:h-6 text-[#9AE856]"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-              )
-            )}
-          </div>
-
-          <p
-            className={`${bricolage.className} md:text-3xl text-xl font-light md:leading-relaxed leading-relaxed`}
+          <motion.div
+            key={currentTestimonial} // Key is used to trigger the animation on testimonial change
+            initial={{ opacity: 0, x: -50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 50 }}
+            transition={{ duration: 0.5, ease: "easeInOut" }}
           >
-            &ldquo;{testimonials[currentTestimonial].text}&rdquo;
-          </p>
+            <div className="flex items-center gap-4 md:gap-6 mb-6 md:mb-8">
+              <Image
+                src={testimonials[currentTestimonial].image}
+                alt={testimonials[currentTestimonial].name}
+                width={100}
+                height={100}
+                quality={100}
+                className="w-[60px] h-[60px] md:w-[80px] md:h-[80px] object-cover rounded-full"
+              />
+              <div>
+                <h3
+                  className={`${bricolage.className} text-xl md:text-2xl font-semibold`}
+                >
+                  {testimonials[currentTestimonial].name}
+                </h3>
+                <p
+                  className={`${inter.className} text-sm md:text-base text-white/80`}
+                >
+                  {testimonials[currentTestimonial].role}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex gap-1 md:gap-2 mb-4 md:mb-6">
+              {[...Array(testimonials[currentTestimonial].rating)].map(
+                (_, index) => (
+                  <svg
+                    key={index}
+                    className="w-4 h-4 md:w-6 md:h-6 text-[#9AE856]"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                  </svg>
+                )
+              )}
+            </div>
+
+            <p
+              className={`${bricolage.className} md:text-3xl text-xl font-light md:leading-relaxed leading-relaxed`}
+            >
+              &ldquo;{testimonials[currentTestimonial].text}&rdquo;
+            </p>
+          </motion.div>
         </div>
       </div>
     </section>

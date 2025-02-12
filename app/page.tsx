@@ -28,19 +28,48 @@ export default function Home() {
             key={index}
             className="absolute top-0 h-full border-l border-white opacity-5"
             style={{ left: `${left}px` }}
-            initial={{ height: 0 }}
-            animate={{ height: "100%" }}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{
+              height: "100%",
+              opacity: 0.05,
+              x: [0, 10, 0], // Subtle horizontal movement
+            }}
             transition={{
-              duration: 1.5,
+              duration: 3,
               delay: index * 0.2,
               ease: "easeInOut",
+              x: {
+                duration: 4,
+                repeat: Infinity,
+                ease: "easeInOut",
+              },
             }}
           />
         ))}
 
         {/* Ellipse Purple gradient effects */}
-        <div className="absolute top-[157px] left-[200] w-[470px] h-[470px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10" />
-        <div className="absolute top-[300px] left-[825px] w-[589px] h-[589px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10" />
+        <motion.div
+          initial={{ x: 0, y: 0 }}
+          animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
+          transition={{
+            duration: 5,
+            repeat: Infinity,
+            repeatType: "loop",
+            ease: "easeInOut",
+          }}
+          className="absolute top-[157px] left-[200px] w-[470px] h-[470px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10"
+        />
+        <motion.div
+          initial={{ x: 0, y: 0 }}
+          animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
+          transition={{
+            duration: 5,
+            repeat: Infinity,
+            repeatType: "loop",
+            ease: "easeInOut",
+          }}
+          className="absolute top-[300px] left-[825px] w-[589px] h-[589px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10"
+        />
 
         {/* Header */}
         <Header />

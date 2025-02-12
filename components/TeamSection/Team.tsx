@@ -114,7 +114,17 @@ export function TeamSection() {
                   }}
                 >
                   {/* Purple Glow Background */}
-                  <div className="absolute inset-0 -left-10 top-10 w-[280px] h-[280px] opacity-50 blur-[10px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#010205] to-[#701CC0] -z-10" />
+                  <motion.div
+                    initial={{ x: 0, y: 0 }}
+                    animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
+                    transition={{
+                      duration: 5,
+                      repeat: Infinity,
+                      repeatType: "loop",
+                      ease: "easeInOut",
+                    }}
+                    className="absolute inset-0 -left-10 top-10 w-[280px] h-[280px] opacity-50 blur-[10px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#010205] to-[#701CC0] -z-10"
+                  />
 
                   {/* Member Image */}
                   <div className="relative w-[200px] h-[200px] mb-4">
@@ -149,7 +159,6 @@ export function TeamSection() {
         <div className="lg:hidden grid grid-cols-1 md:grid-cols-2 gap-10">
           {teamMembers.map((member, index) => (
             <div key={index} className="relative flex flex-col items-center ">
-              {/* <div className="absolute inset-0 bg-[#701CC0] rounded-full blur-[60px] opacity-20" /> */}
               <div className="relative w-[200px] h-[200px] mb-4 z-0">
                 <div className="absolute w-[270px] h-[270px] -left-5 top-10 opacity-50 blur-[10px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#010205] to-[#701CC0] -z-10" />
                 <Image
