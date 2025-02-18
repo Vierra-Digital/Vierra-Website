@@ -1,9 +1,7 @@
 "use client";
-
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
-import { SectionTitle } from "../SectionTitle";
 import { useState } from "react";
 import { motion } from "framer-motion";
 
@@ -12,20 +10,46 @@ const inter = Inter({ subsets: ["latin"] });
 
 const testimonials = [
   {
-    name: "Brian Chesky",
-    role: "CEO Airbnb",
-    image: "/assets/Testimonials/brian-chesky.png",
-    rating: 5,
-    text: "With Vierra's tools we optimize all our marketing and communication tasks. The user-friendly interface offers a wide range of collaboration options.",
-    companyLogo: "/assets/Testimonials/airbnb-logo.svg",
+    name: "Nowfal Ebrahim",
+    role: "Invisalign",
+    text: "Vierra has helped Invisalign by providing doctor referrals and increasing our presence in offices and our total revenue. Every month, we increase our contracts with Vierra and see higher profits.",
+    image: "/assets/Testimonials/nowfal.jpg",
+    companyLogo: "/assets/Testimonials/invisalign.png",
   },
   {
-    name: "Elon Musk",
-    role: "CEO Tesla & SpaceX",
-    image: "/assets/Testimonials/elon-musk.jpg",
-    rating: 4,
-    text: "Vierra Digital's automation tools have significantly improved our ad performance and conversion rates across multiple platforms.",
-    companyLogo: "/assets/Testimonials/tesla-logo.svg",
+    name: "Deanna Mazzeo",
+    role: "Somerville Dental Associates",
+    text: "Our office had no online presence. Alex on Vierra has helped grow our Yelp and the number of new monthly patients we get, filling the annoying gaps in our schedule.",
+    image: "/assets/Testimonials/nowfal.jpg",
+    companyLogo: "/assets/Testimonials/somerville.png",
+  },
+  {
+    name: "Zev Young",
+    role: "Novartis",
+    text: "Vierra's strategic marketing and business-oriented lead generation have enhanced our brand presence, optimized our outreach, and driven measurable growth.",
+    image: "/assets/Testimonials/nowfal.jpg",
+    companyLogo: "/assets/Testimonials/novartis.png",
+  },
+  {
+    name: "Hannah Lowney",
+    role: "Salon Renee",
+    text: "Within just 3 months of Vierra handling my marketing, I saw more than triple the number of clients I used to get.",
+    image: "/assets/Testimonials/nowfal.jpg",
+    companyLogo: "/assets/Testimonials/renee.png",
+  },
+  {
+    name: "Long Doan",
+    role: "eCyberForce",
+    text: "I struggled to get even a percentage of the leads my competitors were getting. After signing with Vierra, my leads have gone from roughly 20 to over 3000 in just a month.",
+    image: "/assets/Testimonials/nowfal.jpg",
+    companyLogo: "/assets/Testimonials/ecyberforce.png",
+  },
+  {
+    name: "Dennis Zax",
+    role: "ezML",
+    text: "Vierra's marketing approach is simple, structured, and intentional. They have made a huge impact on my life and my small business, not to be so small in a few months from the growth I've been seeing!",
+    image: "/assets/Testimonials/nowfal.jpg",
+    companyLogo: "/assets/Testimonials/ezml.png",
   },
 ];
 
@@ -37,9 +61,7 @@ export function TestimonialsSection() {
   };
 
   return (
-    <section className="w-full min-h-screen bg-[#010205] text-white px-4 relative overflow-hidden">
-      <SectionTitle title="Testimonials" />
-
+    <section className="w-full min-h-screen bg-[#010205] text-white px-4 md:mt-40 relative overflow-hidden">
       <div className="hidden md:block absolute right-0 -top-0 w-[450px] h-[470px] bg-[#18042A] rounded-tl-[60px] rounded-bl-[60px] z-0" />
 
       <div className="relative max-w-[800px] mx-auto mt-20 md:mt-40 rounded-[30px] md:rounded-[60px] p-6 md:p-12 border-2 border-[#42345099] z-10 max-lg:mt-40">
@@ -49,7 +71,7 @@ export function TestimonialsSection() {
             alt={testimonials[currentTestimonial].name}
             width={120}
             height={40}
-            className="md:w-[180px] md:h-[60px]"
+            className="md:w-[180px] md:h-[60px] object-contain filter invert brightness-0" // Applied invert and brightness filter to make logo white
           />
         </div>
 
@@ -94,21 +116,6 @@ export function TestimonialsSection() {
                   {testimonials[currentTestimonial].role}
                 </p>
               </div>
-            </div>
-
-            <div className="flex gap-1 md:gap-2 mb-4 md:mb-6">
-              {[...Array(testimonials[currentTestimonial].rating)].map(
-                (_, index) => (
-                  <svg
-                    key={index}
-                    className="w-4 h-4 md:w-6 md:h-6 text-[#9AE856]"
-                    fill="currentColor"
-                    viewBox="0 0 20 20"
-                  >
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                )
-              )}
             </div>
 
             <p

@@ -1,13 +1,14 @@
 import React from "react";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { Bricolage_Grotesque, Inter, Figtree } from "next/font/google";
 import { ArrowUpRight } from "lucide-react";
 import CheckItem from "./CheckItem";
 import Footer from "./Footer";
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
 const inter = Inter({ subsets: ["latin"] });
+const figtree = Figtree({ subsets: ["latin"] });
 
-const checks = ["Free call USP", "Free call, second USP", "3rd Free call USP"];
+const checks = ["Problem & Definition", "LTV Evaluation", "Obtain Leads"];
 
 export function FooterSection() {
   return (
@@ -21,13 +22,14 @@ export function FooterSection() {
                 <div
                   className={`${bricolage.className} text-5xl font-semibold tracking-wide text-white leading-[68px] max-md:text-4xl max-md:leading-[54px] max-sm:text-3xl max-sm:leading-10`}
                 >
-                  We invite you to try our innovative solutions tools.
+                  Want To Explode Profits? See How Vierra Can Help.
                 </div>
 
                 <div
                   className={`${bricolage.className} mt-14 text-3xl font-light tracking-wide leading-none text-white opacity-80 max-md:text-2xl max-sm:text-xl`}
                 >
-                  Schedule an appointment with us and find out.
+                  Obtain a free demo call. Discover how you can elevate your
+                  business in 15 minutes.
                 </div>
 
                 {/* Buttons */}
@@ -35,11 +37,11 @@ export function FooterSection() {
                   className={`flex gap-5 mt-28 max-md:mt-10 max-sm:flex-col max-sm:mx-auto ${inter.className}`}
                 >
                   <button className="flex items-center justify-center gap-2 px-8 py-4 text-sm font-light tracking-wide text-[#7A13D0] bg-white border-2 border-white rounded-[70px] max-sm:w-full">
-                    Book a meeting
+                    Free Audit Call
                     <ArrowUpRight className="w-5 h-5" />
                   </button>
                   <button className="flex items-center justify-center gap-2 px-8 py-4 text-sm font-light tracking-wide text-white border-2 border-white rounded-[70px] max-sm:w-full">
-                    Get in touch
+                    Can&apos;t Decide Yet?
                     <ArrowUpRight className="w-5 h-5" />
                   </button>
                 </div>
@@ -52,26 +54,26 @@ export function FooterSection() {
                 <div
                   className={`${bricolage.className} text-5xl font-bold tracking-tighter leading-tight text-white`}
                 >
-                  +10
+                  &lt; 15
                 </div>
                 <div
                   className={`${inter.className} mt-2 text-lg font-light tracking-normal leading-7 text-white text-opacity-80`}
                 >
-                  Creative business insights and analysis for free.
+                  Free expert-level business advice in less than 15 min.
                 </div>
                 <div className="mt-10">
                   <div
                     className={`${bricolage.className} text-5xl font-medium tracking-tighter leading-tight text-white`}
                   >
-                    +45
+                    +38
                   </div>
                   <div
                     className={`${inter.className} mt-2 text-lg font-light tracking-normal leading-7 text-white text-opacity-80`}
                   >
-                    Satisfied clients served.
+                    Get on our waitlist.
                   </div>
                 </div>
-                <div className={`${inter.className} mt-14`}>
+                <div className={`${figtree.className} mt-14`}>
                   {checks.map((text, index) => (
                     <CheckItem key={index} text={text} />
                   ))}

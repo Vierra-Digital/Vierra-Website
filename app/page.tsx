@@ -68,7 +68,7 @@ export default function Home() {
             repeatType: "loop",
             ease: "easeInOut",
           }}
-          className="absolute top-[300px] left-[825px] w-[589px] h-[589px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10"
+          className="absolute bottom-[0px] right-[20px] w-[549px] h-[549px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10"
         />
 
         {/* Header */}
@@ -80,37 +80,35 @@ export default function Home() {
             <h1
               className={`text-5xl md:text-6xl font-bold leading-tight mb-6 text-[#EFF3FF] ${bricolage.className}`}
             >
-              We boost your brand to thrive in the digital world.
+              Generate More Leads For Your Business
             </h1>
             <p className={`text-[#9BAFC3] text-lg mb-10 ${inter.className}`}>
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
-              eiusmod tempor incididunt.
+              Scale your practice effortlessly. Fill out your schedules and
+              eliminate no-shows.
             </p>
             <div
               className={`flex flex-col sm:flex-row items-center gap-4 ${inter.className}`}
             >
               <Button
                 variant="secondary"
-                className="flex items-center gap-2 border-2 border-[#7A13D0] bg-transparent hover:bg-[#8F42FF] text-white rounded-full px-8 py-7"
+                className="flex items-center gap-2 bg-[#701CC0] hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC0B8]"
               >
-                Book a meeting
+                Free Audit Call
                 <ArrowUpRight className="w-4 h-4" />
               </Button>
               <Button
                 variant="link"
                 className="text-white text-[16px] underline hover:text-[#8F42FF] pl-2"
               >
-                Our Solutions
+                What We Do
               </Button>
             </div>
           </div>
-          {/* Image */}
-
           <div className="flex-shrink-0">
             <Image
-              src="/assets/Mck1-Vierra.png"
+              src="/assets/image1.png"
               alt="Vierra"
-              width={671}
+              width={750}
               height={685}
               priority
               quality={100}
@@ -125,19 +123,33 @@ export default function Home() {
               <h2
                 className={`text-white text-xl font-medium whitespace-nowrap ${bricolage.className}`}
               >
-                Trusted by our partners
+                Trusted By Our Partners
               </h2>
               <div className="flex flex-wrap md:flex-nowrap justify-center items-center gap-12 md:gap-24 w-full">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex items-center gap-9">
-                    <Image
-                      src="/assets/logoipsum.svg"
-                      alt="Partner Logo"
-                      width={184}
-                      height={44}
-                    />
-                  </div>
-                ))}
+                <Image
+                  src="/assets/Partners/Isenberg.png"
+                  alt="Partner Logo"
+                  width={112}
+                  height={24}
+                />
+                <Image
+                  src="/assets/Partners/Athena.png"
+                  alt="Partner Logo"
+                  width={175}
+                  height={24}
+                />
+                <Image
+                  src="/assets/Partners/Harvard.png"
+                  alt="Partner Logo"
+                  width={109}
+                  height={32}
+                />
+                <Image
+                  src="/assets/Partners/NationalAcademy.png"
+                  alt="Partner Logo"
+                  width={123}
+                  height={48}
+                />
               </div>
             </div>
           </div>

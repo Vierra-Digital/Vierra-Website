@@ -1,189 +1,99 @@
-"use client";
-
-import { Bricolage_Grotesque } from "next/font/google";
 import Image from "next/image";
-import { motion } from "framer-motion";
+import { Bricolage_Grotesque, Inter } from "next/font/google";
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
+const inter = Inter({ subsets: ["latin"] });
 
-interface TeamMember {
-  name: string;
-  image: string;
-  position: string;
-  angle?: number; // For circular positioning
-}
-
-const teamMembers: TeamMember[] = [
-  {
-    name: "Patrick Doe",
-    image: "/assets/Team/TeamMember1.png",
-    position: "Team Vierra",
-    angle: 200, // Bottom left
-  },
-  {
-    name: "John Doe",
-    image: "/assets/Team/TeamMember2.png",
-    position: "Team Vierra",
-    angle: 260, // Top
-  },
-  {
-    name: "Rich Doe",
-    image: "/assets/Team/TeamMember3.png",
-    position: "Team Vierra",
-    angle: 325, // Bottom right
-  },
-
-  {
-    name: "Marjolein Doe",
-    image: "/assets/Team/TeamMember4.png",
-    position: "Team Vierra",
-    angle: 135, // Left
-  },
-
-  {
-    name: "John Doe",
-    image: "/assets/Team/TeamMember5.png",
-    position: "Team Vierra",
-    angle: 35, // Right
-  },
-];
-
-export function TeamSection() {
-  const radius = 400; // Adjust this value to change the circle size
+export default function TeamSection() {
+  const team = [
+    {
+      name: "Alex Shick",
+      role: "Chief Executive Officer",
+      image: "/assets/Team/Alex.png",
+    },
+    {
+      name: "Paul Wahba",
+      role: "Chief Operating Officer",
+      image: "/assets/Team/Paul.jpg",
+    },
+    {
+      name: "Sienna Coffey",
+      role: "Chief Law Officer",
+      image: "/assets/Team/Sienna.png",
+    },
+    {
+      name: "Sean Penix",
+      role: "Sales Manager",
+      image: "/assets/Team/Sean.png",
+    },
+    {
+      name: "Justin Waller",
+      role: "Manufacturing Manager",
+      image: "/assets/Team/Justin.png",
+    },
+    {
+      name: "Kanika Khosla",
+      role: "Outreach Team",
+      image: "/assets/Team/Kanika.jpg",
+    },
+  ];
 
   return (
-    <section
-      className="w-full min-h-screen bg-[#010205] max-md:pt-20 lg:pt-[420px] overflow-hidden"
-      id="about"
-    >
-      <div className="container mx-auto px-4">
-        {/* Center Content */}
-        <div className="flex flex-col items-center justify-center mb-20">
-          {/* Vierra Logo */}
-          <Image
-            src="/assets/vierra-logo.png"
-            alt="Vierra"
-            width={80}
-            height={80}
-            className="mb-6 opacity-40 text-[#701DC0]"
-          />
-          {/* Title */}
-          <h2
-            className={`${bricolage.className} text-white text-6xl font-semibold mb-10 relative`}
-          >
-            Our Team<span className="text-[#7A13D0]">.</span>
-          </h2>
+    <div className="min-h-screen bg-[#010205] relative p-8 md:p-16" id="about">
+      <div className="max-w-7xl mx-auto">
+        <h1
+          className={`${bricolage.className} text-white text-6xl md:text-7xl font-bold mb-16 md:ml-8`}
+        >
+          Our Team<span className="text-[#7A13D0]">.</span>
+        </h1>
 
-          {/* Rotating Rings */}
-
-          {[...Array(3)].map((_, i) => (
-            <motion.div
-              key={i}
-              className="hidden lg:block absolute border border-[#701CC0]/20 rounded-full"
-              style={{
-                width: `${600 + i * 90}px`,
-                height: `${600 + i * 90}px`,
-              }}
-              animate={{
-                rotate: 360,
-              }}
-              transition={{
-                duration: 20 + i * 5,
-                repeat: Infinity,
-                ease: "linear",
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Team Members Circle - Desktop */}
-        <div className="hidden lg:block w-full">
-          <div className="relative w-[700px] h-[700px] mx-auto">
-            {teamMembers.map((member, index) => {
-              const angle = member.angle! * (Math.PI / 180);
-              const x = radius * Math.cos(angle);
-              const y = radius * Math.sin(angle);
-
-              return (
-                <div
-                  key={index}
-                  className="absolute transform -translate-x-1/2 -translate-y-1/2 z-30" // Added z-30
-                  style={{
-                    left: `${50 + (x / radius) * 50}%`,
-                    top: `${-18 + (y / radius) * 50}%`,
-                  }}
-                >
-                  {/* Purple Glow Background */}
-                  <motion.div
-                    initial={{ x: 0, y: 0 }}
-                    animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
-                    transition={{
-                      duration: 5,
-                      repeat: Infinity,
-                      repeatType: "loop",
-                      ease: "easeInOut",
-                    }}
-                    className="absolute inset-0 -left-10 top-10 w-[280px] h-[280px] opacity-50 blur-[10px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#010205] to-[#701CC0] -z-10"
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-24">
+          {team.map((member, index) => {
+            return (
+              <div
+                key={member.name}
+                className="group flex flex-col items-center"
+              >
+                <div className="relative w-[319px] h-[319px] group-hover:scale-105 transition-transform duration-300">
+                  {/* Top-left corner (first image) */}
+                  {index === 0 && (
+                    <div className="hidden md:block absolute -top-[55px] -left-[60px] w-[171px] h-[171px] bg-[#18042A] rounded-[40px]" />
+                  )}
+                  {/* Top-right corner (third image) */}
+                  {index === 2 && (
+                    <div className="hidden md:block absolute -top-[55px] -right-[60px] w-[171px] h-[171px] bg-[#18042A] rounded-[40px]" />
+                  )}
+                  {/* Bottom-left corner (fourth image) */}
+                  {index === 3 && (
+                    <div className="hidden md:block absolute -bottom-[55px] -left-[60px] w-[171px] h-[171px] bg-[#18042A] rounded-[40px]" />
+                  )}
+                  {/* Bottom-right corner (last image) */}
+                  {index === 5 && (
+                    <div className="hidden md:block absolute -bottom-[55px] -right-[60px] w-[171px] h-[171px] bg-[#18042A] rounded-[40px]" />
+                  )}
+                  <Image
+                    src={member.image || "/placeholder.svg"}
+                    alt={member.name}
+                    fill
+                    quality={100}
+                    className="object-cover rounded-[60px] relative z-10"
                   />
-
-                  {/* Member Image */}
-                  <div className="relative w-[200px] h-[200px] mb-4">
-                    <Image
-                      src={member.image}
-                      alt={member.name}
-                      fill
-                      className="object-contain"
-                    />
-                  </div>
-
-                  {/* Member Info */}
-                  <div className="text-center z-10">
-                    <h3
-                      className={`${bricolage.className} text-white text-2xl font-semibold mb-2`}
-                    >
-                      {member.name}
-                    </h3>
-                    <p
-                      className={`${bricolage.className} text-[#701CC0] text-lg`}
-                    >
-                      {member.position}
-                    </p>
-                  </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Team Members Grid - Mobile/Tablet */}
-        <div className="lg:hidden grid grid-cols-1 md:grid-cols-2 gap-10">
-          {teamMembers.map((member, index) => (
-            <div key={index} className="relative flex flex-col items-center ">
-              <div className="relative w-[200px] h-[200px] mb-4 z-0">
-                <div className="absolute w-[270px] h-[270px] -left-5 top-10 opacity-50 blur-[10px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#010205] to-[#701CC0] -z-10" />
-                <Image
-                  src={member.image}
-                  alt={member.name}
-                  fill
-                  className="object-contain"
-                />
+                <div className="mt-6 text-center z-10">
+                  <h3
+                    className={`${bricolage.className} text-white text-xl font-semibold`}
+                  >
+                    {member.name}
+                  </h3>
+                  <p className={`${inter.className} text-white/80 mt-1`}>
+                    {member.role}
+                  </p>
+                </div>
               </div>
-              <div className="text-center z-10">
-                <h3
-                  className={`${bricolage.className} text-white text-2xl font-semibold mb-2`}
-                >
-                  {member.name}
-                </h3>
-                <p className={`${bricolage.className} text-[#701CC0] text-lg`}>
-                  {member.position}
-                </p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
-    </section>
+    </div>
   );
 }
-
-export default TeamSection;

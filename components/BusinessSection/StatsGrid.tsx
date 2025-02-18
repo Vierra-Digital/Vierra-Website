@@ -1,10 +1,41 @@
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, ArrowRight } from "lucide-react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { useState } from "react";
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
 const inter = Inter({ subsets: ["latin"] });
 
 export function StatsGrid() {
+  // content sets for card-4
+  const card4Content = [
+    {
+      number: "13M+",
+      text: "leads generated. We drive leads to your practice.",
+      progressPercent: 33.33,
+    },
+    {
+      number: "$687K",
+      text: "ad spent. We maximize every dollar of your marketing budget.",
+      progressPercent: 66.66,
+    },
+    {
+      number: "28+",
+      text: "clients helped. We prioritize your business like our own.",
+      progressPercent: 100,
+    },
+  ];
+
+  // State to track the current content index
+  const [contentIndex, setContentIndex] = useState(0);
+
+  // Function to handle button click and cycle through content
+  const handleContentSwap = () => {
+    setContentIndex((prevIndex) => (prevIndex + 1) % card4Content.length);
+  };
+
+  // Get current content
+  const currentContent = card4Content[contentIndex];
+
   return (
     <div className="flex flex-col mx-auto my-0 items-center max-w-[1200px] z-10 relative">
       <div className="absolute w-[893px] h-[510px] rounded-[60px] top-[50px] left-1/4 bg-[#4F14881A] max-md:hidden -z-10" />
@@ -15,12 +46,12 @@ export function StatsGrid() {
             <div
               className={`text-7xl font-extrabold leading-none text-white max-md:text-4xl ${bricolage.className}`}
             >
-              150%
+              258%
             </div>
             <div
               className={`mt-4 font-light leading-6 text-[#ECF2FDCC] max-sm:text-sm max-sm:leading-5 ${inter.className}`}
             >
-              Average of increase in profit for our partners
+              investment conversion. The average ROI for each practice helped.
             </div>
           </div>
 
@@ -36,13 +67,14 @@ export function StatsGrid() {
             <div
               className={`text-7xl font-extrabold leading-none text-white max-md:text-4xl ${bricolage.className}`}
             >
-              120
-              <span className="font-extrabold text-[#701CC0]">+</span>
+              <span className="font-extrabold text-[#701CC0]">$</span>
+              5.9M
             </div>
             <div
               className={`mt-8 font-light leading-6 text-[#9BAFC3] max-sm:text-sm max-sm:leading-5 ${inter.className}`}
             >
-              Social media marketing campaigns created and launched by Vierra.
+              profits raised. The total amount of profit generated for our
+              partners.
             </div>
           </div>
         </div>
@@ -56,8 +88,7 @@ export function StatsGrid() {
           <div
             className={`text-5xl tracking-tight leading-none text-white max-md:text-2xl ${bricolage.className}`}
           >
-            <span>Business growth</span>
-            <span className="text-[#711CC0]">.</span>
+            <span>Scale Your Enterprise</span>
           </div>
 
           {/* Graph SVG Container */}
@@ -94,17 +125,35 @@ export function StatsGrid() {
         </div>
 
         {/* Card-4 */}
-        <div className="flex flex-col w-[328px] h-[319px] bg-[#701CC0] rounded-[60px] max-md:w-[300px] max-md:h-[250px] max-md:px-5 max-md:py-10 max-sm:w-[260px] max-sm:h-[200px] max-sm:px-8 max-sm:py-8 max-sm:rounded-[30px]">
-          <div className="flex flex-col mx-12 my-8 w-[204px] h-[124px] max-md:mx-0 max-md:my-0 max-md:h-auto max-md:w-full">
+        <div className="flex flex-col w-[328px] h-[319px] bg-[#701CC0] rounded-[60px] max-md:w-[300px] max-md:h-[300px] max-md:px-5 max-md:py-10 max-sm:w-[260px] max-sm:h-[250px] max-sm:px-8 max-sm:py-8 max-sm:rounded-[30px]">
+          <div className="flex flex-col mx-12 my-8 w-[250px] max-md:mx-4 max-md:my-4 max-md:h-auto max-md:w-full max-sm:mx-2">
             <div
-              className={`text-7xl font-extrabold leading-none text-white max-md:text-4xl ${bricolage.className}`}
+              className={`text-7xl font-extrabold leading-none text-white max-md:text-4xl max-sm:text-3xl ${bricolage.className}`}
             >
-              30+
+              {currentContent.number}
             </div>
-            <div
-              className={`mt-8 text-base font-light leading-6 max-w-[300px] text-[#ECF2FDCC] max-sm:text-sm max-sm:leading-5 ${inter.className}`}
-            >
-              Business-driven digital products created and launched in 2024.
+            <div className="flex items-center justify-between mt-8 max-md:mt-6 max-sm:mt-4">
+              <div
+                className={`text-base font-light leading-6 max-w-[200px] max-md:max-w-[160px] max-sm:max-w-[140px] text-[#ECF2FDCC] max-sm:text-sm max-sm:leading-5 ${inter.className}`}
+              >
+                {currentContent.text}
+              </div>
+              <button
+                className="flex items-center justify-center min-w-[56px] w-14 h-14 max-md:w-12 max-md:h-12 max-sm:w-10 max-sm:h-10 rounded-full bg-[#4F1488] hover:bg-[#18042A] ml-4 max-sm:ml-2 transition-colors duration-200"
+                onClick={handleContentSwap}
+              >
+                <ArrowRight className="w-6 h-6 max-md:w-5 max-md:h-5 max-sm:w-4 max-sm:h-4 text-white" />
+              </button>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="mx-12 mt-auto mb-8 max-md:mx-6 max-sm:mx-4 max-md:mb-6 max-sm:mb-4">
+            <div className="h-1 w-full bg-[rgba(255,255,255,0.2)]">
+              <div
+                className="h-1 bg-white transition-all duration-500 ease-in-out"
+                style={{ width: `${currentContent.progressPercent}%` }}
+              ></div>
             </div>
           </div>
         </div>
