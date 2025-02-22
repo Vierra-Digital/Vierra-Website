@@ -9,32 +9,32 @@ export default function TeamSection() {
     {
       name: "Alex Shick",
       role: "Chief Executive Officer",
-      image: "/assets/Team/Alex.png",
+      image: "/assets/Team/Alex2.png",
     },
     {
       name: "Paul Wahba",
       role: "Chief Operating Officer",
-      image: "/assets/Team/Paul.jpg",
+      image: "/assets/Team/Paul2.png",
     },
     {
       name: "Sienna Coffey",
       role: "Chief Law Officer",
-      image: "/assets/Team/Sienna.png",
+      image: "/assets/Team/Sienna2.png",
     },
     {
       name: "Sean Penix",
       role: "Sales Manager",
-      image: "/assets/Team/Sean.png",
+      image: "/assets/Team/Sean2.png",
     },
     {
       name: "Justin Waller",
       role: "Manufacturing Manager",
-      image: "/assets/Team/Justin.png",
+      image: "/assets/Team/Justin2.png",
     },
     {
       name: "Kanika Khosla",
       role: "Outreach Team",
-      image: "/assets/Team/Kanika.jpg",
+      image: "/assets/Team/Kanika2.png",
     },
   ];
 
@@ -54,7 +54,7 @@ export default function TeamSection() {
                 key={member.name}
                 className="group flex flex-col items-center"
               >
-                <div className="relative w-[319px] h-[319px] group-hover:scale-105 transition-transform duration-300">
+                <div className="relative w-[319px] h-[319px]">
                   {/* Top-left corner (first image) */}
                   {index === 0 && (
                     <div className="hidden md:block absolute -top-[55px] -left-[60px] w-[171px] h-[171px] bg-[#18042A] rounded-[40px]" />
@@ -76,7 +76,7 @@ export default function TeamSection() {
                     alt={member.name}
                     fill
                     quality={100}
-                    className="object-cover rounded-[60px] relative z-10"
+                    className="object-cover rounded-[60px] relative z-10 group-hover:scale-105 transition-transform duration-300"
                   />
                 </div>
                 <div className="mt-6 text-center z-10">

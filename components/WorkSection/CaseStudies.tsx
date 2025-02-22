@@ -12,14 +12,14 @@ export function CaseStudies() {
       <div className="mb-8 md:mb-24">
         <div className="flex flex-col lg:flex-row gap-6 lg:gap-3 items-start lg:items-center max-w-[1200px] mx-auto px-2">
           <h2
-            className={`${bricolage.className} text-4xl md:text-6xl lg:text-[96px] leading-tight font-medium text-white lg:pr-24`}
+            className={`${bricolage.className} text-4xl md:text-6xl lg:text-[96px] leading-tight font-semibold text-white lg:pr-24`}
           >
             Why It Works
           </h2>
 
           <div className="w-full lg:w-[583px]">
             <p
-              className={`${inter.className} text-white/60 mt-4 lg:mt-6 mb-6 lg:mb-8 text-base font-extralight`}
+              className={`${inter.className} text-white mt-4 lg:mt-6 mb-6 lg:mb-8 text-base font-extralight`}
             >
               There&apos;s a pristine methodology to our process, what we do
               works because we&apos;ve tested our strategies on thousands of

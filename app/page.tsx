@@ -23,16 +23,16 @@ export default function Home() {
     <>
       <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden z-0">
         {/* Vertical Lines */}
-        {[178, 358, 538, 718, 898, 1078, 1258].map((left, index) => (
+        {Array.from({ length: 7 }).map((_, index) => (
           <motion.div
             key={index}
-            className="absolute top-0 h-full border-l border-white opacity-5"
-            style={{ left: `${left}px` }}
+            className="absolute top-0 h-full border-l border-white opacity-5 -z-10"
+            style={{ left: `${(index + 1) * (100 / 8)}%` }}
             initial={{ height: 0, opacity: 0 }}
             animate={{
               height: "100%",
               opacity: 0.05,
-              x: [0, 10, 0], // Subtle horizontal movement
+              x: [0, 10, 0],
             }}
             transition={{
               duration: 3,
@@ -47,46 +47,83 @@ export default function Home() {
           />
         ))}
 
-        {/* Ellipse Purple gradient effects */}
-        <motion.div
-          initial={{ x: 0, y: 0 }}
-          animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
-          transition={{
-            duration: 5,
-            repeat: Infinity,
-            repeatType: "loop",
-            ease: "easeInOut",
-          }}
-          className="absolute top-[157px] left-[200px] w-[470px] h-[470px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10"
-        />
-        <motion.div
-          initial={{ x: 0, y: 0 }}
-          animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
-          transition={{
-            duration: 5,
-            repeat: Infinity,
-            repeatType: "loop",
-            ease: "easeInOut",
-          }}
-          className="absolute bottom-[0px] right-[20px] w-[549px] h-[549px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10"
-        />
-
         {/* Header */}
-        <Header />
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={{
+            hidden: { opacity: 0, y: -20 },
+            visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
+          }}
+        >
+          <Header />
+        </motion.div>
 
         {/* Hero Section */}
-        <main className="relative z-10 px-6 max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
-          <div className="max-w-2xl">
-            <h1
+        <main className="relative px-6 max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
+          {/* Ellipses */}
+          <motion.div
+            initial={{ x: 0, y: 0 }}
+            animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
+            transition={{
+              duration: 5,
+              repeat: Infinity,
+              repeatType: "loop",
+              ease: "easeInOut",
+            }}
+            className="absolute top-[7%] left-[10%] w-[470px] h-[470px] max-w-[475px] max-h-[475px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A] -z-20"
+          />
+          <motion.div
+            initial={{ x: 0, y: 0 }}
+            animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
+            transition={{
+              duration: 5,
+              repeat: Infinity,
+              repeatType: "loop",
+              ease: "easeInOut",
+            }}
+            className="absolute -bottom-[32%] -right-[3%] w-[545px] h-[545px] max-w-[550px] max-h-[550px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A] -z-20"
+          />
+
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: { opacity: 0, y: 20 },
+              visible: {
+                opacity: 1,
+                y: 0,
+                transition: { staggerChildren: 0.2, ease: "easeOut" },
+              },
+            }}
+            className="max-w-2xl"
+          >
+            <motion.h1
+              variants={{
+                hidden: { opacity: 0, y: 20 },
+                visible: { opacity: 1, y: 0 },
+              }}
               className={`text-5xl md:text-6xl font-bold leading-tight mb-6 text-[#EFF3FF] ${bricolage.className}`}
             >
               Generate More Leads For Your Business
-            </h1>
-            <p className={`text-[#9BAFC3] text-lg mb-10 ${inter.className}`}>
+            </motion.h1>
+
+            <motion.p
+              variants={{
+                hidden: { opacity: 0, y: 20 },
+                visible: { opacity: 1, y: 0 },
+              }}
+              className={`text-[#9BAFC3] text-lg mb-10 ${inter.className}`}
+            >
               Scale your practice effortlessly. Fill out your schedules and
               eliminate no-shows.
-            </p>
-            <div
+            </motion.p>
+
+            <motion.div
+              variants={{
+                hidden: { opacity: 0, y: 20 },
+                visible: { opacity: 1, y: 0 },
+              }}
               className={`flex flex-col sm:flex-row items-center gap-4 ${inter.className}`}
             >
               <Button
@@ -98,13 +135,20 @@ export default function Home() {
               </Button>
               <Button
                 variant="link"
-                className="text-white text-[16px] underline hover:text-[#8F42FF] pl-2"
+                className="text-white text-[16px] relative group hover:text-[#8F42FF] pl-2"
               >
                 What We Do
+                <span className="absolute left-2 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-[calc(100%-20px)]" />
               </Button>
-            </div>
-          </div>
-          <div className="flex-shrink-0">
+            </motion.div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+            className="flex-shrink-0"
+          >
             <Image
               src="/assets/image1.png"
               alt="Vierra"
@@ -113,7 +157,7 @@ export default function Home() {
               priority
               quality={100}
             />
-          </div>
+          </motion.div>
         </main>
 
         {/* Partners Section */}

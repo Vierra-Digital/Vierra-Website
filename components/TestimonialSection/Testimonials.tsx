@@ -61,10 +61,10 @@ export function TestimonialsSection() {
   };
 
   return (
-    <section className="w-full min-h-screen bg-[#010205] text-white px-4 md:mt-40 relative overflow-hidden">
-      <div className="hidden md:block absolute right-0 -top-0 w-[450px] h-[470px] bg-[#18042A] rounded-tl-[60px] rounded-bl-[60px] z-0" />
-
-      <div className="relative max-w-[800px] mx-auto mt-20 md:mt-40 rounded-[30px] md:rounded-[60px] p-6 md:p-12 border-2 border-[#42345099] z-10 max-lg:mt-40">
+    <section className="w-full min-h-screen bg-[#010205] text-white px-4 md:mt-32 relative overflow-hidden">
+      {/* <div className="hidden md:block absolute right-0 -top-0 w-[450px] h-[470px] bg-[#18042A] rounded-tl-[60px] rounded-bl-[60px] z-0" /> */}
+      <div className="relative max-w-[800px] mx-auto mt-20 md:mt-44 rounded-[30px] md:rounded-[60px] p-6 md:p-12 border-2 border-[#42345099] z-0 max-lg:mt-40">
+        <div className="hidden md:block absolute -right-[89%] -top-[32%] w-[800px] h-[470px] bg-[#18042A] rounded-[60px] -z-10" />
         <div className="absolute -top-16 right-4 md:-right-[155px] md:-top-20 bg-[#701CC0] rounded-[30px] md:rounded-[60px] flex items-center justify-center w-[200px] md:w-[305px] h-[100px] md:h-[160px]">
           <Image
             src={testimonials[currentTestimonial].companyLogo}
@@ -79,10 +79,10 @@ export function TestimonialsSection() {
 
         <div className="absolute bottom-4 right-4 md:-right-28 md:top-36">
           <div
-            className="border-2 border-[#7A13D0] rounded-full p-2 md:p-4 cursor-pointer hover:bg-[#6610B2] transition-colors"
+            className="rounded-full p-2 md:p-4 cursor-pointer bg-white hover:bg-[#EEE6F4] transition-colors"
             onClick={nextTestimonial}
           >
-            <ArrowRight size={24} />
+            <ArrowRight size={24} className="text-black" />
           </div>
         </div>
 

@@ -155,7 +155,7 @@ export function BusinessSolutions() {
                           variant="link"
                           className="text-[#022C22] text-[18px] hover:text-[#701CC0] p-0"
                         >
-                          Learn more
+                          Learn More
                         </Button>
                       </motion.div>
                     </motion.div>
