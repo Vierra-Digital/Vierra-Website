@@ -14,7 +14,7 @@ export function FooterSection() {
   return (
     <>
       {/* <div className="mx-auto max-sm:my-6 max-w-[1300px] pt-32 px-5 max-sm:py-10 md:pb-32"> */}
-        <div className="mx-auto max-sm:my-6 max-w-full pt-32 md:px-32 max-sm:py-10 md:pb-32">
+      <div className="mx-auto max-sm:my-6 max-w-full pt-32 md:px-32 max-sm:py-10 md:pb-32">
         <div className="flex gap-5 max-md:flex-col bg-[#7A13D0] rounded-[60px] relative z-10">
           {/* Left Content */}
           <div className="flex flex-col w-[69%] max-md:w-full px-20 max-md:px-8 max-sm:px-5">
@@ -36,11 +36,11 @@ export function FooterSection() {
               <div
                 className={`flex gap-5 mt-28 max-md:mt-10 max-sm:flex-col max-sm:mx-auto ${inter.className}`}
               >
-                <button className="flex items-center justify-center gap-2 px-8 py-4 text-sm font-bold tracking-wide text-[#7A13D0] bg-white border-2 border-white rounded-[70px] max-sm:w-full">
+                <button className="flex items-center justify-center gap-2 px-8 py-4 text-sm font-bold tracking-wide text-[#7A13D0] bg-white border-2 border-white rounded-[70px] transform transition-transform duration-300 hover:scale-105 max-sm:w-full">
                   Free Audit Call
                   <ArrowUpRight className="w-5 h-5" />
                 </button>
-                <button className="flex items-center justify-center gap-2 px-8 py-4 text-sm font-bold tracking-wide text-white border-2 border-white rounded-[70px] max-sm:w-full">
+                <button className="flex items-center justify-center gap-2 px-8 py-4 text-sm font-bold tracking-wide text-white border-2 border-white rounded-[70px] transform transition-transform duration-300 hover:scale-105 max-sm:w-full">
                   Can&apos;t Decide Yet?
                   <ArrowUpRight className="w-5 h-5" />
                 </button>

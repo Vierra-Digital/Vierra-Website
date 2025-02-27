@@ -1,5 +1,6 @@
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
-import React from "react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const gridLayout = [
   [false, false, true, false, false, false],
@@ -19,16 +20,120 @@ const imagesMap = {
   "4-4": "/assets/Socials/Email.png",
 };
 
+const animationSets = [
+  {
+    source: "2-2", // Instagram
+    targets: ["3-0", "4-2"], // Facebook, LinkedIn
+    gradients: ["instagramToFacebook", "instagramToLinkedIn"],
+    paths: [
+      "M240,290 L240,340 C240,348 232,355 224,355 L93,355",
+      "M250,290 L250,425",
+    ],
+  },
+  {
+    source: "1-4", // Google Analytics
+    targets: ["2-5", "4-4"], // SEO, Email
+    gradients: ["googleAnalyticsToSeo", "googleAnalyticsToEmail"],
+    paths: [
+      "M460,175 L460,240 C460,248 468,255 476,255 L512,255",
+      "M450,175 L450,426",
+    ],
+  },
+];
+
 const GridComponent = () => {
+  const [activeSet, setActiveSet] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [activeNodes, setActiveNodes] = useState<string[]>([]);
+
+  useEffect(() => {
+    const runAnimation = () => {
+      const currentSet = animationSets[activeSet];
+
+      // Start animation
+      setIsAnimating(true);
+      setActiveNodes([currentSet.source]);
+
+      // Activate target nodes after line animation
+      const targetTimer = setTimeout(() => {
+        setActiveNodes([currentSet.source, ...currentSet.targets]);
+      }, 1500);
+
+      // Reset and prepare for next set
+      const resetTimer = setTimeout(() => {
+        setIsAnimating(false);
+        setActiveNodes([]);
+        setActiveSet((prev) => (prev + 1) % animationSets.length);
+      }, 3000);
+
+      return { targetTimer, resetTimer };
+    };
+
+    // Run first animation immediately
+    const timers = runAnimation();
+
+    // Set up interval for subsequent animations
+    const intervalTimer = setInterval(() => {
+      runAnimation();
+    }, 4000);
+
+    // Cleanup function
+    return () => {
+      clearTimeout(timers.targetTimer);
+      clearTimeout(timers.resetTimer);
+      clearInterval(intervalTimer);
+    };
+  }, [activeSet]); // Add activeSet as dependency
+
+  const isNodeActive = (key: string) => {
+    return activeNodes.includes(key);
+  };
+
+  const pathVariants = {
+    initial: {
+      opacity: 0,
+      pathLength: 0,
+    },
+    animate: {
+      opacity: 0.7,
+      pathLength: 1,
+      transition: {
+        pathLength: { duration: 1.5, ease: "easeInOut" },
+        opacity: { duration: 0.2 },
+      },
+    },
+    exit: {
+      opacity: 0,
+      transition: {
+        opacity: { duration: 0.2 },
+        pathLength: { duration: 0 },
+      },
+    },
+  };
+
+  const iconVariants = {
+    inactive: {
+      scale: 1,
+      opacity: 1, // Keep opacity at 1 for inactive state
+      transition: {
+        duration: 0.3,
+        ease: "easeOut",
+      },
+    },
+    active: {
+      opacity: 1,
+      transition: {
+        duration: 0.3,
+        ease: "easeOut",
+      },
+    },
+  };
+
   return (
     <div className="relative" style={{ width: "fit-content" }}>
-      {/* SVG layer for connections */}
       <svg
         className="absolute top-0 left-0 w-full h-full pointer-events-none"
-        style={{
-          minWidth: "100%",
-          minHeight: "100%",
-        }}
+        style={{ minWidth: "100%", minHeight: "100%" }}
         preserveAspectRatio="xMidYMid meet"
         viewBox="0 0 600 600"
       >
@@ -77,43 +182,23 @@ const GridComponent = () => {
           </linearGradient>
         </defs>
 
-        {/* Facebook to Instagram */}
-        <path
-          d="M240,295 L240,340 C240,348 232,355 224,355 L95,355"
-          stroke="url(#instagramToFacebook)"
-          strokeWidth="4"
-          fill="none"
-          strokeLinecap="round"
-          className="opacity-70"
-        />
-        {/* Instagram to LinkedIn */}
-        <path
-          d="M250,295 L250,410"
-          stroke="url(#instagramToLinkedIn)"
-          strokeWidth="4"
-          fill="none"
-          strokeLinecap="round"
-          className="opacity-70"
-        />
-        {/* Google Analytics to Email */}
-        <path
-          d="M450,189 L450,410"
-          stroke="url(#googleAnalyticsToEmail)"
-          strokeWidth="4"
-          fill="none"
-          strokeLinecap="round"
-          className="opacity-70"
-        />
-        {/* Google Analytics to SEO */}
-        <path
-          d="M460,189 L460,240 C460,248 468,255 476,255 L505,255"
-          stroke="url(#googleAnalyticsToSeo)"
-          strokeWidth="4"
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="opacity-70"
-        />
+        <AnimatePresence>
+          {isAnimating &&
+            animationSets[activeSet].paths.map((path, index) => (
+              <motion.path
+                key={`${activeSet}-${index}`}
+                d={path}
+                stroke={`url(#${animationSets[activeSet].gradients[index]})`}
+                strokeWidth="4"
+                fill="none"
+                strokeLinecap="round"
+                variants={pathVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+              />
+            ))}
+        </AnimatePresence>
       </svg>
 
       <div
@@ -123,18 +208,21 @@ const GridComponent = () => {
         {gridLayout.map((row, rowIndex) =>
           row.map((isFilled, colIndex) => {
             const key = `${rowIndex}-${colIndex}`;
+            const isActive = isNodeActive(key);
+
             return (
               <div
                 key={key}
-                className="w-[45px] h-[45px] sm:w-[55px] sm:h-[55px] md:w-[80px] md:h-[80px] flex items-center justify-center"
+                className="w-[45px] h-[45px] sm:w-[55px] sm:h-[55px] md:w-[80px] md:h-[80px] flex items-center justify-center z-10"
               >
                 {isFilled ? (
-                  <div
-                    className={`w-full h-full flex items-center justify-center ${
-                      imagesMap[key as keyof typeof imagesMap]
-                        ? "bg-white rounded-lg shadow-md"
-                        : "border border-[#D9DEDD] rounded-lg"
+                  <motion.div
+                    className={`w-full h-full flex items-center justify-center bg-[#F3F3F3] border border-[#D9DEDD] rounded-lg ${
+                      isActive && "shadow-md"
                     }`}
+                    variants={iconVariants}
+                    initial="inactive"
+                    animate={isActive ? "active" : "inactive"}
                   >
                     {imagesMap[key as keyof typeof imagesMap] ? (
                       <Image
@@ -147,7 +235,7 @@ const GridComponent = () => {
                     ) : (
                       <div className="w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full border border-[#D9DEDD]" />
                     )}
-                  </div>
+                  </motion.div>
                 ) : null}
               </div>
             );

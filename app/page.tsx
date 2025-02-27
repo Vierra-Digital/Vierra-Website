@@ -128,7 +128,7 @@ export default function Home() {
             >
               <Button
                 variant="secondary"
-                className="flex items-center gap-2 bg-[#701CC0] hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC0B8]"
+                className="flex items-center gap-2 bg-[#701CC0] hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC0B8] transform transition-transform duration-300 hover:scale-105"
               >
                 Free Audit Call
                 <ArrowUpRight className="w-4 h-4" />
@@ -149,14 +149,25 @@ export default function Home() {
             transition={{ duration: 0.8, ease: "easeOut" }}
             className="flex-shrink-0"
           >
-            <Image
-              src="/assets/image1.png"
-              alt="Vierra"
-              width={750}
-              height={685}
-              priority
-              quality={100}
-            />
+            <motion.div
+              initial={{ y: 0 }}
+              animate={{ y: [0, -10, 0] }}
+              transition={{
+                duration: 2,
+                repeat: Infinity,
+                repeatType: "loop",
+                ease: "easeInOut",
+              }}
+            >
+              <Image
+                src="/assets/image1.png"
+                alt="Vierra"
+                width={750}
+                height={685}
+                priority
+                quality={100}
+              />
+            </motion.div>
           </motion.div>
         </main>
 

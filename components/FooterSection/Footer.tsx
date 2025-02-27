@@ -74,17 +74,29 @@ const Footer = () => {
               className={`space-y-3 md:space-y-4 text-white/80 ${inter.className}`}
             >
               <li>
-                <a href="#" className="hover:text-white transition-colors">
+                <a
+                  href="https://docs.google.com/document/d/1A3rfabN_-r240YgMVmXpG2eR7FwehhPSwYJlpEcUkd4/edit?tab=t.0"
+                  target="_blank"
+                  className="hover:text-white transition-colors"
+                >
                   Terms of Service
                 </a>
               </li>
               <li>
-                <a href="#" className="hover:text-white transition-colors">
+                <a
+                  href="https://docs.google.com/document/d/1eS-9f8RAMGF8AE--GqbBeIuDs1W8_IXn3jRRWXT-7VE/edit?tab=t.0"
+                  target="_blank"
+                  className="hover:text-white transition-colors"
+                >
                   Privacy Policy
                 </a>
               </li>
               <li>
-                <a href="#" className="hover:text-white transition-colors">
+                <a
+                  href="https://docs.google.com/document/d/1zdH-0dTJYSz8fBH7lJ1zT3VW-h6qRD-vdcyTxIgV2WI/edit?tab=t.0"
+                  target="_blank"
+                  className="hover:text-white transition-colors"
+                >
                   Work Policy
                 </a>
               </li>
@@ -100,14 +112,27 @@ const Footer = () => {
         {/* Social Media Links */}
         <div className="flex flex-col gap-4 w-full md:w-auto text-center md:text-left">
           {[
-            { icon: <FaEnvelope size={20} />, text: "Send Us An Email" },
-            { icon: <FaLinkedinIn size={20} />, text: "Connect On LinkedIn" },
-            { icon: <FaFacebookF size={20} />, text: "Friend Us On Facebook" },
+            {
+              icon: <FaEnvelope size={20} />,
+              text: "Send Us An Email",
+              link: "#",
+            },
+            {
+              icon: <FaLinkedinIn size={20} />,
+              text: "Connect On LinkedIn",
+              link: "https://www.linkedin.com/company/vierra/?viewAsMember=true",
+            },
+            {
+              icon: <FaFacebookF size={20} />,
+              text: "Friend Us On Facebook",
+              link: "#",
+            },
           ].map((item, index) => (
             <a
               key={index}
-              href="#"
-              className="flex items-center justify-center md:justify-start gap-4 bg-[#1F0F2D] pl-4 pr-6 py-3 rounded-full hover:bg-[#2A1539] transition-colors"
+              href={item.link}
+              target="_blank"
+              className="flex items-center justify-start gap-4 bg-[#1F0F2D] pl-4 pr-6 py-3 rounded-full hover:bg-[#2A1539] transition-colors"
             >
               <div className="bg-[#701CC0] p-2.5 rounded-full">{item.icon}</div>
               <span className={`text-sm font-medium ${figtree.className}`}>

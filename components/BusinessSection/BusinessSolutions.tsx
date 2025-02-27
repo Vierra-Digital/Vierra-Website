@@ -1,5 +1,4 @@
-"use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bricolage_Grotesque, Inter, Figtree } from "next/font/google";
 import { Button } from "@/components/ui/button";
 import { StatsGrid } from "./StatsGrid";
@@ -45,10 +44,22 @@ const tabs: TabItem[] = [
 ];
 
 export function BusinessSolutions() {
-  const [activeTab, setActiveTab] = useState("efficiency");
+  const [activeTab, setActiveTab] = useState(tabs[0].id);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveTab((prevTab) => {
+        const currentIndex = tabs.findIndex((tab) => tab.id === prevTab);
+        const nextIndex = (currentIndex + 1) % tabs.length; // Loop back to the start
+        return tabs[nextIndex].id;
+      });
+    }, 10000); // Change every 10 seconds
+
+    return () => clearInterval(interval); // Cleanup on unmount
+  }, [activeTab]);
 
   return (
-    <section className="w-full py-20 px-6 bg-white" id="solutions">
+    <section className="w-full py-20 px-6 bg-[#F3F3F3]" id="solutions">
       <div className="max-w-7xl mx-auto px-6 max-md:px-2">
         <div className="grid md:grid-cols-2 gap-12 mb-16">
           <h2
@@ -68,7 +79,7 @@ export function BusinessSolutions() {
 
         {/* Tabs and Image Section */}
         <div className="grid md:grid-cols-2 gap-12 mb-20 place-items-center">
-          <div className="space-y-6 relative">
+          <div className="space-y-6 relative max-md:min-h-[480px]">
             {tabs.map((tab) => (
               <motion.div
                 key={tab.id}
@@ -77,7 +88,9 @@ export function BusinessSolutions() {
                 initial={false}
               >
                 <motion.h3
-                  className={`text-5xl mb-6 relative inline-block`}
+                  className={`text-2xl sm:text-4xl md:text-5xl md:mb-6 relative inline-block ${
+                    activeTab === tab.id && "mb-6"
+                  } `}
                   animate={{
                     color: activeTab === tab.id ? "#701CC0" : "#929C9A",
                   }}
@@ -97,15 +110,20 @@ export function BusinessSolutions() {
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1] }}
                       />
+
                       <motion.div
-                        className="absolute bottom-[-12px] left-0 w-full h-[2px]"
+                        className="absolute bottom-[-12px] left-0 w-full h-[2px] bg-[#D9DEDD] overflow-hidden"
                         layoutId="underline"
                         transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1] }}
-                        style={{
-                          background:
-                            "linear-gradient(to right, #701CC0 0%, #701CC0 60%, #D9DEDD 60%, #D9DEDD 100%)",
-                        }}
-                      />
+                      >
+                        <motion.div
+                          className="h-full bg-[#701CC0]"
+                          initial={{ width: "0%" }}
+                          animate={{ width: "100%" }}
+                          transition={{ duration: 10, ease: "linear" }}
+                          key={activeTab}
+                        />
+                      </motion.div>
                     </>
                   )}
                 </motion.h3>

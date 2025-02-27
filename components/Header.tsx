@@ -68,7 +68,7 @@ export function Header() {
       {/* Desktop CTA Button */}
       <Button
         variant="secondary"
-        className={`hidden md:flex items-center gap-2 border-2 border-[#7A13D0] bg-transparent hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] ${inter.className}`}
+        className={`hidden md:flex items-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-all duration-300 hover:scale-105 ${inter.className}`}
       >
         Free Audit Call
         <ArrowUpRight className="w-4 h-4" />
@@ -143,7 +143,7 @@ export function Header() {
               <div className="mt-auto p-4 border-t border-white/10">
                 <Button
                   variant="secondary"
-                  className={`w-full flex items-center justify-center gap-2 border-2 border-[#7A13D0] bg-transparent hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] ${inter.className}`}
+                  className={`w-full flex items-center justify-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] ${inter.className}`}
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   Free Audit Call
