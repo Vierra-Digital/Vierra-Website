@@ -14,7 +14,7 @@ export function FooterSection() {
   return (
     <>
       {/* <div className="mx-auto max-sm:my-6 max-w-[1300px] pt-32 px-5 max-sm:py-10 md:pb-32"> */}
-      <div className="mx-auto max-sm:my-6 max-w-full pt-32 md:px-32 max-sm:py-10 md:pb-32">
+      <div className="mx-auto max-sm:my-6 max-w-full md:px-32 max-sm:py-10 md:pb-32">
         <div className="flex gap-5 max-md:flex-col bg-[#7A13D0] rounded-[60px] relative z-10">
           {/* Left Content */}
           <div className="flex flex-col w-[69%] max-md:w-full px-20 max-md:px-8 max-sm:px-5">
