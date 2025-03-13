@@ -53,7 +53,7 @@ export function BusinessSolutions() {
         const nextIndex = (currentIndex + 1) % tabs.length; // Loop back to the start
         return tabs[nextIndex].id;
       });
-    }, 10000); // Change every 10 seconds
+    }, 5000); // Change every 5 seconds
 
     return () => clearInterval(interval); // Cleanup on unmount
   }, [activeTab]);
@@ -63,7 +63,7 @@ export function BusinessSolutions() {
       <div className="max-w-7xl mx-auto px-6 max-md:px-2">
         <div className="grid md:grid-cols-2 gap-12 mb-16">
           <h2
-            className={`text-3xl font-bold text-[#18042A] mb-4 ${bricolage.className}`}
+            className={`text-3xl font-semibold text-[#18042A] mb-4 ${bricolage.className}`}
           >
             We Are Not Your Average
             <br />
@@ -120,7 +120,7 @@ export function BusinessSolutions() {
                           className="h-full bg-[#701CC0]"
                           initial={{ width: "0%" }}
                           animate={{ width: "100%" }}
-                          transition={{ duration: 10, ease: "linear" }}
+                          transition={{ duration: 5, ease: "linear" }}
                           key={activeTab}
                         />
                       </motion.div>
