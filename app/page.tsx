@@ -101,11 +101,30 @@ export default function Home() {
             <motion.h1
               variants={{
                 hidden: { opacity: 0, y: 20 },
-                visible: { opacity: 1, y: 0 },
+                visible: {
+                  opacity: 1,
+                  y: 0,
+                  transition: {
+                    staggerChildren: 0.1, // Delay between each letter
+                    ease: "easeOut",
+                  },
+                },
               }}
               className={`text-5xl md:text-6xl font-bold leading-tight mb-6 text-[#EFF3FF] ${bricolage.className}`}
             >
-              Generate More Leads For Your Business
+              {Array.from("Generate More Leads For Your Business").map(
+                (letter, index) => (
+                  <motion.span
+                    key={index}
+                    variants={{
+                      hidden: { opacity: 0, y: 20 },
+                      visible: { opacity: 1, y: 0 },
+                    }}
+                  >
+                    {letter}
+                  </motion.span>
+                )
+              )}
             </motion.h1>
 
             <motion.p
@@ -181,30 +200,54 @@ export default function Home() {
                 Trusted By Our Partners
               </h2>
               <div className="flex flex-wrap md:flex-nowrap justify-center items-center gap-12 md:gap-24 w-full">
-                <Image
-                  src="/assets/Partners/Isenberg.png"
-                  alt="Partner Logo"
-                  width={112}
-                  height={24}
-                />
-                <Image
-                  src="/assets/Partners/Athena.png"
-                  alt="Partner Logo"
-                  width={175}
-                  height={24}
-                />
-                <Image
-                  src="/assets/Partners/Harvard.png"
-                  alt="Partner Logo"
-                  width={109}
-                  height={32}
-                />
-                <Image
-                  src="/assets/Partners/NationalAcademy.png"
-                  alt="Partner Logo"
-                  width={123}
-                  height={48}
-                />
+                <a
+                  href="https://www.isenberg.umass.edu/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Image
+                    src="/assets/Partners/Isenberg.png"
+                    alt="Partner Logo"
+                    width={112}
+                    height={24}
+                  />
+                </a>
+                <a
+                  href="https://www.athenahealth.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Image
+                    src="/assets/Partners/Athena.png"
+                    alt="Partner Logo"
+                    width={175}
+                    height={24}
+                  />
+                </a>
+                <a
+                  href="https://www.harvardpilgrim.org/public/home"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Image
+                    src="/assets/Partners/Harvard.png"
+                    alt="Partner Logo"
+                    width={109}
+                    height={32}
+                  />
+                </a>
+                <a
+                  href="https://www.futuredocs.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Image
+                    src="/assets/Partners/NationalAcademy.png"
+                    alt="Partner Logo"
+                    width={123}
+                    height={48}
+                  />
+                </a>
               </div>
             </div>
           </div>
