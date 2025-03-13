@@ -39,59 +39,43 @@ export default function TeamSection() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#010205] relative p-8 md:p-16" id="about">
+    <div
+      className="min-h-screen bg-[#010205] relative p-8 md:p-16 flex items-center"
+      id="about"
+    >
       <div className="max-w-7xl mx-auto">
         <h1
-          className={`${bricolage.className} text-white text-6xl md:text-7xl font-bold mb-16 md:ml-8`}
+          className={`${bricolage.className} text-white text-6xl md:text-7xl font-bold mb-16 text-center`}
         >
           Our Team<span className="text-[#7A13D0]">.</span>
         </h1>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mt-24">
-          {team.map((member, index) => {
-            return (
-              <div
-                key={member.name}
-                className="group flex flex-col items-center"
-              >
-                <div className="relative w-[319px] h-[319px]">
-                  {/* Top-left corner (first image) */}
-                  {index === 0 && (
-                    <div className="hidden md:block absolute -top-[55px] -left-[60px] w-[171px] h-[171px] bg-[#18042A] rounded-[40px]" />
-                  )}
-                  {/* Top-right corner (third image) */}
-                  {index === 2 && (
-                    <div className="hidden md:block absolute -top-[55px] -right-[60px] w-[171px] h-[171px] bg-[#18042A] rounded-[40px]" />
-                  )}
-                  {/* Bottom-left corner (fourth image) */}
-                  {index === 3 && (
-                    <div className="hidden md:block absolute -bottom-[55px] -left-[60px] w-[171px] h-[171px] bg-[#18042A] rounded-[40px]" />
-                  )}
-                  {/* Bottom-right corner (last image) */}
-                  {index === 5 && (
-                    <div className="hidden md:block absolute -bottom-[55px] -right-[60px] w-[171px] h-[171px] bg-[#18042A] rounded-[40px]" />
-                  )}
-                  <Image
-                    src={member.image || "/placeholder.svg"}
-                    alt={member.name}
-                    fill
-                    quality={100}
-                    className="object-cover rounded-[60px] relative z-10 group-hover:scale-105 transition-transform duration-300"
-                  />
-                </div>
-                <div className="mt-6 text-center z-10">
-                  <h3
-                    className={`${bricolage.className} text-white text-xl font-semibold`}
-                  >
-                    {member.name}
-                  </h3>
-                  <p className={`${inter.className} text-white/80 mt-1`}>
-                    {member.role}
-                  </p>
-                </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-8 md:gap-4 lg:gap-6">
+          {team.map((member) => (
+            <div key={member.name} className="flex flex-col items-center">
+              <div className="relative w-[140px] h-[140px] sm:w-[150px] sm:h-[150px] md:w-[170px] md:h-[170px] group">
+                <Image
+                  src={member.image || "/placeholder.svg"}
+                  alt={member.name}
+                  fill
+                  quality={100}
+                  className="object-cover rounded-full transition-all duration-300 md:group-hover:drop-shadow-[0_0_80px_#701cc0]"
+                />
               </div>
-            );
-          })}
+              <div className="mt-4 text-center">
+                <h3
+                  className={`${bricolage.className} text-white text-base sm:text-lg md:text-xl font-semibold`}
+                >
+                  {member.name}
+                </h3>
+                <p
+                  className={`${inter.className} text-white/70 text-xs sm:text-sm md:text-base`}
+                >
+                  {member.role}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

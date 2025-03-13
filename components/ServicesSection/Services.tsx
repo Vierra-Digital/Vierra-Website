@@ -1,6 +1,11 @@
 "use client";
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useRef } from "react";
+import {
+  motion,
+  AnimatePresence,
+  useMotionValue,
+  useTransform,
+} from "framer-motion";
 import { Bricolage_Grotesque, Figtree } from "next/font/google";
 import Image from "next/image";
 
@@ -67,8 +72,35 @@ const descriptionVariants = {
 };
 
 export function Services() {
-  // Change from single activeService to array of open services
   const [openServices, setOpenServices] = useState<string[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Motion values for mouse position
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+
+  // Transform mouse position to rotation values
+  // Using small values to keep the rotation subtle
+  const rotateY = useTransform(mouseX, [-300, 300], [5, -5]);
+  const rotateX = useTransform(mouseY, [-300, 300], [-5, 5]);
+
+  // Update mouse position values
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+
+      const rect = containerRef.current.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+
+      // Calculate mouse position relative to the center of the container
+      mouseX.set(e.clientX - centerX);
+      mouseY.set(e.clientY - centerY);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, [mouseX, mouseY]);
 
   // New toggle function
   const toggleService = (serviceId: string) => {
@@ -84,26 +116,41 @@ export function Services() {
     <div
       className="w-full max-w-[1174px] px-4 md:px-6 lg:px-0 my-20"
       id="services"
+      ref={containerRef}
     >
       {/* Main Card */}
       <div
         className={`relative w-full min-h-[773px] bg-[#18042A] rounded-[30px] md:rounded-tr-[60px] md:rounded-br-[60px] md:rounded-tl-[0px] md:rounded-bl-[0px] z-0 ${bricolage.className}`}
       >
         {/* 3D Object */}
-        <div className="z-10 relative md:absolute md:right-[15%] md:top-1/3 md:-translate-y-[40%] md:translate-x-1/2 py-8 md:py-0">
+        <div className="z-10 relative md:absolute md:right-[12%] md:top-1/3 md:-translate-y-[40%] md:translate-x-1/2 py-8 md:py-0">
           <div className="flex justify-center">
-            <Image
-              src="/assets/object.png"
-              alt="3D Object"
-              priority
-              quality={100}
-              width={727}
-              height={727}
-              className="object-contain relative z-10 max-sm:w-[80%] max-md:w-full max-w-[727px]"
+            <motion.div
               style={{
-                filter: "drop-shadow(0px 20px 20px rgba(112, 28, 192, 0.3))",
+                rotateY,
+                rotateX,
+                transformPerspective: 1000,
+                transformStyle: "preserve-3d",
               }}
-            />
+              transition={{
+                type: "spring",
+                damping: 20,
+                stiffness: 100,
+              }}
+            >
+              <Image
+                src="/assets/object.png"
+                alt="3D Object"
+                priority
+                quality={100}
+                width={727}
+                height={727}
+                className="object-contain relative z-10 max-sm:w-[80%] max-md:w-full max-w-[727px]"
+                style={{
+                  filter: "drop-shadow(0px 20px 20px rgba(112, 28, 192, 0.3))",
+                }}
+              />
+            </motion.div>
           </div>
         </div>
 

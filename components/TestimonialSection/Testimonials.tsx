@@ -62,6 +62,18 @@ export function TestimonialsSection() {
 
   return (
     <section className="w-full min-h-screen bg-[#010205] text-white px-4 md:mt-32 relative overflow-hidden">
+      {/* New Header Text */}
+      <div className="text-center mt-10 md:mt-20 max-w-[800px] mx-auto">
+        <h2
+          className={`text-2xl md:text-[2.6rem] md:leading-[3rem] font-bold ${bricolage.className}`}
+        >
+          See How We{" "}
+          <span className="bg-[#701CC0B3]">
+            Increased Profits For Top Experts
+          </span>{" "}
+          in the Industry.
+        </h2>
+      </div>
       <div className="relative max-w-[800px] mx-auto z-0">
         <div className="md:min-h-[550px] mt-20 md:mt-44 p-6 md:p-12 max-lg:mt-40 rounded-[30px] md:rounded-[60px] border-2 border-[#42345099] z-0 hover:scale-105 transition-transform duration-300 ease-in-out">
           {/* Animated Testimonial */}
@@ -131,6 +143,13 @@ export function TestimonialsSection() {
             <ArrowRight size={24} className="text-black" />
           </div>
         </div>
+      </div>
+
+      {/* Testimonial Counter */}
+      <div className="text-center mt-4">
+        <p className="text-lg md:text-xl">
+          {currentTestimonial + 1} / {testimonials.length}
+        </p>
       </div>
     </section>
   );
