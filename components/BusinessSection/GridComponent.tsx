@@ -57,7 +57,7 @@ const GridComponent = () => {
       // Activate target nodes after line animation
       const targetTimer = setTimeout(() => {
         setActiveNodes([currentSet.source, ...currentSet.targets]);
-      }, 1500);
+      }, 1000);
 
       // Reset and prepare for next set
       const resetTimer = setTimeout(() => {
@@ -98,7 +98,7 @@ const GridComponent = () => {
       opacity: 0.7,
       pathLength: 1,
       transition: {
-        pathLength: { duration: 1.5, ease: "easeInOut" },
+        pathLength: { duration: 1, ease: "easeInOut" },
         opacity: { duration: 0.2 },
       },
     },
@@ -217,8 +217,8 @@ const GridComponent = () => {
               >
                 {isFilled ? (
                   <motion.div
-                    className={`w-full h-full flex items-center justify-center bg-[#F3F3F3] border border-[#D9DEDD] rounded-lg ${
-                      isActive && "shadow-md"
+                    className={`w-full h-full flex items-center justify-center bg-[#F3F3F3] border border-[#D9DEDD] rounded-lg hover:shadow-md hover:bg-white ${
+                      isActive && "shadow-md bg-white"
                     }`}
                     variants={iconVariants}
                     initial="inactive"
