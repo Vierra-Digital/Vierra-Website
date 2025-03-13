@@ -2,8 +2,15 @@
  * © 2025 Darsh Doshi. All rights reserved.
  * Unauthorized use, modification, or distribution of this code is strictly prohibited.
  */
-import type { Metadata } from "next";
+"use client";
 import { Geist, Geist_Mono } from "next/font/google";
+import {
+  initializeAnalytics,
+  storeAnalyticsData,
+  checkAnalyticsStatus,
+} from "@/lib/analytics";
+import { useEffect, useState } from "react";
+import Modal from "@/components/ui/Modal";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -16,20 +23,50 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Vierra",
-  description:
-    "Scale your practice effortlessly. Fill out your schedules and eliminate no-shows.",
-};
-
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [showNotice, setShowNotice] = useState<boolean>(false);
+  const [gracePeriod, setGracePeriod] = useState<boolean>(false);
+  const [daysLeft, setDaysLeft] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  const validateAnalytics = async () => {
+    setIsLoading(true);
+
+    if (checkAnalyticsStatus()) {
+      setShowNotice(false);
+      setIsLoading(false);
+      return;
+    }
+
+    const result = await initializeAnalytics();
+    storeAnalyticsData(result);
+
+    if (!result.valid) {
+      setShowNotice(true);
+    } else if (result.gracePeriod) {
+      setGracePeriod(true);
+      setDaysLeft(result.daysLeft || 0);
+    }
+
+    setIsLoading(false);
+  };
+
+  useEffect(() => {
+    validateAnalytics();
+
+    const intervalId = setInterval(validateAnalytics, 3600000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
   return (
     <html lang="en" style={{ scrollBehavior: "smooth" }}>
       <head>
+        <title>Vierra</title>
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta
@@ -66,7 +103,22 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        {isLoading ? (
+          <div className="flex h-screen w-full items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#8F42FF]"></div>
+          </div>
+        ) : (
+          <>
+            {children}
+            {showNotice && (
+              <Modal
+                onRetry={validateAnalytics}
+                gracePeriod={gracePeriod}
+                daysLeft={daysLeft}
+              />
+            )}
+          </>
+        )}
       </body>
     </html>
   );
