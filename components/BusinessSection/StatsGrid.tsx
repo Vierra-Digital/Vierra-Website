@@ -1,7 +1,6 @@
 import { TrendingUp, ArrowRight } from "lucide-react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { useState } from "react";
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
 const inter = Inter({ subsets: ["latin"] });
@@ -12,28 +11,22 @@ export function StatsGrid() {
     {
       number: "13M+",
       text: "leads generated. We drive leads to your practice.",
+      progressPercent: 33.33,
     },
     {
       number: "$687K",
       text: "ad spent. We maximize every dollar of your marketing budget.",
+      progressPercent: 66.66,
     },
     {
       number: "28+",
       text: "clients helped. We prioritize your business like our own.",
+      progressPercent: 100,
     },
   ];
 
   // State to track the current content index
   const [contentIndex, setContentIndex] = useState(0);
-
-  // Automatic rotation every 5 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setContentIndex((prevIndex) => (prevIndex + 1) % card4Content.length);
-    }, 5000);
-
-    return () => clearInterval(interval); // Cleanup on unmount
-  }, [contentIndex, card4Content.length]);
 
   // Function to handle button click and cycle through content
   const handleContentSwap = () => {
@@ -157,13 +150,10 @@ export function StatsGrid() {
           {/* Progress bar */}
           <div className="mx-12 mt-auto mb-8 max-md:mx-6 max-sm:mx-4 max-md:mb-6 max-sm:mb-4">
             <div className="h-1 w-full bg-[rgba(255,255,255,0.2)]">
-              <motion.div
-                className="h-1 bg-white"
-                key={contentIndex}
-                initial={{ width: "0%" }}
-                animate={{ width: "100%" }}
-                transition={{ duration: 5, ease: "linear" }}
-              />
+              <div
+                className="h-1 bg-white transition-all duration-500 ease-in-out"
+                style={{ width: `${currentContent.progressPercent}%` }}
+              ></div>
             </div>
           </div>
         </div>
