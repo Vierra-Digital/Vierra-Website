@@ -69,6 +69,13 @@ export function Header() {
       <Button
         variant="secondary"
         className={`hidden md:flex items-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-all duration-300 hover:scale-105 ${inter.className}`}
+        onClick={() =>
+          window.open(
+            "https://calendly.com/alexshick",
+            "_blank",
+            "noopener,noreferrer"
+          )
+        }
       >
         Free Audit Call
         <ArrowUpRight className="w-4 h-4" />
@@ -144,7 +151,14 @@ export function Header() {
                 <Button
                   variant="secondary"
                   className={`w-full flex items-center justify-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] ${inter.className}`}
-                  onClick={() => setIsMobileMenuOpen(false)}
+                  onClick={() => {
+                    setIsMobileMenuOpen(false);
+                    window.open(
+                      "https://calendly.com/alexshick",
+                      "_blank",
+                      "noopener,noreferrer"
+                    );
+                  }}
                 >
                   Free Audit Call
                   <ArrowUpRight className="w-4 h-4" />

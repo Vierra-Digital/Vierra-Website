@@ -148,6 +148,13 @@ export default function Home() {
               <Button
                 variant="secondary"
                 className="flex items-center gap-2 bg-[#701CC0] hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC0B8] transform transition-transform duration-300 hover:scale-105"
+                onClick={() =>
+                  window.open(
+                    "https://calendly.com/alexshick",
+                    "_blank",
+                    "noopener,noreferrer"
+                  )
+                }
               >
                 Free Audit Call
                 <ArrowUpRight className="w-4 h-4" />
