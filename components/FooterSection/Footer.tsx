@@ -1,5 +1,11 @@
 import Image from "next/image";
-import { FaEnvelope, FaFacebookF, FaLinkedinIn, FaTimes, FaExternalLinkAlt } from "react-icons/fa";
+import {
+  FaEnvelope,
+  FaFacebookF,
+  FaLinkedinIn,
+  FaTimes,
+  FaExternalLinkAlt,
+} from "react-icons/fa";
 import { Figtree, Inter } from "next/font/google";
 import { useState, useEffect } from "react";
 
@@ -17,15 +23,15 @@ const Footer = () => {
     const checkIsMobile = () => {
       setIsMobile(window.innerWidth < 768);
     };
-    
+
     // Set initial value
     checkIsMobile();
-    
+
     // Add event listener
-    window.addEventListener('resize', checkIsMobile);
-    
+    window.addEventListener("resize", checkIsMobile);
+
     // Clean up
-    return () => window.removeEventListener('resize', checkIsMobile);
+    return () => window.removeEventListener("resize", checkIsMobile);
   }, []);
 
   const openDocInModal = (url: string, title: string) => {
@@ -33,13 +39,12 @@ const Footer = () => {
     if (isMobile) {
       // Use the direct preview URL
       const previewUrl = url.replace(/\/edit\?tab=t\.0$/, "/preview");
-      window.open(previewUrl, '_blank');
+      window.open(previewUrl, "_blank");
       return;
     }
-    
+
     // On desktop, use the modal approach
-    const embedUrl = url.replace(/\/edit\?tab=t\.0$/, "/preview");
-    setCurrentDocUrl(embedUrl);
+    setCurrentDocUrl(url);
     setCurrentDocTitle(title);
     setIsModalOpen(true);
   };
@@ -52,22 +57,22 @@ const Footer = () => {
   // Open document in new tab (fallback option for desktop too)
   const openDocInNewTab = () => {
     if (currentDocUrl) {
-      window.open(currentDocUrl, '_blank');
+      window.open(currentDocUrl, "_blank");
     }
   };
 
   const documents = [
     {
       title: "Terms of Service",
-      url: "https://docs.google.com/document/d/1A3rfabN_-r240YgMVmXpG2eR7FwehhPSwYJlpEcUkd4/edit?tab=t.0",
+      url: "https://docs.google.com/document/d/1A3rfabN_-r240YgMVmXpG2eR7FwehhPSwYJlpEcUkd4/pub?embedded=true",
     },
     {
       title: "Privacy Policy",
-      url: "https://docs.google.com/document/d/1eS-9f8RAMGF8AE--GqbBeIuDs1W8_IXn3jRRWXT-7VE/edit?tab=t.0",
+      url: "https://docs.google.com/document/d/1eS-9f8RAMGF8AE--GqbBeIuDs1W8_IXn3jRRWXT-7VE/pub?embedded=true",
     },
     {
       title: "Work Policy",
-      url: "https://docs.google.com/document/d/1zdH-0dTJYSz8fBH7lJ1zT3VW-h6qRD-vdcyTxIgV2WI/edit?tab=t.0",
+      url: "https://docs.google.com/document/d/1zdH-0dTJYSz8fBH7lJ1zT3VW-h6qRD-vdcyTxIgV2WI/pub?embedded=true",
     },
   ];
 
@@ -162,7 +167,7 @@ const Footer = () => {
             {
               icon: <FaEnvelope size={20} />,
               text: "Send Us An Email",
-              link: "#",
+              link: "mailto:business@alexshick.com",
             },
             {
               icon: <FaLinkedinIn size={20} />,
@@ -217,7 +222,7 @@ const Footer = () => {
                 >
                   <FaExternalLinkAlt size={16} />
                 </button>
-                
+
                 <button
                   onClick={closeModal}
                   className="text-white/80 hover:text-white bg-[#2A1539] hover:bg-[#3A1F4D] p-2 rounded-full transition-colors"
