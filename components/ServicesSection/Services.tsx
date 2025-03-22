@@ -1,13 +1,10 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import {
-  motion,
-  AnimatePresence,
-  useMotionValue,
-  useTransform,
-} from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Bricolage_Grotesque, Figtree } from "next/font/google";
-import Image from "next/image";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { useGLTF } from "@react-three/drei";
+import * as THREE from "three";
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
 const figtree = Figtree({ subsets: ["latin"] });
@@ -15,7 +12,7 @@ const figtree = Figtree({ subsets: ["latin"] });
 interface Service {
   id: string;
   name: string;
-  description: string; // Add this new field
+  description: string;
 }
 
 const services: Service[] = [
@@ -71,38 +68,65 @@ const descriptionVariants = {
   },
 };
 
+function Model({ isDropdownOpen }: { isDropdownOpen: boolean }) {
+  const gltf = useGLTF("/assets/object.glb");
+  const [isAnimating, setIsAnimating] = useState(false);
+
+  // Trigger animation when dropdown state changes
+  useEffect(() => {
+    if (isDropdownOpen !== undefined) {
+      setIsAnimating(true);
+      const timeout = setTimeout(() => setIsAnimating(false), 500); // Animation duration
+      return () => clearTimeout(timeout);
+    }
+  }, [isDropdownOpen]);
+
+  useFrame((state, delta) => {
+    if (isAnimating) {
+      // Scale up and move upward
+      gltf.scene.scale.lerp(new THREE.Vector3(4.1, 4.1, 4.1), 0.1);
+      gltf.scene.position.lerp(new THREE.Vector3(0, 0.5, 0), 0.1);
+    } else {
+      // Return to original scale and position
+      gltf.scene.scale.lerp(new THREE.Vector3(4, 4, 4), 0.1);
+      gltf.scene.position.lerp(new THREE.Vector3(0, 0, 0), 0.1);
+    }
+    gltf.scene.rotation.y += delta / 2; // Continuous rotation
+  });
+
+  return (
+    <primitive
+      object={gltf.scene}
+      scale={4}
+      position={[0, 0, 0]}
+      rotation={[0.2, 0, 0]}
+      material={
+        new THREE.MeshStandardMaterial({
+          metalness: 0.9,
+          roughness: 0.5,
+          flatShading: false,
+        })
+      }
+    />
+  );
+}
+
 export function Services() {
   const [openServices, setOpenServices] = useState<string[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  // Motion values for mouse position
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
-
-  // Transform mouse position to rotation values
-  // Using small values to keep the rotation subtle
-  const rotateY = useTransform(mouseX, [-300, 300], [5, -5]);
-  const rotateX = useTransform(mouseY, [-300, 300], [-5, 5]);
-
-  // Update mouse position values
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!containerRef.current) return;
-
-      const rect = containerRef.current.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-      const centerY = rect.top + rect.height / 2;
-
-      // Calculate mouse position relative to the center of the container
-      mouseX.set(e.clientX - centerX);
-      mouseY.set(e.clientY - centerY);
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
     };
 
-    window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, [mouseX, mouseY]);
+    handleResize(); // Set initial value
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
-  // New toggle function
   const toggleService = (serviceId: string) => {
     setOpenServices(
       (prev) =>
@@ -110,6 +134,7 @@ export function Services() {
           ? prev.filter((id) => id !== serviceId) // close if open
           : [...prev, serviceId] // open if closed
     );
+    setIsDropdownOpen((prev) => !prev); // Toggle dropdown state
   };
 
   return (
@@ -125,37 +150,29 @@ export function Services() {
         {/* 3D Object */}
         <div className="z-10 relative md:absolute md:right-[12%] md:top-1/3 md:-translate-y-[40%] md:translate-x-1/2 py-8 md:py-0">
           <div className="flex justify-center">
-            <motion.div
-              style={{
-                rotateY,
-                rotateX,
-                transformPerspective: 1000,
-                transformStyle: "preserve-3d",
-              }}
-              transition={{
-                type: "spring",
-                damping: 20,
-                stiffness: 100,
-              }}
-            >
-              <Image
-                src="/assets/object.png"
-                alt="3D Object"
-                priority
-                quality={100}
-                width={727}
-                height={727}
-                className="object-contain relative z-10 max-sm:w-[80%] max-md:w-full max-w-[727px]"
+            <div>
+              <Canvas
                 style={{
-                  filter: "drop-shadow(0px 20px 20px rgba(112, 28, 192, 0.3))",
+                  width: isMobile ? 300 : 727,
+                  height: isMobile ? 300 : 727,
                 }}
-              />
-            </motion.div>
+                gl={{ antialias: true }}
+              >
+                <ambientLight intensity={1} />
+                <directionalLight position={[2, 2, 2]} intensity={6} />
+                <directionalLight position={[-10, -6, -2]} intensity={6} />
+                <directionalLight position={[0, -5, 0]} intensity={6} />
+                <directionalLight position={[5, 5, 5]} intensity={6} />
+                <directionalLight position={[-5, 5, 5]} intensity={6} />
+                <directionalLight position={[5, -5, 5]} intensity={6} />
+                <directionalLight position={[-5, -5, 5]} intensity={6} />
+                <Model isDropdownOpen={isDropdownOpen} />
+              </Canvas>
+            </div>
           </div>
         </div>
 
         {/* Ellipse */}
-
         <motion.div
           initial={{ x: 0, y: 0 }}
           animate={{ x: [0, 15, 0], y: [0, 15, 0] }}
@@ -177,9 +194,9 @@ export function Services() {
               <div key={service.id}>
                 <motion.div
                   onClick={() => toggleService(service.id)}
-                  className={`flex items-center cursor-pointer
-                    border-b py-8 group
-                    ${isOpen ? "border-[#701CC0]" : "border-[#A4A4A4]/20"}`}
+                  className={`flex items-center cursor-pointer border-b py-8 group ${
+                    isOpen ? "border-[#701CC0]" : "border-[#A4A4A4]/20"
+                  }`}
                   animate={{
                     borderColor: isOpen
                       ? "#701CC0"
@@ -192,21 +209,18 @@ export function Services() {
                 >
                   {/* Service Number */}
                   <div
-                    className={`flex items-center justify-center h-[40px] md:h-[52px] w-[56px] md:w-[70px] rounded-full transition-all duration-300
-                      ${
-                        isOpen
-                          ? "bg-[#701CC0]" // Active state
-                          : "bg-transparent border-[1.5px] border-white/40 group-hover:border-white" // Inactive & hover state
-                      }`}
+                    className={`flex items-center justify-center h-[40px] md:h-[52px] w-[56px] md:w-[70px] rounded-full transition-all duration-300 ${
+                      isOpen
+                        ? "bg-[#701CC0]" // Active state
+                        : "bg-transparent border-[1.5px] border-white/40 group-hover:border-white" // Inactive & hover state
+                    }`}
                   >
                     <span
-                      className={`text-lg md:text-[24px] font-light transition-opacity duration-300
-                        ${
-                          isOpen
-                            ? "text-white" // Active state
-                            : "text-white/40 group-hover:text-white" // Inactive & hover state
-                        }
-                      `}
+                      className={`text-lg md:text-[24px] font-light transition-opacity duration-300 ${
+                        isOpen
+                          ? "text-white" // Active state
+                          : "text-white/40 group-hover:text-white" // Inactive & hover state
+                      }`}
                     >
                       {service.id}
                     </span>
@@ -214,13 +228,11 @@ export function Services() {
 
                   {/* Service Name */}
                   <span
-                    className={`ml-4 md:ml-6 max-md:text-2xl md:text-[48px] transition-all duration-300
-                      ${
-                        isOpen
-                          ? "text-white font-normal" // Active state
-                          : "text-white/40 font-light group-hover:text-white" // Inactive & hover state
-                      }
-                    `}
+                    className={`ml-4 md:ml-6 max-md:text-2xl md:text-[48px] transition-all duration-300 ${
+                      isOpen
+                        ? "text-white font-normal" // Active state
+                        : "text-white/40 font-light group-hover:text-white" // Inactive & hover state
+                    }`}
                   >
                     {service.name}
                   </span>
