@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ArrowUpRight } from "lucide-react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
-import Image from "next/image";
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
 const inter = Inter({ subsets: ["latin"] });
@@ -49,17 +48,21 @@ export function CaseStudies() {
         </div>
       </div>
 
-      {/* Image Section */}
+      {/* YT Video Section */}
       <div className="container mx-auto mb-10 px-4 md:px-16">
         <div className="max-w-full mx-auto flex justify-center items-center">
-          <Image
-            src="/assets/cs.jpeg"
-            alt="Case Study Team"
-            width={1136}
-            height={670}
-            quality={100}
-            className="object-cover shrink-0 w-full rounded-[95px] max-sm:rounded-3xl h-[670px] lg:shadow-[20px_15px_100px_0px_#7A13D080]"
-          />
+          <div className="w-full h-[670px] rounded-[50px] max-sm:rounded-3xl overflow-hidden lg:shadow-[20px_15px_100px_0px_#7A13D080]">
+            <iframe
+              width="100%"
+              height="100%"
+              src="https://www.youtube.com/embed/ZK-rNEhJIDs?si=bplSAJC6A2_4xskR"
+              title="YouTube video player"
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+              className="w-full h-full"
+            ></iframe>
+          </div>
         </div>
       </div>
     </div>
