@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
+import { Inter } from "next/font/google";
+
+const inter = Inter({ subsets: ["latin"] });
 
 const gridLayout = [
   [false, false, true, false, false, false],
@@ -12,18 +15,27 @@ const gridLayout = [
 ];
 
 const imagesMap = {
-  "3-0": "/assets/Socials/Facebook.png",
+  "3-0": "/assets/Socials/Connect.png",
   "1-4": "/assets/Socials/GoogleAnalytics.png",
-  "2-2": "/assets/Socials/Instagram.png",
+  "2-2": "/assets/Socials/Payments.png",
   "2-5": "/assets/Socials/SEO.png",
-  "4-2": "/assets/Socials/LinkedIn.png",
+  "4-2": "/assets/Socials/Terminal.png",
   "4-4": "/assets/Socials/Email.png",
+};
+
+const titlesMap = {
+  "3-0": "Connect",
+  "1-4": "Analytics",
+  "2-2": "Payments",
+  "2-5": "SEO",
+  "4-2": "Terminal",
+  "4-4": "Email",
 };
 
 const animationSets = [
   {
-    source: "2-2", // Instagram
-    targets: ["3-0", "4-2"], // Facebook, LinkedIn
+    source: "2-2", // Payments
+    targets: ["3-0", "4-2"], // Connect, Terminal
     gradients: ["instagramToFacebook", "instagramToLinkedIn"],
     paths: [
       "M240,290 L240,340 C240,348 232,355 224,355 L93,355",
@@ -44,29 +56,40 @@ const animationSets = [
 const GridComponent = () => {
   const [activeSet, setActiveSet] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [animationPhase, setAnimationPhase] = useState<
+    "drawing" | "showing" | "erasing" | "idle"
+  >("idle");
   const [activeNodes, setActiveNodes] = useState<string[]>([]);
 
   useEffect(() => {
     const runAnimation = () => {
       const currentSet = animationSets[activeSet];
 
-      // Start animation
+      // Start drawing animation
       setIsAnimating(true);
+      setAnimationPhase("drawing");
       setActiveNodes([currentSet.source]);
 
-      // Activate target nodes after line animation
+      // Activate target nodes after line animation is complete
       const targetTimer = setTimeout(() => {
         setActiveNodes([currentSet.source, ...currentSet.targets]);
+        setAnimationPhase("showing");
       }, 1000);
+
+      // Start erasing animation after showing for a bit
+      const eraseTimer = setTimeout(() => {
+        setAnimationPhase("erasing");
+      }, 2000);
 
       // Reset and prepare for next set
       const resetTimer = setTimeout(() => {
         setIsAnimating(false);
+        setAnimationPhase("idle");
         setActiveNodes([]);
         setActiveSet((prev) => (prev + 1) % animationSets.length);
       }, 3000);
 
-      return { targetTimer, resetTimer };
+      return { targetTimer, eraseTimer, resetTimer };
     };
 
     // Run first animation immediately
@@ -75,15 +98,16 @@ const GridComponent = () => {
     // Set up interval for subsequent animations
     const intervalTimer = setInterval(() => {
       runAnimation();
-    }, 4000);
+    }, 5000);
 
     // Cleanup function
     return () => {
       clearTimeout(timers.targetTimer);
+      clearTimeout(timers.eraseTimer);
       clearTimeout(timers.resetTimer);
       clearInterval(intervalTimer);
     };
-  }, [activeSet]); // Add activeSet as dependency
+  }, [activeSet]);
 
   const isNodeActive = (key: string) => {
     return activeNodes.includes(key);
@@ -93,20 +117,35 @@ const GridComponent = () => {
     initial: {
       opacity: 0,
       pathLength: 0,
+      pathOffset: 0,
     },
-    animate: {
+    drawing: {
       opacity: 0.7,
       pathLength: 1,
+      pathOffset: 0,
       transition: {
         pathLength: { duration: 1, ease: "easeInOut" },
         opacity: { duration: 0.2 },
+      },
+    },
+    showing: {
+      opacity: 0.7,
+      pathLength: 1,
+      pathOffset: 0,
+    },
+    erasing: {
+      opacity: 0.7,
+      pathLength: 1,
+      pathOffset: 1,
+      transition: {
+        pathOffset: { duration: 1, ease: "easeInOut" },
+        opacity: { duration: 0.8 },
       },
     },
     exit: {
       opacity: 0,
       transition: {
         opacity: { duration: 0.2 },
-        pathLength: { duration: 0 },
       },
     },
   };
@@ -114,7 +153,7 @@ const GridComponent = () => {
   const iconVariants = {
     inactive: {
       scale: 1,
-      opacity: 1, // Keep opacity at 1 for inactive state
+      opacity: 1,
       transition: {
         duration: 0.3,
         ease: "easeOut",
@@ -145,8 +184,8 @@ const GridComponent = () => {
             x2="100%"
             y2="0%"
           >
-            <stop offset="0.43%" stopColor="#F50478" />
-            <stop offset="96.7%" stopColor="#1877F2" />
+            <stop offset="0.43%" stopColor="#1877F2" />
+            <stop offset="96.7%" stopColor="#7AE5E6" />
           </linearGradient>
           <linearGradient
             id="instagramToLinkedIn"
@@ -156,8 +195,8 @@ const GridComponent = () => {
             y2="410"
             gradientUnits="userSpaceOnUse"
           >
-            <stop offset="0%" stopColor="#C10CB6" />
-            <stop offset="100%" stopColor="#007EBB" />
+            <stop offset="0%" stopColor="#6166E8" />
+            <stop offset="100%" stopColor="#1AE9EC" />
           </linearGradient>
           <linearGradient
             id="googleAnalyticsToSeo"
@@ -194,7 +233,7 @@ const GridComponent = () => {
                 strokeLinecap="round"
                 variants={pathVariants}
                 initial="initial"
-                animate="animate"
+                animate={animationPhase}
                 exit="exit"
               />
             ))}
@@ -217,7 +256,7 @@ const GridComponent = () => {
               >
                 {isFilled ? (
                   <motion.div
-                    className={`w-full h-full flex items-center justify-center bg-[#F3F3F3] border border-[#D9DEDD] rounded-lg hover:shadow-md hover:bg-white ${
+                    className={`w-full h-full flex flex-col items-center justify-center bg-[#F3F3F3] border border-[#D9DEDD] rounded-lg hover:shadow-md hover:bg-white ${
                       isActive && "shadow-md bg-white"
                     }`}
                     variants={iconVariants}
@@ -225,13 +264,22 @@ const GridComponent = () => {
                     animate={isActive ? "active" : "inactive"}
                   >
                     {imagesMap[key as keyof typeof imagesMap] ? (
-                      <Image
-                        src={imagesMap[key as keyof typeof imagesMap]}
-                        alt="Icon"
-                        className="w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] object-contain"
-                        width={57}
-                        height={57}
-                      />
+                      <>
+                        <Image
+                          src={imagesMap[key as keyof typeof imagesMap]}
+                          alt="Icon"
+                          className="w-[25px] h-[25px] sm:w-[40px] sm:h-[40px] object-contain"
+                          width={40}
+                          height={40}
+                        />
+                        {isActive && (
+                          <p
+                            className={`text-[7px] sm:text-xs text-[#18042A] mt-1 font-medium ${inter.className}`}
+                          >
+                            {titlesMap[key as keyof typeof titlesMap]}
+                          </p>
+                        )}
+                      </>
                     ) : (
                       <div className="w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full border border-[#D9DEDD]" />
                     )}
