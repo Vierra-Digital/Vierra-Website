@@ -105,7 +105,7 @@ export default function Home() {
                   opacity: 1,
                   y: 0,
                   transition: {
-                    staggerChildren: 0.1, // Delay between each letter
+                    staggerChildren: 0.05, // Delay between each letter
                     ease: "easeOut",
                   },
                 },
@@ -162,6 +162,11 @@ export default function Home() {
               <Button
                 variant="link"
                 className="text-white text-[16px] relative group hover:text-[#8F42FF] pl-2"
+                onClick={() => {
+                  document.getElementById("services")?.scrollIntoView({
+                    behavior: "smooth",
+                  });
+                }}
               >
                 What We Do
                 <span className="absolute left-2 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-[calc(100%-20px)]" />
