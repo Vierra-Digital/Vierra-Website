@@ -1,6 +1,6 @@
 import { TrendingUp, ArrowRight } from "lucide-react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
 const inter = Inter({ subsets: ["latin"] });
@@ -27,6 +27,15 @@ export function StatsGrid() {
 
   // State to track the current content index
   const [contentIndex, setContentIndex] = useState(0);
+
+  // Automatic rotation every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setContentIndex((prevIndex) => (prevIndex + 1) % card4Content.length);
+    }, 5000);
+
+    return () => clearInterval(interval); // Cleanup on unmount
+  }, [contentIndex, card4Content.length]);
 
   // Function to handle button click and cycle through content
   const handleContentSwap = () => {
