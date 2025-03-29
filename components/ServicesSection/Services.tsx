@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Bricolage_Grotesque, Figtree } from "next/font/google";
 import { Canvas, useFrame } from "@react-three/fiber";
@@ -68,73 +68,224 @@ const descriptionVariants = {
   },
 };
 
-function Model({ isDropdownOpen }: { isDropdownOpen: boolean }) {
+// Reusable lighting component
+const Lighting = () => (
+  <>
+    <ambientLight intensity={1.5} />
+    <directionalLight position={[2, 2, 2]} intensity={6} />
+    <directionalLight position={[-10, -6, -2]} intensity={6} />
+    <directionalLight position={[0, -5, 0]} intensity={6} />
+    <directionalLight position={[5, 5, 5]} intensity={6} />
+    <directionalLight position={[-5, 5, 5]} intensity={6} />
+    <directionalLight position={[5, -5, 5]} intensity={6} />
+    <directionalLight position={[-5, -5, 5]} intensity={6} />
+  </>
+);
+
+// Different animation settings
+const getAnimationConfig = (isMobile: boolean) => {
+  return {
+    modelPosition: [0, 0, 0],
+    modelScale: 4, // Reduced mobile scale to make it more visible
+    modelScaleAnimating: 4.2,
+    springStrength: isMobile ? 3 : 5,
+    moveSpeed: {
+      animating: isMobile ? 0.2 : 0.15,
+      idle: isMobile ? 0.08 : 0.05,
+    },
+
+    // For mobile, we use horizontal positions based on index
+    getPositionForId: (id: string | null, services: Service[]) => {
+      if (!id) return new THREE.Vector3(0, 0, 0);
+
+      const index = services.findIndex((service) => service.id === id);
+      if (index === -1) return new THREE.Vector3(0, 0, 0);
+
+      if (isMobile) {
+        // For mobile: Horizontal positioning (X-axis)
+        // Create circular arrangement
+        const angle = (index / services.length) * Math.PI * 2;
+        const radius = 0.5; // Reduced radius for mobile
+        const x = Math.sin(angle) * radius;
+        const z = Math.cos(angle) * radius;
+        return new THREE.Vector3(x, 0, z);
+      } else {
+        // For desktop: Vertical positioning (Y-axis)
+        const yOffset = index === services.length - 1 ? 0.4 : 0; // Adjust Y-axis for the last item
+        return new THREE.Vector3(0, 1.5 - index + yOffset, 0);
+      }
+    },
+  };
+};
+
+const Model = React.memo(function Model({
+  selectedId,
+  isMobile,
+}: {
+  selectedId: string | null;
+  isMobile: boolean;
+}) {
   const gltf = useGLTF("/assets/object.glb");
   const [isAnimating, setIsAnimating] = useState(false);
+  const lastSelectedId = useRef<string | null>(null);
+  const animConfig = useMemo(() => getAnimationConfig(isMobile), [isMobile]);
+  const force = useRef(new THREE.Vector3());
 
-  // Trigger animation when dropdown state changes
+  const targetPosition = animConfig.getPositionForId(selectedId, services);
+
+  // Trigger animation when selection changes
   useEffect(() => {
-    if (isDropdownOpen !== undefined) {
+    if (selectedId !== lastSelectedId.current) {
       setIsAnimating(true);
-      const timeout = setTimeout(() => setIsAnimating(false), 500); // Animation duration
+      lastSelectedId.current = selectedId;
+      const timeout = setTimeout(() => setIsAnimating(false), 500);
       return () => clearTimeout(timeout);
     }
-  }, [isDropdownOpen]);
+  }, [selectedId]);
 
   useFrame((state, delta) => {
-    if (isAnimating) {
-      // Scale up and move upward
-      gltf.scene.scale.lerp(new THREE.Vector3(4.1, 4.1, 4.1), 0.1);
-      gltf.scene.position.lerp(new THREE.Vector3(0, 0.5, 0), 0.1);
-    } else {
-      // Return to original scale and position
-      gltf.scene.scale.lerp(new THREE.Vector3(4, 4, 4), 0.1);
-      gltf.scene.position.lerp(new THREE.Vector3(0, 0, 0), 0.1);
-    }
-    gltf.scene.rotation.y += delta / 2; // Continuous rotation
+    if (!gltf.scene) return;
+
+    force.current
+      .subVectors(targetPosition, gltf.scene.position)
+      .multiplyScalar(animConfig.springStrength);
+    const moveSpeed = isAnimating
+      ? animConfig.moveSpeed.animating
+      : animConfig.moveSpeed.idle;
+    gltf.scene.position.add(force.current.multiplyScalar(moveSpeed * delta));
+
+    const targetScale = isAnimating
+      ? animConfig.modelScaleAnimating
+      : animConfig.modelScale;
+    gltf.scene.scale.lerp(
+      new THREE.Vector3(targetScale, targetScale, targetScale),
+      0.1
+    );
+
+    const targetRotationY = selectedId
+      ? (parseInt(selectedId) - 1) * (Math.PI / 2)
+      : gltf.scene.rotation.y;
+    gltf.scene.rotation.y += (targetRotationY - gltf.scene.rotation.y) * 0.05;
+    gltf.scene.rotation.y += delta / 2;
   });
 
   return (
     <primitive
       object={gltf.scene}
-      scale={4}
-      position={[0, 0, 0]}
-      rotation={[0.2, 0, 0]}
-      material={
-        new THREE.MeshStandardMaterial({
-          metalness: 0.9,
-          roughness: 0.5,
-          flatShading: false,
-        })
-      }
+      scale={animConfig.modelScale}
+      position={animConfig.modelPosition}
     />
   );
-}
+});
+
+const ServiceItem = React.memo(function ServiceItem({
+  service,
+  isOpen,
+  toggleService,
+}: {
+  service: Service;
+  isOpen: boolean;
+  toggleService: (id: string) => void;
+}) {
+  return (
+    <div key={service.id}>
+      <motion.div
+        onClick={() => toggleService(service.id)}
+        className={`flex items-center cursor-pointer border-b py-6 md:py-8 group ${
+          isOpen ? "border-[#701CC0]" : "border-[#A4A4A4]/20"
+        }`}
+        animate={{
+          borderColor: isOpen ? "#701CC0" : "rgba(164, 164, 164, 0.2)",
+        }}
+        whileHover={{
+          borderColor: isOpen ? "#701CC0" : "#FFFFFF",
+        }}
+        transition={{ duration: 0.3 }}
+      >
+        {/* Service Number */}
+        <div
+          className={`flex items-center justify-center h-[40px] md:h-[52px] w-[56px] md:w-[70px] rounded-full transition-all duration-300 ${
+            isOpen
+              ? "bg-[#701CC0]" // Active state
+              : "bg-transparent border-[1.5px] border-white/40 group-hover:border-white" // Inactive & hover state
+          }`}
+        >
+          <span
+            className={`text-lg md:text-[24px] font-light transition-opacity duration-300 ${
+              isOpen
+                ? "text-white" // Active state
+                : "text-white/40 group-hover:text-white" // Inactive & hover state
+            }`}
+          >
+            {service.id}
+          </span>
+        </div>
+
+        {/* Service Name */}
+        <span
+          className={`ml-4 md:ml-6 max-md:text-xl md:text-[48px] transition-all duration-300 ${
+            isOpen
+              ? "text-white font-normal" // Active state
+              : "text-white/40 font-light group-hover:text-white" // Inactive & hover state
+          }`}
+        >
+          {service.name}
+        </span>
+      </motion.div>
+
+      {/* Description Text - Animated */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            variants={descriptionVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="text-white/80 text-base md:text-lg overflow-hidden"
+          >
+            <div className={`${figtree.className} mt-4 mb-6 max-w-[580px]`}>
+              {service.description}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+});
 
 export function Services() {
-  const [openServices, setOpenServices] = useState<string[]>([]);
+  const [openServiceId, setOpenServiceId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isMobile, setIsMobile] = useState(false);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const canvasWrapperRef = useRef<HTMLDivElement>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 480, height: 800 });
 
+  // Handle responsive canvas sizing
   useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
+    if (!canvasWrapperRef.current) return;
+
+    const updateCanvasSize = () => {
+      const isMobileView = window.innerWidth <= 768;
+      const containerWidth = canvasWrapperRef.current
+        ? canvasWrapperRef.current.clientWidth
+        : 0;
+      const size = isMobileView
+        ? Math.min(Math.max(containerWidth, 280), 350)
+        : Math.min(containerWidth, 480);
+      setCanvasSize({ width: size, height: isMobileView ? 350 : 800 });
     };
 
-    handleResize(); // Set initial value
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
+    // Use ResizeObserver for more efficient resize handling
+    const observer = new ResizeObserver(updateCanvasSize);
+    observer.observe(canvasWrapperRef.current);
+
+    // Initial size calculation
+    updateCanvasSize();
+
+    return () => observer.disconnect();
   }, []);
 
   const toggleService = (serviceId: string) => {
-    setOpenServices(
-      (prev) =>
-        prev.includes(serviceId)
-          ? prev.filter((id) => id !== serviceId) // close if open
-          : [...prev, serviceId] // open if closed
-    );
-    setIsDropdownOpen((prev) => !prev); // Toggle dropdown state
+    setOpenServiceId(openServiceId === serviceId ? null : serviceId);
   };
 
   return (
@@ -145,120 +296,88 @@ export function Services() {
     >
       {/* Main Card */}
       <div
-        className={`relative w-full min-h-[773px] bg-[#18042A] rounded-[30px] md:rounded-tr-[60px] md:rounded-br-[60px] md:rounded-tl-[0px] md:rounded-bl-[0px] z-0 ${bricolage.className}`}
+        className={`relative w-full min-h-[600px] md:min-h-[773px] bg-[#18042A] rounded-[30px] md:rounded-tr-[60px] md:rounded-br-[60px] md:rounded-tl-[0px] md:rounded-bl-[0px] z-0 ${bricolage.className}`}
       >
-        {/* 3D Object */}
-        <div className="z-10 relative md:absolute md:right-[12%] md:top-1/3 md:-translate-y-[40%] md:translate-x-1/2 py-8 md:py-0">
-          <div className="flex justify-center">
-            <div>
-              <Canvas
-                style={{
-                  width: isMobile ? 300 : 727,
-                  height: isMobile ? 300 : 727,
-                }}
-                gl={{ antialias: true }}
-              >
-                <ambientLight intensity={1} />
-                <directionalLight position={[2, 2, 2]} intensity={6} />
-                <directionalLight position={[-10, -6, -2]} intensity={6} />
-                <directionalLight position={[0, -5, 0]} intensity={6} />
-                <directionalLight position={[5, 5, 5]} intensity={6} />
-                <directionalLight position={[-5, 5, 5]} intensity={6} />
-                <directionalLight position={[5, -5, 5]} intensity={6} />
-                <directionalLight position={[-5, -5, 5]} intensity={6} />
-                <Model isDropdownOpen={isDropdownOpen} />
-              </Canvas>
-            </div>
+        {/* Mobile Layout */}
+        <div className="block md:hidden">
+          {/* 3D Object on top for mobile - Increased height and improved visibility */}
+          <div
+            className="py-8 flex justify-center"
+            ref={canvasWrapperRef}
+            style={{ minHeight: "350px" }}
+          >
+            <Canvas
+              style={{
+                width: canvasSize.width,
+                height: canvasSize.height,
+                minHeight: "350px", // Ensure minimum height
+              }}
+              gl={{ antialias: true, alpha: true }}
+              camera={{ position: [0, 0, 5], fov: 75 }} // Adjusted camera for better mobile view
+            >
+              <Lighting />
+              <Model selectedId={openServiceId} isMobile={true} />
+            </Canvas>
+          </div>
+
+          {/* Services List below 3D object for mobile */}
+          <div className="px-4 py-4">
+            {services.map((service) => (
+              <ServiceItem
+                key={service.id}
+                service={service}
+                isOpen={openServiceId === service.id}
+                toggleService={toggleService}
+              />
+            ))}
           </div>
         </div>
 
-        {/* Ellipse */}
-        <motion.div
-          initial={{ x: 0, y: 0 }}
-          animate={{ x: [0, 15, 0], y: [0, 15, 0] }}
-          transition={{
-            duration: 5,
-            repeat: Infinity,
-            repeatType: "loop",
-            ease: "easeInOut",
-          }}
-          className="hidden md:block absolute top-[165px] left-[415px] w-[540px] h-[540px] opacity-50 blur-[10px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10"
-        />
+        {/* Desktop Layout */}
+        <div className="hidden md:block">
+          {/* 3D Object on right for desktop */}
+          <div
+            className="z-10 absolute right-[12%] top-1/3 -translate-y-[40%] translate-x-1/2"
+            ref={canvasWrapperRef}
+          >
+            <Canvas
+              style={{
+                width: canvasSize.width,
+                height: canvasSize.height,
+              }}
+              gl={{ antialias: true }}
+              onPointerOver={() => (document.body.style.cursor = "grab")}
+              onPointerOut={() => (document.body.style.cursor = "default")}
+            >
+              <Lighting />
+              <Model selectedId={openServiceId} isMobile={false} />
+            </Canvas>
+          </div>
 
-        {/* Services List */}
-        <div className="px-4 md:ml-40 md:mr-20 py-8 md:py-20">
-          {services.map((service) => {
-            const isOpen = openServices.includes(service.id);
+          {/* Services List on left for desktop */}
+          <div className="px-4 md:ml-40 md:mr-20 py-8 md:py-20">
+            {services.map((service) => (
+              <ServiceItem
+                key={service.id}
+                service={service}
+                isOpen={openServiceId === service.id}
+                toggleService={toggleService}
+              />
+            ))}
+          </div>
 
-            return (
-              <div key={service.id}>
-                <motion.div
-                  onClick={() => toggleService(service.id)}
-                  className={`flex items-center cursor-pointer border-b py-8 group ${
-                    isOpen ? "border-[#701CC0]" : "border-[#A4A4A4]/20"
-                  }`}
-                  animate={{
-                    borderColor: isOpen
-                      ? "#701CC0"
-                      : "rgba(164, 164, 164, 0.2)",
-                  }}
-                  whileHover={{
-                    borderColor: isOpen ? "#701CC0" : "#FFFFFF",
-                  }}
-                  transition={{ duration: 0.3 }}
-                >
-                  {/* Service Number */}
-                  <div
-                    className={`flex items-center justify-center h-[40px] md:h-[52px] w-[56px] md:w-[70px] rounded-full transition-all duration-300 ${
-                      isOpen
-                        ? "bg-[#701CC0]" // Active state
-                        : "bg-transparent border-[1.5px] border-white/40 group-hover:border-white" // Inactive & hover state
-                    }`}
-                  >
-                    <span
-                      className={`text-lg md:text-[24px] font-light transition-opacity duration-300 ${
-                        isOpen
-                          ? "text-white" // Active state
-                          : "text-white/40 group-hover:text-white" // Inactive & hover state
-                      }`}
-                    >
-                      {service.id}
-                    </span>
-                  </div>
-
-                  {/* Service Name */}
-                  <span
-                    className={`ml-4 md:ml-6 max-md:text-2xl md:text-[48px] transition-all duration-300 ${
-                      isOpen
-                        ? "text-white font-normal" // Active state
-                        : "text-white/40 font-light group-hover:text-white" // Inactive & hover state
-                    }`}
-                  >
-                    {service.name}
-                  </span>
-                </motion.div>
-
-                {/* Description Text - Animated */}
-                <AnimatePresence>
-                  {isOpen && (
-                    <motion.div
-                      variants={descriptionVariants}
-                      initial="initial"
-                      animate="animate"
-                      exit="exit"
-                      className="text-white/80 text-lg overflow-hidden"
-                    >
-                      <div
-                        className={`${figtree.className} mt-4 mb-6 max-w-[580px]`}
-                      >
-                        {service.description}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            );
-          })}
+          {/* Ellipse */}
+          <motion.div
+            initial={{ x: 0, y: 0 }}
+            animate={{ x: [0, 15, 0], y: [0, 15, 0] }}
+            transition={{
+              duration: 5,
+              repeat: Infinity,
+              repeatType: "loop",
+              ease: "easeInOut",
+            }}
+            className="absolute top-[165px] left-[415px] w-[540px] h-[540px] opacity-50 blur-[10px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10"
+          />
         </div>
       </div>
     </div>
