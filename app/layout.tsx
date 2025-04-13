@@ -2,66 +2,54 @@
  * © 2025 Darsh Doshi. All rights reserved.
  * Unauthorized use, modification, or distribution of this code is strictly prohibited.
  */
-"use client";
-import { Geist, Geist_Mono } from "next/font/google";
+"use client"
+import { Geist, Geist_Mono } from "next/font/google"
 import {
   initializeAnalytics,
   storeAnalyticsData,
   checkAnalyticsStatus,
-} from "@/lib/analytics";
-import { useEffect, useState } from "react";
-import Modal from "@/components/ui/Modal";
-import "./globals.css";
+} from "@/lib/analytics"
+import { useEffect, useState } from "react"
+import "./globals.css"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
-});
+})
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
-});
+})
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: React.ReactNode
 }>) {
-  const [showNotice, setShowNotice] = useState<boolean>(false);
-  const [gracePeriod, setGracePeriod] = useState<boolean>(false);
-  const [daysLeft, setDaysLeft] = useState<number>(0);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true)
 
   const validateAnalytics = async () => {
-    setIsLoading(true);
+    setIsLoading(true)
 
     if (checkAnalyticsStatus()) {
-      setShowNotice(false);
-      setIsLoading(false);
-      return;
+      setIsLoading(false)
+      return
     }
 
-    const result = await initializeAnalytics();
-    storeAnalyticsData(result);
+    const result = await initializeAnalytics()
+    storeAnalyticsData(result)
 
-    if (!result.valid) {
-      setShowNotice(true);
-    } else if (result.gracePeriod) {
-      setGracePeriod(true);
-      setDaysLeft(result.daysLeft || 0);
-    }
-
-    setIsLoading(false);
-  };
+    setIsLoading(false)
+  }
 
   useEffect(() => {
-    validateAnalytics();
+    validateAnalytics()
 
-    const intervalId = setInterval(validateAnalytics, 3600000);
+    const intervalId = setInterval(validateAnalytics, 3600000)
 
-    return () => clearInterval(intervalId);
-  }, []);
+    return () => clearInterval(intervalId)
+  }, [])
 
   return (
     <html lang="en" style={{ scrollBehavior: "smooth" }}>
@@ -108,18 +96,9 @@ export default function RootLayout({
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#8F42FF]"></div>
           </div>
         ) : (
-          <>
-            {children}
-            {showNotice && (
-              <Modal
-                onRetry={validateAnalytics}
-                gracePeriod={gracePeriod}
-                daysLeft={daysLeft}
-              />
-            )}
-          </>
+          <>{children}</>
         )}
       </body>
     </html>
-  );
+  )
 }
