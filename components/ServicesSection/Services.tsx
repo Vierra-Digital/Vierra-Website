@@ -68,7 +68,6 @@ const descriptionVariants = {
   },
 };
 
-// Reusable lighting component
 const Lighting = () => (
   <>
     <ambientLight intensity={1.5} />
@@ -82,19 +81,16 @@ const Lighting = () => (
   </>
 );
 
-// Different animation settings
 const getAnimationConfig = (isMobile: boolean) => {
   return {
     modelPosition: [0, 0, 0],
-    modelScale: 4, // Reduced mobile scale to make it more visible
+    modelScale: 4,
     modelScaleAnimating: 4.2,
     springStrength: isMobile ? 3 : 5,
     moveSpeed: {
       animating: isMobile ? 0.2 : 0.15,
       idle: isMobile ? 0.08 : 0.05,
     },
-
-    // For mobile, we use horizontal positions based on index
     getPositionForId: (id: string | null, services: Service[]) => {
       if (!id) return new THREE.Vector3(0, 0, 0);
 
@@ -102,16 +98,13 @@ const getAnimationConfig = (isMobile: boolean) => {
       if (index === -1) return new THREE.Vector3(0, 0, 0);
 
       if (isMobile) {
-        // For mobile: Horizontal positioning (X-axis)
-        // Create circular arrangement
         const angle = (index / services.length) * Math.PI * 2;
-        const radius = 0.5; // Reduced radius for mobile
+        const radius = 0.5;
         const x = Math.sin(angle) * radius;
         const z = Math.cos(angle) * radius;
         return new THREE.Vector3(x, 0, z);
       } else {
-        // For desktop: Vertical positioning (Y-axis)
-        const yOffset = index === services.length - 1 ? 0.4 : 0; // Adjust Y-axis for the last item
+        const yOffset = index === services.length - 1 ? 0.4 : 0;
         return new THREE.Vector3(0, 1.5 - index + yOffset, 0);
       }
     },
@@ -133,7 +126,6 @@ const Model = React.memo(function Model({
 
   const targetPosition = animConfig.getPositionForId(selectedId, services);
 
-  // Trigger animation when selection changes
   useEffect(() => {
     if (selectedId !== lastSelectedId.current) {
       setIsAnimating(true);
@@ -202,38 +194,33 @@ const ServiceItem = React.memo(function ServiceItem({
         }}
         transition={{ duration: 0.3 }}
       >
-        {/* Service Number */}
         <div
           className={`flex items-center justify-center h-[40px] md:h-[52px] w-[56px] md:w-[70px] rounded-full transition-all duration-300 ${
             isOpen
-              ? "bg-[#701CC0]" // Active state
-              : "bg-transparent border-[1.5px] border-white/40 group-hover:border-white" // Inactive & hover state
+              ? "bg-[#701CC0]"
+              : "bg-transparent border-[1.5px] border-white/40 group-hover:border-white"
           }`}
         >
           <span
             className={`text-lg md:text-[24px] font-light transition-opacity duration-300 ${
               isOpen
-                ? "text-white" // Active state
-                : "text-white/40 group-hover:text-white" // Inactive & hover state
+                ? "text-white"
+                : "text-white/40 group-hover:text-white"
             }`}
           >
             {service.id}
           </span>
         </div>
-
-        {/* Service Name */}
         <span
           className={`ml-4 md:ml-6 max-md:text-xl md:text-[48px] transition-all duration-300 ${
             isOpen
-              ? "text-white font-normal" // Active state
-              : "text-white/40 font-light group-hover:text-white" // Inactive & hover state
+              ? "text-white font-normal"
+              : "text-white/40 font-light group-hover:text-white"
           }`}
         >
           {service.name}
         </span>
       </motion.div>
-
-      {/* Description Text - Animated */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -259,7 +246,6 @@ export function Services() {
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 480, height: 800 });
 
-  // Handle responsive canvas sizing
   useEffect(() => {
     if (!canvasWrapperRef.current) return;
 
@@ -274,14 +260,24 @@ export function Services() {
       setCanvasSize({ width: size, height: isMobileView ? 350 : 800 });
     };
 
-    // Use ResizeObserver for more efficient resize handling
     const observer = new ResizeObserver(updateCanvasSize);
     observer.observe(canvasWrapperRef.current);
 
-    // Initial size calculation
     updateCanvasSize();
 
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setOpenServiceId((prevId) => {
+        const currentIndex = services.findIndex((service) => service.id === prevId);
+        const nextIndex = (currentIndex + 1) % services.length;
+        return services[nextIndex].id;
+      });
+    }, 3000);
+
+    return () => clearInterval(timer);
   }, []);
 
   const toggleService = (serviceId: string) => {
@@ -294,13 +290,10 @@ export function Services() {
       id="services"
       ref={containerRef}
     >
-      {/* Main Card */}
       <div
         className={`relative w-full min-h-[600px] md:min-h-[773px] bg-[#18042A] rounded-[30px] md:rounded-tr-[60px] md:rounded-br-[60px] md:rounded-tl-[0px] md:rounded-bl-[0px] z-0 ${bricolage.className}`}
       >
-        {/* Mobile Layout */}
         <div className="block md:hidden">
-          {/* 3D Object on top for mobile - Increased height and improved visibility */}
           <div
             className="py-8 flex justify-center"
             ref={canvasWrapperRef}
@@ -310,17 +303,15 @@ export function Services() {
               style={{
                 width: canvasSize.width,
                 height: canvasSize.height,
-                minHeight: "350px", // Ensure minimum height
+                minHeight: "350px",
               }}
               gl={{ antialias: true, alpha: true }}
-              camera={{ position: [0, 0, 5], fov: 75 }} // Adjusted camera for better mobile view
+              camera={{ position: [0, 0, 5], fov: 75 }}
             >
               <Lighting />
               <Model selectedId={openServiceId} isMobile={true} />
             </Canvas>
           </div>
-
-          {/* Services List below 3D object for mobile */}
           <div className="px-4 py-4">
             {services.map((service) => (
               <ServiceItem
@@ -332,10 +323,7 @@ export function Services() {
             ))}
           </div>
         </div>
-
-        {/* Desktop Layout */}
         <div className="hidden md:block">
-          {/* 3D Object on right for desktop */}
           <div
             className="z-10 absolute right-[12%] top-1/3 -translate-y-[40%] translate-x-1/2"
             ref={canvasWrapperRef}
@@ -353,8 +341,6 @@ export function Services() {
               <Model selectedId={openServiceId} isMobile={false} />
             </Canvas>
           </div>
-
-          {/* Services List on left for desktop */}
           <div className="px-4 md:ml-40 md:mr-20 py-8 md:py-20">
             {services.map((service) => (
               <ServiceItem
@@ -365,8 +351,6 @@ export function Services() {
               />
             ))}
           </div>
-
-          {/* Ellipse */}
           <motion.div
             initial={{ x: 0, y: 0 }}
             animate={{ x: [0, 15, 0], y: [0, 15, 0] }}
