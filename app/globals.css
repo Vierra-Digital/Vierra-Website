@@ -18,17 +18,60 @@
   animation: float 3s ease-in-out infinite;
 }
 
+@keyframes gradient-horizontal {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient-horizontal 10s ease infinite;
+}
+
+.animate-gradient-fast {
+  background-size: 200% 200%;
+  animation: gradient-horizontal 5s ease infinite;
+}
+
+@keyframes gradient-move {
+  0% {
+    background-position: 0% 0%;
+  }
+  25% {
+    background-position: 50% 0%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  75% {
+    background-position: 50% 100%;
+  }
+  100% {
+    background-position: 0% 0%;
+  }
+}
+
+.animate-gradient-move {
+  background-size: 300% 300%;
+  animation: gradient-move 6s ease infinite;
+}
+
 body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* Custom selection color */
 ::selection {
-  background-color: #701CC0B3; /* #701CC0 with 70% opacity */
+  background-color: #701CC0B3;
   color: white;
 }
 
-/* Custom scrollbar styles */
 ::-webkit-scrollbar {
   width: 10px;
 }
@@ -41,11 +84,11 @@ body {
 ::-webkit-scrollbar-thumb {
   background: #701CC0;
   border-radius: 5px;
-  transition: #701CC0 0.3s ease;
+  transition: background-color 0.3s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #8c3dd3;
+  background: #8F42FF;
 }
 
 @layer base {
@@ -111,4 +154,18 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+.pdf-container .react-pdf__Page__canvas {
+  max-width: 100%;
+  height: auto !important;
+}
+
+.pdf-container {
+  max-width: 90vw;
+  max-height: 70vh;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
 }
