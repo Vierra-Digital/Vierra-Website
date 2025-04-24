@@ -1,19 +1,24 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Image from "next/image";
 import { motion } from "framer-motion";
+import { ArrowUpRight } from "lucide-react";
+import { Button } from "../components/ui/button";
 import { Header } from "@/components/Header";
 import { BusinessSolutions } from "@/components/BusinessSection/BusinessSolutions";
 import Main from "@/components/ServicesSection/Main";
 import TestimonialsSection from "@/components/TestimonialSection/Testimonials";
 import TeamSection from "@/components/TeamSection/Team";
 import { FooterSection } from "@/components/FooterSection/MainComponent";
+import { Modal } from "@/components/Modal";
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
 const inter = Inter({ subsets: ["latin"] });
 
 export default function Page() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   return (
     <>
       <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden z-0">
@@ -74,7 +79,8 @@ export default function Page() {
             variants={{
               hidden: { opacity: 0, y: 20 },
               visible: {
-                opacity: 1, y: 0,
+                opacity: 1,
+                y: 0,
                 transition: { staggerChildren: 0.2, ease: "easeOut" },
               },
             }}
@@ -119,6 +125,35 @@ export default function Page() {
               Scale your practice effortlessly. Fill out your schedules and
               eliminate no-shows.
             </motion.p>
+
+            <motion.div
+              variants={{
+                hidden: { opacity: 0, y: 20 },
+                visible: { opacity: 1, y: 0 },
+              }}
+              className={`flex flex-col sm:flex-row items-center gap-4 ${inter.className}`}
+            >
+              <Button
+                variant="secondary"
+                className="flex items-center gap-2 bg-[#701CC0] hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC0B8] transform transition-transform duration-300 hover:scale-105"
+                onClick={() => setIsModalOpen(true)}
+              >
+                Free Audit Call
+                <ArrowUpRight className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="link"
+                className="text-white text-[16px] relative group hover:text-[#8F42FF] pl-2"
+                onClick={() => {
+                  document.getElementById("services")?.scrollIntoView({
+                    behavior: "smooth",
+                  });
+                }}
+              >
+                What We Do
+                <span className="absolute left-2 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-[calc(100%-20px)]" />
+              </Button>
+            </motion.div>
           </motion.div>
 
           <motion.div
@@ -211,6 +246,7 @@ export default function Page() {
           </div>
         </section>
       </div>
+      {isModalOpen && <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />}
       <BusinessSolutions />
       <Main />
       <TestimonialsSection />
