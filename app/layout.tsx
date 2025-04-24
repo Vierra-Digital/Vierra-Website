@@ -1,55 +1,51 @@
-/*
- * © 2025 Darsh Doshi. All rights reserved.
- * Unauthorized use, modification, or distribution of this code is strictly prohibited.
- */
-"use client"
-import { Geist, Geist_Mono } from "next/font/google"
+"use client";
+import { Geist, Geist_Mono } from "next/font/google";
 import {
   initializeAnalytics,
   storeAnalyticsData,
   checkAnalyticsStatus,
-} from "@/lib/analytics"
-import { useEffect, useState } from "react"
-import "./globals.css"
+} from "@/lib/analytics";
+import { useEffect, useState } from "react";
+import "./globals.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
-})
+});
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
-})
+});
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: React.ReactNode;
 }>) {
-  const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const validateAnalytics = async () => {
-    setIsLoading(true)
+    setIsLoading(true);
 
     if (checkAnalyticsStatus()) {
-      setIsLoading(false)
-      return
+      setIsLoading(false);
+      return;
     }
 
-    const result = await initializeAnalytics()
-    storeAnalyticsData(result)
+    const result = await initializeAnalytics();
+    storeAnalyticsData(result);
 
-    setIsLoading(false)
-  }
+    setIsLoading(false);
+  };
 
   useEffect(() => {
-    validateAnalytics()
+    validateAnalytics();
 
-    const intervalId = setInterval(validateAnalytics, 3600000)
+    const intervalId = setInterval(validateAnalytics, 3600000);
 
-    return () => clearInterval(intervalId)
-  }, [])
+    return () => clearInterval(intervalId);
+  }, []);
 
   return (
     <html lang="en" style={{ scrollBehavior: "smooth" }}>
@@ -66,8 +62,6 @@ export default function RootLayout({
           content="marketing, lead generation, business growth, digital optimization"
         />
         <meta name="author" content="Darsh Doshi" />
-
-        {/* Open Graph (OG) Meta Tags for Social Sharing */}
         <meta property="og:title" content="Vierra" />
         <meta
           property="og:description"
@@ -76,8 +70,6 @@ export default function RootLayout({
         <meta property="og:image" content="/assets/vierra-logo.png" />
         <meta property="og:url" content="https://vierradev.com/" />
         <meta property="og:type" content="website" />
-
-        {/* Twitter Card Meta Tags */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Vierra" />
         <meta
@@ -85,8 +77,6 @@ export default function RootLayout({
           content="Scale your practice effortlessly. Fill out your schedules and eliminate no-shows."
         />
         <meta name="twitter:image" content="/assets/vierra-logo.png" />
-
-        <title>Vierra</title>
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
@@ -100,5 +90,5 @@ export default function RootLayout({
         )}
       </body>
     </html>
-  )
+  );
 }
