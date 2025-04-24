@@ -50,34 +50,26 @@ export function BusinessSolutions() {
     const interval = setInterval(() => {
       setActiveTab((prevTab) => {
         const currentIndex = tabs.findIndex((tab) => tab.id === prevTab);
-        const nextIndex = (currentIndex + 1) % tabs.length; // Loop back to the start
+        const nextIndex = (currentIndex + 1) % tabs.length;
         return tabs[nextIndex].id;
       });
-    }, 5000); // Change every 5 seconds
-
-    return () => clearInterval(interval); // Cleanup on unmount
+    }, 5000);
+    return () => clearInterval(interval);
   }, [activeTab]);
 
   return (
     <section className="w-full py-20 px-6 bg-[#F3F3F3]" id="solutions">
       <div className="max-w-7xl mx-auto px-6 max-md:px-2">
         <div className="grid md:grid-cols-2 gap-12 mb-16">
-          <h2
-            className={`text-3xl font-semibold text-[#18042A] mb-4 ${bricolage.className}`}
-          >
+          <h2 className={`text-3xl font-semibold text-[#18042A] mb-4 ${bricolage.className}`}>
             We Are Not Your Average
             <br />
             “Consultants”
           </h2>
           <p className={`text-[#8A9197] text-lg ${inter.className}`}>
-            We reduce complexity by eliminating corporate formalities. We
-            implement a clear-cut and simple approach to increasing the return
-            on ad spending. Our team hand-picks clients so we can offer more
-            leads and focus on your success.
+            We reduce complexity by eliminating corporate formalities. We implement a clear-cut and simple approach to increasing the return on ad spending. Our team hand-picks clients so we can offer more leads and focus on your success.
           </p>
         </div>
-
-        {/* Tabs and Image Section */}
         <div className="grid md:grid-cols-2 gap-12 mb-20 place-items-center">
           <div className="space-y-6 relative max-md:min-h-[480px]">
             {tabs.map((tab) => (
@@ -110,7 +102,6 @@ export function BusinessSolutions() {
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1] }}
                       />
-
                       <motion.div
                         className="absolute bottom-[-12px] left-0 w-full h-[2px] bg-[#D9DEDD] overflow-hidden"
                         layoutId="underline"
@@ -127,7 +118,6 @@ export function BusinessSolutions() {
                     </>
                   )}
                 </motion.h3>
-
                 <AnimatePresence mode="wait">
                   {activeTab === tab.id && (
                     <motion.div
@@ -182,7 +172,6 @@ export function BusinessSolutions() {
               </motion.div>
             ))}
           </div>
-
           <div className="relative mx-auto">
             <GridComponent />
           </div>
