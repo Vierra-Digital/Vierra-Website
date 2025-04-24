@@ -1,67 +1,50 @@
-/*
- * © 2025 Darsh Doshi. All rights reserved.
- * Unauthorized use, modification, or distribution of this code is strictly prohibited.
- */
-
 "use client";
+import React from "react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Image from "next/image";
-import { ArrowUpRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { Header } from "@/components/Header";
-import { Button } from "@/components/ui/button";
 import { BusinessSolutions } from "@/components/BusinessSection/BusinessSolutions";
 import Main from "@/components/ServicesSection/Main";
 import TestimonialsSection from "@/components/TestimonialSection/Testimonials";
 import TeamSection from "@/components/TeamSection/Team";
 import { FooterSection } from "@/components/FooterSection/MainComponent";
+
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
 const inter = Inter({ subsets: ["latin"] });
 
-export default function Home() {
+export default function Page() {
   return (
     <>
       <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden z-0">
-        {/* Vertical Lines */}
         {Array.from({ length: 7 }).map((_, index) => (
           <motion.div
             key={index}
             className="absolute top-0 h-full border-l border-white opacity-5 -z-10"
             style={{ left: `${(index + 1) * (100 / 8)}%` }}
             initial={{ height: 0, opacity: 0 }}
-            animate={{
-              height: "100%",
-              opacity: 0.05,
-              x: [0, 10, 0],
-            }}
+            animate={{ height: "100%", opacity: 0.05, x: [0, 10, 0] }}
             transition={{
               duration: 3,
               delay: index * 0.2,
               ease: "easeInOut",
-              x: {
-                duration: 4,
-                repeat: Infinity,
-                ease: "easeInOut",
-              },
+              x: { duration: 4, repeat: Infinity, ease: "easeInOut" },
             }}
           />
         ))}
 
-        {/* Header */}
         <motion.div
           initial="hidden"
           animate="visible"
           variants={{
             hidden: { opacity: 0, y: -20 },
-            visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
+            visible: { opacity: 1, y: 0 },
           }}
         >
           <Header />
         </motion.div>
 
-        {/* Hero Section */}
         <main className="relative px-6 max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
-          {/* Ellipses */}
           <motion.div
             initial={{ x: 0, y: 0 }}
             animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
@@ -91,8 +74,7 @@ export default function Home() {
             variants={{
               hidden: { opacity: 0, y: 20 },
               visible: {
-                opacity: 1,
-                y: 0,
+                opacity: 1, y: 0,
                 transition: { staggerChildren: 0.2, ease: "easeOut" },
               },
             }}
@@ -105,7 +87,7 @@ export default function Home() {
                   opacity: 1,
                   y: 0,
                   transition: {
-                    staggerChildren: 0.05, // Delay between each letter
+                    staggerChildren: 0.05,
                     ease: "easeOut",
                   },
                 },
@@ -137,41 +119,6 @@ export default function Home() {
               Scale your practice effortlessly. Fill out your schedules and
               eliminate no-shows.
             </motion.p>
-
-            <motion.div
-              variants={{
-                hidden: { opacity: 0, y: 20 },
-                visible: { opacity: 1, y: 0 },
-              }}
-              className={`flex flex-col sm:flex-row items-center gap-4 ${inter.className}`}
-            >
-              <Button
-                variant="secondary"
-                className="flex items-center gap-2 bg-[#701CC0] hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC0B8] transform transition-transform duration-300 hover:scale-105"
-                onClick={() =>
-                  window.open(
-                    "https://calendly.com/alexshick",
-                    "_blank",
-                    "noopener,noreferrer"
-                  )
-                }
-              >
-                Free Audit Call
-                <ArrowUpRight className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="link"
-                className="text-white text-[16px] relative group hover:text-[#8F42FF] pl-2"
-                onClick={() => {
-                  document.getElementById("services")?.scrollIntoView({
-                    behavior: "smooth",
-                  });
-                }}
-              >
-                What We Do
-                <span className="absolute left-2 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-[calc(100%-20px)]" />
-              </Button>
-            </motion.div>
           </motion.div>
 
           <motion.div
@@ -202,7 +149,6 @@ export default function Home() {
           </motion.div>
         </main>
 
-        {/* Partners Section */}
         <section className="w-full py-16">
           <div className="max-w-7xl mx-auto px-6">
             <div className="flex flex-col md:flex-row items-center gap-12">
