@@ -161,7 +161,7 @@ const SignPdfModal: React.FC<SignPdfModalProps> = ({ isOpen, onClose }) => {
     formData.append('coords', JSON.stringify(signatureCoords));
 
     try {
-      const response = await fetch('/api/generate-sign-link', { method: 'POST', body: formData });
+      const response = await fetch('/api/generateSignLink', { method: 'POST', body: formData });
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
