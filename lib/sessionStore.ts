@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-interface SessionData {
+export interface SessionData {
+    token: string;
     pdfPath: string;
     originalFilename: string;
     coordinates: {
@@ -11,13 +12,13 @@ interface SessionData {
         width: number;
         height: number;
     };
+    status: 'pending' | 'signed';
     createdAt: number;
 }
 
 const sessionsDir = path.resolve(process.cwd(), 'public', 'signing_sessions');
 
 if (!fs.existsSync(sessionsDir)) {
-    console.log(`Creating sessions directory: ${sessionsDir}`);
     fs.mkdirSync(sessionsDir, { recursive: true });
 }
 
@@ -26,9 +27,14 @@ export function getSessionData(tokenId: string): SessionData | null {
     try {
         if (fs.existsSync(filePath)) {
             const fileContent = fs.readFileSync(filePath, 'utf-8');
-            return JSON.parse(fileContent) as SessionData;
+            const data = JSON.parse(fileContent);
+            if (data && typeof data.pdfPath === 'string' && typeof data.originalFilename === 'string' && typeof data.token === 'string') {
+                return data as SessionData;
+            } else {
+                console.error(`Invalid session data format in ${filePath}`);
+                return null;
+            }
         } else {
-            console.warn(`Session file not found: ${filePath}`);
             return null;
         }
     } catch (error) {
@@ -41,7 +47,6 @@ export function saveSessionData(tokenId: string, data: SessionData): void {
     const filePath = path.join(sessionsDir, `${tokenId}.json`);
     try {
         fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
-        console.log(`Session data saved to: ${filePath}`);
     } catch (error) {
         console.error(`Error saving session file ${filePath}:`, error);
     }
@@ -52,9 +57,6 @@ export function deleteSessionFile(tokenId: string): void {
     try {
         if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
-            console.log(`Deleted session file: ${filePath}`);
-        } else {
-            console.warn(`Session file not found for deletion: ${filePath}`);
         }
     } catch (error) {
         console.error(`Error deleting session file ${filePath}:`, error);
