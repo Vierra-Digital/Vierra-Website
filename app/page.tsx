@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from "react";
+import Head from "next/head";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Image from "next/image";
 import { motion } from "framer-motion";
@@ -21,6 +22,9 @@ export default function Page() {
 
   return (
     <>
+      <Head>
+        <title>Vierra | Home</title>
+      </Head>
       <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden z-0">
         {Array.from({ length: 7 }).map((_, index) => (
           <motion.div
