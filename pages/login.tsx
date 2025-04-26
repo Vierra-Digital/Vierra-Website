@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import Image from "next/image";
+import Head from "next/head";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import { Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -58,6 +59,10 @@ const LoginPage = () => {
 
   return (
     <>
+      <Head>
+        <title>Vierra | Login</title>
+      </Head>
+
       <Script
         src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"
         strategy="afterInteractive"
