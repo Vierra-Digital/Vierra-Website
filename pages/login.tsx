@@ -1,10 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Head from "next/head";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import { Eye, EyeOff } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Script from "next/script";
+import { signIn, useSession } from "next-auth/react";
+import { FcGoogle } from "react-icons/fc";
 
 declare global {
   interface Window {
@@ -24,6 +26,15 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+  const { status } = useSession();
+  const searchParams = useSearchParams();
+  const googleError = searchParams ? searchParams.get("error") : null;
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.push("/panel");
+    }
+  }, [status, router]);
 
   const initParticles = () => {
     if (typeof window !== "undefined" && window.particlesJS) {
@@ -56,6 +67,18 @@ const LoginPage = () => {
       setError("Login failed. Please check credentials or network.");
     }
   };
+
+  if (status === "loading") {
+    return (
+      <div className="relative min-h-screen bg-gradient-to-br from-[#4F1488] via-[#2E0A4F] to-[#18042A] flex items-center justify-center">
+        <p className="text-white text-xl">Loading...</p>
+      </div>
+    );
+  }
+
+  if (status === "authenticated") {
+    return null;
+  }
 
   return (
     <>
@@ -131,12 +154,35 @@ const LoginPage = () => {
                 </button>
               </div>
             </div>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
+            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+            {googleError === "AccessDenied" && (
+              <p className="text-red-500 text-sm text-center">
+                Google Sign-In Failed: Use a vierradev.com account.
+              </p>
+            )}
+            {googleError && googleError !== "AccessDenied" && (
+              <p className="text-red-500 text-sm text-center">
+                Google Sign-In Failed. Please try again.
+              </p>
+            )}
             <button
               type="submit"
               className={`w-full px-4 py-2 bg-[#701CC0] text-white rounded-md shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-transform duration-300 hover:scale-105 ${inter.className}`}
             >
               Login
+            </button>
+            <div className="flex items-center my-4">
+              <hr className="flex-grow border-t border-white/30" />
+              <span className={`px-2 text-xs text-white/70 ${inter.className}`}>OR</span>
+              <hr className="flex-grow border-t border-white/30" />
+            </div>
+            <button
+              type="button"
+              onClick={() => signIn("google", { callbackUrl: "/panel" })}
+              className={`w-full flex items-center justify-center px-4 py-2 bg-white text-gray-700 rounded-md shadow-md transform transition-transform duration-300 hover:scale-105 ${inter.className} font-medium`}
+            >
+              <FcGoogle className="w-5 h-5 mr-2" />
+              Sign In With Google
             </button>
           </form>
         </div>
