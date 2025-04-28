@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { getSessionData, saveSessionData, SessionData } from '@/lib/sessionStore';
+import { sendSignedDocumentEmail } from '@/lib/emailSender';
 
 interface SubmitSignatureBody {
     tokenId: string;
@@ -21,8 +22,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
         try {
             await fs.mkdir(signedPdfsDir, { recursive: true });
-        } catch (mkdirError) {
-            console.error(`[submit-signature] Failed to create directory ${signedPdfsDir}:`, mkdirError);
+        } catch (mkdirError: unknown) {
+            if (!(typeof mkdirError === 'object' && mkdirError !== null && 'code' in mkdirError && mkdirError.code === 'EEXIST')) {
+                console.error(`[submit-signature] Critical error creating directory ${signedPdfsDir}:`, mkdirError);
+                const errorMessage = mkdirError instanceof Error ? mkdirError.message : String(mkdirError);
+                throw new Error(`Failed to prepare storage directory: ${errorMessage}`);
+            }
+            console.log(`[submit-signature] Directory ${signedPdfsDir} already exists.`);
         }
 
         const { tokenId, signature, position }: SubmitSignatureBody = req.body;
@@ -95,28 +101,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         try {
             await fs.writeFile(signedPdfPathAbs, signedPdfBytes);
+            console.log(`[submit-signature] Successfully wrote signed PDF to ${signedPdfPathAbs}`);
         } catch (writeError) {
              console.error(`[submit-signature] ERROR writing signed PDF to ${signedPdfPathAbs}:`, writeError);
              return res.status(500).json({ message: 'Failed to save the signed document.' });
         }
 
         try {
-            const updatedSessionData: SessionData = {
-                ...sessionData,
-                status: 'signed',
-            };
-            saveSessionData(tokenId, updatedSessionData);
+            sessionData.status = 'signed';
+            sessionData.signedPdfPath = `/signed_pdfs/${signedPdfFilename}`;
+            saveSessionData(tokenId, sessionData);
+            console.log(`[submit-signature] Successfully updated session status for token ${tokenId}`);
         } catch (sessionError) {
-             console.warn(`[submit-signature] Failed to update session status for token ${tokenId}:`, sessionError);
+            console.warn(`[submit-signature] WARNING: Failed to update session data for token ${tokenId} after saving PDF:`, sessionError);
         }
 
-        res.status(200).json({ message: 'Signature submitted successfully.' });
+        try {
+            const emailSubject = `Signed Document: ${sessionData.originalFilename}`;
+            const emailText = `The document "${sessionData.originalFilename}" (Token: ${tokenId}) has been signed. Find the signed version attached.`;
+            await sendSignedDocumentEmail(emailSubject, emailText, signedPdfPathAbs, signedPdfFilename);
+            console.log(`[submit-signature] Successfully sent signed document email for token ${tokenId}`);
+        } catch (emailError) {
+            console.warn(`[submit-signature] WARNING: Failed to send signed document email for token ${tokenId} after saving PDF:`, emailError);
+        }
+
+        res.status(200).json({ message: 'Signature submitted and document saved successfully.' });
 
     } catch (error: unknown) {
-        console.error('[submit-signature] Unexpected error during signature processing:', error);
-        const message = error instanceof Error ? error.message : 'An internal server error occurred.';
-        if (!res.headersSent) {
-             res.status(500).json({ message: message || 'Internal server error processing signature.' });
-        }
+        console.error('[submit-signature] General error:', error);
+        const message = error instanceof Error ? error.message : 'An unknown error occurred during signature submission.';
+        res.status(500).json({ message });
     }
 }
