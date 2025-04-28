@@ -36,7 +36,6 @@ const PanelPage = () => {
           <title>Vierra | Admin Panel</title>
         </Head>
         <div className="relative min-h-screen bg-[#18042A] text-white flex">
-          {/* Logo positioned absolutely */}
           <div className="absolute top-4 left-4 z-20">
             <Link href="/" legacyBehavior>
               <a aria-label="Go to homepage">
@@ -51,22 +50,18 @@ const PanelPage = () => {
             </Link>
           </div>
 
-          {/* Left Sidebar */}
           <div className="w-56 bg-[#2E0A4F] h-screen flex flex-col justify-between pt-20 pb-4 px-4">
             <div className="flex flex-col space-y-2">
-              {/* Prepare PDF Button */}
               <button
                 onClick={() => setIsSignModalOpen(true)}
                 className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
                 aria-label="Prepare PDF for Signing"
               >
                 <FiFileText className="w-5 h-5" />
-                <span className={`ml-3 text-sm font-medium ${inter.className}`}>Prepare PDF</span>
+                <span className={`ml-3 text-sm font-medium ${inter.className}`}>PDF Signer</span>
               </button>
-              {/* Placeholder for other sidebar icons/links */}
             </div>
 
-            {/* Logout Button */}
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
               className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
@@ -77,14 +72,10 @@ const PanelPage = () => {
             </button>
           </div>
 
-          {/* Main Content Area */}
           <div className="flex-1 flex flex-col">
-            {/* Top Bar - Updated */}
             <div className="h-16 bg-[#2E0A4F] flex items-center pl-64 pr-8 justify-end"></div>
 
-            {/* Page Content */}
             <div className="flex-1 p-8 flex flex-col items-start justify-start">
-              {/* You can add other content here */}
             </div>
           </div>
         </div>
