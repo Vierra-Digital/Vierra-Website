@@ -3,8 +3,8 @@ import path from 'path';
 
 export interface SessionData {
     token: string;
-    pdfPath: string;
     originalFilename: string;
+    pdfPath: string;
     coordinates: {
         page: number;
         xRatio: number;
@@ -12,8 +12,9 @@ export interface SessionData {
         width: number;
         height: number;
     };
-    status: 'pending' | 'signed';
+    status: 'pending' | 'signed' | 'expired';
     createdAt: number;
+    signedPdfPath?: string;
 }
 
 const sessionsDir = path.resolve(process.cwd(), 'public', 'signing_sessions');
