@@ -118,7 +118,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         try {
             const emailSubject = `Signed Document: ${sessionData.originalFilename}`;
-            const emailText = `The document "${sessionData.originalFilename}" (Token: ${tokenId}) has been signed. Find the signed version attached.`;
+            const emailText = `The document "${sessionData.originalFilename}" has been signed. See the signed version attached.`;
             await sendSignedDocumentEmail(emailSubject, emailText, signedPdfPathAbs, signedPdfFilename);
             console.log(`[submit-signature] Successfully sent signed document email for token ${tokenId}`);
         } catch (emailError) {
