@@ -13,10 +13,6 @@ export const config = {
 
 const pdfsDir = path.resolve(process.cwd(), 'public', 'signing_pdfs');
 
-if (!fs.existsSync(pdfsDir)) {
-    fs.mkdirSync(pdfsDir, { recursive: true });
-}
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') {
         res.setHeader('Allow', ['POST']);
@@ -59,6 +55,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const originalFilename = pdfFile.originalFilename || 'document.pdf';
         persistentPdfPath = path.join(pdfsDir, `${tokenId}.pdf`);
         publicPdfPath = `/signing_pdfs/${tokenId}.pdf`;
+
+        if (!fs.existsSync(pdfsDir)) {
+            fs.mkdirSync(pdfsDir, { recursive: true });
+        }
 
         if (tempPdfPath) {
             fs.renameSync(tempPdfPath, persistentPdfPath);
