@@ -1,18 +1,18 @@
-"use client";
-import React, { useState, useEffect, useRef, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Bricolage_Grotesque, Figtree } from "next/font/google";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { useGLTF } from "@react-three/drei";
-import * as THREE from "three";
+"use client"
+import React, { useState, useEffect, useRef, useMemo } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import { Bricolage_Grotesque, Figtree } from "next/font/google"
+import { Canvas, useFrame } from "@react-three/fiber"
+import { useGLTF } from "@react-three/drei"
+import * as THREE from "three"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
-const figtree = Figtree({ subsets: ["latin"] });
+const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
+const figtree = Figtree({ subsets: ["latin"] })
 
 interface Service {
-  id: string;
-  name: string;
-  description: string;
+  id: string
+  name: string
+  description: string
 }
 
 const services: Service[] = [
@@ -40,7 +40,7 @@ const services: Service[] = [
     description:
       "Improve your business by making your data work for you. We use results-driven numbers to improve your lead generation and increase patient longevity.",
   },
-];
+]
 
 const descriptionVariants = {
   initial: {
@@ -66,7 +66,7 @@ const descriptionVariants = {
       ease: "easeIn",
     },
   },
-};
+}
 
 const Lighting = () => (
   <>
@@ -79,7 +79,7 @@ const Lighting = () => (
     <directionalLight position={[5, -5, 5]} intensity={6} />
     <directionalLight position={[-5, -5, 5]} intensity={6} />
   </>
-);
+)
 
 const getAnimationConfig = (isMobile: boolean) => {
   return {
@@ -92,74 +92,74 @@ const getAnimationConfig = (isMobile: boolean) => {
       idle: isMobile ? 0.08 : 0.05,
     },
     getPositionForId: (id: string | null, services: Service[]) => {
-      if (!id) return new THREE.Vector3(0, 0, 0);
+      if (!id) return new THREE.Vector3(0, 0, 0)
 
-      const index = services.findIndex((service) => service.id === id);
-      if (index === -1) return new THREE.Vector3(0, 0, 0);
+      const index = services.findIndex((service) => service.id === id)
+      if (index === -1) return new THREE.Vector3(0, 0, 0)
 
       if (isMobile) {
-        const angle = (index / services.length) * Math.PI * 2;
-        const radius = 0.5;
-        const x = Math.sin(angle) * radius;
-        const z = Math.cos(angle) * radius;
-        return new THREE.Vector3(x, 0, z);
+        const angle = (index / services.length) * Math.PI * 2
+        const radius = 0.5
+        const x = Math.sin(angle) * radius
+        const z = Math.cos(angle) * radius
+        return new THREE.Vector3(x, 0, z)
       } else {
-        const yOffset = index === services.length - 1 ? 0.4 : 0;
-        return new THREE.Vector3(0, 1.5 - index + yOffset, 0);
+        const yOffset = index === services.length - 1 ? 0.4 : 0
+        return new THREE.Vector3(0, 1.5 - index + yOffset, 0)
       }
     },
-  };
-};
+  }
+}
 
 const Model = React.memo(function Model({
   selectedId,
   isMobile,
 }: {
-  selectedId: string | null;
-  isMobile: boolean;
+  selectedId: string | null
+  isMobile: boolean
 }) {
-  const gltf = useGLTF("/assets/object.glb");
-  const [isAnimating, setIsAnimating] = useState(false);
-  const lastSelectedId = useRef<string | null>(null);
-  const animConfig = useMemo(() => getAnimationConfig(isMobile), [isMobile]);
-  const force = useRef(new THREE.Vector3());
+  const gltf = useGLTF("/assets/object.glb")
+  const [isAnimating, setIsAnimating] = useState(false)
+  const lastSelectedId = useRef<string | null>(null)
+  const animConfig = useMemo(() => getAnimationConfig(isMobile), [isMobile])
+  const force = useRef(new THREE.Vector3())
 
-  const targetPosition = animConfig.getPositionForId(selectedId, services);
+  const targetPosition = animConfig.getPositionForId(selectedId, services)
 
   useEffect(() => {
     if (selectedId !== lastSelectedId.current) {
-      setIsAnimating(true);
-      lastSelectedId.current = selectedId;
-      const timeout = setTimeout(() => setIsAnimating(false), 500);
-      return () => clearTimeout(timeout);
+      setIsAnimating(true)
+      lastSelectedId.current = selectedId
+      const timeout = setTimeout(() => setIsAnimating(false), 500)
+      return () => clearTimeout(timeout)
     }
-  }, [selectedId]);
+  }, [selectedId])
 
   useFrame((state, delta) => {
-    if (!gltf.scene) return;
+    if (!gltf.scene) return
 
     force.current
       .subVectors(targetPosition, gltf.scene.position)
-      .multiplyScalar(animConfig.springStrength);
+      .multiplyScalar(animConfig.springStrength)
     const moveSpeed = isAnimating
       ? animConfig.moveSpeed.animating
-      : animConfig.moveSpeed.idle;
-    gltf.scene.position.add(force.current.multiplyScalar(moveSpeed * delta));
+      : animConfig.moveSpeed.idle
+    gltf.scene.position.add(force.current.multiplyScalar(moveSpeed * delta))
 
     const targetScale = isAnimating
       ? animConfig.modelScaleAnimating
-      : animConfig.modelScale;
+      : animConfig.modelScale
     gltf.scene.scale.lerp(
       new THREE.Vector3(targetScale, targetScale, targetScale),
       0.1
-    );
+    )
 
     const targetRotationY = selectedId
       ? (parseInt(selectedId) - 1) * (Math.PI / 2)
-      : gltf.scene.rotation.y;
-    gltf.scene.rotation.y += (targetRotationY - gltf.scene.rotation.y) * 0.05;
-    gltf.scene.rotation.y += delta / 2;
-  });
+      : gltf.scene.rotation.y
+    gltf.scene.rotation.y += (targetRotationY - gltf.scene.rotation.y) * 0.05
+    gltf.scene.rotation.y += delta / 2
+  })
 
   return (
     <primitive
@@ -167,17 +167,17 @@ const Model = React.memo(function Model({
       scale={animConfig.modelScale}
       position={animConfig.modelPosition}
     />
-  );
-});
+  )
+})
 
 const ServiceItem = React.memo(function ServiceItem({
   service,
   isOpen,
   toggleService,
 }: {
-  service: Service;
-  isOpen: boolean;
-  toggleService: (id: string) => void;
+  service: Service
+  isOpen: boolean
+  toggleService: (id: string) => void
 }) {
   return (
     <div key={service.id}>
@@ -203,9 +203,7 @@ const ServiceItem = React.memo(function ServiceItem({
         >
           <span
             className={`text-lg md:text-[24px] font-light transition-opacity duration-300 ${
-              isOpen
-                ? "text-white"
-                : "text-white/40 group-hover:text-white"
+              isOpen ? "text-white" : "text-white/40 group-hover:text-white"
             }`}
           >
             {service.id}
@@ -237,52 +235,54 @@ const ServiceItem = React.memo(function ServiceItem({
         )}
       </AnimatePresence>
     </div>
-  );
-});
+  )
+})
 
 export function Services() {
-  const [openServiceId, setOpenServiceId] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const canvasWrapperRef = useRef<HTMLDivElement>(null);
-  const [canvasSize, setCanvasSize] = useState({ width: 480, height: 800 });
+  const [openServiceId, setOpenServiceId] = useState<string | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const canvasWrapperRef = useRef<HTMLDivElement>(null)
+  const [canvasSize, setCanvasSize] = useState({ width: 480, height: 800 })
 
   useEffect(() => {
-    if (!canvasWrapperRef.current) return;
+    if (!canvasWrapperRef.current) return
 
     const updateCanvasSize = () => {
-      const isMobileView = window.innerWidth <= 768;
+      const isMobileView = window.innerWidth <= 768
       const containerWidth = canvasWrapperRef.current
         ? canvasWrapperRef.current.clientWidth
-        : 0;
+        : 0
       const size = isMobileView
         ? Math.min(Math.max(containerWidth, 280), 350)
-        : Math.min(containerWidth, 480);
-      setCanvasSize({ width: size, height: isMobileView ? 350 : 800 });
-    };
+        : Math.min(containerWidth, 480)
+      setCanvasSize({ width: size, height: isMobileView ? 350 : 800 })
+    }
 
-    const observer = new ResizeObserver(updateCanvasSize);
-    observer.observe(canvasWrapperRef.current);
+    const observer = new ResizeObserver(updateCanvasSize)
+    observer.observe(canvasWrapperRef.current)
 
-    updateCanvasSize();
+    updateCanvasSize()
 
-    return () => observer.disconnect();
-  }, []);
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     const timer = setInterval(() => {
       setOpenServiceId((prevId) => {
-        const currentIndex = services.findIndex((service) => service.id === prevId);
-        const nextIndex = (currentIndex + 1) % services.length;
-        return services[nextIndex].id;
-      });
-    }, 3000);
+        const currentIndex = services.findIndex(
+          (service) => service.id === prevId
+        )
+        const nextIndex = (currentIndex + 1) % services.length
+        return services[nextIndex].id
+      })
+    }, 5000)
 
-    return () => clearInterval(timer);
-  }, []);
+    return () => clearInterval(timer)
+  }, [])
 
   const toggleService = (serviceId: string) => {
-    setOpenServiceId(openServiceId === serviceId ? null : serviceId);
-  };
+    setOpenServiceId(openServiceId === serviceId ? null : serviceId)
+  }
 
   return (
     <div
@@ -365,5 +365,5 @@ export function Services() {
         </div>
       </div>
     </div>
-  );
+  )
 }
