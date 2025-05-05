@@ -1,5 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next"
 import fs from "fs"
+import path from "path"
 import { getSessionData, SessionData } from "@/lib/sessionStore"
 
 interface TokenDetailsResponse {
@@ -25,36 +26,22 @@ export default function handler(
 
   if (req.method === "GET") {
     if (content === "pdf") {
-      const pdfFilePath = session.pdfPath
+      const rel = session.pdfPath.replace(/^\//, "")
+      const abs = path.join(process.cwd(), "public", rel)
 
-      if (!pdfFilePath) {
-        console.error(`[API ${tokenId}] PDF path missing in session data.`)
-        return res
-          .status(500)
-          .json({ message: "PDF path configuration error." })
-      }
-
-      console.log(
-        `[API ${tokenId}] Attempting to serve PDF from path: ${pdfFilePath}`
-      )
-
-      if (!fs.existsSync(pdfFilePath)) {
-        console.error(
-          `[API ${tokenId}] PDF file not found at path: ${pdfFilePath}`
-        )
-        return res
-          .status(404)
-          .json({ message: "Signing document not found or expired." })
+      if (!fs.existsSync(abs)) {
+        console.error(`[API ${tokenId}] PDF file not found at path: ${abs}`)
+        return res.status(404).json({ message: "PDF file not found." })
       }
       try {
-        const stat = fs.statSync(pdfFilePath)
+        const stat = fs.statSync(abs)
         res.setHeader("Content-Type", "application/pdf")
         res.setHeader(
           "Content-Disposition",
-          `inline; filename="${session.originalFilename || "document.pdf"}"`
+          `inline; filename="${session.originalFilename}"`
         )
         res.setHeader("Content-Length", stat.size.toString())
-        const readStream = fs.createReadStream(pdfFilePath)
+        const readStream = fs.createReadStream(abs)
         readStream.pipe(res)
         readStream.on("error", (err) => {
           console.error(`[API ${tokenId}] Error streaming PDF:`, err)
@@ -63,12 +50,6 @@ export default function handler(
           } else {
             res.end()
           }
-        })
-        req.on("close", () => {
-          console.log(
-            `[API ${tokenId}] Client closed connection during PDF stream.`
-          )
-          readStream.destroy()
         })
       } catch (err) {
         console.error(

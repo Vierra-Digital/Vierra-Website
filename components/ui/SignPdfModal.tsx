@@ -180,7 +180,8 @@ const SignPdfModal: React.FC<SignPdfModalProps> = ({ isOpen, onClose }) => {
         )
       }
       const data = await response.json()
-      setGeneratedLink(data.link)
+      const fullLink = `${window.location.origin}${data.link}`
+      setGeneratedLink(fullLink)
     } catch (err: unknown) {
       setError(
         err instanceof Error ? err.message : "Failed to generate signing link."
