@@ -1,6 +1,5 @@
 import { NextApiRequest, NextApiResponse } from "next"
 import fs from "fs"
-import path from "path"
 import { getSessionData, SessionData } from "@/lib/sessionStore"
 
 interface TokenDetailsResponse {
