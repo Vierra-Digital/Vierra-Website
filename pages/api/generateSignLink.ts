@@ -11,8 +11,9 @@ export const config = {
   },
 }
 
-const pdfsDir = path.resolve(process.cwd(), "public", "signing_pdfs")
-console.log(`[generate-sign-link] Resolved pdfsDir: ${pdfsDir}`) // Log the resolved path
+// Use the temporary directory for file storage in serverless environments
+const pdfsDir = path.resolve("/tmp", "signing_pdfs") // Changed from process.cwd(), 'public'
+console.log(`[generate-sign-link] Using pdfsDir: ${pdfsDir}`) // Log the resolved path
 
 export default async function handler(
   req: NextApiRequest,
@@ -23,10 +24,12 @@ export default async function handler(
     return res.status(405).json({ message: `Method ${req.method} Not Allowed` })
   }
 
-  const form = formidable({})
+  const form = formidable({
+    uploadDir: "/tmp", // Ensure formidable also uses /tmp for initial uploads
+    keepExtensions: true,
+  })
   let tempPdfPath: string | null = null
   let persistentPdfPath: string | null = null
-  let publicPdfPath: string | null = null
 
   try {
     console.log("[generate-sign-link] Parsing form data...")
@@ -34,7 +37,7 @@ export default async function handler(
     console.log("[generate-sign-link] Form data parsed.")
 
     const pdfFile = files.pdf?.[0]
-    tempPdfPath = pdfFile?.filepath ?? null
+    tempPdfPath = pdfFile?.filepath ?? null // This should now be in /tmp
     const coordsString = fields.coords?.[0]
     console.log(`[generate-sign-link] Temp PDF path: ${tempPdfPath}`)
     console.log(
@@ -97,14 +100,12 @@ export default async function handler(
     const tokenId = uuidv4()
     const originalFilename = pdfFile.originalFilename || "document.pdf"
     persistentPdfPath = path.join(pdfsDir, `${tokenId}.pdf`)
-    publicPdfPath = `/signing_pdfs/${tokenId}.pdf`
     console.log(`[generate-sign-link] Generated tokenId: ${tokenId}`)
     console.log(
       `[generate-sign-link] Persistent PDF path: ${persistentPdfPath}`
     )
-    console.log(`[generate-sign-link] Public PDF path: ${publicPdfPath}`)
 
-    // Check and create directory
+    // Check and create directory in /tmp
     try {
       if (!fs.existsSync(pdfsDir)) {
         console.log(
@@ -127,12 +128,20 @@ export default async function handler(
       )
     }
 
-    // Rename (move) the file
+    // Rename (move) the file within /tmp
     if (tempPdfPath) {
       try {
         console.log(
           `[generate-sign-link] Attempting to rename ${tempPdfPath} to ${persistentPdfPath}`
         )
+        if (!fs.existsSync(tempPdfPath)) {
+          console.error(
+            `[generate-sign-link] Error: Temp file ${tempPdfPath} not found before rename.`
+          )
+          throw new Error(
+            `Temporary file not found at ${tempPdfPath}. Upload might have failed.`
+          )
+        }
         fs.renameSync(tempPdfPath, persistentPdfPath)
         console.log(`[generate-sign-link] File renamed successfully.`)
       } catch (renameError) {
@@ -154,13 +163,12 @@ export default async function handler(
       )
       throw new Error("Temporary PDF path is null.")
     }
-    // Temporary PDF path is now null after renaming
     tempPdfPath = null
 
     const sessionData: SessionData = {
       token: tokenId,
       originalFilename: originalFilename,
-      pdfPath: publicPdfPath,
+      pdfPath: persistentPdfPath,
       coordinates: coords,
       status: "pending",
       createdAt: Date.now(),
@@ -197,7 +205,7 @@ export default async function handler(
       if (persistentPdfPath && fs.existsSync(persistentPdfPath)) {
         try {
           console.log(
-            `[generate-sign-link] Cleaning up persistent PDF: ${persistentPdfPath}`
+            `[generate-sign-link] Cleaning up persistent PDF in /tmp: ${persistentPdfPath}`
           )
           fs.unlinkSync(persistentPdfPath)
         } catch (cleanupError) {
@@ -207,17 +215,12 @@ export default async function handler(
           )
         }
       }
-      const tempPathToClean =
-        (error.message?.includes("Failed to save PDF file") ||
-          error.message?.includes("Temporary PDF path is null")) &&
-        tempPdfPath
-          ? tempPdfPath
-          : null
+      const tempPathToClean = tempPdfPath
 
       if (tempPathToClean && fs.existsSync(tempPathToClean)) {
         try {
           console.log(
-            `[generate-sign-link] Cleaning up temp PDF (error path): ${tempPathToClean}`
+            `[generate-sign-link] Cleaning up temp PDF (error path) in /tmp: ${tempPathToClean}`
           )
           fs.unlinkSync(tempPathToClean)
         } catch (cleanupError) {
@@ -230,7 +233,8 @@ export default async function handler(
 
       const message = error.message?.includes("Failed to save session data")
         ? "Failed to save signing session metadata."
-        : error.message?.includes("Failed to save PDF file")
+        : error.message?.includes("Failed to save PDF file") ||
+          error.message?.includes("Temporary file not found")
         ? "Failed to save uploaded PDF file."
         : error.message?.includes("Failed to ensure PDF directory exists")
         ? "Server configuration error creating storage directory."
