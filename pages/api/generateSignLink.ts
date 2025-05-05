@@ -154,7 +154,7 @@ export default async function handler(
       )
       throw new Error("Temporary PDF path is null.")
     }
-    const successfullyRenamedTempPath = tempPdfPath
+    // Temporary PDF path is now null after renaming
     tempPdfPath = null
 
     const sessionData: SessionData = {
