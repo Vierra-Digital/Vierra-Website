@@ -53,7 +53,10 @@ export default function RootLayout({
           content="marketing, lead generation, business growth, digital optimization"
         />
         <meta name="author" content="Alex Shick" />
-        <meta property="og:title" content="Vierra" />
+        <meta
+          property="og:title"
+          content="Vierra, Lead-Driven Solutions For Your Entire Business."
+        />
         <meta
           property="og:description"
           content="Scale your practice effortlessly. Fill out your schedules and eliminate no-shows."
@@ -62,7 +65,10 @@ export default function RootLayout({
         <meta property="og:url" content="https://vierradev.com/" />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Vierra" />
+        <meta
+          name="twitter:title"
+          content="Vierra, Lead-Driven Solutions For Your Entire Business."
+        />
         <meta
           name="twitter:description"
           content="Scale your practice effortlessly. Fill out your schedules and eliminate no-shows."
