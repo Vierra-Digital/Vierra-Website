@@ -1,3 +1,4 @@
+"use client";
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import {
@@ -29,17 +30,17 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "https://vierradev.com",
   },
-  themeColor: "#8F42FF", // Added theme color
+  themeColor: "#8F42FF",
   openGraph: {
-    title: "Vierra - Effortless Practice Scaling",
-    description: "Fill your schedules and eliminate no-shows with Vierra.",
+    title: "Vierra - Scale Your Practice Effortlessly",
+    description: "Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services.",
     url: "https://vierradev.com",
     siteName: "Vierra",
     images: [
       {
-        url: "https://vierradev.com/assets/meta-banner.png", // Updated image
-        width: 1200, // Adjust if your banner has different dimensions
-        height: 630, // Adjust if your banner has different dimensions
+        url: "https://vierradev.com/assets/meta-banner.png",
+        width: 1200,
+        height: 630,
         alt: "Vierra - Scale Your Practice Effortlessly",
       },
     ],
@@ -48,17 +49,15 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Vierra - Effortless Practice Scaling",
-    description: "Fill your schedules and eliminate no-shows with Vierra.",
-    images: ["https://vierradev.com/assets/meta-banner.png"], // Updated image
-    // creator: '@yourTwitterHandle',
+    title: "Vierra - Scale Your Practice Effortlessly",
+    description: "Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services.",
+    images: ["https://vierradev.com/assets/meta-banner.png"],
   },
   icons: {
     icon: "/favicon.ico",
     apple: "/apple-touch-icon.png",
   },
-  // manifest: '/site.webmanifest',
-};
+}
 
 export default function RootLayout({
   children,
@@ -84,30 +83,25 @@ export default function RootLayout({
     return () => clearInterval(intervalId)
   }, [])
 
-  // Define Organization Schema
   const organizationSchema = {
     "@context": "https://schema.org",
     "@type": "Organization",
     "name": "Vierra Development",
     "url": "https://vierradev.com",
-    "logo": "https://vierradev.com/assets/meta-banner.png", 
+    "logo": "https://vierradev.com/assets/meta-banner.png",
     "contactPoint": {
       "@type": "ContactPoint",
-      "telephone": "+1-781-496-8867", 
-      "contactType": "Customer Service" 
+      "telephone": "+1-781-496-8867",
+      "contactType": "Sales",
     },
-    "sameAs": [ 
-      "https://www.instagram.com/yourprofile", // Replace with your actual Instagram link
-      "https://www.linkedin.com/company/yourcompany", // Replace with your actual LinkedIn link
-      "https://twitter.com/yourprofile" // Replace with your actual Twitter/X link
-      // Add other social media links if you have them, e.g., Facebook, YouTube
+    "sameAs": [
+      "https://www.linkedin.com/company/vierra/"
     ]
-  };
+  }
 
   return (
     <html lang="en" style={{ scrollBehavior: "smooth" }}>
       <head>
-        {/* Next.js will inject metadata here */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
