@@ -7,12 +7,47 @@ import {
   checkAnalyticsStatus,
 } from "@/lib/analytics"
 import { useEffect, useState } from "react"
+import type { Metadata } from "next"
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] })
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 })
+
+export const metadata: Metadata = {
+  title: "Vierra Development - Custom Web Solutions", // Replace with your main site title
+  description:
+    "Vierra Development offers bespoke web development, design, and SEO services to elevate your online presence.", // Replace with your site description
+  openGraph: {
+    title: "Vierra Development - Custom Web Solutions", // OG title
+    description: "Bespoke web solutions to grow your business.", // OG description
+    url: "https://vierradev.com", // Your site URL
+    siteName: "Vierra Development",
+    // images: [ // Optional: Add Open Graph images
+    //   {
+    //     url: 'https://vierradev.com/og-image.png', // URL to your OG image
+    //     width: 1200,
+    //     height: 630,
+    //   },
+    // ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    // Optional: Twitter specific card
+    card: "summary_large_image",
+    title: "Vierra Development - Custom Web Solutions",
+    description: "Bespoke web solutions to grow your business.",
+    // images: ['https://vierradev.com/twitter-image.png'], // URL to your Twitter image
+    // creator: '@yourTwitterHandle', // Optional: Your Twitter handle
+  },
+  // icons: { // Optional: Favicon and apple touch icons
+  //   icon: '/favicon.ico',
+  //   apple: '/apple-touch-icon.png',
+  // },
+  // manifest: '/site.webmanifest', // Optional: If you have a web app manifest
+}
 
 export default function RootLayout({
   children,
