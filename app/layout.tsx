@@ -1,4 +1,4 @@
-"use client"; // Added: This file is now a Client Component
+"use client";
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import {
@@ -45,7 +45,7 @@ export default function RootLayout({
     url: "https://vierradev.com",
     logo: "https://vierradev.com/assets/meta-banner.png",
     contactPoint: {
-      "@type": "ContactPoint",
+      "@type": "Contact",
       telephone: "+1-781-496-8867",
       contactType: "Sales",
     },
@@ -63,8 +63,6 @@ export default function RootLayout({
         <meta name="keywords" content="marketing, lead generation, business growth, digital optimization, practice scaling" />
         <meta name="author" content="Alex Shick" />
         <link rel="canonical" href="https://vierradev.com" />
-
-        {/* Open Graph / Facebook */}
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://vierradev.com" />
         <meta property="og:title" content="Vierra - Scale Your Practice Effortlessly" />
@@ -74,21 +72,14 @@ export default function RootLayout({
         <meta property="og:image:height" content="630" />
         <meta property="og:site_name" content="Vierra" />
         <meta property="og:locale" content="en_US" />
-
-        {/* Twitter */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Vierra - Scale Your Practice Effortlessly" />
         <meta name="twitter:description" content="Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services." />
         <meta name="twitter:image" content="https://vierradev.com/assets/meta-banner.png" />
-
-        {/* Icons */}
         <link rel="icon" href="/favicon.ico" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-        
-        {/* Viewport and Theme */}
         <meta name="viewport" content="width=device-width, initial-scale=1" /> 
         <meta name="theme-color" content="#8F42FF" />
-        
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
