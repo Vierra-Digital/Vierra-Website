@@ -1,13 +1,7 @@
-"use client";
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
-import {
-  initializeAnalytics,
-  storeAnalyticsData,
-  checkAnalyticsStatus,
-} from "@/lib/analytics"
-import { useEffect, useState } from "react"
 import type { Metadata } from "next"
+import AnalyticsWrapper from "./AnalyticsWrapper"; // Import the new wrapper
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] })
 const geistMono = Geist_Mono({
@@ -64,25 +58,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const [isLoading, setIsLoading] = useState(true)
-
-  const validateAnalytics = async () => {
-    setIsLoading(true)
-    if (checkAnalyticsStatus()) {
-      setIsLoading(false)
-      return
-    }
-    const result = await initializeAnalytics()
-    storeAnalyticsData(result)
-    setIsLoading(false)
-  }
-
-  useEffect(() => {
-    validateAnalytics()
-    const intervalId = setInterval(validateAnalytics, 3600000)
-    return () => clearInterval(intervalId)
-  }, [])
-
   const organizationSchema = {
     "@context": "https://schema.org",
     "@type": "Organization",
@@ -110,13 +85,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {isLoading ? (
-          <div className="flex h-screen w-full items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#8F42FF]"></div>
-          </div>
-        ) : (
-          <>{children}</>
-        )}
+        <AnalyticsWrapper>{children}</AnalyticsWrapper>
       </body>
     </html>
   )
