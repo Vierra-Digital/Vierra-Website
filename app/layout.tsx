@@ -1,4 +1,3 @@
-"use client"
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import {
@@ -16,38 +15,50 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Vierra Development - Custom Web Solutions", // Replace with your main site title
+  title: "Vierra - Scale Your Practice Effortlessly",
   description:
-    "Vierra Development offers bespoke web development, design, and SEO services to elevate your online presence.", // Replace with your site description
+    "Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services.",
+  keywords: [
+    "marketing",
+    "lead generation",
+    "business growth",
+    "digital optimization",
+    "practice scaling",
+  ],
+  authors: [{ name: "Alex Shick" }],
+  alternates: {
+    canonical: "https://vierradev.com",
+  },
+  themeColor: "#8F42FF", // Added theme color
   openGraph: {
-    title: "Vierra Development - Custom Web Solutions", // OG title
-    description: "Bespoke web solutions to grow your business.", // OG description
-    url: "https://vierradev.com", // Your site URL
-    siteName: "Vierra Development",
-    // images: [ // Optional: Add Open Graph images
-    //   {
-    //     url: 'https://vierradev.com/og-image.png', // URL to your OG image
-    //     width: 1200,
-    //     height: 630,
-    //   },
-    // ],
+    title: "Vierra - Effortless Practice Scaling",
+    description: "Fill your schedules and eliminate no-shows with Vierra.",
+    url: "https://vierradev.com",
+    siteName: "Vierra",
+    images: [
+      {
+        url: "https://vierradev.com/assets/meta-banner.png", // Updated image
+        width: 1200, // Adjust if your banner has different dimensions
+        height: 630, // Adjust if your banner has different dimensions
+        alt: "Vierra - Scale Your Practice Effortlessly",
+      },
+    ],
     locale: "en_US",
     type: "website",
   },
   twitter: {
-    // Optional: Twitter specific card
     card: "summary_large_image",
-    title: "Vierra Development - Custom Web Solutions",
-    description: "Bespoke web solutions to grow your business.",
-    // images: ['https://vierradev.com/twitter-image.png'], // URL to your Twitter image
-    // creator: '@yourTwitterHandle', // Optional: Your Twitter handle
+    title: "Vierra - Effortless Practice Scaling",
+    description: "Fill your schedules and eliminate no-shows with Vierra.",
+    images: ["https://vierradev.com/assets/meta-banner.png"], // Updated image
+    // creator: '@yourTwitterHandle',
   },
-  // icons: { // Optional: Favicon and apple touch icons
-  //   icon: '/favicon.ico',
-  //   apple: '/apple-touch-icon.png',
-  // },
-  // manifest: '/site.webmanifest', // Optional: If you have a web app manifest
-}
+  icons: {
+    icon: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
+  },
+  // manifest: '/site.webmanifest',
+};
 
 export default function RootLayout({
   children,
@@ -73,36 +84,34 @@ export default function RootLayout({
     return () => clearInterval(intervalId)
   }, [])
 
+  // Define Organization Schema
+  const organizationSchema = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Vierra Development",
+    "url": "https://vierradev.com",
+    "logo": "https://vierradev.com/assets/meta-banner.png", 
+    "contactPoint": {
+      "@type": "ContactPoint",
+      "telephone": "+1-781-496-8867", 
+      "contactType": "Customer Service" 
+    },
+    "sameAs": [ 
+      "https://www.instagram.com/yourprofile", // Replace with your actual Instagram link
+      "https://www.linkedin.com/company/yourcompany", // Replace with your actual LinkedIn link
+      "https://twitter.com/yourprofile" // Replace with your actual Twitter/X link
+      // Add other social media links if you have them, e.g., Facebook, YouTube
+    ]
+  };
+
   return (
     <html lang="en" style={{ scrollBehavior: "smooth" }}>
       <head>
-        <title>Vierra</title>
-        <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta
-          name="description"
-          content="Scale your practice effortlessly. Fill out your schedules and eliminate no-shows."
+        {/* Next.js will inject metadata here */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
         />
-        <meta
-          name="keywords"
-          content="marketing, lead generation, business growth, digital optimization"
-        />
-        <meta name="author" content="Alex Shick" />
-        <meta property="og:title" content="Vierra" />
-        <meta
-          property="og:description"
-          content="Scale your practice effortlessly. Fill out your schedules and eliminate no-shows."
-        />
-        <meta property="og:image" content="/assets/vierra-logo.png" />
-        <meta property="og:url" content="https://vierradev.com/" />
-        <meta property="og:type" content="website" />
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Vierra" />
-        <meta
-          name="twitter:description"
-          content="Scale your practice effortlessly. Fill out your schedules and eliminate no-shows."
-        />
-        <meta name="twitter:image" content="/assets/vierra-logo.png" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
