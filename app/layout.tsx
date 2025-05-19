@@ -1,3 +1,4 @@
+"use client"; // Added: This file is now a Client Component
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import {
@@ -6,47 +7,12 @@ import {
   checkAnalyticsStatus,
 } from "@/lib/analytics"
 import { useEffect, useState } from "react"
-import type { Metadata } from "next"
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] })
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 })
-
-export const metadata: Metadata = {
-  title: "Vierra Development - Custom Web Solutions", // Replace with your main site title
-  description:
-    "Vierra Development offers bespoke web development, design, and SEO services to elevate your online presence.", // Replace with your site description
-  openGraph: {
-    title: "Vierra Development - Custom Web Solutions", // OG title
-    description: "Bespoke web solutions to grow your business.", // OG description
-    url: "https://vierradev.com", // Your site URL
-    siteName: "Vierra Development",
-    // images: [ // Optional: Add Open Graph images
-    //   {
-    //     url: 'https://vierradev.com/og-image.png', // URL to your OG image
-    //     width: 1200,
-    //     height: 630,
-    //   },
-    // ],
-    locale: "en_US",
-    type: "website",
-  },
-  twitter: {
-    // Optional: Twitter specific card
-    card: "summary_large_image",
-    title: "Vierra Development - Custom Web Solutions",
-    description: "Bespoke web solutions to grow your business.",
-    // images: ['https://vierradev.com/twitter-image.png'], // URL to your Twitter image
-    // creator: '@yourTwitterHandle', // Optional: Your Twitter handle
-  },
-  // icons: { // Optional: Favicon and apple touch icons
-  //   icon: '/favicon.ico',
-  //   apple: '/apple-touch-icon.png',
-  // },
-  // manifest: '/site.webmanifest', // Optional: If you have a web app manifest
-}
 
 export default function RootLayout({
   children,
@@ -72,36 +38,63 @@ export default function RootLayout({
     return () => clearInterval(intervalId)
   }, [])
 
+  const organizationSchema = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "Vierra Development",
+    url: "https://vierradev.com",
+    logo: "https://vierradev.com/assets/meta-banner.png",
+    contactPoint: {
+      "@type": "ContactPoint",
+      telephone: "+1-781-496-8867",
+      contactType: "Sales",
+    },
+    sameAs: [
+      "https://www.linkedin.com/company/vierra/",
+    ],
+  }
+
   return (
     <html lang="en" style={{ scrollBehavior: "smooth" }}>
       <head>
-        <title>Vierra</title>
         <meta charSet="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <meta
-          name="description"
-          content="Scale your practice effortlessly. Fill out your schedules and eliminate no-shows."
-        />
-        <meta
-          name="keywords"
-          content="marketing, lead generation, business growth, digital optimization"
-        />
+        <title>Vierra - Scale Your Practice Effortlessly</title>
+        <meta name="description" content="Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services." />
+        <meta name="keywords" content="marketing, lead generation, business growth, digital optimization, practice scaling" />
         <meta name="author" content="Alex Shick" />
-        <meta property="og:title" content="Vierra" />
-        <meta
-          property="og:description"
-          content="Scale your practice effortlessly. Fill out your schedules and eliminate no-shows."
-        />
-        <meta property="og:image" content="/assets/vierra-logo.png" />
-        <meta property="og:url" content="https://vierradev.com/" />
+        <link rel="canonical" href="https://vierradev.com" />
+
+        {/* Open Graph / Facebook */}
         <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://vierradev.com" />
+        <meta property="og:title" content="Vierra - Scale Your Practice Effortlessly" />
+        <meta property="og:description" content="Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services." />
+        <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:site_name" content="Vierra" />
+        <meta property="og:locale" content="en_US" />
+
+        {/* Twitter */}
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Vierra" />
-        <meta
-          name="twitter:description"
-          content="Scale your practice effortlessly. Fill out your schedules and eliminate no-shows."
+        <meta name="twitter:title" content="Vierra - Scale Your Practice Effortlessly" />
+        <meta name="twitter:description" content="Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services." />
+        <meta name="twitter:image" content="https://vierradev.com/assets/meta-banner.png" />
+
+        {/* Icons */}
+        <link rel="icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        
+        {/* Viewport and Theme */}
+        <meta name="viewport" content="width=device-width, initial-scale=1" /> 
+        <meta name="theme-color" content="#8F42FF" />
+        
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(organizationSchema),
+          }}
         />
-        <meta name="twitter:image" content="/assets/vierra-logo.png" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
