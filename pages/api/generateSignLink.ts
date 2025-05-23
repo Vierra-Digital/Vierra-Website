@@ -66,6 +66,16 @@ export default async function handler(
 
     const tokenId = uuidv4()
     const originalFilename = pdfFile.originalFilename || "document.pdf"
+
+    // Check that tempPdfPath is not null before reading
+    if (!tempPdfPath) {
+      throw new Error("Temporary PDF path is null.")
+    }
+
+    // Read PDF file as base64
+    const pdfContent = fs.readFileSync(tempPdfPath);
+    const pdfBased64 = pdfContent.toString('base64');
+
     persistentPdfPath = path.join(pdfsDir, `${tokenId}.pdf`)
     publicPdfPath = `/signing_pdfs/${tokenId}.pdf`
 
@@ -84,6 +94,7 @@ export default async function handler(
       token: tokenId,
       originalFilename: originalFilename,
       pdfPath: publicPdfPath,
+      pdfBase64: pdfBased64,
       coordinates: coords,
       status: "pending",
       createdAt: Date.now(),

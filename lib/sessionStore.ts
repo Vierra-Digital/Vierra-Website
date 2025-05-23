@@ -5,6 +5,7 @@ export interface SessionData {
     token: string;
     originalFilename: string;
     pdfPath: string;
+    pdfBase64?:  string,
     coordinates: {
         page: number;
         xRatio: number;
