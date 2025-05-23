@@ -26,7 +26,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const responseData = {
             coordinates: sessionData.coordinates,
             originalFilename: sessionData.originalFilename,
-            status: sessionData.status
+            status: sessionData.status,
+            pdfBase64: sessionData.pdfBase64
         };
 
         return res.status(200).json(responseData);
