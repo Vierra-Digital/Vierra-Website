@@ -16,9 +16,9 @@ const PanelPage = () => {
   const { data: session, status } = useSession();
 
   useEffect(() => {
-    if (status !== "loading" && !session) {
-      router.replace("/login");
-    }
+    // if (status !== "loading" && !session) {
+    //   router.replace("/login");
+    // }
   }, [session, status, router]);
 
   if (status === "loading") {
@@ -29,7 +29,7 @@ const PanelPage = () => {
     );
   }
 
-  if (status === "authenticated") {
+  // if (status === "authenticated") {
     return (
       <>
         <Head>
@@ -85,7 +85,7 @@ const PanelPage = () => {
         />
       </>
     );
-  }
+  // }
 
   return null;
 };

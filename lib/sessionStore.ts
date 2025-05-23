@@ -15,6 +15,7 @@ export interface SessionData {
     status: 'pending' | 'signed' | 'expired';
     createdAt: number;
     signedPdfPath?: string;
+    signerEmail?: string;
 }
 
 const sessionsDir = path.resolve(process.cwd(), 'public', 'signing_sessions');

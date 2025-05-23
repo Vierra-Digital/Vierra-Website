@@ -39,6 +39,8 @@ const SignDocumentPage: React.FC = () => {
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
   const [sessionDetails, setSessionDetails] = useState<{ originalFilename: string } | null>(null);
   const [redirectCountdown, setRedirectCountdown] = useState<number>(5);
+  const [signerEmail, setSignerEmail] = useState<string>('');
+  const [isEmailValid, setIsEmailValid] = useState<boolean>(true);
   const sigRef = useRef<SignatureCanvas>(null);
   const pageRefs = useRef<{ [page: number]: HTMLDivElement | null }>({});
 
@@ -61,7 +63,7 @@ const SignDocumentPage: React.FC = () => {
       setIsLoadingDetails(true);
       setError(null);
       try {
-        const response = await fetch(`/api/${tokenId}`);
+        const response = await fetch(`/api/getSigningSession?tokenId=${tokenId}`);
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.message || `Failed to fetch details (${response.status})`);
@@ -126,11 +128,33 @@ const SignDocumentPage: React.FC = () => {
     setError(null);
   };
 
+  // Validate email format
+  const validateEmail = (email: string): boolean => {
+    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return regex.test(email);
+  }
+
+  // Handle email input changes
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const email = e.target.value;
+    setSignerEmail(email);
+    setIsEmailValid(email === '' || validateEmail(email));
+  };
+  
+
   const handleSubmit = async () => {
     if (!sigRef.current || sigRef.current.isEmpty() || !fetchedCoords) {
       setError('Please sign in the designated area first.');
       return;
     }
+
+    // Validate email
+    if (signerEmail && !validateEmail(signerEmail)) {
+      setIsEmailValid(false);
+      setError('Please enter a valid email address.');
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
     const img = sigRef.current.toDataURL('image/png');
@@ -138,7 +162,12 @@ const SignDocumentPage: React.FC = () => {
       const response = await fetch('/api/submitSignature', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tokenId, signature: img, position: fetchedCoords })
+        body: JSON.stringify({ 
+          tokenId, 
+          signature: img, 
+          position: fetchedCoords,
+          email: signerEmail || undefined // Include email in submission payload and only if it is provided
+          })
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -281,6 +310,22 @@ const SignDocumentPage: React.FC = () => {
                 </div>
                 {fetchedCoords && (
                   <div className="mt-6 flex flex-col items-center">
+                    {/* Add email input field */}
+                    <div className="mb-4 w-full max-w-md">
+                      <label className="block text-sm font-medium text-gray-300 mb-1">
+                        Your Email Address (optional - to receive a copy of the signed document)
+                      </label>
+                      <input
+                        type="email"
+                        value={signerEmail}
+                        onChange={handleEmailChange}
+                        className={`w-full px-4 py-2 bg-gray-800 border ${isEmailValid ? 'border-gray-600' : 'border-red-500'} rounded-md text-white focus:outline-none focus:ring-2 focus:ring-[#701CC0]`}
+                        placeholder="your.email@example.com"
+                      />
+                      {!isEmailValid && (
+                        <p className="text-sm text-red-500 mt-1">Please enter a valid email address</p>
+                      )}
+                    </div>
                     <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
                       <button
                         onClick={handleClear}
