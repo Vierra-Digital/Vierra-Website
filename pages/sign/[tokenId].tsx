@@ -217,7 +217,7 @@ const SignDocumentPage: React.FC = () => {
     return <div className="p-4 text-center">Invalid or missing token.</div>;
   }
 
-  const pdfFileUrl = `/signing_pdfs/${tokenId}.pdf`;
+  // const pdfFileUrl = `/signing_pdfs/${tokenId}.pdf`;
 
   if (isLoadingDetails) {
     return <div className="p-4 text-center text-white">Loading signing details...</div>;
