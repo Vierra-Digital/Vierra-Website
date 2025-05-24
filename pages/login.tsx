@@ -31,10 +31,10 @@ const LoginPage = () => {
   const googleError = searchParams ? searchParams.get("error") : null;
 
   useEffect(() => {
-    if (status === "authenticated") {
-      router.push("/panel");
-    }
-    // router.push("/panel");
+    // if (status === "authenticated") {
+    //   router.push("/panel");
+    // }
+    router.push("/panel");
   }, [status, router]);
 
   const initParticles = () => {
@@ -47,30 +47,30 @@ const LoginPage = () => {
     e.preventDefault();
     setError("");
 
-    // // Temporary direct access - REMOVE THIS IN PRODUCTION
-    // localStorage.setItem("isAuthenticated", "true");
-    // router.push("/panel");
-    try {
-      const response = await fetch("/users.json");
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const users = await response.json();
+    // Temporary direct access - REMOVE THIS IN PRODUCTION
+    localStorage.setItem("isAuthenticated", "true");
+    router.push("/panel");
+    // try {
+    //   const response = await fetch("/users.json");
+    //   if (!response.ok) {
+    //     throw new Error(`HTTP error! status: ${response.status}`);
+    //   }
+    //   const users = await response.json();
 
-      type User = { username: string; password: string };
-      const user = (users as User[]).find(
-        (u) => u.username === username && u.password === password
-      );
+    //   type User = { username: string; password: string };
+    //   const user = (users as User[]).find(
+    //     (u) => u.username === username && u.password === password
+    //   );
 
-      if (user) {
-        localStorage.setItem("isAuthenticated", "true");
-        router.push("/panel");
-      } else {
-        setError("Invalid username or password");
-      }
-    } catch {
-      setError("Login failed. Please check credentials or network.");
-    }
+    //   if (user) {
+    //     localStorage.setItem("isAuthenticated", "true");
+    //     router.push("/panel");
+    //   } else {
+    //     setError("Invalid username or password");
+    //   }
+    // } catch {
+    //   setError("Login failed. Please check credentials or network.");
+    // }
   };
 
   if (status === "loading") {

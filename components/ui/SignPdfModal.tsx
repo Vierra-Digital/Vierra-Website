@@ -179,7 +179,20 @@ const SignPdfModal: React.FC<SignPdfModalProps> = ({ isOpen, onClose }) => {
           errorData.message || `HTTP error! status: ${response.status}`
         )
       }
-      const data = await response.json()
+      // Try to safely parse the JSON response
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        console.error("Failed to parse JSON response:", jsonError);
+        throw new Error("Server returned invalid response. Please try again.");
+      }
+      
+      // Validate that we got a link in the response
+      if (!data || !data.link) {
+        throw new Error("Invalid server response (missing link)");
+      }
+      
       const fullLink = `${window.location.origin}${data.link}`
       setGeneratedLink(fullLink)
     } catch (err: unknown) {
