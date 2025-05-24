@@ -17,6 +17,10 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+
+  // Set content type header early to ensure JSON response
+  res.setHeader('Content-Type', 'application/json')
+
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"])
     return res.status(405).json({ message: `Method ${req.method} Not Allowed` })
@@ -74,7 +78,7 @@ export default async function handler(
 
     // Read PDF file as base64
     const pdfContent = fs.readFileSync(tempPdfPath);
-    const pdfBased64 = pdfContent.toString('base64');
+    const pdfBase64 = pdfContent.toString('base64');
 
     publicPdfPath = `/signing_pdfs/${tokenId}.pdf`
 
@@ -100,7 +104,7 @@ export default async function handler(
       token: tokenId,
       originalFilename: originalFilename,
       pdfPath: publicPdfPath,
-      pdfBase64: pdfBased64,
+      pdfBase64: pdfBase64,
       coordinates: coords,
       status: "pending",
       createdAt: Date.now(),
@@ -108,8 +112,6 @@ export default async function handler(
 
     saveSessionData(tokenId, sessionData)
 
-    // Return JSON response with the signing link
-    res.setHeader('Content-Type', 'application/json')
     res.status(200).json({ link: `/sign/${tokenId}` })
   } catch (error: unknown) {
     if (error instanceof Error) {
