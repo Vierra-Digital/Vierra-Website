@@ -47,7 +47,7 @@ const LoginPage = () => {
     e.preventDefault();
     setError("");
 
-    // Temporary direct access - REMOVE THIS IN PRODUCTION
+    // // Temporary direct access - REMOVE THIS IN PRODUCTION
     // localStorage.setItem("isAuthenticated", "true");
     // router.push("/panel");
     try {
