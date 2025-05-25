@@ -27,17 +27,6 @@ const inter = Inter({ subsets: ['latin'] });
 
 type SigningCoordinates = SessionData['coordinates'];
 
-// Helper function to convert base64 to ArrayBuffer
-const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
-  const binaryString = window.atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes.buffer;
-};
-
 const SignDocumentPage: React.FC = () => {
   const router = useRouter();
   const { tokenId } = router.query as { tokenId?: string };
@@ -48,12 +37,8 @@ const SignDocumentPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
-  const [sessionDetails, setSessionDetails] = useState<{ originalFilename: string; pdfBase64?: string } | null>(null);
+  const [sessionDetails, setSessionDetails] = useState<{ originalFilename: string } | null>(null);
   const [redirectCountdown, setRedirectCountdown] = useState<number>(5);
-  const [signerEmail, setSignerEmail] = useState<string>('');
-  const [isEmailValid, setIsEmailValid] = useState<boolean>(true);
-  const [pdfData, setPdfData] = useState<string | ArrayBuffer | { data: ArrayBuffer } | null>(null);
-  const [usingBase64, setUsingBase64] = useState<boolean>(false);
   const sigRef = useRef<SignatureCanvas>(null);
   const pageRefs = useRef<{ [page: number]: HTMLDivElement | null }>({});
 
@@ -76,7 +61,7 @@ const SignDocumentPage: React.FC = () => {
       setIsLoadingDetails(true);
       setError(null);
       try {
-        const response = await fetch(`/api/getSigningSession?tokenId=${tokenId}`);
+        const response = await fetch(`/api/${tokenId}`);
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.message || `Failed to fetch details (${response.status})`);
@@ -86,22 +71,7 @@ const SignDocumentPage: React.FC = () => {
           throw new Error('Coordinates not found in session data.');
         }
         setFetchedCoords(data.coordinates);
-        setSessionDetails({ 
-          originalFilename: data.originalFilename, 
-          // Store base64 PDF if available
-          pdfBase64: data.pdfBase64
-        });
-
-        // Process PDF data - either URL or base64
-        if (data.pdfBase64) {
-          setUsingBase64(true);
-          // Convert base64 to ArrayBuffer for PDF.js
-          const arrayBuffer = base64ToArrayBuffer(data.pdfBase64);
-          setPdfData({ data: arrayBuffer });
-        } else {
-          setUsingBase64(false);
-          setPdfData(`/signing_pdfs/${tokenId}.pdf`);
-        }
+        setSessionDetails({ originalFilename: data.originalFilename });
       } catch (err: unknown) {
         if (err instanceof Error) {
           setError(err.message || 'Failed to load signing details.');
@@ -156,33 +126,11 @@ const SignDocumentPage: React.FC = () => {
     setError(null);
   };
 
-  // Validate email format
-  const validateEmail = (email: string): boolean => {
-    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return regex.test(email);
-  }
-
-  // Handle email input changes
-  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const email = e.target.value;
-    setSignerEmail(email);
-    setIsEmailValid(email === '' || validateEmail(email));
-  };
-  
-
   const handleSubmit = async () => {
     if (!sigRef.current || sigRef.current.isEmpty() || !fetchedCoords) {
       setError('Please sign in the designated area first.');
       return;
     }
-
-    // Validate email
-    if (signerEmail && !validateEmail(signerEmail)) {
-      setIsEmailValid(false);
-      setError('Please enter a valid email address.');
-      return;
-    }
-
     setIsSubmitting(true);
     setError(null);
     const img = sigRef.current.toDataURL('image/png');
@@ -190,12 +138,7 @@ const SignDocumentPage: React.FC = () => {
       const response = await fetch('/api/submitSignature', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          tokenId, 
-          signature: img, 
-          position: fetchedCoords,
-          email: signerEmail || undefined // Include email in submission payload and only if it is provided
-          })
+        body: JSON.stringify({ tokenId, signature: img, position: fetchedCoords })
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -217,7 +160,7 @@ const SignDocumentPage: React.FC = () => {
     return <div className="p-4 text-center">Invalid or missing token.</div>;
   }
 
-  // const pdfFileUrl = `/signing_pdfs/${tokenId}.pdf`;
+  const pdfFileUrl = `/signing_pdfs/${tokenId}.pdf`;
 
   if (isLoadingDetails) {
     return <div className="p-4 text-center text-white">Loading signing details...</div>;
@@ -263,7 +206,7 @@ const SignDocumentPage: React.FC = () => {
               <>
                 <div className="pdf-viewer-container w-full max-h-[70vh] overflow-auto flex justify-center mb-6 bg-gray-800/30 rounded p-2">
                   <Document
-                    file={pdfData}
+                    file={pdfFileUrl}
                     onLoadSuccess={onDocumentLoadSuccess}
                     onLoadError={(err) => { setError(`Failed to load PDF document: ${err.message}`); }}
                     loading={<div className="text-white p-10">Loading PDF document...</div>}
@@ -338,22 +281,6 @@ const SignDocumentPage: React.FC = () => {
                 </div>
                 {fetchedCoords && (
                   <div className="mt-6 flex flex-col items-center">
-                    {/* Add email input field */}
-                    <div className="mb-4 w-full max-w-md">
-                      <label className="block text-sm font-medium text-gray-300 mb-1">
-                        Your Email Address (optional - to receive a copy of the signed document)
-                      </label>
-                      <input
-                        type="email"
-                        value={signerEmail}
-                        onChange={handleEmailChange}
-                        className={`w-full px-4 py-2 bg-gray-800 border ${isEmailValid ? 'border-gray-600' : 'border-red-500'} rounded-md text-white focus:outline-none focus:ring-2 focus:ring-[#701CC0]`}
-                        placeholder="your.email@example.com"
-                      />
-                      {!isEmailValid && (
-                        <p className="text-sm text-red-500 mt-1">Please enter a valid email address</p>
-                      )}
-                    </div>
                     <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
                       <button
                         onClick={handleClear}

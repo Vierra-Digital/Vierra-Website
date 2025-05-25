@@ -3,13 +3,12 @@ import fs from 'fs/promises';
 import path from 'path';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { getSessionData, saveSessionData, SessionData } from '@/lib/sessionStore';
-import { sendSignedDocumentEmail, sendSignerCopyEmail } from '@/lib/emailSender';
+import { sendSignedDocumentEmail } from '@/lib/emailSender';
 
 interface SubmitSignatureBody {
     tokenId: string;
     signature: string;
     position: SessionData['coordinates'];
-    email?: string; // Make email optional
 }
 
 const signedPdfsDir = path.resolve(process.cwd(), 'public', 'signed_pdfs');
@@ -21,7 +20,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        // Ensure the signed PDFs directory exists
         try {
             await fs.mkdir(signedPdfsDir, { recursive: true });
         } catch (mkdirError: unknown) {
@@ -33,8 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             console.log(`[submit-signature] Directory ${signedPdfsDir} already exists.`);
         }
 
-        // Extract data from request body
-        const { tokenId, signature, position, email }: SubmitSignatureBody = req.body;
+        const { tokenId, signature, position }: SubmitSignatureBody = req.body;
 
         if (!tokenId || !signature || !position) {
             return res.status(400).json({ message: 'Missing required fields: tokenId, signature, or position.' });
@@ -113,11 +110,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         try {
             sessionData.status = 'signed';
             sessionData.signedPdfPath = `/signed_pdfs/${signedPdfFilename}`;
-
-            // Store signer's email if provided
-            if (email) {
-                sessionData.signerEmail = email;
-            }
             saveSessionData(tokenId, sessionData);
             console.log(`[submit-signature] Successfully updated session status for token ${tokenId}`);
         } catch (sessionError) {
@@ -133,16 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             console.warn(`[submit-signature] WARNING: Failed to send signed document email for token ${tokenId} after saving PDF:`, emailError);
         }
 
-        if (email) {
-            try {
-                await sendSignerCopyEmail(email, sessionData.originalFilename, signedPdfPathAbs);
-                console.log(`[submit-signature] Successfully sent signed document copy to signer at ${email}`);
-            } catch (signerEmailError) {
-                console.warn(`[submit-signature] WARNING: Failed to send signed document copy to signer at ${email}:`, signerEmailError);
-            }
-        }
-
-        return res.status(200).json({ message: 'Signature submitted and document saved successfully.' });
+        res.status(200).json({ message: 'Signature submitted and document saved successfully.' });
 
     } catch (error: unknown) {
         console.error('[submit-signature] General error:', error);

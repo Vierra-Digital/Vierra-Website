@@ -34,7 +34,6 @@ const LoginPage = () => {
     if (status === "authenticated") {
       router.push("/panel");
     }
-    // router.push("/panel");
   }, [status, router]);
 
   const initParticles = () => {
@@ -46,10 +45,6 @@ const LoginPage = () => {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
-
-    // // Temporary direct access - REMOVE THIS IN PRODUCTION
-    // localStorage.setItem("isAuthenticated", "true");
-    // router.push("/panel");
     try {
       const response = await fetch("/users.json");
       if (!response.ok) {
