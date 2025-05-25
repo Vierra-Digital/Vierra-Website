@@ -31,10 +31,10 @@ const LoginPage = () => {
   const googleError = searchParams ? searchParams.get("error") : null;
 
   useEffect(() => {
-    // if (status === "authenticated") {
-    //   router.push("/panel");
-    // }
-    router.push("/panel");
+    if (status === "authenticated") {
+      router.push("/panel");
+    }
+    // router.push("/panel");
   }, [status, router]);
 
   const initParticles = () => {
