@@ -17,6 +17,10 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+
+  // Set content type header early to ensure JSON response
+  res.setHeader('Content-Type', 'application/json')
+
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"])
     return res.status(405).json({ message: `Method ${req.method} Not Allowed` })
@@ -66,17 +70,33 @@ export default async function handler(
 
     const tokenId = uuidv4()
     const originalFilename = pdfFile.originalFilename || "document.pdf"
-    persistentPdfPath = path.join(pdfsDir, `${tokenId}.pdf`)
-    publicPdfPath = `/signing_pdfs/${tokenId}.pdf`
 
-    if (!fs.existsSync(pdfsDir)) {
-      fs.mkdirSync(pdfsDir, { recursive: true })
+    // Check that tempPdfPath is not null before reading
+    if (!tempPdfPath) {
+      throw new Error("Temporary PDF path is null.")
     }
 
-    if (tempPdfPath) {
-      fs.renameSync(tempPdfPath, persistentPdfPath)
-    } else {
-      throw new Error("Temporary PDF path is null.")
+    // Read PDF file as base64
+    const pdfContent = fs.readFileSync(tempPdfPath);
+    const pdfBase64 = pdfContent.toString('base64');
+
+    publicPdfPath = `/signing_pdfs/${tokenId}.pdf`
+
+    try {
+      persistentPdfPath = path.join(pdfsDir, `${tokenId}.pdf`)
+
+      if (!fs.existsSync(pdfsDir)) {
+        fs.mkdirSync(pdfsDir, { recursive: true })
+      }
+
+      if (tempPdfPath) {
+        fs.renameSync(tempPdfPath, persistentPdfPath)
+      } else {
+        throw new Error("Temporary PDF path is null.")
+      }
+    } catch (fsError) {
+      // Log the error but continue - we have the base64 version
+      console.warn("[generate-sign-link] Filesystem operations failed, continuing with base64 only:", fsError)
     }
     tempPdfPath = null
 
@@ -84,6 +104,7 @@ export default async function handler(
       token: tokenId,
       originalFilename: originalFilename,
       pdfPath: publicPdfPath,
+      pdfBase64: pdfBase64,
       coordinates: coords,
       status: "pending",
       createdAt: Date.now(),
@@ -116,6 +137,9 @@ export default async function handler(
           )
         }
       }
+
+      // Ensure we return a proper JSON response
+      res.setHeader('Content-Type', 'application/json')
       const message = error.message?.includes("Failed to save session data")
         ? "Failed to save signing session metadata."
         : "Failed to process PDF upload."
@@ -125,6 +149,8 @@ export default async function handler(
         "[generate-sign-link] Unknown error processing PDF upload:",
         error
       )
+      // Ensure we return a proper JSON response
+      res.setHeader('Content-Type', 'application/json')
       res
         .status(500)
         .json({ message: "An unknown error occurred during PDF upload." })
