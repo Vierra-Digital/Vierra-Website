@@ -54,18 +54,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
              return res.status(400).json({ message: 'Document already signed.' });
         }
 
-        // Adjust path handling for original PDF based on environment
-        const originalPdfPathRel = sessionData.pdfPath.replace(/^\//, '');
-        const originalPdfPathAbs = process.env.NODE_ENV === 'production'
-            ? path.join('/tmp', originalPdfPathRel) // In production, look in /tmp
-            : path.join(process.cwd(), 'public', originalPdfPathRel); // In dev, use public dir
-
         let pdfBytes: Buffer;
-        try {
-            pdfBytes = await fs.readFile(originalPdfPathAbs);
-        } catch (readError) {
-             console.error(`[submit-signature] Failed to read original PDF: ${originalPdfPathAbs}`, readError);
-             return res.status(500).json({ message: 'Failed to load original document.' });
+        
+        // SERVERLESS OPTIMIZATION: Prioritize using base64 PDF from session data instead of filesystem
+        if (sessionData.pdfBase64) {
+            // Use the base64 encoded PDF directly from session data - no filesystem dependency
+            console.log(`[submit-signature] Using base64 encoded PDF from session data for token ${tokenId}`);
+            pdfBytes = Buffer.from(sessionData.pdfBase64, 'base64');
+        } else {
+            // Fall back to filesystem as before (mainly for development environment)
+            const originalPdfPathRel = sessionData.pdfPath.replace(/^\//, '');
+            const originalPdfPathAbs = process.env.NODE_ENV === 'production'
+                ? path.join('/tmp', originalPdfPathRel) // In production, look in /tmp
+                : path.join(process.cwd(), 'public', originalPdfPathRel); // In dev, use public dir
+
+            try {
+                console.log(`[submit-signature] Reading PDF from filesystem at ${originalPdfPathAbs}`);
+                pdfBytes = await fs.readFile(originalPdfPathAbs);
+            } catch (readError) {
+                console.error(`[submit-signature] Failed to read original PDF: ${originalPdfPathAbs}`, readError);
+                return res.status(500).json({ message: 'Failed to load original document.' });
+            }
         }
 
         const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -133,21 +142,55 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             console.warn(`[submit-signature] WARNING: Failed to update session data for token ${tokenId} after saving PDF:`, sessionError);
         }
 
-        try {
+        // Email sending sequence - modified to be more atomic in production
+        if (process.env.NODE_ENV === 'production') {
+            // In production, guarantee emails are sent within same function execution as PDF creation
+            // This ensures /tmp files are still available when emails are sent
+            const emailPromises = [];
+            
+            // Primary email to document owner/admin
             const emailSubject = `Signed Document: ${sessionData.originalFilename}`;
             const emailText = `The document "${sessionData.originalFilename}" has been signed. See the signed version attached.`;
-            await sendSignedDocumentEmail(emailSubject, emailText, signedPdfPathAbs, signedPdfFilename);
-            console.log(`[submit-signature] Successfully sent signed document email for token ${tokenId}`);
-        } catch (emailError) {
-            console.warn(`[submit-signature] WARNING: Failed to send signed document email for token ${tokenId} after saving PDF:`, emailError);
-        }
-
-        if (email) {
+            emailPromises.push(
+                sendSignedDocumentEmail(emailSubject, emailText, signedPdfPathAbs, signedPdfFilename)
+                    .catch(emailError => {
+                        console.warn(`[submit-signature] WARNING: Failed to send admin email for token ${tokenId}:`, emailError);
+                        // Continue execution even if email fails
+                    })
+            );
+            
+            // Copy to signer if email provided
+            if (email) {
+                emailPromises.push(
+                    sendSignerCopyEmail(email, sessionData.originalFilename, signedPdfPathAbs)
+                        .catch(signerEmailError => {
+                            console.warn(`[submit-signature] WARNING: Failed to send signer email to ${email}:`, signerEmailError);
+                            // Continue execution even if email fails
+                        })
+                );
+            }
+            
+            // Wait for all emails to complete or fail before responding
+            await Promise.all(emailPromises);
+            console.log(`[submit-signature] Email sending sequence completed for token ${tokenId}`);
+        } else {
+            // In development, keep original sequential behavior
             try {
-                await sendSignerCopyEmail(email, sessionData.originalFilename, signedPdfPathAbs);
-                console.log(`[submit-signature] Successfully sent signed document copy to signer at ${email}`);
-            } catch (signerEmailError) {
-                console.warn(`[submit-signature] WARNING: Failed to send signed document copy to signer at ${email}:`, signerEmailError);
+                const emailSubject = `Signed Document: ${sessionData.originalFilename}`;
+                const emailText = `The document "${sessionData.originalFilename}" has been signed. See the signed version attached.`;
+                await sendSignedDocumentEmail(emailSubject, emailText, signedPdfPathAbs, signedPdfFilename);
+                console.log(`[submit-signature] Successfully sent signed document email for token ${tokenId}`);
+            } catch (emailError) {
+                console.warn(`[submit-signature] WARNING: Failed to send signed document email for token ${tokenId} after saving PDF:`, emailError);
+            }
+
+            if (email) {
+                try {
+                    await sendSignerCopyEmail(email, sessionData.originalFilename, signedPdfPathAbs);
+                    console.log(`[submit-signature] Successfully sent signed document copy to signer at ${email}`);
+                } catch (signerEmailError) {
+                    console.warn(`[submit-signature] WARNING: Failed to send signed document copy to signer at ${email}:`, signerEmailError);
+                }
             }
         }
 
