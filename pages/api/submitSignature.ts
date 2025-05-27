@@ -12,7 +12,10 @@ interface SubmitSignatureBody {
     email?: string; // Make email optional
 }
 
-const signedPdfsDir = path.resolve(process.cwd(), 'public', 'signed_pdfs');
+// Change directory to /tmp for serverless environment compatibility
+const signedPdfsDir = process.env.NODE_ENV === 'production' 
+    ? path.resolve('/tmp', 'signed_pdfs')
+    : path.resolve(process.cwd(), 'public', 'signed_pdfs');
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') {
@@ -51,8 +54,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
              return res.status(400).json({ message: 'Document already signed.' });
         }
 
+        // Adjust path handling for original PDF based on environment
         const originalPdfPathRel = sessionData.pdfPath.replace(/^\//, '');
-        const originalPdfPathAbs = path.join(process.cwd(), 'public', originalPdfPathRel);
+        const originalPdfPathAbs = process.env.NODE_ENV === 'production'
+            ? path.join('/tmp', originalPdfPathRel) // In production, look in /tmp
+            : path.join(process.cwd(), 'public', originalPdfPathRel); // In dev, use public dir
 
         let pdfBytes: Buffer;
         try {
@@ -112,7 +118,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         try {
             sessionData.status = 'signed';
-            sessionData.signedPdfPath = `/signed_pdfs/${signedPdfFilename}`;
+            // Store relative path for consistency between environments
+            sessionData.signedPdfPath = process.env.NODE_ENV === 'production' 
+                ? `/tmp/signed_pdfs/${signedPdfFilename}` 
+                : `/signed_pdfs/${signedPdfFilename}`;
 
             // Store signer's email if provided
             if (email) {
