@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import fs from "fs/promises"
 
 interface EmailData {
   fullName: string;
@@ -97,5 +98,44 @@ export async function sendSignedDocumentEmail(subject: string, text: string, att
     console.log("Signed document email sent successfully:", info.response);
   } catch (error) {
     console.error("Error sending signed document email:", error);
+  }
+}
+
+export async function sendSignerCopyEmail(email: string, documentName: string, attachmentPath: string): Promise<void> {
+  // Read PDF file for attachment
+  const fileBuffer = await fs.readFile(attachmentPath);
+  
+  const mailOptions = {
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: `Your Signed Document: ${documentName}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; background-color: #18042A; color: #FFFFFF; padding: 20px; border-radius: 10px;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <img src="https://vierradev.com/assets/vierra-logo.png" alt="Vierra Logo" style="width: 150px; height: auto;" />
+        </div>
+        <h2 style="color: #701CC0; text-align: center;">Your Signed Document</h2>
+        <p style="color: #FFFFFF; text-align: center;">Thank you for signing the document "${documentName}" with Vierra. A copy is attached to this email for your records.</p>
+        <footer style="margin-top: 30px; text-align: center; border-top: 1px solid #701CC0; padding-top: 20px; color: #9BAFC3;">
+          <p style="margin: 0;">© ${new Date().getFullYear()} Vierra Digital Inc. All rights reserved.</p>
+          <p style="margin: 0;">Visit us at <a href="https://vierradev.com" style="color: #8F42FF; text-decoration: none;">vierradev.com</a></p>
+        </footer>
+      </div>
+    `,
+    attachments: [
+      {
+        filename: `${documentName}.pdf`,
+        content: fileBuffer,
+        contentType: 'application/pdf'
+      }
+    ]
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`Signed document copy sent to signer at ${email}:`, info.response);
+  } catch (error) {
+    console.error(`Error sending signed document copy to signer at ${email}:`, error);
+    throw error;
   }
 }

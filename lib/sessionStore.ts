@@ -5,6 +5,7 @@ export interface SessionData {
     token: string;
     originalFilename: string;
     pdfPath: string;
+    pdfBase64?:  string,
     coordinates: {
         page: number;
         xRatio: number;
@@ -15,6 +16,7 @@ export interface SessionData {
     status: 'pending' | 'signed' | 'expired';
     createdAt: number;
     signedPdfPath?: string;
+    signerEmail?: string;
 }
 
 const sessionsDir = path.resolve(process.cwd(), 'public', 'signing_sessions');
