@@ -19,7 +19,11 @@ export interface SessionData {
     signerEmail?: string;
 }
 
-const sessionsDir = path.resolve(process.cwd(), 'public', 'signing_sessions');
+// Adjust sessions storage directory based on environment
+const sessionsDir = process.env.NODE_ENV === 'production'
+  ? path.resolve('/tmp', 'signing_sessions')
+  : path.resolve(process.cwd(), 'public', 'signing_sessions');
+
 
 if (!fs.existsSync(sessionsDir)) {
     fs.mkdirSync(sessionsDir, { recursive: true });

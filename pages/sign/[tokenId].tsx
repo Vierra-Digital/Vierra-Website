@@ -53,6 +53,7 @@ const SignDocumentPage: React.FC = () => {
   const [signerEmail, setSignerEmail] = useState<string>('');
   const [isEmailValid, setIsEmailValid] = useState<boolean>(true);
   const [pdfData, setPdfData] = useState<string | ArrayBuffer | { data: ArrayBuffer } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [usingBase64, setUsingBase64] = useState<boolean>(false);
   const sigRef = useRef<SignatureCanvas>(null);
   const pageRefs = useRef<{ [page: number]: HTMLDivElement | null }>({});

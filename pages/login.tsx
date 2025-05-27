@@ -50,6 +50,8 @@ const LoginPage = () => {
     // // Temporary direct access - REMOVE THIS IN PRODUCTION
     // localStorage.setItem("isAuthenticated", "true");
     // router.push("/panel");
+
+
     try {
       const response = await fetch("/users.json");
       if (!response.ok) {
