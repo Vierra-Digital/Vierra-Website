@@ -11,7 +11,10 @@ export const config = {
   },
 }
 
-const pdfsDir = path.resolve(process.cwd(), "public", "signing_pdfs")
+// Update directory path for production environment compatibility
+const pdfsDir = process.env.NODE_ENV === 'production'
+  ? path.resolve('/tmp', "signing_pdfs")
+  : path.resolve(process.cwd(), "public", "signing_pdfs")
 
 export default async function handler(
   req: NextApiRequest,
@@ -77,7 +80,10 @@ export default async function handler(
     const pdfBased64 = pdfContent.toString('base64');
 
     persistentPdfPath = path.join(pdfsDir, `${tokenId}.pdf`)
-    publicPdfPath = `/signing_pdfs/${tokenId}.pdf`
+    // Adjust path handling based on environment
+    publicPdfPath = process.env.NODE_ENV === 'production'
+      ? `/tmp/signing_pdfs/${tokenId}.pdf`
+      : `/signing_pdfs/${tokenId}.pdf`
 
     if (!fs.existsSync(pdfsDir)) {
       fs.mkdirSync(pdfsDir, { recursive: true })
