@@ -31,8 +31,12 @@ const Timeline = () => {
 
   return (
     <>
-      <div id="timeline-section" className="hidden lg:block relative h-[200vh]">
-        <div className="bg-[#010205] text-white py-16 mx-10 px-20 rounded-[80px] sticky top-0 h-[100vh] flex flex-col justify-center">
+      <div id="timeline-section" className="hidden lg:block relative h-[200vh] mx-[-1.5rem]">
+        <div className="bg-[#010205] text-white py-16 px-20 sticky top-0 h-[100vh] flex flex-col justify-center w-full overflow-hidden">
+          {/* Gradient background effect with blurred circle */}
+          <div className="absolute top-[5%] left-[10%] w-[800px] h-[800px] opacity-80 blur-[100px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10" />
+          <div className="absolute bottom-[5%] right-[10%] w-[600px] h-[600px] opacity-60 blur-[80px] rotate-[30deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10" />
+          
           <h2 className={`${bricolage.className} text-5xl font-normal text-start mb-16`}>How Does It Work?</h2>
           <div className="h-[50vh] flex relative w-full justify-between items-center">
             <div className="absolute top-1/2 left-0 right-0 h-4 bg-[#3E1F58] z-0" />
@@ -77,7 +81,12 @@ const Timeline = () => {
           </div>
         </div>
       </div>
-      <div className="lg:hidden bg-[#010205] text-white py-16 mx-2 md:mx-10 px-4 md:px-20 rounded-[40px] md:rounded-[80px]">
+<div className="lg:hidden bg-[#010205] text-white py-16 px-4 md:px-20 w-full relative overflow-hidden">
+        {/* Gradient background effect with blurred circles for mobile */}
+        <div className="absolute top-[5%] left-[5%] w-[300px] h-[300px] opacity-80 blur-[50px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10" />
+        <div className="absolute bottom-[5%] right-[5%] w-[250px] h-[250px] opacity-60 blur-[40px] rotate-[30deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10" />
+        
+        
         <h2 className={`${bricolage.className} text-4xl font-normal text-start mb-16`}>How Does It Work?</h2>
         <div className="flex flex-col items-center relative w-full">
           <div className="absolute left-1/2 -translate-x-1/2 w-2 h-full bg-[#3E1F58] z-0" />
