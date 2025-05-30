@@ -98,7 +98,7 @@ const Timeline = () => {
                 </div>
                 <div className="text-center mt-6 px-6 relative z-10">
                   <span className="text-5xl font-bold text-white">{step.number}</span>
-                  <p className="text-gray-200 text-base leading-tight mt-2 bg-gradient-to-b from-[#010205] to-[#3E1F58] p-4 rounded-lg">{step.text}</p>
+                  <p className="text-gray-200 text-base leading-tight mt-2 p-4 rounded-lg">{step.text}</p>
                 </div>
               </motion.div>
             ))}
