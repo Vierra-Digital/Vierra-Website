@@ -31,8 +31,8 @@ const Timeline = () => {
 
   return (
     <>
-      <div id="timeline-section" className="hidden lg:block relative h-[200vh]">
-        <div className="bg-[#010205] text-white py-16 mx-10 px-20 rounded-[80px] sticky top-0 h-[100vh] flex flex-col justify-center">
+      <div id="timeline-section" className="hidden lg:block relative h-[200vh] mx-[-1.5rem]">
+        <div className="bg-gradient-to-r from-[#010205] via-[#0c0415] to-[#19082d] text-white py-16 px-20 sticky top-0 h-[100vh] flex flex-col justify-center w-full overflow-hidden">
           <h2 className={`${bricolage.className} text-5xl font-normal text-start mb-16`}>How Does It Work?</h2>
           <div className="h-[50vh] flex relative w-full justify-between items-center">
             <div className="absolute top-1/2 left-0 right-0 h-4 bg-[#3E1F58] z-0" />
@@ -77,30 +77,32 @@ const Timeline = () => {
           </div>
         </div>
       </div>
-      <div className="lg:hidden bg-[#010205] text-white py-16 mx-2 md:mx-10 px-4 md:px-20 rounded-[40px] md:rounded-[80px]">
-        <h2 className={`${bricolage.className} text-4xl font-normal text-start mb-16`}>How Does It Work?</h2>
-        <div className="flex flex-col items-center relative w-full">
-          <div className="absolute left-1/2 -translate-x-1/2 w-2 h-full bg-[#3E1F58] z-0" />
-          {steps.map((step, index) => (
-            <motion.div
-              key={index}
-              className="relative flex flex-col items-center w-full mb-12 last:mb-0"
-              initial={{ opacity: 0, y: 50 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
-              viewport={{ once: true, amount: 0.5 }}
-            >
-              <div className="relative z-10 w-12 h-12 bg-[#7A13D0] rounded-full flex items-center justify-center">
-                <div className="w-8 h-8 bg-[#010205] rounded-full flex items-center justify-center">
-                  <div className="w-4 h-4 bg-[#FFFFFF] rounded-full" />
+      <div className="lg:hidden bg-gradient-to-b from-[#010205] via-[#0c0415] to-[#19082d] text-white py-16 w-screen -mx-[1.5rem] relative overflow-hidden">
+          <div className="px-4">
+          <h2 className={`${bricolage.className} text-4xl font-normal text-start mb-16`}>How Does It Work?</h2>
+          <div className="flex flex-col items-center relative w-full">
+            <div className="absolute left-1/2 -translate-x-1/2 w-2 h-full bg-[#3E1F58] z-0" />
+            {steps.map((step, index) => (
+              <motion.div
+                key={index}
+                className="relative flex flex-col items-center w-full mb-12 last:mb-0"
+                initial={{ opacity: 0, y: 50 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                viewport={{ once: true, amount: 0.5 }}
+              >
+                <div className="relative z-10 w-12 h-12 bg-[#7A13D0] rounded-full flex items-center justify-center">
+                  <div className="w-8 h-8 bg-[#010205] rounded-full flex items-center justify-center">
+                    <div className="w-4 h-4 bg-[#FFFFFF] rounded-full" />
+                  </div>
                 </div>
-              </div>
-              <div className="text-center mt-6 px-6 relative z-10">
-                <span className="text-5xl font-bold text-white">{step.number}</span>
-                <p className="text-gray-200 text-base leading-tight mt-2 bg-gradient-to-b from-[#010205] to-[#3E1F58] p-4 rounded-lg">{step.text}</p>
-              </div>
-            </motion.div>
-          ))}
+                <div className="text-center mt-6 px-6 relative z-10">
+                  <span className="text-5xl font-bold text-white">{step.number}</span>
+                  <p className="text-gray-200 text-base leading-tight mt-2 p-4 rounded-lg">{step.text}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
         </div>
       </div>
     </>
