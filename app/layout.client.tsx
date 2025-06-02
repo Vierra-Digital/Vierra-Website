@@ -56,11 +56,6 @@ export default function RootLayoutClient({
   return (
     <html lang="en" style={{ scrollBehavior: "smooth" }}>
       <head>
-        <meta name="theme-color" content="#8F42FF" />
-        <meta name="og:theme-color" content="#8F42FF" />
-        <meta name="msapplication-TileColor" content="#8F42FF" />
-        <meta name="msapplication-navbutton-color" content="#8F42FF" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="#8F42FF" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
