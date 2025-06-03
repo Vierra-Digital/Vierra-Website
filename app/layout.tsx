@@ -43,12 +43,14 @@ export const metadata = {
     title: "Vierra - Scale Your Practice Effortlessly",
     description: "Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services.",
     creator: "@vierradev",
-    images: {
-      url: META_IMAGE_URL,
-      alt: "Vierra",
-      width: 1200,
-      height: 630,
-    },
+    images: [
+      {
+        url: META_IMAGE_URL,
+        alt: "Vierra",
+        width: 1200,
+        height: 630,
+      }
+    ],
   },
   
   icons: {
@@ -63,6 +65,7 @@ export const metadata = {
 // New viewport export with themeColor
 export const viewport = {
   themeColor: "#8F42FF",
+  scrollBehavior: "smooth"
 }
 
 export default function RootLayout({
@@ -71,11 +74,15 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <RootLayoutClient 
-      geistSansVariable={geistSans.variable}
-      geistMonoVariable={geistMono.variable}
-    >
-      {children}
-    </RootLayoutClient>
+    <html lang="en" style={{ scrollBehavior: "smooth" }}>
+      <body>
+        <RootLayoutClient 
+          geistSansVariable={geistSans.variable}
+          geistMonoVariable={geistMono.variable}
+        >
+          {children}
+        </RootLayoutClient>
+      </body>
+    </html>
   )
 }
