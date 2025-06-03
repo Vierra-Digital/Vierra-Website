@@ -13,45 +13,73 @@ const gridLayout = [
   [false, true, false, false, false, false],
 ];
 
+{/*
+
 const titlesMap = {
-  "0-2": "Tax",
-  "2-2": "Payments",
-  "3-3": "Radar",
-  "3-0": "Connect",
-  "1-4": "Capital",
-  "2-5": "Treasury",
-  "4-2": "Terminal",
-  "4-4": "Issuing",
+  "2-2": "Instagram",
+  "3-0": "Facebook",
+  "1-4": "GoogleAnalytics",
+  "2-5": "SEO",
+  "4-2": "LinkedIn",
+  "4-4": "Email",
 };
 
+*/}
+
 const animationSets = [
+  
   {
-    source: "2-2", // Payments
-    targets: ["0-2", "3-3"], // Tax, Radar
+    source: "2-2", // Instagram
+    targets: ["0-2", "3-3"], // Placeholder
     paths: [
       "M250,200 L250,60",
-      "M250,290 L250,335 C250,343 258,350 266,350 L310,350",
+      "M250,290 L250,335 C250,343 258,350 266,350 L310,350"
     ],
     colors: ["#9966ff", "#ff5996"],
   },
+ 
   {
-    source: "2-2", // Payments
-    targets: ["3-0", "4-2"], // Connect, Terminal
+    source: "2-2", // Instagram
+    targets: ["3-0", "4-2"], // Facebook, LinkedIn
     paths: [
       "M240,290 L240,340 C240,348 232,355 224,355 L93,355",
-      "M250,290 L250,425",
+      "M255,290 L255,425",
     ],
-    colors: ["#9966FF", "#11EFE3"],
+    colors: ["#F50478", "#1877F2"],
+  },
+
+  {
+    source: "1-0", // Placeholder
+    targets: ["2-1", "1-3"], // Placeholder
+    paths: [
+      "M93,150 L138,150 C144,150 150,156 150,165 L150,210",
+      "M93,135 L310,135",
+     
+    ],
+    colors: ["#F50478", "#1877F2"],
   },
   {
-    source: "4-4", // Issuing
-    targets: ["2-5", "1-4"], // Treasury, Capital
+    source: "4-4", // Email
+    targets: ["2-5", "1-4"], // SEO, Google Analytics
     paths: [
       "M460,426 L460,270 C460,262 468,255 476,255 L512,255",
-      "M450,426 L450,175",
+      "M445,426 L445,175",
     ],
-    colors: ["#0073e6", "#ff80ff"],
+    colors: ["#E93948", "#FFC600"],
   },
+
+  {
+    source: "4-4", // Email
+    targets: ["2-3", "5-1"], // Placeholder
+    paths: [
+      "M455,426 L455,275 C455,255 450,250 440,250 L395,250",
+      "M455,500 L455,555 C455,560 450,565 440,565 L190,565"
+
+    ],
+    colors: ["#E93948", "#FFC600"],
+  },
+
+
 ];
 
 function GridComponent() {
@@ -206,6 +234,7 @@ function GridComponent() {
     const strokeColor = isActive ? "none" : "#D9DEDD";
 
     switch (key) {
+      /*
       case "0-2": // Tax
         return (
           <svg
@@ -256,6 +285,7 @@ function GridComponent() {
             </defs>
           </svg>
         );
+
       case "3-3": // Radar
         return (
           <svg
@@ -303,312 +333,97 @@ function GridComponent() {
             </defs>
           </svg>
         );
-      case "3-0": // Connect
+        */
+      case "3-0": // Facebook
         return (
-          <svg
-            className={`${svgSize}`}
-            viewBox="0 0 40 40"
-            fill="none"
-            stroke={strokeColor}
-            xmlns="http://www.w3.org/2000/svg"
+          <div
+            className={`w-[57px] h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
+              } border flex items-center justify-center`}
           >
-            <path
-              d="M12.47.01a13.01 13.01 0 0 0 .5 25.99h10.55c1.37 0 2.48-1.1 2.48-2.48V13.01a12.99 12.99 0 0 0-13.53-13z"
-              fill={isActive ? "url(#product-icon-connect-Sticky-a)" : "none"}
-            />
-            <path
-              d="M27.53 39.99a13.01 13.01 0 0 0-.5-25.99H16.48A2.48 2.48 0 0 0 14 16.48v10.51a12.99 12.99 0 0 0 13.53 13z"
-              fill={isActive ? "#0073E6" : "none"}
-            />
-            <path
-              d="M26 14v9.52A2.48 2.48 0 0 1 23.52 26H14v-9.52A2.48 2.48 0 0 1 16.32 14l.16-.01H26z"
-              fill={isActive ? "url(#product-icon-connect-Sticky-b)" : "none"}
-            />
             {isActive && (
-              <defs>
-                <linearGradient
-                  id="product-icon-connect-Sticky-a"
-                  x1="13"
-                  y1="1.71"
-                  x2="13"
-                  y2="15.25"
-                  gradientUnits="userSpaceOnUse"
-                >
-                  <stop stopColor="#11EFE3" />
-                  <stop offset=".33" stopColor="#15E8E2" />
-                  <stop offset=".74" stopColor="#1FD3E0" />
-                  <stop offset="1" stopColor="#21CFE0" />
-                </linearGradient>
-                <linearGradient
-                  id="product-icon-connect-Sticky-b"
-                  x1="20"
-                  y1="15.72"
-                  x2="20"
-                  y2="27.24"
-                  gradientUnits="userSpaceOnUse"
-                >
-                  <stop stopColor="#00299C" />
-                  <stop offset="1" stopColor="#0073E6" />
-                </linearGradient>
-              </defs>
+              <img
+                src="/assets/Socials/Facebook.png"
+                alt="Facebook"
+                className="w-[60px] h-[60px] object-contain"
+              />
             )}
-          </svg>
+          </div>
         );
-      case "1-4": // Capital
+      case "1-4": // Google Analytics
         return (
-          <svg
-            className={`${svgSize}`}
-            viewBox="0 0 40 40"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            stroke={strokeColor}
+          <div
+            className={`w-[57px] h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
+              } border flex items-center justify-center`}
           >
-            <path
-              d="M23.95 14.05l-9.74 2.12-12.18 2.52A2.59 2.59 0 0 0 0 21.22v16.26A2.5 2.5 0 0 0 2.54 40H27V16.57a2.55 2.55 0 0 0-3.05-2.52z"
-              fill={isActive ? "url(#product-icon-capital-Sticky-a)" : "none"}
-            ></path>
-            <path
-              d="M36.85.05l-21.82 4.6A2.57 2.57 0 0 0 13 7.15V40h24.46c1.42-.2 2.54-1.3 2.54-2.7V2.55c0-1.6-1.52-2.8-3.15-2.5z"
-              fill={isActive ? "url(#product-icon-capital-Sticky-b)" : "none"}
-            ></path>
-            <path
-              d="M23.95 14.05c1.63-.3 3.05.9 3.05 2.52V40H13V16.42l1.21-.25 9.74-2.12z"
-              fill={isActive ? "url(#product-icon-capital-Sticky-c)" : "none"}
-            ></path>
-            <defs>
-              <linearGradient
-                id="product-icon-capital-Sticky-a"
-                x1="13.52"
-                y1="36.35"
-                x2="13.52"
-                y2="18.21"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop stopColor="#00D0E1"></stop>
-                <stop offset="1" stopColor="#00F5E7"></stop>
-              </linearGradient>
-              <linearGradient
-                id="product-icon-capital-Sticky-b"
-                x1="26.46"
-                x2="26.46"
-                y2="40"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop stopColor="#00D924"></stop>
-                <stop offset="1" stopColor="#00D924"></stop>
-              </linearGradient>
-              <linearGradient
-                id="product-icon-capital-Sticky-c"
-                x1="19.93"
-                y1="40"
-                x2="19.93"
-                y2="14"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop stopColor="#00D722"></stop>
-                <stop offset=".85" stopColor="#00BD01"></stop>
-              </linearGradient>
-            </defs>
-          </svg>
-        );
-      case "2-2": // Payments
-        return (
-          <svg
-            className={`${svgSize}`}
-            viewBox="0 0 40 40"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            stroke={strokeColor}
-          >
-            <path
-              d="M34.61 11.28a2.56 2.56 0 0 0-1.22-1.04L8.54.2A2.57 2.57 0 0 0 5 2.6V15c0 1.05.64 2 1.61 2.4l6.44 2.6 21.56 8.72c.26-.4.4-.88.39-1.36V12.64c0-.48-.13-.96-.39-1.37z"
-              fill={isActive ? "url(#product-icon-payments-Sticky-a)" : "none"}
-            />
-            <path
-              d="M34.63 11.28L13.06 20l-6.45 2.6A2.58 2.58 0 0 0 5 25v12.42a2.58 2.58 0 0 0 3.54 2.39L33.4 29.76c.5-.21.93-.57 1.21-1.04.26-.41.4-.88.39-1.36V12.64c0-.48-.12-.95-.37-1.36z"
-              fill={isActive ? "#96F" : "none"}
-            />
-            <path
-              d="M34.62 11.28l.1.17c.18.37.28.77.28 1.19v-.03 14.75c0 .48-.13.95-.39 1.36L13.06 20l21.56-8.72z"
-              fill={isActive ? "url(#product-icon-payments-Sticky-b)" : "none"}
-            />
             {isActive && (
-              <defs>
-                <linearGradient
-                  id="product-icon-payments-Sticky-a"
-                  x1="20"
-                  y1="4.13"
-                  x2="20"
-                  y2="21.13"
-                  gradientUnits="userSpaceOnUse"
-                >
-                  <stop stopColor="#11EFE3" />
-                  <stop offset="1" stopColor="#21CFE0" />
-                </linearGradient>
-                <linearGradient
-                  id="product-icon-payments-Sticky-b"
-                  x1="35"
-                  y1="11.28"
-                  x2="35"
-                  y2="28.72"
-                  gradientUnits="userSpaceOnUse"
-                >
-                  <stop stopColor="#0048E5" />
-                  <stop offset="1" stopColor="#9B66FF" />
-                </linearGradient>
-              </defs>
+              <img
+                src="/assets/Socials/GoogleAnalytics.png"
+                alt="GoogleAnalytics"
+                className="w-[60px] h-[60px] object-contain"
+              />
             )}
-          </svg>
+          </div>
         );
-      case "2-5": //Treasury
+      case "2-2": // Instagram
         return (
-          <svg
-            className={`${svgSize}`}
-            viewBox="0 0 40 40"
-            fill="none"
-            stroke={strokeColor}
-            xmlns="http://www.w3.org/2000/svg"
+          <div
+            className={`w-[57px] h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
+              } border flex items-center justify-center`}
           >
-            <path
-              d="M29 14.5c0-.36-.07-.71-.22-1.04l-3.92-8.94A2.52 2.52 0 0 0 22.56 3H2.52A2.54 2.54 0 0 0 0 5.56v17.88A2.54 2.54 0 0 0 2.52 26h20.04c1 0 1.9-.6 2.3-1.52l3.92-8.94c.15-.33.22-.68.22-1.04z"
-              fill={isActive ? "url(#product-icon-banking-Sticky-a)" : "none"}
-            ></path>
-            <path
-              d="M11 25.5c0 .36.07.71.22 1.04l3.92 8.94c.4.93 1.3 1.52 2.3 1.52h20.04c1.4 0 2.52-1.14 2.52-2.56V16.56A2.54 2.54 0 0 0 37.48 14H17.44c-1 0-1.9.6-2.3 1.52l-3.92 8.94c-.15.33-.22.68-.22 1.04z"
-              fill={isActive ? "#00D924" : "none"}
-            ></path>
-            <path
-              d="M28.95 14a2.59 2.59 0 0 1-.17 1.54l-3.92 8.94c-.4.93-1.3 1.52-2.3 1.52H11.05a2.59 2.59 0 0 1 .17-1.54l3.92-8.94c.4-.93 1.3-1.52 2.3-1.52h11.51z"
-              fill={isActive ? "url(#product-icon-banking-Sticky-b)" : "none"}
-            ></path>
-            <defs>
-              <linearGradient
-                id="product-icon-banking-Sticky-a"
-                x1="14.5"
-                y1="6.13"
-                x2="14.5"
-                y2="28.22"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop stopColor="#11EFE3"></stop>
-                <stop offset=".35" stopColor="#14E8E2"></stop>
-                <stop offset=".86" stopColor="#1ED6E1"></stop>
-                <stop offset="1" stopColor="#21CFE0"></stop>
-              </linearGradient>
-              <linearGradient
-                id="product-icon-banking-Sticky-b"
-                x1="25.31"
-                y1="29.5"
-                x2="25.31"
-                y2="9"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop stopColor="#00D924"></stop>
-                <stop offset="1" stopColor="#00A600"></stop>
-              </linearGradient>
-            </defs>
-          </svg>
-        );
-      case "4-2": // Terminal
-        return (
-          <svg
-            className={`${svgSize}`}
-            viewBox="0 0 40 40"
-            fill="none"
-            stroke={strokeColor}
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <path
-              d="M36.98 14.05l-6.31 1.36L9.33 20l-7.35 1.58A2.52 2.52 0 0 0 0 24.05v13.42C0 38.87 1.12 40 2.5 40h35c1.38 0 2.5-1.13 2.5-2.53V16.53c0-.77-.34-1.49-.93-1.97a2.48 2.48 0 0 0-2.09-.5z"
-              fill={isActive ? "#9B66FF" : "none"}
-            />
-            <path
-              d="M28.59 0H11.58A2.54 2.54 0 0 0 9 2.5v25c0 1.38 1.15 2.5 2.58 2.5h16.84A2.54 2.54 0 0 0 31 27.5v-25A2.5 2.5 0 0 0 28.59 0z"
-              fill={isActive ? "url(#product-icon-terminal-Sticky-a)" : "none"}
-            />
-            <path
-              d="M31 15.34V27.5c0 1.38-1.15 2.5-2.58 2.5H11.58A2.54 2.54 0 0 1 9 27.5v-7.43l.33-.07 21.34-4.59.33-.07z"
-              fill={isActive ? "url(#product-icon-terminal-Sticky-b)" : "none"}
-            />
             {isActive && (
-              <defs>
-                <linearGradient
-                  id="product-icon-terminal-Sticky-a"
-                  x1="20"
-                  y1="1.97"
-                  x2="20"
-                  y2="17.6"
-                  gradientUnits="userSpaceOnUse"
-                >
-                  <stop stopColor="#11EFE3" />
-                  <stop offset=".33" stopColor="#15E8E2" />
-                  <stop offset=".74" stopColor="#1FD3E0" />
-                  <stop offset="1" stopColor="#21CFE0" />
-                </linearGradient>
-                <linearGradient
-                  id="product-icon-terminal-Sticky-b"
-                  x1="31"
-                  y1="22.67"
-                  x2="5.34"
-                  y2="22.67"
-                  gradientUnits="userSpaceOnUse"
-                >
-                  <stop stopColor="#0048E5" />
-                  <stop offset=".64" stopColor="#625AF5" />
-                  <stop offset="1" stopColor="#8A62FC" />
-                </linearGradient>
-              </defs>
+              <img
+                src="/assets/Socials/Instagram.png"
+                alt="Instagram"
+                className="w-[60px] h-[60px] object-contain"
+              />
             )}
-          </svg>
+          </div>
         );
-      case "4-4": // Issuing
+
+      case "2-5": //SEO
         return (
-          <svg
-            className={`${svgSize}`}
-            viewBox="0 0 40 40"
-            fill="none"
-            stroke={strokeColor}
-            xmlns="http://www.w3.org/2000/svg"
+          <div
+          className={`w-[57px] h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
+            } border flex items-center justify-center`}
+        >
+          {isActive && (
+            <img
+              src="/assets/Socials/SEO.png"
+              alt="SEO"
+              className="w-[60px] h-[60px] object-contain"
+            />
+          )}
+        </div>
+        );
+      case "4-2": // LinkedIn
+        return (
+          <div
+            className={`w-[57px] h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
+              } border flex items-center justify-center`}
           >
-            <path
-              d="M7.62 26.48l-.02-.03a2.44 2.44 0 0 1-.7-1.48 2.49 2.49 0 0 1 .11-1.05c.05-.28.13-.54.24-.77l.08-.17L14.67 10h21.85A2.52 2.52 0 0 1 39 12.37l.01.16v22.92A2.52 2.52 0 0 1 36.67 38l-.16.01H19a2.5 2.5 0 0 0 .64-1.97c-.07-.66-.43-1.09-.95-1.47l-.15-.1-10.62-7.73-.14-.1v-.01l.14.1a2.52 2.52 0 0 1-.27-.21l-.03-.03z"
-              fill={isActive ? "url(#product-icon-issuing-Sticky-a)" : "none"}
-            ></path>
-            <path
-              d="M22.05 2.1c.7-.15 1.41 0 1.99.41l6.56 4.72a2.5 2.5 0 0 1 .92 2.8V10l-8.5 26-.05.2-.03.08-.03.09-.15.32-.02.04-.19.29-.03.04a2.9 2.9 0 0 1-.23.25l-.03.02a2.24 2.24 0 0 1-.58.4l-.03.03c-.1.05-.2.1-.31.13h-.05l-.33.08h-.05a2.3 2.3 0 0 1-.36.03H3.53A2.53 2.53 0 0 1 1 35.45v-22.9C1 11.14 2.13 10 3.53 10H16.6l3.8-6.7a2.5 2.5 0 0 1 1.46-1.15l.18-.05z"
-              fill={isActive ? "#0073E6" : "none"}
-            ></path>
-            <path
-              d="M31.38 10l-8.37 26-.02.1-.02.1-.03.08-.03.09-.07.16-.08.16-.02.04-.1.15-.09.14-.03.04-.11.13-.12.12-.03.02c-.08.09-.17.16-.26.23l-.15.1-.17.08-.03.02-.15.07-.16.06h-.05l-.16.05-.1.01.1-.1c.4-.51.59-1.17.51-1.82-.07-.66-.43-1.09-.95-1.47l-.15-.1-10.62-7.73-.14-.1a2.54 2.54 0 0 1-.26-.26l-.04-.05a2.48 2.48 0 0 1-.12-.14l-.02-.04-.03-.04a2.43 2.43 0 0 1-.17-.3l-.03-.06a2.5 2.5 0 0 1-.15-.42l-.01-.07-.02-.1-.01-.06a2.51 2.51 0 0 1 .05-1.01l.02-.09a2.5 2.5 0 0 1 .04-.1c.03-.25.1-.5.21-.74l.1-.17L16.66 10h14.71z"
-              fill={isActive ? "url(#product-icon-issuing-Sticky-b)" : "none"}
-            ></path>
-            <defs>
-              <linearGradient
-                id="product-icon-issuing-Sticky-a"
-                x1="22.92"
-                y1="11.68"
-                x2="22.92"
-                y2="39.68"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop offset=".1" stopColor="#FF80FF"></stop>
-                <stop offset=".39" stopColor="#FF7BF9"></stop>
-                <stop offset=".77" stopColor="#FF6EEA"></stop>
-                <stop offset="1" stopColor="#FF62DC"></stop>
-              </linearGradient>
-              <linearGradient
-                id="product-icon-issuing-Sticky-b"
-                x1="31.38"
-                y1="27.93"
-                x2="11.62"
-                y2="27.93"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop stopColor="#0073E6"></stop>
-                <stop offset="1" stopColor="#00299C"></stop>
-              </linearGradient>
-            </defs>
-          </svg>
+            {isActive && (
+              <img
+                src="/assets/Socials/LinkedIn.png"
+                alt="LinkedIn"
+                className="w-[60px] h-[60px] object-contain"
+              />
+            )}
+          </div>
+        );
+      case "4-4": // Email
+        return (
+          <div
+            className={`w-[57px] h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
+              } border flex items-center justify-center`}
+          >
+            {isActive && (
+              <img
+                src="/assets/Socials/Email.png"
+                alt="Email"
+                className="w-[60px] h-[60px] object-contain"
+              />
+            )}
+          </div>
         );
       default:
         return (
@@ -633,14 +448,14 @@ function GridComponent() {
       <motion.div
         key={cellKey}
         aria-label={`Grid cell ${cellKey}`}
-        className={`w-full h-full flex flex-col items-center justify-center border border-[#D9DEDD] rounded-lg ${
-          isActive && "shadow-md"
-        }`}
+        className={`w-full h-full flex flex-col items-center justify-center border border-[#D9DEDD] rounded-lg ${isActive && "shadow-md"
+          }`}
         variants={iconVariants}
         initial={false} // Prevent re-initialization
         animate={isActive ? "active" : "inactive"} // Only change when `isActive` changes
       >
         {renderSVG(cellKey, isActive)}
+        {/*
         {isActive && (
           <p
             className={`text-[7px] sm:text-xs text-[#18042A] mt-1 font-medium ${inter.className}`}
@@ -648,6 +463,7 @@ function GridComponent() {
             {titlesMap[cellKey as keyof typeof titlesMap]}
           </p>
         )}
+          */}
       </motion.div>
     );
   };
@@ -673,7 +489,7 @@ function GridComponent() {
                       key={`${activeSet}-${index}`}
                       d={path}
                       stroke="white"
-                      strokeWidth="1.5"
+                      strokeWidth="5"
                       fill="none"
                       strokeLinecap="round" // Smooth line ends
                       strokeLinejoin="round" // Smooth corners
@@ -693,8 +509,8 @@ function GridComponent() {
                     ? { y1: "1", y2: "0" } // Bottom to top for the first path
                     : { y1: "0", y2: "1" } // Top to bottom for the second path
                   : isLastSet
-                  ? { y1: "1", y2: "0" } // Bottom to top for the last set
-                  : { y1: "0", y2: "1" }; // Default top to bottom for other sets
+                    ? { y1: "1", y2: "0" } // Bottom to top for the last set
+                    : { y1: "0", y2: "1" }; // Default top to bottom for other sets
                 return (
                   <React.Fragment key={`${activeSet}-${index}`}>
                     <linearGradient
