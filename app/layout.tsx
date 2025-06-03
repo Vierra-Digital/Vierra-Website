@@ -8,40 +8,56 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 })
 
-// Updated metadata export - themeColor removed
+// Fix: Use absolute URL with explicit domain to ensure crawlers can access the image
+const SITE_URL = 'https://vierradev.com';
+const META_IMAGE_URL = `${SITE_URL}/assets/meta-banner.png`;
+
+// Updated metadata export with explicit image handling
 export const metadata = {
-  metadataBase: new URL('https://vierradev.com'),
+  metadataBase: new URL(SITE_URL),
   title: "Vierra - Scale Your Practice Effortlessly",
   description: "Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services.",
   keywords: ["marketing", "lead generation", "business growth", "digital optimization", "practice scaling"],
   authors: [{ name: "Alex Shick" }],
   openGraph: {
     type: "website",
-    url: "https://vierradev.com",
+    url: SITE_URL,
     title: "Vierra - Scale Your Practice Effortlessly",
     description: "Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services.",
     siteName: "Vierra",
-    images: [{
-      url: "https://vierradev.com/assets/meta-banner.png",
-      width: 1200,
-      height: 630,
-      alt: "Vierra"
-    }],
+    images: [
+      {
+        url: META_IMAGE_URL,
+        width: 1200,
+        height: 630,
+        alt: "Vierra",
+        type: "image/png",  
+        secureUrl: META_IMAGE_URL
+      }
+    ],
     locale: "en_US",
   },
+  
   twitter: {
     card: "summary_large_image",
     title: "Vierra - Scale Your Practice Effortlessly",
     description: "Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services.",
-    images: ["https://vierradev.com/assets/meta-banner.png"],
+    creator: "@vierradev",
+    images: {
+      url: META_IMAGE_URL,
+      alt: "Vierra",
+      width: 1200,
+      height: 630,
+    },
   },
+  
   icons: {
     icon: "/favicon.ico",
     apple: "/apple-touch-icon.png",
   },
   alternates: {
-    canonical: "https://vierradev.com",
-  }
+    canonical: SITE_URL,
+  },
 }
 
 // New viewport export with themeColor
