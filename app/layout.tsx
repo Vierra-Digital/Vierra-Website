@@ -71,12 +71,17 @@ export const viewport = {
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="en" style={{ scrollBehavior: "smooth" }}>
+      <head>
+        <meta property="og:image" content={META_IMAGE_URL} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+      </head>
       <body>
-        <RootLayoutClient 
+        <RootLayoutClient
           geistSansVariable={geistSans.variable}
           geistMonoVariable={geistMono.variable}
         >
@@ -84,5 +89,5 @@ export default function RootLayout({
         </RootLayoutClient>
       </body>
     </html>
-  )
+  );
 }
