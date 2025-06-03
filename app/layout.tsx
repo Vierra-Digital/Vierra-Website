@@ -1,6 +1,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import RootLayoutClient from "./layout.client";
+import Script from "next/script";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -21,14 +22,26 @@ export const metadata = {
     description: "Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services.",
     siteName: "Vierra",
     locale: "en_US",
-    images: [META_IMAGE_URL],
+    images: [{
+      url: META_IMAGE_URL,
+      width: 1200,
+      height: 630,
+      alt: "Vierra",
+      type: "image/png",
+    }],
   },
   twitter: {
     card: "summary_large_image",
     creator: "@vierradev",
+    site: "@vierradev",
     title: "Vierra - Scale Your Practice Effortlessly",
     description: "Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services.",
-    images: [META_IMAGE_URL],
+    images: [{
+      url: META_IMAGE_URL,
+      width: 1200,
+      height: 630,
+      alt: "Vierra"
+    }],
   },
   icons: {
     icon: "/favicon.ico",
@@ -50,30 +63,29 @@ export default function RootLayout({
   return (
     <html lang="en" style={{ scrollBehavior: "smooth" }}>
       <head>
-        {/* Raw tags added for full OG/Twitter compatibility in production */}
-
-        {/* Title/desc are still needed here to show in raw HTML */}
-        <title>Vierra - Scale Your Practice Effortlessly</title>
-        <meta name="description" content="Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services." />
-        <link rel="canonical" href={SITE_URL} />
-
-        {/* Facebook / LinkedIn / OG tags */}
-        <meta property="og:type" content="website" />
-        <meta property="og:url" content={SITE_URL} />
-        <meta property="og:title" content="Vierra - Scale Your Practice Effortlessly" />
-        <meta property="og:description" content="Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services." />
-        <meta property="og:image" content={META_IMAGE_URL} />
-        <meta property="og:image:width" content="1200" />
-        <meta property="og:image:height" content="630" />
-
-        {/* Twitter preview */}
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Vierra - Scale Your Practice Effortlessly" />
-        <meta name="twitter:description" content="Scale your practice effortlessly with Vierra. Fill your schedules and eliminate no-shows with our expert marketing and lead generation services." />
-        <meta name="twitter:image" content={META_IMAGE_URL} />
-        <meta name="twitter:creator" content="@vierradev" />
+        {/* Only use JSON-LD here, let Next.js handle all other meta tags */}
+        <Script
+          id="schema-org"
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Organization",
+              "name": "Vierra Development",
+              "url": SITE_URL,
+              "logo": `${SITE_URL}/assets/meta-banner.png`,
+              "contactPoint": {
+                "@type": "ContactPoint",
+                "telephone": "+1-781-496-8867",
+                "contactType": "Sales"
+              },
+              "sameAs": [
+                "https://www.linkedin.com/company/vierra/"
+              ]
+            })
+          }}
+        />
       </head>
-
       <body>
         <RootLayoutClient
           geistSansVariable={geistSans.variable}
