@@ -337,14 +337,14 @@ function GridComponent() {
       case "3-0": // Facebook
         return (
           <div
-            className={`w-[57px] h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
+            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
               } border flex items-center justify-center`}
           >
             {isActive && (
               <img
                 src="/assets/Socials/Facebook.png"
                 alt="Facebook"
-                className="w-[60px] h-[60px] object-contain"
+                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
           </div>
@@ -352,14 +352,14 @@ function GridComponent() {
       case "1-4": // Google Analytics
         return (
           <div
-            className={`w-[57px] h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
+            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
               } border flex items-center justify-center`}
           >
             {isActive && (
               <img
                 src="/assets/Socials/GoogleAnalytics.png"
                 alt="GoogleAnalytics"
-                className="w-[60px] h-[60px] object-contain"
+                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
           </div>
@@ -367,14 +367,14 @@ function GridComponent() {
       case "2-2": // Instagram
         return (
           <div
-            className={`w-[57px] h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
+            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
               } border flex items-center justify-center`}
           >
             {isActive && (
               <img
                 src="/assets/Socials/Instagram.png"
                 alt="Instagram"
-                className="w-[60px] h-[60px] object-contain"
+                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
           </div>
@@ -383,14 +383,14 @@ function GridComponent() {
       case "2-5": //SEO
         return (
           <div
-          className={`w-[57px] h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
+          className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
             } border flex items-center justify-center`}
         >
           {isActive && (
             <img
               src="/assets/Socials/SEO.png"
               alt="SEO"
-              className="w-[60px] h-[60px] object-contain"
+              className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
             />
           )}
         </div>
@@ -398,14 +398,14 @@ function GridComponent() {
       case "4-2": // LinkedIn
         return (
           <div
-            className={`w-[57px] h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
+            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
               } border flex items-center justify-center`}
           >
             {isActive && (
               <img
                 src="/assets/Socials/LinkedIn.png"
                 alt="LinkedIn"
-                className="w-[60px] h-[60px] object-contain"
+                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
           </div>
@@ -413,14 +413,14 @@ function GridComponent() {
       case "4-4": // Email
         return (
           <div
-            className={`w-[57px] h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
+            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
               } border flex items-center justify-center`}
           >
             {isActive && (
               <img
                 src="/assets/Socials/Email.png"
                 alt="Email"
-                className="w-[60px] h-[60px] object-contain"
+                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
           </div>
