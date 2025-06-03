@@ -53,19 +53,17 @@ export default function RootLayoutClient({
     ],
   };
 
+  // CRITICAL FIX: Don't render html/head tags in client component
   return (
-    <html lang="en" style={{ scrollBehavior: "smooth" }}>
-      <head>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify(organizationSchema),
-          }}
-        />
-      </head>
-      <body
-        className={`${geistSansVariable} ${geistMonoVariable} antialiased`}
-      >
+    <>
+      {/* Keep only the JSON-LD schema */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(organizationSchema),
+        }}
+      />
+      <div className={`${geistSansVariable} ${geistMonoVariable} antialiased`}>
         {isLoading ? (
           <div className="flex h-screen w-full items-center justify-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#8F42FF]"></div>
@@ -73,7 +71,7 @@ export default function RootLayoutClient({
         ) : (
           <>{children}</>
         )}
-      </body>
-    </html>
+      </div>
+    </>
   );
 }
