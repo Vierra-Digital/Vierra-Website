@@ -9,9 +9,6 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 const SITE_URL = "https://vierradev.com";
 const META_IMAGE_URL = `${SITE_URL}/assets/meta-banner.png`;
 
-// Next.js metadata API is now the *only* source of truth for SEO/social tags.
-// This ensures SSR generates all correct <meta> tags in the final HTML.
-// Don't double up with manual <meta> tags in <head> — that causes conflicts.
 export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: "Vierra - Scale Your Practice Effortlessly",
