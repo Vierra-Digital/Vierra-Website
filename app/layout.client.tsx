@@ -37,40 +37,26 @@ export default function RootLayoutClient({
     return () => clearInterval(intervalId);
   }, []);
 
-  const organizationSchema = {
-    "@context": "https://schema.org",
-    "@type": "Organization",
-    name: "Vierra Development",
-    url: "https://vierradev.com",
-    logo: "https://vierradev.com/assets/meta-banner.png",
-    contactPoint: {
-      "@type": "Contact",
-      telephone: "+1-781-496-8867",
-      contactType: "Sales",
-    },
-    sameAs: [
-      "https://www.linkedin.com/company/vierra/",
-    ],
-  };
+  // const organizationSchema = {
+  //   "@context": "https://schema.org",
+  //   "@type": "Organization",
+  //   name: "Vierra Development",
+  //   url: "https://vierradev.com",
+  //   logo: "https://vierradev.com/assets/meta-banner.png",
+  //   contactPoint: {
+  //     "@type": "Contact",
+  //     telephone: "+1-781-496-8867",
+  //     contactType: "Sales",
+  //   },
+  //   sameAs: [
+  //     "https://www.linkedin.com/company/vierra/",
+  //   ],
+  // };
 
+  // CRITICAL FIX: Don't render html/head tags in client component
   return (
-    <html lang="en" style={{ scrollBehavior: "smooth" }}>
-      <head>
-        <meta name="theme-color" content="#8F42FF" />
-        <meta name="og:theme-color" content="#8F42FF" />
-        <meta name="msapplication-TileColor" content="#8F42FF" />
-        <meta name="msapplication-navbutton-color" content="#8F42FF" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="#8F42FF" />
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify(organizationSchema),
-          }}
-        />
-      </head>
-      <body
-        className={`${geistSansVariable} ${geistMonoVariable} antialiased`}
-      >
+    <>
+      <div className={`${geistSansVariable} ${geistMonoVariable} antialiased`}>
         {isLoading ? (
           <div className="flex h-screen w-full items-center justify-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#8F42FF]"></div>
@@ -78,7 +64,7 @@ export default function RootLayoutClient({
         ) : (
           <>{children}</>
         )}
-      </body>
-    </html>
+      </div>
+    </>
   );
 }
