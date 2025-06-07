@@ -1,8 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { Inter } from "next/font/google";
-
-const inter = Inter({ subsets: ["latin"] });
 
 const gridLayout = [
   [false, false, true, false, false, false],
@@ -230,9 +227,7 @@ function GridComponent() {
 
   // Renders SVG
   const renderSVG = (key: string, isActive: boolean) => {
-    const svgSize = "w-[25px] h-[25px] sm:w-[40px] sm:h-[40px]";
-    const strokeColor = isActive ? "none" : "#D9DEDD";
-
+    
     switch (key) {
       /*
       case "0-2": // Tax
