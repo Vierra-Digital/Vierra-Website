@@ -72,6 +72,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" style={{ scrollBehavior: "smooth" }}>
       <head>
+        
         {/* JSON-LD for rich results, included manually since Next.js doesn't generate this yet */}
         <Script
           id="schema-org"
