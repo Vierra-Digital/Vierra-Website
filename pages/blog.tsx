@@ -9,11 +9,73 @@ import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { ArrowUpRight } from "lucide-react";
+import { Search } from "lucide-react";
 import { FooterSection } from "@/components/FooterSection/MainComponent";
 import { Modal } from "@/components/Modal";
 import Main from "@/components/ServicesSection/Main";
 
+// interface for testing BlogItems (NOTE: This is not the final structure for Blog Items)
+interface BlogItem {
+    id: string;
+    title: string;
+    description: string;
+    author: string;
+    image: string;
+    createdAt: string;
+    category?: string;
+}
 
+// array for testing BlogItems
+const view1Array: BlogItem[] = [
+    {
+        id: "1",
+        title: "Lorem Ipsum",
+        description: "Lorem ipsum dolor sit amet, on consectetur adipiscing elit. Vivamus",
+        author: "Thomas Walsh",
+        image: "/assets/Team/Paul.png",
+        createdAt: "1"
+    },
+    {
+        id: "2",
+        title: "Lorem Ipsum",
+        description: "Lorem ipsum dolor sit amet, on consectetur adipiscing elit. Vivamus",
+        author: "Thomas Walsh",
+        image: "/assets/Team/Paul.png",
+        createdAt: "2"
+    },
+    {
+        id: "3",
+        title: "Lorem Ipsum",
+        description: "Lorem ipsum dolor sit amet, on consectetur adipiscing elit. Vivamus",
+        author: "Thomas Walsh",
+        image: "/assets/Team/Paul.png",
+        createdAt: "3"
+    },
+    {
+        id: "4",
+        title: "Lorem Ipsum",
+        description: "Lorem ipsum dolor sit amet, on consectetur adipiscing elit. Vivamus",
+        author: "Thomas Walsh",
+        image: "/assets/Team/Paul.png",
+        createdAt: "4"
+    },
+    {
+        id: "5",
+        title: "Lorem Ipsum",
+        description: "Lorem ipsum dolor sit amet, on consectetur adipiscing elit. Vivamus",
+        author: "Thomas Walsh",
+        image: "/assets/Team/Paul.png",
+        createdAt: "5"
+    },
+    {
+        id: "6",
+        title: "Lorem Ipsum",
+        description: "Lorem ipsum dolor sit amet, on consectetur adipiscing elit. Vivamus",
+        author: "Thomas Walsh",
+        image: "/assets/Team/Paul.png",
+        createdAt: "6"
+    }
+]
 
 declare global {
     interface Window {
@@ -24,12 +86,16 @@ declare global {
     }
 }
 
+
 const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
 const inter = Inter({ subsets: ["latin"] });
+const tags: string[] = ["All Blog Posts", "Latest Blog Posts", "Lorem Ipsum", "Lorem Ipsum", "Lorem Ipsum", "Lorem Ipsum"]
+
 
 const BlogPage: React.FC = () => {
 
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [tagSelected, setTagSelected] = useState(0);
 
     const initParticles = () => {
         if (typeof window !== 'undefined' && window.particlesJS) {
@@ -76,64 +142,181 @@ const BlogPage: React.FC = () => {
                 >
                     <Header />
                 </motion.div>
-                <div className="bg-[#E3DDE9] py-20">
-                    <main className="relative px-6 max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
-                        <motion.div
-                            initial="hidden"
-                            animate="visible"
-                            variants={{
-                                hidden: { opacity: 0, y: 20 },
-                                visible: {
-                                    opacity: 1,
-                                    y: 0,
-                                    transition: { staggerChildren: 0.2, ease: "easeOut" },
-                                },
-                            }}
-                            className="max-w-2xl"
-                        >
-                            <motion.h1
-                                variants={{
-                                    hidden: { opacity: 0, y: 20 },
-                                    visible: {
-                                        opacity: 1,
-                                        y: 0,
-                                        transition: {
-                                            staggerChildren: 0.05,
-                                            ease: "easeOut",
-                                        },
-                                    },
-                                }}
-                                className={`text-5xl md:text-6xl font-bold leading-tight mb-6 text-black ${bricolage.className}`}
-                            >
-                                {Array.from("Vierra Marketing Blog").map(
-                                    (letter, index) => (
-                                        <motion.span
-                                            key={index}
-                                            variants={{
-                                                hidden: { opacity: 0, y: 20 },
-                                                visible: { opacity: 1, y: 0 },
-                                            }}
-                                        >
-                                            {letter}
-                                        </motion.span>
-                                    )
-                                )}
-                            </motion.h1>
+                <main id="control-section" className="bg-[#E3DDE9] p-8 lg:p-20">
+                    <div id="header-text-holder" className="my-4 max-w-2xl mb-5">
+                        <h1 className={`text-5xl md:text-6xl font-bold leading-tight lg:mb-6 text-[#18042A] ${bricolage.className}`}>Vierra</h1>
+                        <h1 className={`text-5xl md:text-6xl font-bold leading-tight lg:mb-6 text-[#18042A] ${bricolage.className}`}>Marketing Blog</h1>
+                    </div>
+                    <div id="subtext-search-row" className="w-full h-auto flex flex-col sm:flex-col md:flex-col lg:flex-row xl:flex-row justify-between">
+                        <div id="subtext-holder" className={`text-[#646A69] text-lg mb-10 max-w-2xl ${inter.className}`}>
+                            <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+                        </div>
+                        <div id="search-holder" className="flex">
+                            <div className="w-full lg:w-[556px] h-[56px] rounded-full bg-[#F3F3F3] flex items-center px-10 justify-between">
+                                <p id="search-text" className={`lg:text-lg text-[#646A69] ${bricolage.className}`}>Search...
+                                </p>
+                                <div id="search-icon-holder">
+                                    <Search className="h-[25px] w-[25px] text-[#646A69]" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="tag-row" className="w-full h-auto mt-5 flex flex-wrap gap-3 lg:justify-between">
+                        {tags.map((tag, index) => (
+                            (index === tagSelected) ? (
+                                <Button id="tag-holder">
+                                    <p className={`text-lg text-[#EFF3FF] ${bricolage.className}`}>{tag}</p>
+                                </Button>
+                            ) : (
+                                <Button id="tag-holder" className="bg-[#F3F3F3] text-[#010205] hover:text-[#EFF3FF]" onClick={() => setTagSelected(index)}>
+                                    <p className={`text-lg  ${bricolage.className}`}>{tag}</p>
+                                </Button>
+                            )
+                        ))}
+                    </div>
+                </main>
+                <div id="view-section" className="bg-[#E3DDE9] px-8 lg:px-20">
+                    <div id="view-part-1">
+                        <h1 id="part-1-header" className={`text-2xl md:text-3xl font-bold leading-tight lg:mb-6 text-[#18042A] ${bricolage.className}`}>All Blog Posts</h1>
+                        <div id="vp-1-blogs-container" className="w-full flex flex-col lg:flex-row gap-6">
+                            {/* Featured Blog Post (Top on mobile, Left Half on desktop) */}
+                            {view1Array.length > 0 && (
+                                <div
+                                    className="w-full lg:flex-[0.5] relative h-80 lg:h-96 rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300 hover:scale-[1.02]"
+                                    style={{
+                                        backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${view1Array[0].image})`,
+                                        backgroundSize: 'cover',
+                                        backgroundPosition: 'center',
+                                        backgroundRepeat: 'no-repeat'
+                                    }}
+                                >
+                                    {/* Purple category tag */}
+                                    <div className="absolute top-6 left-6">
+                                        <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-medium">
+                                            {view1Array[0].title}
+                                        </span>
+                                    </div>
 
-                            <motion.p
-                                variants={{
-                                    hidden: { opacity: 0, y: 20 },
-                                    visible: { opacity: 1, y: 0 },
-                                }}
-                                className={`text-[#646A69] text-lg mb-10 ${inter.className}`}
-                            >
-                                Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-                            </motion.p>
-                        </motion.div>
-                    </main>
+                                    {/* Content overlay */}
+                                    <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
+                                        <div className="transform transition-transform duration-300 group-hover:translate-y-[-8px]">
+                                            <h2 className={`text-2xl lg:text-3xl font-bold mb-3 leading-tight ${bricolage.className}`}>
+                                                {view1Array[0].description}
+                                            </h2>
+                                            <div className="flex justify-between items-center mt-4">
+                                                <span className={`text-sm text-gray-300 ${inter.className}`}>
+                                                    {view1Array[0].author}
+                                                </span>
+                                                <span className={`text-sm text-gray-300 ${inter.className}`}>
+                                                    {view1Array[0].createdAt}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Hover overlay */}
+                                    <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+                                </div>
+                            )}
+
+                            {/* 2x2 Grid (Bottom on mobile, Right Half on desktop) */}
+                            <div className="w-full lg:flex-[0.5] grid grid-cols-2 gap-4">
+                                {view1Array.slice(1, 5).map((blog) => (
+                                    <div
+                                        key={blog.id}
+                                        className="relative h-44 lg:h-48 rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300 hover:scale-105"
+                                        style={{
+                                            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image})`,
+                                            backgroundSize: 'cover',
+                                            backgroundPosition: 'center',
+                                            backgroundRepeat: 'no-repeat'
+                                        }}
+                                    >
+                                        {/* Purple category tag */}
+                                        <div className="absolute top-4 left-4">
+                                            <span className="bg-purple-600 text-white px-2 py-1 rounded-full text-xs font-medium">
+                                                {blog.title}
+                                            </span>
+                                        </div>
+
+                                        {/* Content overlay */}
+                                        <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
+                                            <div className="transform transition-transform duration-300 group-hover:translate-y-[-4px]">
+                                                <h3 className={`text-sm lg:text-base font-bold mb-1 leading-tight ${bricolage.className}`}>
+                                                    {blog.description}
+                                                </h3>
+                                            </div>
+                                        </div>
+
+                                        {/* Hover overlay */}
+                                        <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div id="view-part-2">
+                        <h1 id="part-2-header" className={`text-2xl md:text-3xl font-bold leading-tight lg:mb-6 text-[#18042A] ${bricolage.className}`}>Trending</h1>
+                        <div id="vp-2-blogs-container" className="w-full flex flex-col lg:flex-row gap-6">
+                            <div className="w-full grid lg:grid-cols-4 gap-4">
+                                {view1Array.slice(0, 4).map((blog) => (
+                                    <div
+                                        key={blog.id}
+                                        className="relative h-44 lg:h-48 rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300 hover:scale-105"
+                                        style={{
+                                            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image})`,
+                                            backgroundSize: 'cover',
+                                            backgroundPosition: 'center',
+                                            backgroundRepeat: 'no-repeat'
+                                        }}
+                                    >
+                                        {/* Purple category tag */}
+                                        <div className="absolute top-4 left-4">
+                                            <span className="bg-purple-600 text-white px-2 py-1 rounded-full text-xs font-medium">
+                                                {blog.title}
+                                            </span>
+                                        </div>
+
+                                        {/* Content overlay */}
+                                        <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
+                                            <div className="transform transition-transform duration-300 group-hover:translate-y-[-4px]">
+                                                <h3 className={`text-sm lg:text-base font-bold mb-1 leading-tight ${bricolage.className}`}>
+                                                    {blog.description}
+                                                </h3>
+                                            </div>
+                                        </div>
+
+                                        {/* Hover overlay */}
+                                        <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div id="view-part-3">
+                        <h1 id="part-3-header" className={`text-2xl md:text-3xl font-bold leading-tight lg:mb-6 text-[#18042A] ${bricolage.className}`}>Editor's Pick</h1>
+                        <div id="vp-3-blogs-container" className="w-full flex gap-6">
+                            <div className="w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                                {view1Array.slice(0,6).map((blog) => (
+                                    <div id="editor-blog-container" className="flex flex-row w-full h-30 p-2 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
+                                        <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
+                                            <img src={blog.image} className="object-cover"/>
+                                        </div>
+                                        <div id="editor-blog-text-container" className="flex flex-col justify-center">
+                                            <span className={`text-sm font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
+                                                {blog.description}
+                                            </span>
+                                            <span className={`text-xs font-bold leading-tight font-thin text-[#18042A] ${bricolage.className}`}>
+                                                {blog.author}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 </div>
-
-            </div>
+            </div >
         </>
     )
 }
