@@ -13,6 +13,7 @@ import { Search } from "lucide-react";
 import { FooterSection } from "@/components/FooterSection/MainComponent";
 import { Modal } from "@/components/Modal";
 import Main from "@/components/ServicesSection/Main";
+import Footer from "@/components/FooterSection/Footer";
 
 // interface for testing BlogItems (NOTE: This is not the final structure for Blog Items)
 interface BlogItem {
@@ -161,7 +162,7 @@ const BlogPage: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                    <div id="tag-row" className="w-full h-auto mt-5 flex flex-wrap gap-3 lg:justify-between">
+                    <div id="tag-row" className="w-full h-auto mt-5 flex flex-wrap gap-3">
                         {tags.map((tag, index) => (
                             (index === tagSelected) ? (
                                 <Button id="tag-holder">
@@ -177,7 +178,7 @@ const BlogPage: React.FC = () => {
                 </main>
                 <div id="view-section" className="bg-[#E3DDE9] px-8 lg:px-20">
                     <div id="view-part-1">
-                        <h1 id="part-1-header" className={`text-2xl md:text-3xl font-bold leading-tight lg:mb-6 text-[#18042A] ${bricolage.className}`}>All Blog Posts</h1>
+                        <h1 id="part-1-header" className={`text-2xl md:text-3xl font-bold leading-tight mb-6 text-[#18042A] ${bricolage.className}`}>All Blog Posts</h1>
                         <div id="vp-1-blogs-container" className="w-full flex flex-col lg:flex-row gap-6">
                             {/* Featured Blog Post (Top on mobile, Left Half on desktop) */}
                             {view1Array.length > 0 && (
@@ -256,7 +257,7 @@ const BlogPage: React.FC = () => {
                         </div>
                     </div>
                     <div id="view-part-2">
-                        <h1 id="part-2-header" className={`text-2xl md:text-3xl font-bold leading-tight lg:mb-6 text-[#18042A] ${bricolage.className}`}>Trending</h1>
+                        <h1 id="part-2-header" className={`text-2xl md:text-3xl font-bold leading-tight mt-6 mb-6 text-[#18042A] ${bricolage.className}`}>Trending</h1>
                         <div id="vp-2-blogs-container" className="w-full flex flex-col lg:flex-row gap-6">
                             <div className="w-full grid lg:grid-cols-4 gap-4">
                                 {view1Array.slice(0, 4).map((blog) => (
@@ -294,13 +295,13 @@ const BlogPage: React.FC = () => {
                         </div>
                     </div>
                     <div id="view-part-3">
-                        <h1 id="part-3-header" className={`text-2xl md:text-3xl font-bold leading-tight lg:mb-6 text-[#18042A] ${bricolage.className}`}>Editor's Pick</h1>
-                        <div id="vp-3-blogs-container" className="w-full flex gap-6">
+                        <h1 id="part-3-header" className={`text-2xl md:text-3xl font-bold leading-tight mt-6 mb-6 text-[#18042A] ${bricolage.className}`}>Editor's Pick</h1>
+                        <div id="vp-3-blogs-container" className="w-full flex gap-6 pb-5">
                             <div className="w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                                {view1Array.slice(0,6).map((blog) => (
+                                {view1Array.slice(0, 6).map((blog) => (
                                     <div id="editor-blog-container" className="flex flex-row w-full h-30 p-2 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
                                         <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
-                                            <img src={blog.image} className="object-cover"/>
+                                            <img src={blog.image} className="object-cover" />
                                         </div>
                                         <div id="editor-blog-text-container" className="flex flex-col justify-center">
                                             <span className={`text-sm font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
@@ -317,6 +318,7 @@ const BlogPage: React.FC = () => {
                     </div>
                 </div>
             </div >
+            <Footer />
         </>
     )
 }
