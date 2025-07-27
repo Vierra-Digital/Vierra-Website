@@ -34,7 +34,7 @@ const LoginPage = () => {
     if (status === "authenticated") {
       router.push("/panel");
     }
-    // router.push("/panel");
+    //router.push("/panel");
   }, [status, router]);
 
   const initParticles = () => {

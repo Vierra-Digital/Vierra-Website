@@ -4,6 +4,7 @@ import { Inter } from "next/font/google";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import SignPdfModal from "@/components/ui/SignPdfModal";
+import LtvCalculatorModal from "@/components/ui/LtvCalculatorModal";
 import Link from "next/link";
 import { FiLogOut, FiFileText } from "react-icons/fi";
 import { useSession, signOut } from "next-auth/react";
@@ -15,6 +16,7 @@ const PanelPage = () => {
   const router = useRouter();
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [isLtvModalOpen, setIsLtvModalOpen] = useState(false);
   const { data: session, status } = useSession();
 
   useEffect(() => {
@@ -61,6 +63,14 @@ const PanelPage = () => {
               >
                 <FiFileText className="w-5 h-5" />
                 <span className={`ml-3 text-sm font-medium ${inter.className}`}>PDF Signer</span>
+              </button>
+              <button
+                onClick={() => setIsLtvModalOpen(true)}
+                className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
+                aria-label="Open LTV Calculator"
+              >
+                <span className="w-5 h-5 flex items-center justify-center font-bold text-lg">Σ</span>
+                <span className={`ml-3 text-sm font-medium ${inter.className}`}>LTV Calculator</span>
               </button>
             </div>
 
@@ -117,6 +127,12 @@ const PanelPage = () => {
           onClose={() => setIsSettingsModalOpen(false)}
           user={session?.user || {}}
         /> */}
+        {isLtvModalOpen && (
+          <LtvCalculatorModal
+            isOpen={isLtvModalOpen}
+            onClose={() => setIsLtvModalOpen(false)}
+          />
+        )}
       </>
     );
   }
