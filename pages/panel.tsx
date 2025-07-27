@@ -7,12 +7,14 @@ import SignPdfModal from "@/components/ui/SignPdfModal";
 import Link from "next/link";
 import { FiLogOut, FiFileText } from "react-icons/fi";
 import { useSession, signOut } from "next-auth/react";
+import UserSettingsModal from "../components/UserSettingsModal";
 
 const inter = Inter({ subsets: ["latin"] });
 
 const PanelPage = () => {
   const router = useRouter();
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const { data: session, status } = useSession();
 
   useEffect(() => {
@@ -72,17 +74,48 @@ const PanelPage = () => {
             </button>
           </div>
 
-          <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col">
+          {/* Profile image button for settings modal */}
+          <div className="h-16 bg-[#2E0A4F] flex items-center pl-64 pr-8 justify-end relative">
+            <button
+              className="ml-4 flex items-center focus:outline-none absolute right-8 top-1/2 -translate-y-1/2"
+              onClick={() => setIsSettingsModalOpen(true)}
+              aria-label="Open user settings"
+            >
+                <Image
+                  src={
+                    typeof session?.user?.image === "string" && session.user.image.length > 0
+                      ? session.user.image
+                      : "/assets/vierra-logo.png"
+                  }
+                  alt="Profile"
+                  width={48}
+                  height={48}
+                  className="object-cover w-full h-full"
+                  priority
+                  quality={100}
+                />
+            </button>
             <div className="h-16 bg-[#2E0A4F] flex items-center pl-64 pr-8 justify-end"></div>
-
             <div className="flex-1 p-8 flex flex-col items-start justify-start">
             </div>
           </div>
+        </div>
         </div>
         <SignPdfModal
           isOpen={isSignModalOpen}
           onClose={() => setIsSignModalOpen(false)}
         />
+        {/* <UserSettingsModal
+          open={isSettingsModalOpen}
+          onClose={() => setIsSettingsModalOpen(false)}
+          user={session?.user || {}}
+        /> */}
+      <UserSettingsModal
+        open={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        user={session?.user || { name: "Test User", email: "test@vierra.com", image: "/assets/vierra-logo.png" }}
+      />
       </>
     );
   }
