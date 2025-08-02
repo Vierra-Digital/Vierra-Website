@@ -34,7 +34,7 @@ const LoginPage = () => {
     if (status === "authenticated") {
       router.push("/panel");
     }
-    // router.push("/panel");
+    //router.push("/panel");
   }, [status, router]);
 
   const initParticles = () => {
@@ -47,9 +47,9 @@ const LoginPage = () => {
     e.preventDefault();
     setError("");
 
-    // // Temporary direct access - REMOVE THIS IN PRODUCTION
-    // localStorage.setItem("isAuthenticated", "true");
-    // router.push("/panel");
+    // Temporary direct access - REMOVE THIS IN PRODUCTION
+    //localStorage.setItem("isAuthenticated", "true");
+    //router.push("/panel");
 
 
     try {
