@@ -4,16 +4,20 @@ import { Inter } from "next/font/google";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import SignPdfModal from "@/components/ui/SignPdfModal";
+import LtvCalculatorModal from "@/components/ui/LtvCalculatorModal";
 import AddClientsModal from "@/components/ui/AddClientsModal";
 import Link from "next/link";
 import { FiLogOut, FiFileText, FiUsers } from "react-icons/fi";
 import { useSession, signOut } from "next-auth/react";
+import UserSettingsPage from "@/components/UserSettingsPage";
 
 const inter = Inter({ subsets: ["latin"] });
 
 const PanelPage = () => {
   const router = useRouter();
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [isLtvModalOpen, setIsLtvModalOpen] = useState(false);
   const [isAddClientsOpen, setIsAddClientsOpen] = useState(false);
   const { data: session, status } = useSession();
 
@@ -63,6 +67,14 @@ const PanelPage = () => {
                 <span className={`ml-3 text-sm font-medium ${inter.className}`}>PDF Signer</span>
               </button>
               <button
+                onClick={() => setIsLtvModalOpen(true)}
+                className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
+                aria-label="Open LTV Calculator"
+              >
+                <span className="w-5 h-5 flex items-center justify-center font-bold text-lg">Σ</span>
+                <span className={`ml-3 text-sm font-medium ${inter.className}`}>LTV Calculator</span>
+              </button>
+              <button
                 onClick={() => setIsAddClientsOpen(true)}
                 className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
                 aria-label="Open LTV Calculator"
@@ -82,17 +94,55 @@ const PanelPage = () => {
             </button>
           </div>
 
-          <div className="flex-1 flex flex-col">
-            <div className="h-16 bg-[#2E0A4F] flex items-center pl-64 pr-8 justify-end"></div>
-
-            <div className="flex-1 p-8 flex flex-col items-start justify-start">
-            </div>
+        <div className="flex-1 flex flex-col">
+          {/* Top header bar */}
+          <div className="h-16 bg-[#2E0A4F] flex items-center pl-64 pr-8 justify-end relative">
+            <button
+              className="ml-4 flex items-center focus:outline-none absolute right-8 top-1/2 -translate-y-1/2"
+              aria-label="Open user settings"
+              onClick={() => setShowSettings((prev) => !prev)}
+            >
+              <Image
+                src={
+                  typeof session?.user?.image === "string" && session.user.image.length > 0
+                    ? session.user.image
+                    : "/assets/vierra-logo.png"
+                }
+                alt="Profile"
+                width={48}
+                height={48}
+                className="object-cover w-full h-full"
+                priority
+                quality={100}
+              />
+            </button>
           </div>
+          {/* Main content area */}
+          <div className="flex-1 flex items-center justify-center">
+            {showSettings ? (
+              <UserSettingsPage user={session?.user || { name: "Test User", email: "test@vierra.com", image: "/assets/vierra-logo.png" }} />
+            ) : (
+              // You can put your dashboard or leave this empty for now
+              null
+            )}
+          </div>
+        </div>
         </div>
         <SignPdfModal
           isOpen={isSignModalOpen}
           onClose={() => setIsSignModalOpen(false)}
         />
+        {/* <UserSettingsModal
+          open={isSettingsModalOpen}
+          onClose={() => setIsSettingsModalOpen(false)}
+          user={session?.user || {}}
+        /> */}
+        {isLtvModalOpen && (
+          <LtvCalculatorModal
+            isOpen={isLtvModalOpen}
+            onClose={() => setIsLtvModalOpen(false)}
+          />
+        )}
         {isAddClientsOpen && (
           <AddClientsModal
             isOpen={isAddClientsOpen}
