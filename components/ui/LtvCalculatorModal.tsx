@@ -34,6 +34,7 @@ interface LtvCalculatorModalProps {
   onClose: () => void;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export default function LtvCalculatorModal({ isOpen, onClose }: LtvCalculatorModalProps) {
     const [values, setValues] = useState(defValues);
     const { LTV, retainer } = calculateLTV(values);
