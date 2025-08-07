@@ -3,27 +3,37 @@ import { v4 as uuidv4 } from "uuid";
 import fs from "fs";
 import path from "path";
 
-// Store sessions in a JSON file for demo purposes
-const SESSIONS_PATH = path.resolve(process.cwd(), "client_sessions.json");
-
-function saveClientSession(token: string, data: any) {
-  let sessions: { [key: string]: any } = {};
-  if (fs.existsSync(SESSIONS_PATH)) {
-    sessions = JSON.parse(fs.readFileSync(SESSIONS_PATH, "utf-8"));
-  }
-  sessions[token] = data;
-  fs.writeFileSync(SESSIONS_PATH, JSON.stringify(sessions, null, 2));
-}
+const sessionsFile = path.join(process.cwd(), "sessions.json");
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
-    return res.status(405).json({ message: "Method not allowed" });
+    return res.status(405).json({ message: "Method Not Allowed" });
   }
-  const { clientName, clientAddress, businessName } = req.body;
-  if (!clientName || !clientAddress || !businessName) {
-    return res.status(400).json({ message: "Missing fields" });
+
+  const { clientName, clientEmail, businessName } = req.body;
+  if (!clientName || !clientEmail || !businessName) {
+    return res.status(400).json({ message: "Missing required fields" });
   }
+
   const token = uuidv4();
-  saveClientSession(token, { clientName, clientAddress, businessName, createdAt: Date.now() });
+  const sessionData = { clientName, clientEmail, businessName, token, createdAt: Date.now() };
+
+  // Read existing sessions or initialize
+  let sessions: Record<string, any> = {};
+  if (fs.existsSync(sessionsFile)) {
+    const fileContent = fs.readFileSync(sessionsFile, "utf-8");
+    try {
+      sessions = JSON.parse(fileContent);
+    } catch {
+      sessions = {};
+    }
+  }
+
+  // Add new session
+  sessions[token] = sessionData;
+
+  // Write back to file
+  fs.writeFileSync(sessionsFile, JSON.stringify(sessions, null, 2));
+
   res.status(200).json({ link: `/session/${token}` });
 }

@@ -1,6 +1,6 @@
 import React, { useState, useRef} from "react";
 import { Bricolage_Grotesque as BricolageGrotesqueFont, Inter as InterFont } from "next/font/google";
-
+import { X } from "lucide-react"
 
 const Bricolage_Grotesque = BricolageGrotesqueFont({ subsets: ["latin"] });
 const inter = InterFont({ subsets: ["latin"] });
@@ -35,22 +35,21 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose }) => {
 
   const handleSubmit = async () => {
     try {
-      const res = await fetch("/api/generateClientSession", {
+        const res = await fetch("/api/generateClientSession", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(clientData),
-      });
-      const data = await res.json();
-      if (data && data.link) {
+        });
+        const data = await res.json();
+        if (data && data.link) {
         setSessionLink(`${window.location.origin}${data.link}`);
-        nextStep();
-      } else {
+        } else {
         setSessionLink("Error generating link.");
-      }
-    } catch {
-      setSessionLink("Error generating link.");
-    }
-    nextStep();
+        }
+        } catch {
+            setSessionLink("Error generating link.");
+        }
+        nextStep();
   };
 
   
@@ -61,7 +60,14 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose }) => {
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60"
       onClick={handleOutsideClick}>
-      <div ref={modalRef} className="bg-[#2E0A4F] rounded-lg p-8 w-full max-w-md">
+      <div ref={modalRef} className="bg-[#2E0A4F] rounded-lg p-8 w-full max-w-md relative">
+        <button
+          className="absolute top-4 right-4 text-gray-400 hover:text-red-500 transition-colors z-10"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          <X size={24} />
+        </button>
         <h2 className={`text-2xl font-bold mb-5 text-center ${Bricolage_Grotesque.className}`}>Add New Client</h2>
         {step === 1 && (
           <>
