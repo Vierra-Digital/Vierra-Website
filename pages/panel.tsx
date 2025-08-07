@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import SignPdfModal from "@/components/ui/SignPdfModal";
 import LtvCalculatorModal from "@/components/ui/LtvCalculatorModal";
-import AddClientsModal from "@/components/ui/AddClientsModal";
+import AddClientModal from "@/components/ui/AddClientModal";
 import Link from "next/link";
 import { FiLogOut, FiFileText, FiUsers } from "react-icons/fi";
 import { useSession, signOut } from "next-auth/react";
@@ -18,7 +18,7 @@ const PanelPage = () => {
   const [isSignModalOpen, setIsSignModalOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [isLtvModalOpen, setIsLtvModalOpen] = useState(false);
-  const [isAddClientsOpen, setIsAddClientsOpen] = useState(false);
+  const [isAddClientOpen, setIsAddClientOpen] = useState(false);
   const { data: session, status } = useSession();
 
   // useEffect(() => {
@@ -35,7 +35,7 @@ const PanelPage = () => {
     );
   }
 
-  if (status === "authenticated") {
+  //if (status === "authenticated") {
     return (
       <>
         <Head>
@@ -75,7 +75,7 @@ const PanelPage = () => {
                 <span className={`ml-3 text-sm font-medium ${inter.className}`}>LTV Calculator</span>
               </button>
               <button
-                onClick={() => setIsAddClientsOpen(true)}
+                onClick={() => setIsAddClientOpen(true)}
                 className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
                 aria-label="Open LTV Calculator"
               >
@@ -143,15 +143,15 @@ const PanelPage = () => {
             onClose={() => setIsLtvModalOpen(false)}
           />
         )}
-        {isAddClientsOpen && (
-          <AddClientsModal
-            isOpen={isAddClientsOpen}
-            onClose={() => setIsAddClientsOpen(false)}
+        {isAddClientOpen && (
+          <AddClientModal
+            isOpen={isAddClientOpen}
+            onClose={() => setIsAddClientOpen(false)}
           />
         )}
       </>
     );
-  }
+  //}
 
   return null;
 };
