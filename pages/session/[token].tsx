@@ -139,8 +139,7 @@ const SessionQuestionnaire = () => {
             className="w-auto h-10"
           />
         </div>
-        
-        {/* Client Info Display */}
+
         <div className="absolute top-8 right-8 z-10 bg-[#2E0A4F]/90 backdrop-blur-md rounded-lg p-4">
           <div className={`text-white text-sm ${inter.className}`}>
             <div><strong>Client:</strong> {sessionData.clientName}</div>
@@ -198,7 +197,6 @@ const SessionQuestionnaire = () => {
                 <button
                   type="button"
                   onClick={nextStep}
-                  // Only require input for text questions
                   disabled={
                     questions[step].type === "text" && !answers[questions[step].name]
                   }
@@ -218,7 +216,6 @@ const SessionQuestionnaire = () => {
                   onClick={async (e) => {
                     e.preventDefault();
                     try {
-                      // Final save with completed status
                       const response = await fetch('/api/submitClientAnswers', {
                         method: 'POST',
                         headers: {
@@ -228,8 +225,7 @@ const SessionQuestionnaire = () => {
                       });
 
                       if (response.ok) {
-                        alert("Questionnaire completed! Thank you for your time. Your answers have been saved automatically.");
-                        // Optionally redirect to a thank you page
+                        alert("Submission Completed");
                       } else {
                         alert("There was an issue finalizing your submission, but your answers have been saved.");
                       }

@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import fs from "fs";
 import path from "path";
 
-const sessionsFile = path.join(process.cwd(), "session.json");
+const sessionsFile = path.join(process.cwd(), "sessions.json");
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
