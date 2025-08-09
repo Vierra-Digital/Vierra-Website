@@ -35,21 +35,24 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose }) => {
 
   const handleSubmit = async () => {
     try {
-        const res = await fetch("/api/generateClientSession", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const response = await fetch('/api/generateClientSession', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify(clientData),
-        });
-        const data = await res.json();
-        if (data && data.link) {
-        setSessionLink(`${window.location.origin}${data.link}`);
-        } else {
-        setSessionLink("Error generating link.");
-        }
-        } catch {
-            setSessionLink("Error generating link.");
-        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSessionLink(data.link);
         nextStep();
+      } else {
+        console.error('Failed to generate session');
+      }
+    } catch (error) {
+      console.error('Error generating session:', error);
+    }
   };
 
   
@@ -144,19 +147,28 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose }) => {
         )}
         {step === 3 && (
           <>
-            <h3 className={`text-lg font-semibold mb-3 ${Bricolage_Grotesque.className}`}>Session Link</h3>
+            <h3 className={`text-lg font-semibold mb-3 ${Bricolage_Grotesque.className}`}>Session Link Generated</h3>
             <div className="mt-6">
-              <p className={inter.className}>
-                Session Link:{" "}
-                <a
-                  href={sessionLink || "#"}
-                  className="text-blue-500"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {sessionLink || "Generating..."}
-                </a>
+              <p className={`mb-2 text-sm ${inter.className}`}>
+                Share this link with {clientData.clientName}:
               </p>
+              <div className="bg-[#18042A]/50 border border-[#701CC0]/50 rounded p-3 mb-4">
+                <p className={`text-sm text-blue-300 break-all ${inter.className}`}>
+                  {sessionLink ? `${window.location.origin}${sessionLink}` : "Generating..."}
+                </p>
+              </div>
+              <button
+                className={`w-full mb-4 px-4 py-2 bg-blue-500 text-white rounded-md shadow hover:scale-105 transition-transform ${inter.className}`}
+                onClick={() => {
+                  if (sessionLink) {
+                    navigator.clipboard.writeText(`${window.location.origin}${sessionLink}`);
+                    alert("Link copied to clipboard!");
+                  }
+                }}
+                disabled={!sessionLink}
+              >
+                Copy Link
+              </button>
             </div>
             <div className="flex justify-end mt-6">
               <button
