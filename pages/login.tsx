@@ -5,7 +5,7 @@ import { Bricolage_Grotesque, Inter } from "next/font/google";
 import { Eye, EyeOff } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Script from "next/script";
-import { signIn, useSession } from "next-auth/react";
+import { signIn, useSession, getSession } from "next-auth/react";
 import { FcGoogle } from "react-icons/fc";
 
 declare global {
@@ -17,29 +17,33 @@ declare global {
   }
 }
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
+const bricolage = Bricolage_Grotesque({ subsets: ["latin"] }, );
 const inter = Inter({ subsets: ["latin"] });
 
 const LoginPage = () => {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const searchParams = useSearchParams();
   const googleError = searchParams ? searchParams.get("error") : null;
 
   useEffect(() => {
-    if (status === "authenticated") {
+    if (status === "loading") return; // wait until session is loaded
+    if (!session) return; // stay on login if no session
+
+    if ((session.user as any).role === "user") {
+      router.push("/client");
+    } else {
       router.push("/panel");
     }
-    //router.push("/panel");
-  }, [status, router]);
+  }, [session, status, router]);
 
   const initParticles = () => {
     if (typeof window !== "undefined" && window.particlesJS) {
-      window.particlesJS.load("particles-container", "/particles-config.json", () => {});
+      window.particlesJS.load("particles-container", "/particles-config.json", () => { });
     }
   };
 
@@ -51,27 +55,23 @@ const LoginPage = () => {
     // localStorage.setItem("isAuthenticated", "true");
     // router.push("/panel");
 
-
     try {
-      const response = await fetch("/users.json");
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      const users = await response.json();
+      const response = await signIn("credentials", { email, password, redirect: false });
 
-      type User = { username: string; password: string };
-      const user = (users as User[]).find(
-        (u) => u.username === username && u.password === password
-      );
+      if (response?.ok) {
+        const session = await getSession();
+        const role = (session?.user as any)?.role;
 
-      if (user) {
-        localStorage.setItem("isAuthenticated", "true");
-        router.push("/panel");
+        if (role === "user") {
+          router.push("/client");
+        } else {
+          router.push("/panel");
+        }
       } else {
-        setError("Invalid username or password");
+        setError(response?.error ?? "Invalid credentials");
       }
     } catch {
-      setError("Login failed. Please check credentials or network.");
+      setError("Invalid credentials");
     }
   };
 
@@ -119,16 +119,16 @@ const LoginPage = () => {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label
-                htmlFor="username"
+                htmlFor="email"
                 className={`block text-sm font-medium text-white ${inter.className}`}
               >
                 Username
               </label>
               <input
                 type="text"
-                id="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                id="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full border border-gray-300 rounded-md p-2 bg-[#18042A] text-white placeholder-gray-400"
                 placeholder="Enter your username"
                 required
