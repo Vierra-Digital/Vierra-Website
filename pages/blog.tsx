@@ -236,15 +236,15 @@ const BlogPage: React.FC = () => {
                                         backgroundRepeat: 'no-repeat'
                                     }}
                                 >
-                                    {/* Purple category tag */}
-                                    <div className="absolute top-6 left-6">
-                                        <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-medium">
-                                            {view1Array[0].title}
-                                        </span>
-                                    </div>
+
 
                                     {/* Content overlay */}
                                     <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
+                                        <div className="mb-4">
+                                            <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium">
+                                                {view1Array[0].title}
+                                            </span>
+                                        </div>
                                         <div className="transform transition-transform duration-300 group-hover:translate-y-[-8px]">
                                             <h2 className={`text-2xl lg:text-3xl font-bold mb-3 leading-tight ${bricolage.className}`}>
                                                 {view1Array[0].description}
@@ -278,15 +278,15 @@ const BlogPage: React.FC = () => {
                                             backgroundRepeat: 'no-repeat'
                                         }}
                                     >
-                                        {/* Purple category tag */}
-                                        <div className="absolute top-4 left-4">
-                                            <span className="bg-purple-600 text-white px-2 py-1 rounded-full text-xs font-medium">
-                                                {blog.title}
-                                            </span>
-                                        </div>
+
 
                                         {/* Content overlay */}
                                         <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
+                                            <div className="mb-4">
+                                                <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-xs font-medium">
+                                                    {blog.title}
+                                                </span>
+                                            </div>
                                             <div className="transform transition-transform duration-300 group-hover:translate-y-[-4px]">
                                                 <h3 className={`text-sm lg:text-base font-bold mb-1 leading-tight ${bricolage.className}`}>
                                                     {blog.description}
@@ -319,15 +319,14 @@ const BlogPage: React.FC = () => {
                                             backgroundRepeat: 'no-repeat'
                                         }}
                                     >
-                                        {/* Purple category tag */}
-                                        <div className="absolute top-4 left-4">
-                                            <span className="bg-purple-600 text-white px-2 py-1 rounded-full text-xs font-medium">
-                                                {blog.title}
-                                            </span>
-                                        </div>
 
                                         {/* Content overlay */}
                                         <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
+                                            <div className="mb-4">
+                                                <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-xs font-medium">
+                                                    {blog.title}
+                                                </span>
+                                            </div>
                                             <div className="transform transition-transform duration-300 group-hover:translate-y-[-4px]">
                                                 <h3 className={`text-sm lg:text-base font-bold mb-1 leading-tight ${bricolage.className}`}>
                                                     {blog.description}
@@ -350,16 +349,16 @@ const BlogPage: React.FC = () => {
                         <div id="vp-3-blogs-container" className="w-full flex gap-6 pb-5">
                             <div className="w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                                 {view1Array.slice(0, 6).map((blog) => (
-                                    <div id="editor-blog-container" className="flex flex-row w-full h-30 p-2 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
+                                    <div id="editor-blog-container" className="flex flex-row w-full h-30 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
                                         <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
                                             <img src={blog.image} className="object-cover" />
                                         </div>
                                         <div id="editor-blog-text-container" className="flex flex-col justify-center">
-                                            <span className={`text-sm font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
+                                            <span className={`text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
                                                 {blog.description}
                                             </span>
-                                            <span className={`text-xs font-bold leading-tight font-thin text-[#18042A] ${bricolage.className}`}>
-                                                {blog.author}
+                                            <span className={`text-sm font-bold font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
+                                                99-99-9999
                                             </span>
                                         </div>
                                     </div>
@@ -367,7 +366,7 @@ const BlogPage: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                    <div id="view-part-4" className="py-20 flex flex-row gap-3">
+                    <div id="view-part-4" className="py-20 flex flex-col lg:flex-row gap-3">
                         <div id="weekly-best" className="flex-[2] w-full">
                             <div id="part-4-heading-row" className="flex w-full flex-row justify-between items-center">
                                 <h1 id="part-4-header" className={`text-2xl md:text-3xl font-bold leading-tight text-[#18042A] ${bricolage.className}`}>Weekly Best</h1>
@@ -384,15 +383,14 @@ const BlogPage: React.FC = () => {
                                             backgroundRepeat: 'no-repeat'
                                         }}
                                     >
-                                        {/* Purple category tag */}
-                                        <div className="absolute top-6 left-6">
-                                            <span className="bg-purple-600 text-white px-3 py-1 rounded-full text-sm font-medium">
-                                                {view1Array[0].title}
-                                            </span>
-                                        </div>
 
                                         {/* Content overlay */}
                                         <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
+                                            <div className="mb-4">
+                                                <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium">
+                                                    {view1Array[0].title}
+                                                </span>
+                                            </div>
                                             <div className="transform transition-transform duration-300 group-hover:translate-y-[-8px]">
                                                 <h2 className={`text-2xl lg:text-3xl font-bold mb-3 leading-tight ${bricolage.className}`}>
                                                     {view1Array[0].description}
@@ -414,18 +412,18 @@ const BlogPage: React.FC = () => {
                                 )}
                             </div>
                             <div id="part-4-weekly-other-container" className="mt-4">
-                                <div className="w-full grid grid-cols-2 sm:grid-cols-2 md:grid-cols-2 gap-4">
+                                <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {view1Array.slice(0, 6).map((blog) => (
-                                        <div id="editor-blog-container" className="flex flex-row w-full h-30 p-2 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
+                                        <div id="editor-blog-container" className="flex flex-row w-full h-30 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
                                             <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
                                                 <img src={blog.image} className="object-cover" />
                                             </div>
                                             <div id="editor-blog-text-container" className="flex flex-col justify-center">
-                                                <span className={`text-sm font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
+                                                <span className={`text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
                                                     {blog.description}
                                                 </span>
-                                                <span className={`text-xs font-bold leading-tight font-thin text-[#18042A] ${bricolage.className}`}>
-                                                    {blog.author}
+                                                <span className={`text-sm font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
+                                                    99-99-9999
                                                 </span>
                                             </div>
                                         </div>
@@ -439,16 +437,16 @@ const BlogPage: React.FC = () => {
                                 <h1 className={`text-[#18042A] font-semibold ${bricolage.className}`}>Popular Posts</h1>
                                 <div className="w-full grid grid-cols-1 sm:grid-cols-1 md:grid-cols-1 gap-4">
                                     {view1Array.slice(0, 6).map((blog) => (
-                                        <div id="editor-blog-container" className="flex flex-row w-full h-30 p-2 gap-3 border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
+                                        <div id="editor-blog-container" className="flex flex-row w-full h-30 p-5 gap-3 border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
                                             <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
                                                 <img src={blog.image} className="object-cover" />
                                             </div>
                                             <div id="editor-blog-text-container" className="flex flex-col justify-center">
-                                                <span className={`text-sm font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
+                                                <span className={`text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
                                                     {blog.description}
                                                 </span>
-                                                <span className={`text-xs font-bold leading-tight font-thin text-[#18042A] ${bricolage.className}`}>
-                                                    {blog.author}
+                                                <span className={`text-sm font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
+                                                    99-99-9999
                                                 </span>
                                             </div>
                                         </div>
