@@ -221,9 +221,9 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
         props: {
             title: post.title,
             content: post.content,
-            imageUrl: post.imageUrl,
-            author: { name: post.author.name },
-            publishedDate: post.publishedDate.toISOString(),
+            imageUrl: post.image_url,
+            author: { name: post.authors.name },
+            publishedDate: post.published_date.toISOString(),
         },
         revalidate: 60, // ISR: re-generate every 60s
     };
