@@ -2,9 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
-import Image from 'next/image';
-import Link from 'next/link';
-import Script from 'next/script';
+import { prisma } from "@/lib/prisma"
 import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -14,69 +12,59 @@ import { FooterSection } from "@/components/FooterSection/MainComponent";
 import { Modal } from "@/components/Modal";
 import Main from "@/components/ServicesSection/Main";
 import Footer from "@/components/FooterSection/Footer";
+import { GetStaticProps } from "next";
+import Link from "next/link";
 
-// interface for testing BlogItems (NOTE: This is not the final structure for Blog Items)
-interface BlogItem {
-    id: string;
+type BlogPostType = {
+    id: number;
+    author_id: number;
     title: string;
-    description: string;
-    author: string;
-    image: string;
-    createdAt: string;
-    category?: string;
-}
+    content: string;
+    image_url?: string | null;
+    published_date: Date;
+    slug: string;
+    is_test?: boolean | null;
+    visits: number;
+    author: {
+        name: string;
+    };
+};
 
-// array for testing BlogItems
-const view1Array: BlogItem[] = [
-    {
-        id: "1",
-        title: "Lorem Ipsum",
-        description: "Lorem ipsum dolor sit amet, on consectetur adipiscing elit. Vivamus",
-        author: "Thomas Walsh",
-        image: "/assets/Team/Paul.png",
-        createdAt: "1"
-    },
-    {
-        id: "2",
-        title: "Lorem Ipsum",
-        description: "Lorem ipsum dolor sit amet, on consectetur adipiscing elit. Vivamus",
-        author: "Thomas Walsh",
-        image: "/assets/Team/Paul.png",
-        createdAt: "2"
-    },
-    {
-        id: "3",
-        title: "Lorem Ipsum",
-        description: "Lorem ipsum dolor sit amet, on consectetur adipiscing elit. Vivamus",
-        author: "Thomas Walsh",
-        image: "/assets/Team/Paul.png",
-        createdAt: "3"
-    },
-    {
-        id: "4",
-        title: "Lorem Ipsum",
-        description: "Lorem ipsum dolor sit amet, on consectetur adipiscing elit. Vivamus",
-        author: "Thomas Walsh",
-        image: "/assets/Team/Paul.png",
-        createdAt: "4"
-    },
-    {
-        id: "5",
-        title: "Lorem Ipsum",
-        description: "Lorem ipsum dolor sit amet, on consectetur adipiscing elit. Vivamus",
-        author: "Thomas Walsh",
-        image: "/assets/Team/Paul.png",
-        createdAt: "5"
-    },
-    {
-        id: "6",
-        title: "Lorem Ipsum",
-        description: "Lorem ipsum dolor sit amet, on consectetur adipiscing elit. Vivamus",
-        author: "Thomas Walsh",
-        image: "/assets/Team/Paul.png",
-        createdAt: "6"
-    }
-]
+type Props = {
+    latestPosts: BlogPostType[];
+    trendingPosts: BlogPostType[];
+};
+
+export const getStaticProps: GetStaticProps<Props> = async () => {
+    const [latestPosts, trendingPosts] = await Promise.all([
+        prisma.blogPost.findMany({
+            orderBy: { published_date: "desc" },
+            take: 10,
+            include: { author: { select: { name: true } } },
+        }),
+        prisma.blogPost.findMany({
+            orderBy: { visits: "desc" },
+            take: 10,
+            include: { author: { select: { name: true } } },
+        }),
+    ]);
+
+    return {
+        props: {
+            latestPosts: latestPosts.map(post => ({
+                ...post,
+                published_date: post.published_date.toISOString(), // convert Date → string
+                author: { name: post.author.name },
+            })),
+            trendingPosts: trendingPosts.map(post => ({
+                ...post,
+                published_date: post.published_date.toISOString(),
+                author: { name: post.author.name },
+            })),
+        },
+        revalidate: 60,
+    };
+};
 
 declare global {
     interface Window {
@@ -93,9 +81,8 @@ const inter = Inter({ subsets: ["latin"] });
 const tags: string[] = ["All Blog Posts", "Latest Blog Posts", "Lorem Ipsum", "Lorem Ipsum", "Lorem Ipsum", "Lorem Ipsum"]
 
 
-const BlogPage: React.FC = () => {
+const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
 
-    const [isModalOpen, setIsModalOpen] = useState(false);
     const [tagSelected, setTagSelected] = useState(0);
 
     const initParticles = () => {
@@ -191,7 +178,7 @@ const BlogPage: React.FC = () => {
                             </div>
                             <div id="subtext-search-row" className="w-full h-auto flex flex-col sm:flex-col md:flex-col lg:flex-row xl:flex-row justify-between">
                                 <div id="subtext-holder" className={`text-[#9BAFC3] text-lg mb-10 max-w-2xl ${inter.className}`}>
-                                    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+                                    <p>Check out the latest news, projects, and insights from Vierra.</p>
                                 </div>
                                 <div id="search-holder" className="flex">
                                     <div className="w-full lg:w-[556px] h-[56px] rounded-full bg-[#F3F3F3] flex items-center px-10 justify-between">
@@ -226,53 +213,56 @@ const BlogPage: React.FC = () => {
                         <h1 id="part-1-header" className={`text-2xl md:text-3xl font-bold leading-tight mb-6 text-[#18042A] ${bricolage.className}`}>All Blog Posts</h1>
                         <div id="vp-1-blogs-container" className="w-full flex flex-col lg:flex-row gap-6">
                             {/* Featured Blog Post (Top on mobile, Left Half on desktop) */}
-                            {view1Array.length > 0 && (
+                            {latestPosts.length > 0 && (
                                 <div
                                     className="w-full lg:flex-[0.5] relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300 hover:scale-[1.02]"
                                     style={{
-                                        backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${view1Array[0].image})`,
+                                        backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${latestPosts[0].image_url})`,
                                         backgroundSize: 'cover',
                                         backgroundPosition: 'center',
                                         backgroundRepeat: 'no-repeat'
                                     }}
                                 >
 
+                                    <Link href={`/blog/${latestPosts[0].slug}`} passHref>
 
-                                    {/* Content overlay */}
-                                    <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
-                                        <div className="mb-4">
-                                            <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium">
-                                                {view1Array[0].title}
-                                            </span>
-                                        </div>
-                                        <div className="transform transition-transform duration-300 group-hover:translate-y-[-8px]">
-                                            <h2 className={`text-2xl lg:text-3xl font-bold mb-3 leading-tight ${bricolage.className}`}>
-                                                {view1Array[0].description}
-                                            </h2>
-                                            <div className="flex flex-row gap-5 items-center mt-4">
-                                                <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
-                                                    {view1Array[0].author}
-                                                </span>
-                                                <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
-                                                    99-99-99
+                                        {/* Content overlay */}
+                                        <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
+                                            <div className="mb-4">
+                                                <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium">
+                                                    Lorem Ipsum
                                                 </span>
                                             </div>
+                                            <div className="transform transition-transform duration-300 group-hover:translate-y-[-8px]">
+                                                <h2 className={`text-2xl lg:text-3xl font-bold mb-3 leading-tight ${bricolage.className}`}>
+                                                    {latestPosts[0].title}
+                                                </h2>
+                                                <div className="flex flex-row gap-5 items-center mt-4">
+                                                    <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
+                                                        {latestPosts[0].author.name}
+                                                    </span>
+                                                    <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
+                                                        99-99-99
+                                                    </span>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
 
-                                    {/* Hover overlay */}
-                                    <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+                                        {/* Hover overlay */}
+                                        <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+                                    </Link>
+
                                 </div>
                             )}
 
                             {/* 2x2 Grid (Bottom on mobile, Right Half on desktop) */}
                             <div className="w-full lg:flex-[0.5] grid grid-cols-2 gap-4">
-                                {view1Array.slice(1, 5).map((blog) => (
+                                {latestPosts.slice(1, 5).map((blog) => (
                                     <div
                                         key={blog.id}
                                         className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300 hover:scale-105"
                                         style={{
-                                            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image})`,
+                                            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image_url})`,
                                             backgroundSize: 'cover',
                                             backgroundPosition: 'center',
                                             backgroundRepeat: 'no-repeat'
@@ -284,12 +274,12 @@ const BlogPage: React.FC = () => {
                                         <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
                                             <div className="mb-4">
                                                 <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-xs font-medium">
-                                                    {blog.title}
+                                                    Lorem Ipsum
                                                 </span>
                                             </div>
                                             <div className="transform transition-transform duration-300 group-hover:translate-y-[-4px]">
                                                 <h3 className={`text-sm lg:text-base font-bold mb-1 leading-tight ${bricolage.className}`}>
-                                                    {blog.description}
+                                                    {blog.title}
                                                 </h3>
                                             </div>
                                         </div>
@@ -308,12 +298,12 @@ const BlogPage: React.FC = () => {
                         </div>
                         <div id="vp-2-blogs-container" className="w-full flex flex-col lg:flex-row gap-6">
                             <div className="w-full grid lg:grid-cols-4 gap-4">
-                                {view1Array.slice(0, 4).map((blog) => (
+                                {trendingPosts.slice(0, 4).map((blog) => (
                                     <div
                                         key={blog.id}
                                         className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300 hover:scale-105"
                                         style={{
-                                            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image})`,
+                                            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image_url})`,
                                             backgroundSize: 'cover',
                                             backgroundPosition: 'center',
                                             backgroundRepeat: 'no-repeat'
@@ -324,12 +314,12 @@ const BlogPage: React.FC = () => {
                                         <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
                                             <div className="mb-4">
                                                 <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-xs font-medium">
-                                                    {blog.title}
+                                                    Lorem Ipsum
                                                 </span>
                                             </div>
                                             <div className="transform transition-transform duration-300 group-hover:translate-y-[-4px]">
                                                 <h3 className={`text-sm lg:text-base font-bold mb-1 leading-tight ${bricolage.className}`}>
-                                                    {blog.description}
+                                                    {blog.title}
                                                 </h3>
                                             </div>
                                         </div>
@@ -348,20 +338,22 @@ const BlogPage: React.FC = () => {
                         </div>
                         <div id="vp-3-blogs-container" className="w-full flex gap-6 pb-5">
                             <div className="w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                                {view1Array.slice(0, 6).map((blog) => (
-                                    <div id="editor-blog-container" className="flex flex-row w-full h-30 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
-                                        <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
-                                            <img src={blog.image} className="object-cover" />
+                                {trendingPosts.slice(0, 6).map((blog) => (
+                                    <Link href={`/blog/${blog.slug}`} passHref>
+                                        <div id="editor-blog-container" className="flex flex-row w-full h-30 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
+                                            <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
+                                                <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
+                                            </div>
+                                            <div id="editor-blog-text-container" className="flex flex-col justify-center">
+                                                <span className={`text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
+                                                    {blog.title}
+                                                </span>
+                                                <span className={`text-sm font-bold font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
+                                                    {blog.published_date ? blog.published_date.toString() : ""}
+                                                </span>
+                                            </div>
                                         </div>
-                                        <div id="editor-blog-text-container" className="flex flex-col justify-center">
-                                            <span className={`text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
-                                                {blog.description}
-                                            </span>
-                                            <span className={`text-sm font-bold font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
-                                                99-99-9999
-                                            </span>
-                                        </div>
-                                    </div>
+                                    </Link>
                                 ))}
                             </div>
                         </div>
@@ -373,11 +365,11 @@ const BlogPage: React.FC = () => {
                                 <button className={`h-fit px-4 py-2 border border-[#646A69] text-[#646A69] rounded-lg ${bricolage.className}`}>View All Posts</button>
                             </div>
                             <div id="part-4-weekly-feature-container" className="mt-4">
-                                {view1Array.length > 0 && (
+                                {trendingPosts.length > 0 && (
                                     <div
                                         className="w-full lg:flex-[0.5] relative h-[453px] rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300 hover:scale-[1.02]"
                                         style={{
-                                            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${view1Array[0].image})`,
+                                            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${trendingPosts[0].image_url})`,
                                             backgroundSize: 'cover',
                                             backgroundPosition: 'center',
                                             backgroundRepeat: 'no-repeat'
@@ -388,19 +380,19 @@ const BlogPage: React.FC = () => {
                                         <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
                                             <div className="mb-4">
                                                 <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium">
-                                                    {view1Array[0].title}
+                                                    Lorem Ipsum
                                                 </span>
                                             </div>
                                             <div className="transform transition-transform duration-300 group-hover:translate-y-[-8px]">
                                                 <h2 className={`text-2xl lg:text-3xl font-bold mb-3 leading-tight ${bricolage.className}`}>
-                                                    {view1Array[0].description}
+                                                    {trendingPosts[0].title}
                                                 </h2>
                                                 <div className="flex flex-row gap-5 items-center mt-4">
                                                     <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
-                                                        {view1Array[0].author}
+                                                        {trendingPosts[0].author.name}
                                                     </span>
                                                     <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
-                                                        99-99-99
+                                                        {trendingPosts[0].published_date ? trendingPosts[0].published_date.toString() : ""}
                                                     </span>
                                                 </div>
                                             </div>
@@ -413,17 +405,18 @@ const BlogPage: React.FC = () => {
                             </div>
                             <div id="part-4-weekly-other-container" className="mt-4">
                                 <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    {view1Array.slice(0, 6).map((blog) => (
+                                    {trendingPosts.slice(0, 6).map((blog) => (
                                         <div id="editor-blog-container" className="flex flex-row w-full h-30 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
                                             <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
-                                                <img src={blog.image} className="object-cover" />
+                                                <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
                                             </div>
                                             <div id="editor-blog-text-container" className="flex flex-col justify-center">
                                                 <span className={`text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
-                                                    {blog.description}
+                                                    {blog.title}
                                                 </span>
                                                 <span className={`text-sm font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
-                                                    99-99-9999
+                                                    {blog.published_date ? blog.published_date.toString() : ""}
+
                                                 </span>
                                             </div>
                                         </div>
@@ -436,17 +429,17 @@ const BlogPage: React.FC = () => {
                             <div id="popular-posts-container" className="flex flex-col p-2 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
                                 <h1 className={`text-[#18042A] font-semibold ${bricolage.className}`}>Popular Posts</h1>
                                 <div className="w-full grid grid-cols-1 sm:grid-cols-1 md:grid-cols-1 gap-4">
-                                    {view1Array.slice(0, 6).map((blog) => (
+                                    {trendingPosts.slice(0, 6).map((blog) => (
                                         <div id="editor-blog-container" className="flex flex-row w-full h-30 p-5 gap-3 border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
                                             <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
-                                                <img src={blog.image} className="object-cover" />
+                                                <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
                                             </div>
                                             <div id="editor-blog-text-container" className="flex flex-col justify-center">
                                                 <span className={`text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
-                                                    {blog.description}
+                                                    {blog.title}
                                                 </span>
                                                 <span className={`text-sm font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
-                                                    99-99-9999
+                                                    {blog.published_date ? blog.published_date.toString() : ""}
                                                 </span>
                                             </div>
                                         </div>

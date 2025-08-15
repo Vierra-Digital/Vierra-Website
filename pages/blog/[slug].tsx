@@ -188,7 +188,7 @@ const BlogViewPage = ({
 }
 
 export const getStaticPaths: GetStaticPaths = async () => {
-    const posts = await prisma.blog_posts.findMany({
+    const posts = await prisma.blogPost.findMany({
         select: { slug: true },
     });
 
@@ -208,9 +208,9 @@ export const getStaticPaths: GetStaticPaths = async () => {
 export const getStaticProps: GetStaticProps = async ({ params }) => {
     const slug = params?.slug as string;
 
-    const post = await prisma.blog_posts.findUnique({
+    const post = await prisma.blogPost.findUnique({
         where: { slug },
-        include: { authors: true },
+        include: { author: true },
     });
 
     if (!post) {
@@ -222,7 +222,7 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
             title: post.title,
             content: post.content,
             imageUrl: post.image_url,
-            author: { name: post.authors.name },
+            author: { name: post.author.name },
             publishedDate: post.published_date.toISOString(),
         },
         revalidate: 60, // ISR: re-generate every 60s

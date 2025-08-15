@@ -81,15 +81,19 @@ model UserToken {
   @@map("user_tokens")
 }
 
-model authors {
-  id         Int          @id @default(autoincrement())
+model Author {
+  id         Int       @id @default(autoincrement())
   name       String
-  email      String?      @unique
+  email      String   @unique
   bio        String?
-  blog_posts blog_posts[]
+  is_test    Boolean?  @default(false)
+
+  blogPosts  BlogPost[]
+
+  @@map("authors")
 }
 
-model blog_posts {
+model BlogPost {
   id             Int      @id @default(autoincrement())
   author_id      Int
   title          String
@@ -97,7 +101,13 @@ model blog_posts {
   image_url      String?
   published_date DateTime @default(now()) @db.Timestamp(6)
   slug           String   @unique
-  authors        authors  @relation(fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_author")
+  is_test        Boolean? @default(false)
+  visits         Int     @default(0)
+
+  author         Author   @relation(fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_author")
+
+  @@index([author_id])
+  @@map("blog_posts")
 }
 
 model staff {
