@@ -134,7 +134,7 @@ const BlogViewPage = ({
                                 <p className={`text-[#9BAFC3] ${inter.className}`}>Scale your practice effortlessly. Fill out your schedules and eliminate no-shows. Scale your practice effortlessly. Fill out your schedules and eliminate no-show</p>
                             </div>
                             <div id="metadata-row" className="w-full h-auto mt-5 flex flex-wrap md:flex-row items-center gap-[24px]">
-                                <p className={`text-[#9BAFC3] ${bricolage.className}`}>{`By ${author}`}</p>
+                                <p className={`text-[#9BAFC3] ${bricolage.className}`}>{`By ${author.name}`}</p>
                                 <div id="tiny-ellipse" className="h-[4px] w-[4px] bg-[#9BAFC3] rounded-full"></div>
                                 <p className={`text-[#9BAFC3] ${bricolage.className}`}>99-99-99</p>
                                 <div id="tiny-ellipse" className="h-[4px] w-[4px] bg-[#9BAFC3] rounded-full"></div>
@@ -221,7 +221,7 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
         props: {
             title: post.title,
             content: post.content,
-            imageUrl: post.image_url,
+            image_url: post.image_url,
             author: { name: post.author.name },
             publishedDate: post.published_date.toISOString(),
         },
