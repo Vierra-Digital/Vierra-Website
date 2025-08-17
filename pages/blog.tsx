@@ -14,6 +14,8 @@ import Main from "@/components/ServicesSection/Main";
 import Footer from "@/components/FooterSection/Footer";
 import { GetStaticProps } from "next";
 import Link from "next/link";
+import { SearchModal } from "@/components/Blog/SearchModal";
+import { AllPostsModal } from "@/components/Blog/AllPostsModal";
 
 type BlogPostType = {
     id: number;
@@ -25,7 +27,7 @@ type BlogPostType = {
     slug: string;
     is_test?: boolean | null;
     visits: number;
-    tag: string;
+    tag?: string;
     author: {
         name: string;
     };
@@ -91,6 +93,8 @@ const tags: string[] = ["All Blog Posts", "Consulting", "Business Insights", "Ne
 const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
 
     const [tagSelected, setTagSelected] = useState(0);
+    const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+    const [isAllPostModalOpen, setIsAllPostModalOpen] = useState(false);
 
     const initParticles = () => {
         if (typeof window !== 'undefined' && window.particlesJS) {
@@ -187,15 +191,16 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                 <div id="subtext-holder" className={`text-[#9BAFC3] text-lg mb-10 max-w-2xl ${inter.className}`}>
                                     <p>Check out the latest news, projects, and insights from Vierra.</p>
                                 </div>
-                                <div id="search-holder" className="flex">
-                                    <div className="w-full lg:w-[556px] h-[56px] rounded-full bg-[#F3F3F3] flex items-center px-10 justify-between">
+                                
+                                <button id="search-holder" className="flex" onClick={() => setIsSearchModalOpen(true)}>
+                                    <div className="w-full lg:w-[556px] h-[56px] rounded-full bg-[#F3F3F3] flex items-center px-10 justify-between cursor-pointer">
                                         <p id="search-text" className={`lg:text-lg text-[#646A69] ${bricolage.className}`}>Search...
                                         </p>
                                         <div id="search-icon-holder">
-                                            <Search className="h-[25px] w-[25px] text-[#646A69]" />
+                                            <Search className="h-[25px] w-[25px] text-[#646A69]"/>
                                         </div>
                                     </div>
-                                </div>
+                                </button>
                             </div>
                             <div id="tag-row" className="w-full h-auto mt-5 flex flex-wrap gap-3">
                                 {tags.map((tag, index) => (
@@ -237,7 +242,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                         <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
                                             <div className="mb-4">
                                                 <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium">
-                                                    Lorem Ipsum
+                                                    {latestPosts[0].tag? latestPosts[0].tag : "Lorem Ipsum"}
                                                 </span>
                                             </div>
                                             <div className="transform transition-transform duration-300 group-hover:translate-y-[-8px]">
@@ -265,35 +270,38 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                             {/* 2x2 Grid (Bottom on mobile, Right Half on desktop) */}
                             <div className="w-full lg:flex-[0.5] grid grid-cols-2 gap-4">
                                 {latestPosts.slice(1, 5).map((blog) => (
-                                    <div
-                                        key={blog.id}
-                                        className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
-                                        style={{
-                                            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image_url})`,
-                                            backgroundSize: 'cover',
-                                            backgroundPosition: 'center',
-                                            backgroundRepeat: 'no-repeat'
-                                        }}
-                                    >
+                                    <Link href={`/blog/${blog.slug}`} passHref>
+
+                                        <div
+                                            key={blog.id}
+                                            className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
+                                            style={{
+                                                backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image_url})`,
+                                                backgroundSize: 'cover',
+                                                backgroundPosition: 'center',
+                                                backgroundRepeat: 'no-repeat'
+                                            }}
+                                        >
 
 
-                                        {/* Content overlay */}
-                                        <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
-                                            <div className="mb-4">
-                                                <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-xs font-medium">
-                                                    Lorem Ipsum
-                                                </span>
+                                            {/* Content overlay */}
+                                            <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
+                                                <div className="mb-4">
+                                                    <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-xs font-medium">
+                                                        {blog.tag? blog.tag : "Lorem Ipsum"}
+                                                    </span>
+                                                </div>
+                                                <div className="transform transition-transform duration-300 group-hover:translate-y-[-4px]">
+                                                    <h3 className={`text-sm lg:text-base font-bold mb-1 leading-tight ${bricolage.className}`}>
+                                                        {blog.title}
+                                                    </h3>
+                                                </div>
                                             </div>
-                                            <div className="transform transition-transform duration-300 group-hover:translate-y-[-4px]">
-                                                <h3 className={`text-sm lg:text-base font-bold mb-1 leading-tight ${bricolage.className}`}>
-                                                    {blog.title}
-                                                </h3>
-                                            </div>
+
+                                            {/* Hover overlay */}
+                                            <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
                                         </div>
-
-                                        {/* Hover overlay */}
-                                        <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
-                                    </div>
+                                    </Link>
                                 ))}
                             </div>
                         </div>
@@ -301,54 +309,59 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                     <div id="view-part-2" className="pt-20">
                         <div id="part-2-heading-row" className="flex w-full flex-row justify-between items-center">
                             <h1 id="part-2-header" className={`text-2xl md:text-3xl font-bold leading-tight mt-6 mb-6 text-[#18042A] ${bricolage.className}`}>Trending</h1>
-                            <button className={`h-fit px-4 py-2 border border-[#646A69] text-[#646A69] rounded-lg ${bricolage.className}`}>View All Posts</button>
+                            <Button onClick={() => setIsAllPostModalOpen(true)} className={`h-fit px-4 py-2 border border-[#646A69] text-[#646A69] rounded-lg ${bricolage.className} hover:text-[#EFF3FF] bg-transparent`}>View All Posts</Button>
                         </div>
                         <div id="vp-2-blogs-container" className="w-full flex flex-col lg:flex-row gap-6">
                             <div className="w-full grid lg:grid-cols-4 gap-4">
                                 {trendingPosts.slice(0, 4).map((blog) => (
-                                    <div
-                                        key={blog.id}
-                                        className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
-                                        style={{
-                                            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image_url})`,
-                                            backgroundSize: 'cover',
-                                            backgroundPosition: 'center',
-                                            backgroundRepeat: 'no-repeat'
-                                        }}
-                                    >
+                                    <Link href={`/blog/${blog.slug}`} passHref>
 
-                                        {/* Content overlay */}
-                                        <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
-                                            <div className="mb-4">
-                                                <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-xs font-medium">
-                                                    Lorem Ipsum
-                                                </span>
+                                        <div
+                                            key={blog.id}
+                                            className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
+                                            style={{
+                                                backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image_url})`,
+                                                backgroundSize: 'cover',
+                                                backgroundPosition: 'center',
+                                                backgroundRepeat: 'no-repeat'
+                                            }}
+                                        >
+
+                                            {/* Content overlay */}
+                                            <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
+                                                <div className="mb-4">
+                                                    <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-xs font-medium">
+                                                        {blog.tag? blog.tag : "Lorem Ipsum"}
+                                                    </span>
+                                                </div>
+                                                <div className="transform transition-transform duration-300 group-hover:translate-y-[-4px]">
+                                                    <h3 className={`text-sm lg:text-base font-bold mb-1 leading-tight ${bricolage.className}`}>
+                                                        {blog.title}
+                                                    </h3>
+                                                </div>
                                             </div>
-                                            <div className="transform transition-transform duration-300 group-hover:translate-y-[-4px]">
-                                                <h3 className={`text-sm lg:text-base font-bold mb-1 leading-tight ${bricolage.className}`}>
-                                                    {blog.title}
-                                                </h3>
-                                            </div>
+
+                                            {/* Hover overlay */}
+                                            <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
                                         </div>
-
-                                        {/* Hover overlay */}
-                                        <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
-                                    </div>
+                                    </Link>
                                 ))}
+
                             </div>
+
                         </div>
                     </div>
                     <div id="view-part-3" className="pt-20">
                         <div id="part-3-heading-row" className="flex w-full flex-row justify-between items-center">
                             <h1 id="part-3-header" className={`text-2xl md:text-3xl font-bold leading-tight mt-6 mb-6 text-[#18042A] ${bricolage.className}`}>Editor's Pick</h1>
-                            <button className={`h-fit px-4 py-2 border border-[#646A69] text-[#646A69] rounded-lg ${bricolage.className}`}>View All Posts</button>
+                            <Button onClick={() => setIsAllPostModalOpen(true)} className={`h-fit px-4 py-2 border border-[#646A69] text-[#646A69] rounded-lg ${bricolage.className} hover:text-[#EFF3FF] bg-transparent`}>View All Posts</Button>
                         </div>
                         <div id="vp-3-blogs-container" className="w-full flex gap-6 pb-5">
                             {/* Blog rectangle cards: Editor's pick  */}
                             <div className="w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                                 {trendingPosts.slice(0, 6).map((blog) => (
                                     <Link href={`/blog/${blog.slug}`} passHref>
-                                        <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
+                                        <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
                                             <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
                                                 <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
                                             </div>
@@ -370,87 +383,97 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                         <div id="weekly-best" className="flex-[2] w-full">
                             <div id="part-4-heading-row" className="flex w-full flex-row justify-between items-center">
                                 <h1 id="part-4-header" className={`text-2xl md:text-3xl font-bold leading-tight text-[#18042A] ${bricolage.className}`}>Weekly Best</h1>
-                                <button className={`h-fit px-4 py-2 border border-[#646A69] text-[#646A69] rounded-lg ${bricolage.className}`}>View All Posts</button>
+                                <Button onClick={() => setIsAllPostModalOpen(true)} className={`h-fit px-4 py-2 border border-[#646A69] text-[#646A69] rounded-lg ${bricolage.className} hover:text-[#EFF3FF] bg-transparent`}>View All Posts</Button>
                             </div>
                             <div id="part-4-weekly-feature-container" className="mt-4">
                                 {trendingPosts.length > 0 && (
-                                    <div
-                                        className="w-full lg:flex-[0.5] relative h-[453px] rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
-                                        style={{
-                                            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${trendingPosts[0].image_url})`,
-                                            backgroundSize: 'cover',
-                                            backgroundPosition: 'center',
-                                            backgroundRepeat: 'no-repeat'
-                                        }}
-                                    >
+                                    <Link href={`/blog/${trendingPosts[0].slug}`} passHref>
 
-                                        {/* Content overlay */}
-                                        <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
-                                            <div className="mb-4">
-                                                <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium">
-                                                    Lorem Ipsum
-                                                </span>
-                                            </div>
-                                            <div className="transform transition-transform duration-300 group-hover:translate-y-[-8px]">
-                                                <h2 className={`text-2xl lg:text-3xl font-bold mb-3 leading-tight ${bricolage.className}`}>
-                                                    {trendingPosts[0].title}
-                                                </h2>
-                                                <div className="flex flex-row gap-5 items-center mt-4">
-                                                    <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
-                                                        {trendingPosts[0].author.name}
-                                                    </span>
-                                                    <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
-                                                        {trendingPosts[0].published_date ? formatDate(trendingPosts[0].published_date) : ""}
+                                        <div
+                                            className="w-full lg:flex-[0.5] relative h-[453px] rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
+                                            style={{
+                                                backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${trendingPosts[0].image_url})`,
+                                                backgroundSize: 'cover',
+                                                backgroundPosition: 'center',
+                                                backgroundRepeat: 'no-repeat'
+                                            }}
+                                        >
+
+                                            {/* Content overlay */}
+                                            <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
+                                                <div className="mb-4">
+                                                    <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium">
+                                                        {trendingPosts[0].tag? trendingPosts[0].tag : "Lorem Ipsum"}
+                                                        
                                                     </span>
                                                 </div>
+                                                <div className="transform transition-transform duration-300 group-hover:translate-y-[-8px]">
+                                                    <h2 className={`text-2xl lg:text-3xl font-bold mb-3 leading-tight ${bricolage.className}`}>
+                                                        {trendingPosts[0].title}
+                                                    </h2>
+                                                    <div className="flex flex-row gap-5 items-center mt-4">
+                                                        <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
+                                                            {trendingPosts[0].author.name}
+                                                        </span>
+                                                        <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
+                                                            {trendingPosts[0].published_date ? formatDate(trendingPosts[0].published_date) : ""}
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
 
-                                        {/* Hover overlay */}
-                                        <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
-                                    </div>
+                                            {/* Hover overlay */}
+                                            <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+                                        </div>
+                                    </Link>
                                 )}
                             </div>
                             <div id="part-4-weekly-other-container" className="mt-4">
                                 <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {trendingPosts.slice(0, 6).map((blog) => (
-                                        <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
-                                            <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
-                                                <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
-                                            </div>
-                                            <div id="editor-blog-text-container" className="flex flex-col justify-center">
-                                                <span className={`text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
-                                                    {blog.title}
-                                                </span>
-                                                <span className={`text-sm font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
-                                                    {blog.published_date ? formatDate(blog.published_date) : ""}
+                                        <Link href={`/blog/${blog.slug}`} passHref>
 
-                                                </span>
+                                            <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
+                                                <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
+                                                    <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
+                                                </div>
+                                                <div id="editor-blog-text-container" className="flex flex-col justify-center">
+                                                    <span className={`text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
+                                                        {blog.title}
+                                                    </span>
+                                                    <span className={`text-sm font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
+                                                        {blog.published_date ? formatDate(blog.published_date) : ""}
+
+                                                    </span>
+                                                </div>
                                             </div>
-                                        </div>
+                                        </Link>
                                     ))}
                                 </div>
                             </div>
 
                         </div>
                         <div id="popular" className="flex-[1] w-full">
-                            <div id="popular-posts-container" className="flex flex-col p-2 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
+                            <div id="popular-posts-container" className="flex flex-col p-2 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden ">
                                 <h1 className={`text-[#18042A] font-semibold ${bricolage.className}`}>Popular Posts</h1>
                                 <div className="w-full grid grid-cols-1 sm:grid-cols-1 md:grid-cols-1 gap-4">
                                     {trendingPosts.slice(0, 6).map((blog) => (
-                                        <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
-                                            <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
-                                                <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
+                                        <Link href={`/blog/${blog.slug}`} passHref>
+
+                                            <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
+                                                <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
+                                                    <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
+                                                </div>
+                                                <div id="editor-blog-text-container" className="flex flex-col justify-center">
+                                                    <span className={`text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
+                                                        {blog.title}
+                                                    </span>
+                                                    <span className={`text-sm font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
+                                                        {blog.published_date ? formatDate(blog.published_date) : ""}
+                                                    </span>
+                                                </div>
                                             </div>
-                                            <div id="editor-blog-text-container" className="flex flex-col justify-center">
-                                                <span className={`text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
-                                                    {blog.title}
-                                                </span>
-                                                <span className={`text-sm font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
-                                                    {blog.published_date ? formatDate(blog.published_date) : ""}
-                                                </span>
-                                            </div>
-                                        </div>
+                                        </Link>
                                     ))}
                                 </div>
                             </div>
@@ -458,6 +481,9 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                     </div>
 
                 </div>
+            {isSearchModalOpen && <SearchModal isOpen={isSearchModalOpen} onClose={() => setIsSearchModalOpen(false)} />}
+            {isAllPostModalOpen && <AllPostsModal isOpen={isAllPostModalOpen} onClose={() => setIsAllPostModalOpen(false)} />}
+              
             </div >
             <Footer />
         </>
