@@ -1,24 +1,24 @@
-"use client";
-import React, { useState } from "react";
-import Head from "next/head";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
-import Image from "next/image";
-import { motion } from "framer-motion";
-import { ArrowUpRight } from "lucide-react";
-import { Button } from "../components/ui/button";
-import { Header } from "@/components/Header";
-import { BusinessSolutions } from "@/components/BusinessSection/BusinessSolutions";
-import Main from "@/components/ServicesSection/Main";
-import TestimonialsSection from "@/components/TestimonialSection/Testimonials";
-import TeamSection from "@/components/TeamSection/Team";
-import { FooterSection } from "@/components/FooterSection/MainComponent";
-import { Modal } from "@/components/Modal";
+"use client"
+import React, { useState } from "react"
+import Head from "next/head"
+import { Bricolage_Grotesque, Inter } from "next/font/google"
+import Image from "next/image"
+import { motion } from "framer-motion"
+import { ArrowUpRight } from "lucide-react"
+import { Button } from "../components/ui/button"
+import { Header } from "@/components/Header"
+import { BusinessSolutions } from "@/components/BusinessSection/BusinessSolutions"
+import Main from "@/components/ServicesSection/Main"
+import TestimonialsSection from "@/components/TestimonialSection/Testimonials"
+import TeamSection from "@/components/TeamSection/Team"
+import { FooterSection } from "@/components/FooterSection/MainComponent"
+import { Modal } from "@/components/Modal"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
-const inter = Inter({ subsets: ["latin"] });
+const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
+const inter = Inter({ subsets: ["latin"] })
 
 export default function Page() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   return (
     <>
@@ -104,7 +104,7 @@ export default function Page() {
               }}
               className={`text-5xl md:text-6xl font-bold leading-tight mb-6 text-[#EFF3FF] ${bricolage.className}`}
             >
-              {Array.from("Generate More Leads For Your Business").map(
+              {Array.from("Risk-Averse Guaranteed Leads For Your Business").map(
                 (letter, index) => (
                   <motion.span
                     key={index}
@@ -151,7 +151,7 @@ export default function Page() {
                 onClick={() => {
                   document.getElementById("services")?.scrollIntoView({
                     behavior: "smooth",
-                  });
+                  })
                 }}
               >
                 What We Do
@@ -250,12 +250,14 @@ export default function Page() {
           </div>
         </section>
       </div>
-      {isModalOpen && <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />}
+      {isModalOpen && (
+        <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      )}
       <BusinessSolutions />
       <Main />
       <TestimonialsSection />
       <TeamSection />
       <FooterSection />
     </>
-  );
+  )
 }
