@@ -25,6 +25,7 @@ type BlogPostType = {
     slug: string;
     is_test?: boolean | null;
     visits: number;
+    tag: string;
     author: {
         name: string;
     };
@@ -75,11 +76,17 @@ declare global {
     }
 }
 
+const formatDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${month}-${day}-${year}`;
+};
 
 const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
 const inter = Inter({ subsets: ["latin"] });
-const tags: string[] = ["All Blog Posts", "Latest Blog Posts", "Lorem Ipsum", "Lorem Ipsum", "Lorem Ipsum", "Lorem Ipsum"]
-
+const tags: string[] = ["All Blog Posts", "Consulting", "Business Insights", "New Findings", "Innovations", "Life at Vierra"]
 
 const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
 
@@ -215,7 +222,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                             {/* Featured Blog Post (Top on mobile, Left Half on desktop) */}
                             {latestPosts.length > 0 && (
                                 <div
-                                    className="w-full lg:flex-[0.5] relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300 hover:scale-[1.02]"
+                                    className="w-full lg:flex-[0.5] relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
                                     style={{
                                         backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${latestPosts[0].image_url})`,
                                         backgroundSize: 'cover',
@@ -242,7 +249,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                                         {latestPosts[0].author.name}
                                                     </span>
                                                     <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
-                                                        99-99-99
+                                                        {formatDate(latestPosts[0].published_date)}
                                                     </span>
                                                 </div>
                                             </div>
@@ -260,7 +267,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                 {latestPosts.slice(1, 5).map((blog) => (
                                     <div
                                         key={blog.id}
-                                        className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300 hover:scale-105"
+                                        className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
                                         style={{
                                             backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image_url})`,
                                             backgroundSize: 'cover',
@@ -301,7 +308,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                 {trendingPosts.slice(0, 4).map((blog) => (
                                     <div
                                         key={blog.id}
-                                        className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300 hover:scale-105"
+                                        className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
                                         style={{
                                             backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image_url})`,
                                             backgroundSize: 'cover',
@@ -349,7 +356,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                                     {blog.title}
                                                 </span>
                                                 <span className={`text-sm font-bold font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
-                                                    {blog.published_date ? blog.published_date.toString() : ""}
+                                                    {blog.published_date ? formatDate(blog.published_date) : ""}
                                                 </span>
                                             </div>
                                         </div>
@@ -367,7 +374,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                             <div id="part-4-weekly-feature-container" className="mt-4">
                                 {trendingPosts.length > 0 && (
                                     <div
-                                        className="w-full lg:flex-[0.5] relative h-[453px] rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300 hover:scale-[1.02]"
+                                        className="w-full lg:flex-[0.5] relative h-[453px] rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
                                         style={{
                                             backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${trendingPosts[0].image_url})`,
                                             backgroundSize: 'cover',
@@ -392,7 +399,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                                         {trendingPosts[0].author.name}
                                                     </span>
                                                     <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
-                                                        {trendingPosts[0].published_date ? trendingPosts[0].published_date.toString() : ""}
+                                                        {trendingPosts[0].published_date ? formatDate(trendingPosts[0].published_date) : ""}
                                                     </span>
                                                 </div>
                                             </div>
@@ -415,7 +422,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                                     {blog.title}
                                                 </span>
                                                 <span className={`text-sm font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
-                                                    {blog.published_date ? blog.published_date.toString() : ""}
+                                                    {blog.published_date ? formatDate(blog.published_date) : ""}
 
                                                 </span>
                                             </div>
@@ -439,7 +446,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                                     {blog.title}
                                                 </span>
                                                 <span className={`text-sm font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
-                                                    {blog.published_date ? blog.published_date.toString() : ""}
+                                                    {blog.published_date ? formatDate(blog.published_date) : ""}
                                                 </span>
                                             </div>
                                         </div>
