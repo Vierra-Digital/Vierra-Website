@@ -344,10 +344,11 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                             <button className={`h-fit px-4 py-2 border border-[#646A69] text-[#646A69] rounded-lg ${bricolage.className}`}>View All Posts</button>
                         </div>
                         <div id="vp-3-blogs-container" className="w-full flex gap-6 pb-5">
+                            {/* Blog rectangle cards: Editor's pick  */}
                             <div className="w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                                 {trendingPosts.slice(0, 6).map((blog) => (
                                     <Link href={`/blog/${blog.slug}`} passHref>
-                                        <div id="editor-blog-container" className="flex flex-row w-full h-30 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
+                                        <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
                                             <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
                                                 <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
                                             </div>
@@ -413,7 +414,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                             <div id="part-4-weekly-other-container" className="mt-4">
                                 <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {trendingPosts.slice(0, 6).map((blog) => (
-                                        <div id="editor-blog-container" className="flex flex-row w-full h-30 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
+                                        <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
                                             <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
                                                 <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
                                             </div>
@@ -437,7 +438,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                 <h1 className={`text-[#18042A] font-semibold ${bricolage.className}`}>Popular Posts</h1>
                                 <div className="w-full grid grid-cols-1 sm:grid-cols-1 md:grid-cols-1 gap-4">
                                     {trendingPosts.slice(0, 6).map((blog) => (
-                                        <div id="editor-blog-container" className="flex flex-row w-full h-30 p-5 gap-3 border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
+                                        <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden">
                                             <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
                                                 <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
                                             </div>
