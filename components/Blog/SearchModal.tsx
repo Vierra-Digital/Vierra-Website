@@ -82,7 +82,7 @@ export function SearchModal({ isOpen, onClose }: ModalProps) {
 
   return (
     <div className="fixed w-full inset-0 bg-black/50 flex items-center justify-center z-[200]" onClick={handleOutsideClick}>
-      <div ref={modalRef} className="bg-white backdrop-blur-md rounded-lg h-full lg:h-[70%] p-6 w-full max-w-4xl shadow-lg relative">
+      <div ref={modalRef} className="bg-white backdrop-blur-md rounded-lg h-full lg:h-[80%] p-6 w-full max-w-4xl shadow-lg relative">
         <button
           className="absolute top-4 right-4 text-black hover:text-[#FF0000] transition-colors"
           onClick={onClose}
