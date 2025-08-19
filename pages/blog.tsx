@@ -268,7 +268,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                             )}
 
                             {/* 2x2 Grid (Bottom on mobile, Right Half on desktop) */}
-                            <div className="w-full lg:flex-[0.5] grid grid-cols-2 gap-4">
+                            <div className="w-full lg:flex-[0.5] grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {latestPosts.slice(1, 5).map((blog) => (
                                     <Link href={`/blog/${blog.slug}`} passHref>
 
@@ -366,7 +366,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                                 <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
                                             </div>
                                             <div id="editor-blog-text-container" className="flex flex-col justify-center">
-                                                <span className={`text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
+                                                <span className={`text-sm md:text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
                                                     {blog.title}
                                                 </span>
                                                 <span className={`text-sm font-bold font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
@@ -438,7 +438,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                                     <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
                                                 </div>
                                                 <div id="editor-blog-text-container" className="flex flex-col justify-center">
-                                                    <span className={`text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
+                                                    <span className={`text-sm md:text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
                                                         {blog.title}
                                                     </span>
                                                     <span className={`text-sm font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
@@ -465,7 +465,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                                     <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
                                                 </div>
                                                 <div id="editor-blog-text-container" className="flex flex-col justify-center">
-                                                    <span className={`text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
+                                                    <span className={`text-sm md:text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
                                                         {blog.title}
                                                     </span>
                                                     <span className={`text-sm font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>

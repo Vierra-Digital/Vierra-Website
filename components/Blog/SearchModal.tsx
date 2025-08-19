@@ -82,7 +82,7 @@ export function SearchModal({ isOpen, onClose }: ModalProps) {
 
   return (
     <div className="fixed w-full inset-0 bg-black/50 flex items-center justify-center z-[200]" onClick={handleOutsideClick}>
-      <div ref={modalRef} className="bg-white backdrop-blur-md rounded-lg lg:h-[80%] p-6 w-full max-w-4xl shadow-lg relative">
+      <div ref={modalRef} className="bg-white backdrop-blur-md rounded-lg h-full lg:h-[70%] p-6 w-full max-w-4xl shadow-lg relative">
         <button
           className="absolute top-4 right-4 text-black hover:text-[#FF0000] transition-colors"
           onClick={onClose}
@@ -95,7 +95,7 @@ export function SearchModal({ isOpen, onClose }: ModalProps) {
               <h2 className={`text-2xl lg:text-3xl font-bold mb-3 leading-tight ${bricolage.className}`}>
                 Search Blog Posts
               </h2>
-              <p className={`text-gray-600 ${inter.className}`}>
+              <p className={`text-sm md:text-lg text-gray-600 ${inter.className}`}>
                 Find articles, insights, and more from Vierra
               </p>
             </div>
@@ -107,13 +107,13 @@ export function SearchModal({ isOpen, onClose }: ModalProps) {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search articles, topics, authors..."
-                    className={`w-full h-14 pl-6 pr-14 rounded-full border-2 border-gray-200 focus:border-purple-500 focus:outline-none transition-colors text-gray-700 ${inter.className}`}
+                    className={`w-full h-10 md:h-14 pl-6 pr-14 rounded-full border-2 text-sm md:text-lg border-gray-200 focus:border-purple-500 focus:outline-none transition-colors text-gray-700 ${inter.className}`}
                   />
                   <button
                     type="submit"
                     className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-purple-600 hover:bg-purple-700 text-white rounded-full p-3 transition-colors"
                   >
-                    <Search size={20} />
+                    <Search className="h-4 w-12 md:h-8 md:w-12"/>
                   </button>
                 </div>
               </form>
@@ -121,7 +121,7 @@ export function SearchModal({ isOpen, onClose }: ModalProps) {
           </div>
           <div id="posts-in-view" className="h-full w-full">
             {loading ? (
-              <div className="grid grid-cols-2 gap-4 w-full">
+              <div className="grid sm:grid-cols-1 md:grid-cols-2 gap-2 md:gap-4 w-full">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <motion.div
                     key={i}
@@ -132,7 +132,7 @@ export function SearchModal({ isOpen, onClose }: ModalProps) {
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-4 w-full">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4 w-full">
                 {allPosts.map(blog => (
                   <Link href={`/blog/${blog.slug}`} passHref>
                     <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
@@ -140,10 +140,10 @@ export function SearchModal({ isOpen, onClose }: ModalProps) {
                         <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
                       </div>
                       <div id="editor-blog-text-container" className="flex flex-col justify-center">
-                        <span className={`text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
+                        <span className={`text-sm md:text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
                           {blog.title}
                         </span>
-                        <span className={`text-sm font-bold font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
+                        <span className={`text-xs md:text-sm font-bold font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
                           {blog.published_date ? formatDate(blog.published_date) : ""}
                         </span>
                       </div>
