@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { motion } from "framer-motion";
+import React, { useState, useEffect, useMemo } from "react"
+import Image from "next/image"
+import { motion } from "framer-motion"
 
 const gridLayout = [
   [false, false, true, false, false, false],
@@ -8,9 +9,10 @@ const gridLayout = [
   [true, false, false, true, false, false],
   [false, false, true, true, true, false],
   [false, true, false, false, false, false],
-];
+]
 
-{/*
+{
+  /*
 
 const titlesMap = {
   "2-2": "Instagram",
@@ -21,20 +23,20 @@ const titlesMap = {
   "4-4": "Email",
 };
 
-*/}
+*/
+}
 
 const animationSets = [
-  
   {
     source: "2-2", // Instagram
     targets: ["0-2", "3-3"], // Placeholder
     paths: [
       "M250,200 L250,60",
-      "M250,290 L250,335 C250,343 258,350 266,350 L310,350"
+      "M250,290 L250,335 C250,343 258,350 266,350 L310,350",
     ],
     colors: ["#9966ff", "#ff5996"],
   },
- 
+
   {
     source: "2-2", // Instagram
     targets: ["3-0", "4-2"], // Facebook, LinkedIn
@@ -51,7 +53,6 @@ const animationSets = [
     paths: [
       "M93,150 L138,150 C144,150 150,156 150,165 L150,210",
       "M93,135 L310,135",
-     
     ],
     colors: ["#F50478", "#1877F2"],
   },
@@ -70,100 +71,97 @@ const animationSets = [
     targets: ["2-3", "5-1"], // Placeholder
     paths: [
       "M455,426 L455,275 C455,255 450,250 440,250 L395,250",
-      "M455,500 L455,555 C455,560 450,565 440,565 L190,565"
-
+      "M455,500 L455,555 C455,560 450,565 440,565 L190,565",
     ],
     colors: ["#E93948", "#FFC600"],
   },
-
-
-];
+]
 
 function GridComponent() {
-  const [activeSet, setActiveSet] = useState(0);
-  const [isAnimating, setIsAnimating] = useState(false);
+  const [activeSet, setActiveSet] = useState(0)
+  const [isAnimating, setIsAnimating] = useState(false)
   const [animationPhase, setAnimationPhase] = useState<
     "drawing" | "showing" | "erasing" | "idle"
-  >("idle");
-  const [activeNodes, setActiveNodes] = useState<string[]>([]);
+  >("idle")
+  const [activeNodes, setActiveNodes] = useState<string[]>([])
 
   useEffect(() => {
-    let targetTimer: NodeJS.Timeout;
-    let eraseTimer: NodeJS.Timeout;
-    let resetTimer: NodeJS.Timeout;
-    let dataFlowInterval: NodeJS.Timer;
-    let intervalTimer: ReturnType<typeof setInterval>;
+    let targetTimer: NodeJS.Timeout
+    let eraseTimer: NodeJS.Timeout
+    let resetTimer: NodeJS.Timeout
+    let dataFlowInterval: NodeJS.Timer
+    let intervalTimer: ReturnType<typeof setInterval>
 
     const runAnimation = () => {
-      const currentSet = animationSets[activeSet];
+      const currentSet = animationSets[activeSet]
 
-      setIsAnimating(true);
-      setAnimationPhase("drawing");
-      setActiveNodes([currentSet.source]);
+      setIsAnimating(true)
+      setAnimationPhase("drawing")
+      setActiveNodes([currentSet.source])
 
       // Draw the main lines
       targetTimer = setTimeout(() => {
-        setActiveNodes([currentSet.source, ...currentSet.targets]);
-        setAnimationPhase("showing");
+        setActiveNodes([currentSet.source, ...currentSet.targets])
+        setAnimationPhase("showing")
 
         // Start data flow animation
-        let progress = 0;
+        let progress = 0
         dataFlowInterval = setInterval(() => {
-          progress = (progress + 0.02) % 1;
-        }, 25);
-      }, 500);
+          progress = (progress + 0.02) % 1
+        }, 25)
+      }, 500)
 
       eraseTimer = setTimeout(() => {
-        setAnimationPhase("erasing");
-      }, 2000);
+        setAnimationPhase("erasing")
+      }, 2000)
 
       resetTimer = setTimeout(() => {
-        setIsAnimating(false);
-        setAnimationPhase("idle");
-        setActiveNodes([]);
-        setActiveSet((prev) => (prev + 1) % animationSets.length);
-      }, 2500);
-    };
+        setIsAnimating(false)
+        setAnimationPhase("idle")
+        setActiveNodes([])
+        setActiveSet((prev) => (prev + 1) % animationSets.length)
+      }, 2500)
+    }
 
     const startAnimationLoop = () => {
-      runAnimation();
-      intervalTimer = setInterval(runAnimation, 3000);
-    };
+      runAnimation()
+      intervalTimer = setInterval(runAnimation, 3000)
+    }
 
     const stopAnimationLoop = () => {
-      clearTimeout(targetTimer);
-      clearTimeout(eraseTimer);
-      clearTimeout(resetTimer);
-      clearInterval(dataFlowInterval as NodeJS.Timeout);
-      clearInterval(intervalTimer);
-    };
+      clearTimeout(targetTimer)
+      clearTimeout(eraseTimer)
+      clearTimeout(resetTimer)
+      clearInterval(dataFlowInterval as NodeJS.Timeout)
+      clearInterval(intervalTimer)
+    }
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        stopAnimationLoop(); // Clear all timers and intervals
-        setActiveSet(0); // Reset to the first animation set
-        setAnimationPhase("idle");
-        setActiveNodes([]);
-        setIsAnimating(false);
-        startAnimationLoop(); // Restart the animation loop
+        stopAnimationLoop() // Clear all timers and intervals
+        setActiveSet(0) // Reset to the first animation set
+        setAnimationPhase("idle")
+        setActiveNodes([])
+        setIsAnimating(false)
+        startAnimationLoop() // Restart the animation loop
       } else {
-        stopAnimationLoop(); // Stop the animation when the tab is hidden
+        stopAnimationLoop() // Stop the animation when the tab is hidden
       }
-    };
+    }
 
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange)
 
-    startAnimationLoop(); // Start the animation loop initially
+    startAnimationLoop() // Start the animation loop initially
 
     return () => {
-      stopAnimationLoop(); // Cleanup on component unmount
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [activeSet]);
+      stopAnimationLoop() // Cleanup on component unmount
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [activeSet])
 
   const isNodeActive = (key: string) => {
-    return activeNodes.includes(key);
-  };
+    return activeNodes.includes(key)
+  }
 
   const pathVariants = useMemo(
     () => ({
@@ -202,7 +200,7 @@ function GridComponent() {
       },
     }),
     []
-  );
+  )
 
   const iconVariants = {
     inactive: {
@@ -223,11 +221,10 @@ function GridComponent() {
         ease: "easeOut",
       },
     },
-  };
+  }
 
   // Renders SVG
   const renderSVG = (key: string, isActive: boolean) => {
-    
     switch (key) {
       /*
       case "0-2": // Tax
@@ -332,100 +329,106 @@ function GridComponent() {
       case "3-0": // Facebook
         return (
           <div
-            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
-              } border flex items-center justify-center`}
+            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${
+              isActive ? "border-transparent" : "border-[#D9DEDD]"
+            } border flex items-center justify-center`}
           >
             {isActive && (
-              <img
+              <Image
                 src="/assets/Socials/Facebook.png"
                 alt="Facebook"
                 className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
           </div>
-        );
+        )
       case "1-4": // Google Analytics
         return (
           <div
-            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
-              } border flex items-center justify-center`}
+            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${
+              isActive ? "border-transparent" : "border-[#D9DEDD]"
+            } border flex items-center justify-center`}
           >
             {isActive && (
-              <img
+              <Image
                 src="/assets/Socials/GoogleAnalytics.png"
                 alt="GoogleAnalytics"
                 className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
           </div>
-        );
+        )
       case "2-2": // Instagram
         return (
           <div
-            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
-              } border flex items-center justify-center`}
+            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${
+              isActive ? "border-transparent" : "border-[#D9DEDD]"
+            } border flex items-center justify-center`}
           >
             {isActive && (
-              <img
+              <Image
                 src="/assets/Socials/Instagram.png"
                 alt="Instagram"
                 className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
           </div>
-        );
+        )
 
       case "2-5": //SEO
         return (
           <div
-          className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
+            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${
+              isActive ? "border-transparent" : "border-[#D9DEDD]"
             } border flex items-center justify-center`}
-        >
-          {isActive && (
-            <img
-              src="/assets/Socials/SEO.png"
-              alt="SEO"
-              className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-            />
-          )}
-        </div>
-        );
+          >
+            {isActive && (
+              <Image
+                src="/assets/Socials/SEO.png"
+                alt="SEO"
+                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
+              />
+            )}
+          </div>
+        )
       case "4-2": // LinkedIn
         return (
           <div
-            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
-              } border flex items-center justify-center`}
+            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${
+              isActive ? "border-transparent" : "border-[#D9DEDD]"
+            } border flex items-center justify-center`}
           >
             {isActive && (
-              <img
+              <Image
                 src="/assets/Socials/LinkedIn.png"
                 alt="LinkedIn"
                 className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
           </div>
-        );
+        )
       case "4-4": // Email
         return (
           <div
-            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${isActive ? "border-transparent" : "border-[#D9DEDD]"
-              } border flex items-center justify-center`}
+            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${
+              isActive ? "border-transparent" : "border-[#D9DEDD]"
+            } border flex items-center justify-center`}
           >
             {isActive && (
-              <img
+              <Image
                 src="/assets/Socials/Email.png"
                 alt="Email"
                 className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
           </div>
-        );
+        )
       default:
         return (
           <div className="w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full border border-[#D9DEDD]" />
-        );
+        )
     }
-  };
+  }
 
   // Renders Each Cell
   const GridCell = ({
@@ -433,18 +436,19 @@ function GridComponent() {
     isFilled,
     isActive,
   }: {
-    cellKey: string;
-    isFilled: boolean;
-    isActive: boolean;
+    cellKey: string
+    isFilled: boolean
+    isActive: boolean
   }) => {
-    if (!isFilled) return null;
+    if (!isFilled) return null
 
     return (
       <motion.div
         key={cellKey}
         aria-label={`Grid cell ${cellKey}`}
-        className={`w-full h-full flex flex-col items-center justify-center border border-[#D9DEDD] rounded-lg ${isActive && "shadow-md"
-          }`}
+        className={`w-full h-full flex flex-col items-center justify-center border border-[#D9DEDD] rounded-lg ${
+          isActive && "shadow-md"
+        }`}
         variants={iconVariants}
         initial={false} // Prevent re-initialization
         animate={isActive ? "active" : "inactive"} // Only change when `isActive` changes
@@ -460,11 +464,11 @@ function GridComponent() {
         )}
           */}
       </motion.div>
-    );
-  };
+    )
+  }
 
-  const width = 600;
-  const height = 600;
+  const width = 600
+  const height = 600
 
   return (
     <div className="relative" style={{ width: "fit-content" }}>
@@ -493,19 +497,19 @@ function GridComponent() {
                       animate={animationPhase}
                       exit="erasing"
                     />
-                  );
+                  )
                 })}
               </mask>
               {animationSets[activeSet].paths.map((path, index) => {
-                const isLastSet = activeSet === animationSets.length - 1; // Check if it's the last active set
-                const isFirstSet = activeSet === 0; // Check if it's the first active set
+                const isLastSet = activeSet === animationSets.length - 1 // Check if it's the last active set
+                const isFirstSet = activeSet === 0 // Check if it's the first active set
                 const gradientDirection = isFirstSet
                   ? index === 0
                     ? { y1: "1", y2: "0" } // Bottom to top for the first path
                     : { y1: "0", y2: "1" } // Top to bottom for the second path
                   : isLastSet
-                    ? { y1: "1", y2: "0" } // Bottom to top for the last set
-                    : { y1: "0", y2: "1" }; // Default top to bottom for other sets
+                  ? { y1: "1", y2: "0" } // Bottom to top for the last set
+                  : { y1: "0", y2: "1" } // Default top to bottom for other sets
                 return (
                   <React.Fragment key={`${activeSet}-${index}`}>
                     <linearGradient
@@ -553,7 +557,7 @@ function GridComponent() {
                       />
                     </linearGradient>
                   </React.Fragment>
-                );
+                )
               })}
             </defs>
             {animationSets[activeSet].paths.map((path, index) => {
@@ -574,7 +578,7 @@ function GridComponent() {
                     fill="url(#gradient)"
                   />
                 </g>
-              );
+              )
             })}
           </>
         )}
@@ -586,8 +590,8 @@ function GridComponent() {
       >
         {gridLayout.map((row, rowIndex) =>
           row.map((isFilled, colIndex) => {
-            const key = `${rowIndex}-${colIndex}`;
-            const isActive = isNodeActive(key);
+            const key = `${rowIndex}-${colIndex}`
+            const isActive = isNodeActive(key)
 
             return (
               <div
@@ -600,12 +604,12 @@ function GridComponent() {
                   isActive={isActive}
                 />
               </div>
-            );
+            )
           })
         )}
       </div>
     </div>
-  );
+  )
 }
 
-export default GridComponent;
+export default GridComponent
