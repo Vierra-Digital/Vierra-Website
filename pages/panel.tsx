@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import SignPdfModal from "@/components/ui/SignPdfModal";
 import LtvCalculatorModal from "@/components/ui/LtvCalculatorModal";
+import MarketingTrackerModal from "@/components/ui/MarketingTrackerModal";
 import Link from "next/link";
 import { FiLogOut, FiFileText, FiUsers } from "react-icons/fi";
 import { useSession, signOut } from "next-auth/react";
@@ -26,6 +27,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
   const [isLtvModalOpen, setIsLtvModalOpen] = useState(false);
   const { data: session, status } = useSession();
   const [isAddClientOpen, setIsAddClientOpen] = useState(false);
+  const [isMarketingTrackerOpen, setIsMarketingTrackerOpen] = useState(false);
   const [items, setItems] = useState<SessionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +92,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             <button
               onClick={() => setIsAddClientOpen(true)}
               className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
-              aria-label="Open LTV Calculator"
+              aria-label="Add Clients"
             >
               <FiUsers className="w-5 h-5" />
               <span className={`ml-3 text-sm font-medium ${inter.className}`}>Add Clients</span>
@@ -103,6 +105,15 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             >
               <FiUsers className="w-5 h-5" />
               <span className={`ml-3 text-sm font-medium ${inter.className}`}>Manage Users</span>
+            </button>
+
+            <button
+              onClick={() => setIsMarketingTrackerOpen(true)}
+              className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
+              aria-label="Marketing Tracker"
+            >
+              <span className="w-5 h-5 flex items-center justify-center font-bold text-lg">$</span>
+              <span className={`ml-3 text-sm font-medium ${inter.className}`}>Marketing</span>
             </button>
 
 
@@ -212,6 +223,12 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
         <LtvCalculatorModal
           isOpen={isLtvModalOpen}
           onClose={() => setIsLtvModalOpen(false)}
+        />
+      )}
+      {isMarketingTrackerOpen && (
+        <MarketingTrackerModal
+          isOpen={isMarketingTrackerOpen}
+          onClose={() => setIsMarketingTrackerOpen(false)}
         />
       )}
       {isAddClientOpen && (
