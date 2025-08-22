@@ -126,8 +126,8 @@ export default function Page() {
               }}
               className={`text-[#9BAFC3] text-lg mb-10 ${inter.className}`}
             >
-              Scale your practice effortlessly. Fill out your schedules and
-              eliminate no-shows.
+              Scale your business effortlessly. Fill in your sales calendar and
+              eliminate risky marketing investments.
             </motion.p>
 
             <motion.div
