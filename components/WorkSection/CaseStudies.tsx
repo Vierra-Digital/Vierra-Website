@@ -1,21 +1,30 @@
-import { Button } from "@/components/ui/button";
-import { ArrowUpRight } from "lucide-react";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { Button } from "@/components/ui/button"
+import { ArrowUpRight } from "lucide-react"
+import { Bricolage_Grotesque, Inter } from "next/font/google"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
-const inter = Inter({ subsets: ["latin"] });
+const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
+const inter = Inter({ subsets: ["latin"] })
 
 export function CaseStudies() {
   return (
     <div className="mt-16 md:mt-32 md:px-20" id="cases">
       <div className="mb-8 md:mb-24">
         <div className="flex flex-col lg:flex-row gap-6 lg:gap-3 items-start lg:items-center max-w-[1200px] mx-auto px-2">
-          <h2 className={`${bricolage.className} text-4xl md:text-6xl lg:text-[96px] leading-tight font-semibold text-white lg:pr-24`}>
+          <h2
+            className={`${bricolage.className} text-4xl md:text-6xl lg:text-[96px] leading-tight font-semibold text-white lg:pr-24`}
+          >
             Why It Works
           </h2>
           <div className="w-full lg:w-[583px]">
-            <p className={`${inter.className} text-white mt-4 lg:mt-6 mb-6 lg:mb-8 text-base font-extralight`}>
-              There&apos;s a pristine methodology to our process, what we do works because we&apos;ve tested our strategies on thousands of practices and refined a one-service and results-based approach. Learn more about drawing in more patients from a team that&apos;s helped scale over $5 million in profits. Obtain free business strategies from the most current professionals in the field.
+            <p
+              className={`${inter.className} text-white mt-4 lg:mt-6 mb-6 lg:mb-8 text-base font-extralight`}
+            >
+              There&apos;s a pristine methodology to our process, what we do
+              works because we&apos;ve tested our strategies on thousands of
+              businesses and refined a one-service and results-based approach.
+              Learn more about drawing in more leads from a team that helped
+              scale over $5 million in profits. Obtain free business strategies
+              from the most current professionals in the field.
             </p>
             <div className="flex gap-4 flex-wrap">
               <Button
@@ -51,7 +60,7 @@ export function CaseStudies() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
-export default CaseStudies;
+export default CaseStudies
