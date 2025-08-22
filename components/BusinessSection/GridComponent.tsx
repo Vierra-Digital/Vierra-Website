@@ -337,6 +337,8 @@ function GridComponent() {
               <Image
                 src="/assets/Socials/Facebook.png"
                 alt="Facebook"
+                width={56}
+                height={56}
                 className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
@@ -353,6 +355,8 @@ function GridComponent() {
               <Image
                 src="/assets/Socials/GoogleAnalytics.png"
                 alt="GoogleAnalytics"
+                width={56}
+                height={56}
                 className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
@@ -369,6 +373,8 @@ function GridComponent() {
               <Image
                 src="/assets/Socials/Instagram.png"
                 alt="Instagram"
+                width={56}
+                height={56}
                 className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
@@ -386,6 +392,8 @@ function GridComponent() {
               <Image
                 src="/assets/Socials/SEO.png"
                 alt="SEO"
+                width={56}
+                height={56}
                 className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
@@ -402,6 +410,8 @@ function GridComponent() {
               <Image
                 src="/assets/Socials/LinkedIn.png"
                 alt="LinkedIn"
+                width={56}
+                height={56}
                 className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
@@ -418,6 +428,8 @@ function GridComponent() {
               <Image
                 src="/assets/Socials/Email.png"
                 alt="Email"
+                width={56}
+                height={56}
                 className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
               />
             )}
