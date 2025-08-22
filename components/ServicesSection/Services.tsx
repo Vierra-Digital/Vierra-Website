@@ -20,25 +20,25 @@ const services: Service[] = [
     id: "01",
     name: "Warm Outreach",
     description:
-      "A stagnant business is worse than a dying one. We use warm outreach methods through our current connections to increase new leads flowing to your business.",
+      "A stagnant business is worse than a dying one. We use warm outreach methods through our connections to drive new leads flowing to your business.",
   },
   {
     id: "02",
     name: "Systems",
     description:
-      "You're not getting new patients because you don't have systematic outreach. We build your foundational systems to pinpoint constraints in your growth and maximize organic lead generation.",
+      "You're not getting new clients because you don't have systematic outreach. We build your foundational systems to pinpoint constraints in your growth and maximize organic lead generation.",
   },
   {
     id: "03",
     name: "Targeted Ads",
     description:
-      "We align with the market's self-interests to push ads that reach an audience that wants your practice. Save money by spending on ad spend that helps you reach your desired audience.",
+      "We use the changing market's self-interests to push ads that reach an audience that wants your service. Save money by spending on premium ad spend that helps reach your desired audience.",
   },
   {
     id: "04",
     name: "Google Analytics",
     description:
-      "Improve your business by making your data work for you. We use results-driven numbers to improve your lead generation and increase patient longevity.",
+      "Improve your business by making your data work for you. We use results-driven numbers to improve lead generation and increase client longevity.",
   },
 ]
 
