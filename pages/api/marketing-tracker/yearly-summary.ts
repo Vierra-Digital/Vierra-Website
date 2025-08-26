@@ -29,7 +29,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
       })
 
-      // If no summary exists, calculate and create one
       if (!yearlySummary) {
         const monthlyData = await prisma.marketingTracker.findMany({
           where: {
@@ -46,7 +45,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           return acc
         }, { attempt: 0, meetingsSet: 0, clientsClosed: 0, revenue: 0 })
 
-        // Use your percentage calculation method
         const calculatePercentage = (numerator: number, denominator: number) => {
           if (denominator === 0) return 0;
           return Math.round(((numerator + denominator)/2) * 100);
@@ -92,7 +90,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return acc
       }, { attempt: 0, meetingsSet: 0, clientsClosed: 0, revenue: 0 })
 
-      // Use your percentage calculation method
       const calculatePercentage = (numerator: number, denominator: number) => {
         if (denominator === 0) return 0;
         return Math.round(((numerator + denominator)/2) * 100);

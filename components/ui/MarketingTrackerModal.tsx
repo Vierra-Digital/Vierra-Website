@@ -165,7 +165,7 @@ const MarketingTrackerModal: React.FC<MarketingTrackerModalProps> = ({
   };
 
   const getComparisonWithPreviousMonth = (currentMonthIndex: number, field: keyof MonthlyData) => {
-    if (currentMonthIndex === 0) return 'stable'; // No previous month for January
+    if (currentMonthIndex === 0) return 'stable'; 
     
     const currentData = getMonthData(currentMonthIndex);
     const previousData = getMonthData(currentMonthIndex - 1);
