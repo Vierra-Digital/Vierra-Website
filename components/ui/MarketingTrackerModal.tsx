@@ -254,7 +254,6 @@ const MarketingTrackerModal: React.FC<MarketingTrackerModalProps> = ({
           <div className="p-6 text-center text-white">Loading...</div>
         ) : (
           <div className="p-6 space-y-8">
-            {/* Unsaved changes indicator */}
             {hasUnsavedChanges && (
               <div className="bg-yellow-900/20 border border-yellow-500/20 rounded-lg p-3 text-center">
                 <span className="text-yellow-300 text-sm font-medium">
@@ -263,7 +262,6 @@ const MarketingTrackerModal: React.FC<MarketingTrackerModalProps> = ({
               </div>
             )}
 
-            {/* First half of the year */}
             <div className="space-y-6">
               <div className="grid grid-cols-7 gap-3">
                 <div className="text-white/70 font-medium text-sm"></div>
@@ -335,7 +333,6 @@ const MarketingTrackerModal: React.FC<MarketingTrackerModalProps> = ({
               </div>
             </div>
 
-            {/* Second half of the year */}
             <div className="space-y-6">
               <div className="grid grid-cols-7 gap-3">
                 <div className="text-white/70 font-medium text-sm"></div>
