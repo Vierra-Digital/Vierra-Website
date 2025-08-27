@@ -21,10 +21,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Hard expiry (1 hour after creation via expiresAt)
     if (session.expiresAt && now > session.expiresAt) {
       if (session.status !== "expired") {
-        await prisma.onboardingSession.update({
-          where: { id: token },
-          data: { status: "expired" },
-        });
+        try {
+          await prisma.onboardingSession.update({
+            where: { id: token },
+            data: { status: "expired" },
+          });
+        } catch (e: any) {
+          console.error("Marking session expired failed", {
+            message: e?.message,
+            code: e?.code,
+            meta: e?.meta,
+            stack: e?.stack,
+          });
+        }
       }
       return res.status(410).json({ message: "Session expired" });
     }
@@ -58,7 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           httpOnly: true,
           sameSite: "lax",
           secure: process.env.NODE_ENV === "production",
-          path: "/api/session", 
+          path: "/api/session",
           maxAge: secondsLeft,
         }),
         // resume cookie for token-less /session route after OAuth
@@ -66,7 +75,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           httpOnly: true,
           sameSite: "lax",
           secure: process.env.NODE_ENV === "production",
-          path: "/",       
+          path: "/",
           maxAge: secondsLeft,
         }),
       ];
