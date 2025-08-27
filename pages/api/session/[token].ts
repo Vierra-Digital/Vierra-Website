@@ -52,7 +52,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // First click - allow and set firstAccessedAt + cookie
       const updated = await prisma.onboardingSession.update({
         where: { id: token },
-        data: { firstAccessedAt: now, status: "in_progress" },
+        data: { firstAccessedAt: now},
         include: { client: true },
       });
 
