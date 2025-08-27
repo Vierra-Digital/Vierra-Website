@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import cookie from "cookie";
+import { parse as parseCookie, serialize as serializeCookie } from "cookie";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
 import { getServerSession } from "next-auth/next";
@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!code || !state) return res.status(400).send("Missing code/state");
 
   // Decide which flow we're in by presence of the state cookie
-  const cookies = cookie.parse(req.headers.cookie || "");
+  const cookies = parseCookie(req.headers.cookie || "");
   const hasStateCookie = !!cookies.fb_oauth_state;
 
   // Verify state
@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // clear cookie
     res.setHeader(
       "Set-Cookie",
-      cookie.serialize("fb_oauth_state", "", {
+      serializeCookie("fb_oauth_state", "", {
         path: "/api/facebook/callback",
         maxAge: 0,
         httpOnly: true,
@@ -60,6 +60,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const expiresAt = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
 
   if (hasStateCookie) {
+
     // LOGGED-IN CONNECT FLOW
     const session = await getServerSession(req, res, authOptions);
     if (!session) return res.redirect("/login");
