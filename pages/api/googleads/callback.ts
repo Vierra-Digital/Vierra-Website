@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import cookie from "cookie";
+import { parse as parseCookie, serialize as serializeCookie } from "cookie";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
 import { getServerSession } from "next-auth/next";
@@ -43,14 +43,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const encRefresh = refresh_token ? encrypt(refresh_token) : undefined;
   const expiresAt  = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
 
-  const cookies = cookie.parse(req.headers.cookie || "");
+  const cookies = parseCookie(req.headers.cookie || "");
   const hasStateCookie = !!cookies.ga_oauth_state;
 
   if (hasStateCookie) {
     // Logged-in Connect flow
     if (!state || cookies.ga_oauth_state !== state) { res.status(400).send("Invalid state"); return; }
     // clear the state cookie
-    res.setHeader("Set-Cookie", cookie.serialize("ga_oauth_state", "", {
+    res.setHeader("Set-Cookie", serializeCookie("ga_oauth_state", "", {
       path: "/api/googleads/callback",
       maxAge: 0,
     }));
@@ -82,7 +82,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
 
   // ensure the resume cookie exists so /session (no token) can load
-  res.setHeader("Set-Cookie", cookie.serialize("ob_session", state, {
+  res.setHeader("Set-Cookie", serializeCookie("ob_session", state, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",

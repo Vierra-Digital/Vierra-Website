@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import cookie from "cookie";
+import { parse as parseCookie, serialize as serializeCookie } from "cookie";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") return res.status(405).json({ message: "Method Not Allowed" });
@@ -45,14 +45,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Single-use link via cookie
     const cookieName = `onb_${token}`;
-    const cookies = cookie.parse(req.headers.cookie || "");
+    const cookies = parseCookie(req.headers.cookie ?? "");
     const hasCookie = Boolean(cookies[cookieName]);
 
     if (!session.firstAccessedAt) {
       // First click - allow and set firstAccessedAt + cookie
       const updated = await prisma.onboardingSession.update({
         where: { id: token },
-        data: { firstAccessedAt: now},
+        data: { firstAccessedAt: now, status: "in_progress" },
         include: { client: true },
       });
 
@@ -63,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const cookiesToSet = [
         // one-time link guard (cookie only needs to come back to this API group)
-        cookie.serialize(`onb_${token}`, "1", {
+        serializeCookie(`onb_${token}`, "1", {
           httpOnly: true,
           sameSite: "lax",
           secure: process.env.NODE_ENV === "production",
@@ -71,7 +71,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           maxAge: secondsLeft,
         }),
         // resume cookie for token-less /session route after OAuth
-        cookie.serialize("ob_session", token, {
+        serializeCookie("ob_session", token, {
           httpOnly: true,
           sameSite: "lax",
           secure: process.env.NODE_ENV === "production",

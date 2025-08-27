@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { randomBytes } from "crypto";
-import cookie from "cookie";
+import { serialize as serializeCookie } from "cookie";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 
@@ -39,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const state = randomBytes(16).toString("hex");
   res.setHeader(
     "Set-Cookie",
-    cookie.serialize("li_oauth_state", state, {
+    serializeCookie("li_oauth_state", state, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",

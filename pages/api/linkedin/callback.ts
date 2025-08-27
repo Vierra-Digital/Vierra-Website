@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import cookie from "cookie";
+import { parse as parseCookie, serialize as serializeCookie } from "cookie";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
 import { requireSession } from "@/lib/auth";
@@ -43,14 +43,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const expiresAt  = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
 
   // Decide flow by presence of state cookie
-  const cookies = cookie.parse(req.headers.cookie || "");
+  const cookies = parseCookie(req.headers.cookie || "");
   const hasStateCookie = !!cookies.li_oauth_state;
 
   if (hasStateCookie) {
     // logged-in connect flow
     if (!state || cookies.li_oauth_state !== state) { res.status(400).send("Invalid state"); return; }
     // clear state cookie
-    res.setHeader("Set-Cookie", cookie.serialize("li_oauth_state", "", {
+    res.setHeader("Set-Cookie", serializeCookie("li_oauth_state", "", {
       path: "/api/linkedin/callback",
       maxAge: 0,
     }));
@@ -81,7 +81,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
 
   // ensure resume cookie exists so /session (no token) can load
-  res.setHeader("Set-Cookie", cookie.serialize("ob_session", state, {
+  res.setHeader("Set-Cookie", serializeCookie("ob_session", state, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
