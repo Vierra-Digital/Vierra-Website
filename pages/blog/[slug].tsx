@@ -25,24 +25,29 @@ type BlogPostProps = {
     content: string;
     image_url?: string;
     author: { name: string };
-    published_date: string;
+    publishedDate: Date;
+    tag: string;
 };
 
 const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
 const inter = Inter({ subsets: ["latin"] });
-const tags: string[] = ["All Blog Posts", "Latest Blog Posts", "Lorem Ipsum", "Lorem Ipsum", "Lorem Ipsum", "Lorem Ipsum"]
 
+const formatDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${month}-${day}-${year}`;
+};
 
 const BlogViewPage = ({
     title,
     content,
     image_url,
     author,
-    published_date,
+    publishedDate,
+    tag
 }: BlogPostProps) => {
-
-    const [tagSelected, setTagSelected] = useState(0);
-
     const initParticles = () => {
         if (typeof window !== 'undefined' && window.particlesJS) {
             window.particlesJS.load('particles-container', '/particles-config.json', () => {
@@ -136,11 +141,11 @@ const BlogViewPage = ({
                             <div id="metadata-row" className="w-full h-auto mt-5 flex flex-wrap md:flex-row items-center gap-[24px]">
                                 <p className={`text-[#9BAFC3] ${bricolage.className}`}>{`By ${author.name}`}</p>
                                 <div id="tiny-ellipse" className="h-[4px] w-[4px] bg-[#9BAFC3] rounded-full"></div>
-                                <p className={`text-[#9BAFC3] ${bricolage.className}`}>99-99-99</p>
+                                <p className={`text-[#9BAFC3] ${bricolage.className}`}>{formatDate(publishedDate)}</p>
                                 <div id="tiny-ellipse" className="h-[4px] w-[4px] bg-[#9BAFC3] rounded-full"></div>
                                 <div id="meta-colorbox">
                                     <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium">
-                                        Lorem Ipsum
+                                        {tag}
                                     </span>
                                 </div>
                             </div>
@@ -224,6 +229,7 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
             image_url: post.image_url,
             author: { name: post.author.name },
             publishedDate: post.published_date.toISOString(),
+            tag: post.tag
         },
         revalidate: 60, // ISR: re-generate every 60s
     };

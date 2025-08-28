@@ -88,22 +88,60 @@ const formatDate = (dateString: string): string => {
 
 const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
 const inter = Inter({ subsets: ["latin"] });
-const tags: string[] = ["All Blog Posts", "Consulting", "Business Insights", "New Findings", "Innovations", "Life at Vierra"]
+const tags: string[] = ["All Blog Posts", "Case Studies", "Technology", "AI & Automation", "Finance", "Marketing", "Sales", "Management", "Leadership"]
+
+
+
 
 const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
 
     const [tagSelected, setTagSelected] = useState(0);
+    const [tagSelectedName, setTagSelectedName] = useState("All Blog Posts");
     const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
     const [isAllPostModalOpen, setIsAllPostModalOpen] = useState(false);
+    const [filteredLatestPosts, setFilteredLatestPosts] = useState<BlogPostType[]>([])
+    const [filteredTrendingPosts, setFilteredTrendingPosts] = useState<BlogPostType[]>([])
+    const [loading, setLoading] = useState(false);
 
-    const initParticles = () => {
-        if (typeof window !== 'undefined' && window.particlesJS) {
-            window.particlesJS.load('particles-container', '/particles-config.json', () => {
-                console.log('particles.js loaded - callback');
-            });
+    const filterPostsByTag = (tagName: string, posts: BlogPostType[]) => {
+        if (tagName === "All Blog Posts") {
+            return posts;
+        }
+        return posts.filter(post => post.tag === tagName);
+    };
+
+    const handleTagSwitch = async (index: number) => {
+        const name = tags[index];
+        setTagSelected(index);
+        setTagSelectedName(name);
+        setLoading(true);
+
+        try {
+            // Filter both latest and trending posts by the selected tag
+            const filteredLatest = filterPostsByTag(name, latestPosts);
+            const filteredTrending = filterPostsByTag(name, trendingPosts);
+
+            setFilteredLatestPosts(filteredLatest);
+            setFilteredTrendingPosts(filteredTrending);
+        } catch (error) {
+            console.error("Error filtering posts:", error);
+            setFilteredLatestPosts([]);
+            setFilteredTrendingPosts([]);
+        } finally {
+            setLoading(false);
         }
     };
+
+
+
     const router = useRouter();
+
+
+    // Initialize filtered posts on component mount
+    useEffect(() => {
+        setFilteredLatestPosts(latestPosts);
+        setFilteredTrendingPosts(trendingPosts);
+    }, [latestPosts, trendingPosts]);
 
     useEffect(() => {
         router.push("/blog")
@@ -191,30 +229,40 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                 <div id="subtext-holder" className={`text-[#9BAFC3] text-lg mb-10 max-w-2xl ${inter.className}`}>
                                     <p>Check out the latest news, projects, and insights from Vierra.</p>
                                 </div>
-                                
+
                                 <button id="search-holder" className="flex" onClick={() => setIsSearchModalOpen(true)}>
                                     <div className="w-full lg:w-[556px] h-[56px] rounded-full bg-[#F3F3F3] flex items-center px-10 justify-between cursor-pointer">
                                         <p id="search-text" className={`lg:text-lg text-[#646A69] ${bricolage.className}`}>Search...
                                         </p>
                                         <div id="search-icon-holder">
-                                            <Search className="h-[25px] w-[25px] text-[#646A69]"/>
+                                            <Search className="h-[25px] w-[25px] text-[#646A69]" />
                                         </div>
                                     </div>
                                 </button>
                             </div>
                             <div id="tag-row" className="w-full h-auto mt-5 flex flex-wrap gap-3">
                                 {tags.map((tag, index) => (
-                                    (index === tagSelected) ? (
-                                        <Button id="tag-holder">
-                                            <p className={`text-lg text-[#EFF3FF] ${bricolage.className}`}>{tag}</p>
-                                        </Button>
-                                    ) : (
-                                        <Button id="tag-holder" className="bg-transparent text-[#F3F3F3] border rounded-lg border-[#F3F3F3] hover:text-[#EFF3FF]" onClick={() => setTagSelected(index)}>
-                                            <p className={`text-lg  ${bricolage.className}`}>{tag}</p>
-                                        </Button>
-                                    )
+                                    <Button
+                                        key={index}
+                                        id="tag-holder"
+                                        className={
+                                            index === tagSelected
+                                                ? `bg-[#701CC0] hover:bg-[#5a1799] text-[#EFF3FF] border-none`
+                                                : `bg-transparent text-[#F3F3F3] border rounded-lg border-[#F3F3F3] hover:text-[#EFF3FF] hover:bg-[#701CC0] hover:border-[#701CC0]`
+                                        }
+                                        onClick={() => handleTagSwitch(index)}
+                                        disabled={loading}
+                                    >
+                                        <p className={`text-lg ${bricolage.className}`}>{tag}</p>
+                                    </Button>
                                 ))}
                             </div>
+                            {loading && (
+                                <div className="mt-4 text-center">
+                                    <p className={`text-[#9BAFC3] ${inter.className}`}>Loading posts...</p>
+                                </div>
+                            )}
+
                         </div>
                     </motion.div>
 
@@ -225,51 +273,57 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                         <h1 id="part-1-header" className={`text-2xl md:text-3xl font-bold leading-tight mb-6 text-[#18042A] ${bricolage.className}`}>All Blog Posts</h1>
                         <div id="vp-1-blogs-container" className="w-full flex flex-col lg:flex-row gap-6">
                             {/* Featured Blog Post (Top on mobile, Left Half on desktop) */}
-                            {latestPosts.length > 0 && (
+                            {!loading && (
                                 <div
                                     className="w-full lg:flex-[0.5] relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
                                     style={{
-                                        backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${latestPosts[0].image_url})`,
+                                        backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${filteredLatestPosts[0] ? filteredLatestPosts[0].image_url : ""})`,
                                         backgroundSize: 'cover',
                                         backgroundPosition: 'center',
                                         backgroundRepeat: 'no-repeat'
                                     }}
                                 >
+                                    {filteredLatestPosts[0] ? (
+                                        <Link href={`/blog/${filteredLatestPosts[0].slug}`} passHref>
 
-                                    <Link href={`/blog/${latestPosts[0].slug}`} passHref>
-
-                                        {/* Content overlay */}
-                                        <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
-                                            <div className="mb-4">
-                                                <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium">
-                                                    {latestPosts[0].tag? latestPosts[0].tag : "Lorem Ipsum"}
-                                                </span>
-                                            </div>
-                                            <div className="transform transition-transform duration-300 group-hover:translate-y-[-8px]">
-                                                <h2 className={`text-2xl lg:text-3xl font-bold mb-3 leading-tight ${bricolage.className}`}>
-                                                    {latestPosts[0].title}
-                                                </h2>
-                                                <div className="flex flex-row gap-5 items-center mt-4">
-                                                    <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
-                                                        {latestPosts[0].author.name}
-                                                    </span>
-                                                    <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
-                                                        {formatDate(latestPosts[0].published_date)}
+                                            {/* Content overlay */}
+                                            <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
+                                                <div className="mb-4">
+                                                    <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium">
+                                                        {filteredLatestPosts[0].tag ? filteredLatestPosts[0].tag : "Lorem Ipsum"}
                                                     </span>
                                                 </div>
+                                                <div className="transform transition-transform duration-300 group-hover:translate-y-[-8px]">
+                                                    <h2 className={`text-2xl lg:text-3xl font-bold mb-3 leading-tight ${bricolage.className}`}>
+                                                        {filteredLatestPosts[0].title}
+                                                    </h2>
+                                                    <div className="flex flex-row gap-5 items-center mt-4">
+                                                        <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
+                                                            {filteredLatestPosts[0].author.name}
+                                                        </span>
+                                                        <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
+                                                            {formatDate(filteredLatestPosts[0].published_date)}
+                                                        </span>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
 
-                                        {/* Hover overlay */}
-                                        <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
-                                    </Link>
+                                            {/* Hover overlay */}
+                                            <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+                                        </Link>
+                                    ) : (
+                                        <div className="absolute inset-0 flex flex-col justify-end p-6 text-white items-center justify-center">
+                                            <p>{`No blogs with the tag "${tagSelectedName}" yet`}</p>
+                                        </div>
+                                    )}
+
 
                                 </div>
                             )}
 
                             {/* 2x2 Grid (Bottom on mobile, Right Half on desktop) */}
                             <div className="w-full lg:flex-[0.5] grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {latestPosts.slice(1, 5).map((blog) => (
+                                {filteredLatestPosts.slice(1, 5).map((blog) => (
                                     <Link href={`/blog/${blog.slug}`} passHref>
 
                                         <div
@@ -288,7 +342,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                             <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
                                                 <div className="mb-4">
                                                     <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-xs font-medium">
-                                                        {blog.tag? blog.tag : "Lorem Ipsum"}
+                                                        {blog.tag ? blog.tag : "Lorem Ipsum"}
                                                     </span>
                                                 </div>
                                                 <div className="transform transition-transform duration-300 group-hover:translate-y-[-4px]">
@@ -313,7 +367,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                         </div>
                         <div id="vp-2-blogs-container" className="w-full flex flex-col lg:flex-row gap-6">
                             <div className="w-full grid lg:grid-cols-4 gap-4">
-                                {trendingPosts.slice(0, 4).map((blog) => (
+                                {filteredTrendingPosts[0] ? filteredTrendingPosts.slice(0, 4).map((blog) => (
                                     <Link href={`/blog/${blog.slug}`} passHref>
 
                                         <div
@@ -331,7 +385,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                             <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
                                                 <div className="mb-4">
                                                     <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-xs font-medium">
-                                                        {blog.tag? blog.tag : "Lorem Ipsum"}
+                                                        {blog.tag ? blog.tag : "Lorem Ipsum"}
                                                     </span>
                                                 </div>
                                                 <div className="transform transition-transform duration-300 group-hover:translate-y-[-4px]">
@@ -345,7 +399,32 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                             <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
                                         </div>
                                     </Link>
-                                ))}
+                                )) : (
+                                    <div
+                                        className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
+                                        style={{
+                                            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6))`,
+                                            backgroundSize: 'cover',
+                                            backgroundPosition: 'center',
+                                            backgroundRepeat: 'no-repeat'
+                                        }}
+                                    >
+
+                                        {/* Content overlay */}
+                                        <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
+                                            <div className="mb-4">
+
+                                            </div>
+                                            <div className="transform transition-transform duration-300 group-hover:translate-y-[-4px]">
+                                                <h3 className={`text-sm lg:text-base font-bold mb-1 leading-tight ${bricolage.className}`}>
+                                                    {`No blogs with the tag "${tagSelectedName}" yet`}
+
+                                                </h3>
+                                            </div>
+                                        </div>
+
+                                    </div>
+                                )}
 
                             </div>
 
@@ -359,7 +438,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                         <div id="vp-3-blogs-container" className="w-full flex gap-6 pb-5">
                             {/* Blog rectangle cards: Editor's pick  */}
                             <div className="w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                                {trendingPosts.slice(0, 6).map((blog) => (
+                                {filteredTrendingPosts[0] ? filteredTrendingPosts.slice(0, 6).map((blog) => (
                                     <Link href={`/blog/${blog.slug}`} passHref>
                                         <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
                                             <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
@@ -375,7 +454,20 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                             </div>
                                         </div>
                                     </Link>
-                                ))}
+                                )) : (
+                                    <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
+                                        <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
+                                        </div>
+                                        <div id="editor-blog-text-container" className="flex flex-col justify-center">
+                                            <span className={`text-sm md:text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
+                                                {`No blogs with the tag "${tagSelectedName}" yet`}
+
+                                            </span>
+                                            <span className={`text-sm font-bold font-normal leading-tight mt-2 text-[#18042A] ${bricolage.className}`}>
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -386,13 +478,13 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                 <Button onClick={() => setIsAllPostModalOpen(true)} className={`h-fit px-4 py-2 border border-[#646A69] text-[#646A69] rounded-lg ${bricolage.className} hover:text-[#EFF3FF] bg-transparent`}>View All Posts</Button>
                             </div>
                             <div id="part-4-weekly-feature-container" className="mt-4">
-                                {trendingPosts.length > 0 && (
-                                    <Link href={`/blog/${trendingPosts[0].slug}`} passHref>
+                                {filteredTrendingPosts.length > 0 ? (
+                                    <Link href={`/blog/${filteredTrendingPosts[0].slug}`} passHref>
 
                                         <div
                                             className="w-full lg:flex-[0.5] relative h-[453px] rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
                                             style={{
-                                                backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${trendingPosts[0].image_url})`,
+                                                backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${filteredTrendingPosts[0].image_url})`,
                                                 backgroundSize: 'cover',
                                                 backgroundPosition: 'center',
                                                 backgroundRepeat: 'no-repeat'
@@ -403,20 +495,20 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                             <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
                                                 <div className="mb-4">
                                                     <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium">
-                                                        {trendingPosts[0].tag? trendingPosts[0].tag : "Lorem Ipsum"}
-                                                        
+                                                        {filteredTrendingPosts[0].tag ? filteredTrendingPosts[0].tag : "Lorem Ipsum"}
+
                                                     </span>
                                                 </div>
                                                 <div className="transform transition-transform duration-300 group-hover:translate-y-[-8px]">
                                                     <h2 className={`text-2xl lg:text-3xl font-bold mb-3 leading-tight ${bricolage.className}`}>
-                                                        {trendingPosts[0].title}
+                                                        {filteredTrendingPosts[0].title}
                                                     </h2>
                                                     <div className="flex flex-row gap-5 items-center mt-4">
                                                         <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
-                                                            {trendingPosts[0].author.name}
+                                                            {filteredTrendingPosts[0].author.name}
                                                         </span>
                                                         <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
-                                                            {trendingPosts[0].published_date ? formatDate(trendingPosts[0].published_date) : ""}
+                                                            {filteredTrendingPosts[0].published_date ? formatDate(filteredTrendingPosts[0].published_date) : ""}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -426,11 +518,40 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                             <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
                                         </div>
                                     </Link>
+                                ) : (
+                                    <div
+                                        className="w-full lg:flex-[0.5] relative h-[453px] rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
+                                        style={{
+                                            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${filteredTrendingPosts[0] ? filteredTrendingPosts[0].image_url : ""})`,
+                                            backgroundSize: 'cover',
+                                            backgroundPosition: 'center',
+                                            backgroundRepeat: 'no-repeat'
+                                        }}
+                                    >
+
+                                        <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
+                                            <div className="mb-4">
+                                            
+                                            </div>
+                                            <div className="transform transition-transform duration-300 group-hover:translate-y-[-8px]">
+                                                <h2 className={`text-2xl lg:text-3xl font-bold mb-3 leading-tight ${bricolage.className}`}>
+                                                    {`No blogs with the tag "${tagSelectedName}" yet`}
+                                                </h2>
+                                                <div className="flex flex-row gap-5 items-center mt-4">
+                                                    <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
+                                                    </span>
+                                                    <span className={`text-lg text-[#EFF3FF] ${inter.className}`}>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                    </div>
                                 )}
                             </div>
                             <div id="part-4-weekly-other-container" className="mt-4">
                                 <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    {trendingPosts.slice(0, 6).map((blog) => (
+                                    {filteredTrendingPosts.slice(0, 6).map((blog) => (
                                         <Link href={`/blog/${blog.slug}`} passHref>
 
                                             <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
@@ -457,7 +578,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                             <div id="popular-posts-container" className="flex flex-col p-2 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden ">
                                 <h1 className={`text-[#18042A] font-semibold ${bricolage.className}`}>Popular Posts</h1>
                                 <div className="w-full grid grid-cols-1 sm:grid-cols-1 md:grid-cols-1 gap-4">
-                                    {trendingPosts.slice(0, 6).map((blog) => (
+                                    {filteredTrendingPosts.slice(0, 6).map((blog) => (
                                         <Link href={`/blog/${blog.slug}`} passHref>
 
                                             <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
@@ -481,9 +602,9 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                     </div>
 
                 </div>
-            {isSearchModalOpen && <SearchModal isOpen={isSearchModalOpen} onClose={() => setIsSearchModalOpen(false)} />}
-            {isAllPostModalOpen && <AllPostsModal isOpen={isAllPostModalOpen} onClose={() => setIsAllPostModalOpen(false)} />}
-              
+                {isSearchModalOpen && <SearchModal isOpen={isSearchModalOpen} onClose={() => setIsSearchModalOpen(false)} />}
+                {isAllPostModalOpen && <AllPostsModal isOpen={isAllPostModalOpen} onClose={() => setIsAllPostModalOpen(false)} />}
+
             </div >
             <Footer />
         </>
