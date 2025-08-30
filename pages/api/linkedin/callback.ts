@@ -9,7 +9,9 @@ const asStr = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") { res.status(405).end(); return; }
 
-  const code  = asStr(req.query.code);
+  console.log("[LI] start", { url: req.url, query: req.query });
+
+  const code = asStr(req.query.code);
   const state = asStr(req.query.state);
   if (!code) { res.status(400).send("Missing code"); return; }
 
@@ -27,6 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
   if (!tokenRes.ok) {
     const text = await tokenRes.text();
+    console.error("[LI] token exchange failed", tokenRes.status, text);
     res.status(400).send(`LinkedIn token exchange failed: ${text}`);
     return;
   }
@@ -38,13 +41,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
   if (!access_token) { res.status(400).send("No access token received"); return; }
 
-  const encAccess  = encrypt(access_token);
+  const encAccess = encrypt(access_token);
   const encRefresh = refresh_token ? encrypt(refresh_token) : undefined;
-  const expiresAt  = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
+  const expiresAt = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
 
   // Decide flow by presence of state cookie
   const cookies = parseCookie(req.headers.cookie || "");
   const hasStateCookie = !!cookies.li_oauth_state;
+  console.log("[LI] cookies", Object.keys(cookies));
+  console.log("[LI] env.redirect_uri", process.env.LINKEDIN_REDIRECT_URI);
+  console.log("[LI] hasStateCookie", !!cookies.li_oauth_state);
 
   if (hasStateCookie) {
     // logged-in connect flow
