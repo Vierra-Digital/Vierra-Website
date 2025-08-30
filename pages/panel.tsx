@@ -38,6 +38,9 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
   const [currentSection, setCurrentSection] = useState(0);
   // [0: dashboard, 1: clients, 2: team, 3: marketing]
 
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  // controlling the sidebar
+
   const [isLtvModalOpen, setIsLtvModalOpen] = useState(false)
   const { data: session } = useSession()
   const [isAddClientOpen, setIsAddClientOpen] = useState(false)
@@ -69,7 +72,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
         <title>Vierra | Admin Panel</title>
       </Head>
       <div id="main-panel" className="w-screen h-screen bg-white flex flex-row">
-        <div id="left-side" className="flex flex-col w-[243px] h-full z-20 bg-[#701CC0]">
+        <div id="left-side" className={`flex flex-col  h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
           <div id="vierra-nameplate-body" className="w-full h-20 flex items-center justify-center mb-4">
             <Link href="/">
               <Image
@@ -125,13 +128,30 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
         </div>
         <div id="right-side" className="flex flex-col w-full h-full">
           <div id="right-side-heading" className="flex w-full flex-row h-16 bg-[#F8F0FF]">
+            <div className="md:hidden flex items-center pl-2">
+              <button
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                aria-label="Toggle sidebar"
+              >
+                {/* Hamburger icon */}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-6 w-6 text-[#701CC0]"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            </div>
             <div id="left-side-search-holder" className="flex w-1/2 h-full pl-4 items-center">
               <div id="search-bar" className="w-[270px] h-[36px] z-40 flex items-center border border-[#A6A9AC] rounded-lg gap-x-2 p-2 text-[#A6A9AC] cursor-pointer">
                 <CiSearch height={10} width={10} className="w-6 h-6" />
                 <span className={`text-sm ${inter.className}`}>Search</span>
               </div>
             </div>
-            <div id="right-side-info-holder" className="flex w-1/2 h-full items-center justify-end p-2 gap-x-8 text-[#A6A9AC]">
+            <div id="right-side-info-holder" className="flex w-1/2 h-full items-center justify-end p-2 gap-x-4 md:gap-x-8 text-[#A6A9AC]">
               <IoIosNotificationsOutline height={10} width={10} className="w-8 h-8" />
               <div id="user-holder" className="flex items-center w-auto h-auto">
                 <button
@@ -153,10 +173,10 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                     priority
                     quality={100}
                   />
-                  <div id="name-holder" className="w-auto h-auto text-[#111014] flex items-center font-semibold">
+                  <div id="name-holder" className="hidden w-auto h-auto text-[#111014] md:flex items-center font-semibold">
                     <span className="">{session?.user?.name ? session.user.name : "Vierra Admin"}</span>
                   </div>
-                  <div id="dropdowner" className="">
+                  <div id="dropdowner" className="hidden md:flex">
                     <RiArrowDropDownLine width={32}
                       height={32} className="w-8 h-8" />
                   </div>
