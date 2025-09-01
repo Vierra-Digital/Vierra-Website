@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 import SignPdfModal from "@/components/ui/SignPdfModal"
 import LtvCalculatorModal from "@/components/ui/LtvCalculatorModal"
 import Link from "next/link"
-import { FiLogOut, FiFileText, FiUsers } from "react-icons/fi"
+import { FiLogOut, FiFileText, FiUsers, FiPlus } from "react-icons/fi"
 import { useSession, signOut } from "next-auth/react"
 import UserSettingsPage from "@/components/UserSettingsPage"
 import AddClientModal from "@/components/ui/AddClientModal"
@@ -114,6 +114,17 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               <FiUsers className="w-5 h-5" />
               <span className={`ml-3 text-sm font-medium ${inter.className}`}>
                 Manage Users
+              </span>
+            </button>
+
+            <button
+              onClick={() => router.push("/create-ads")}
+              className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
+              aria-label="Create Ads"
+            >
+              <FiPlus className="w-5 h-5" />
+              <span className={`ml-3 text-sm font-medium ${inter.className}`}>
+                Create Ads
               </span>
             </button>
           </div>

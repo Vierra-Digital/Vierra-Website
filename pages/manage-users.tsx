@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { FiUsers, FiLogOut, FiFileText } from "react-icons/fi"
+import { FiUsers, FiLogOut, FiFileText, FiPlus } from "react-icons/fi"
 import Image from "next/image"
 import Link from "next/link"
 import { Inter } from "next/font/google"
@@ -62,15 +62,24 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
               Dashboard
             </span>
           </button>
-          <button
-            onClick={() => router.push("/manage-users")}
-            className="flex items-center w-full p-2 rounded text-white bg-white/10"
-          >
-            <FiUsers className="w-5 h-5" />
-            <span className={`ml-3 text-sm font-medium ${inter.className}`}>
-              Manage Users
-            </span>
-          </button>
+                      <button
+              onClick={() => router.push("/manage-users")}
+              className="flex items-center w-full p-2 rounded text-white bg-white/10"
+            >
+              <FiUsers className="w-5 h-5" />
+              <span className={`ml-3 text-sm font-medium ${inter.className}`}>
+                Manage Users
+              </span>
+            </button>
+            <button
+              onClick={() => router.push("/create-ads")}
+              className="flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10"
+            >
+              <FiPlus className="w-5 h-5" />
+              <span className={`ml-3 text-sm font-medium ${inter.className}`}>
+                Create Ads
+              </span>
+            </button>
         </div>
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}

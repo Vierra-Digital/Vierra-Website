@@ -3,7 +3,7 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { FiLogOut, FiFileText, FiLink } from "react-icons/fi"
+import { FiLogOut, FiFileText, FiLink, FiPlus } from "react-icons/fi"
 import { Inter } from "next/font/google"
 import type { GetServerSideProps } from "next"
 import { getServerSession } from "next-auth/next"
@@ -73,6 +73,15 @@ export default function ClientsPage({ dashboardHref }: PageProps) {
                 Connect
               </span>
             </button>
+            <button
+              onClick={() => router.push("/create-ads")}
+              className="flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200"
+            >
+              <FiPlus className="w-5 h-5" />
+              <span className={`ml-3 text-sm font-medium ${inter.className}`}>
+                Create Ads
+              </span>
+            </button>
           </div>
 
           <button
@@ -140,20 +149,10 @@ export default function ClientsPage({ dashboardHref }: PageProps) {
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const session = await getServerSession(ctx.req, ctx.res, authOptions)
+
   if (!session) {
     return { redirect: { destination: "/login", permanent: false } }
   }
   const role = (session.user as any).role
-
-  // Not logged in -> login
-  if (!session) {
-    return { redirect: { destination: "/login", permanent: false } }
-  }
-
-  // If not a "user", send to admin panel
-  if ((session.user as any).role !== "user") {
-    return { redirect: { destination: "/panel", permanent: false } }
-  }
-
   return { props: { dashboardHref: role === "user" ? "/client" : "/panel" } }
 }
