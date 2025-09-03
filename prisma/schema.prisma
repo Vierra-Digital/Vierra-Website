@@ -1,11 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
@@ -14,7 +8,172 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ---------- Enums ----------
+model Client {
+  id                 String              @id @default(cuid())
+  name               String
+  email              String              @unique
+  businessName       String
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  userId             Int?                @unique
+  user               User?               @relation("UserClient", fields: [userId], references: [id])
+  onboardingSessions OnboardingSession[]
+
+  @@map("clients")
+}
+
+model OnboardingSession {
+  id              String                    @id @default(uuid())
+  clientId        String
+  createdAt       DateTime                  @default(now())
+  firstAccessedAt DateTime?
+  lastUpdatedAt   DateTime?
+  submittedAt     DateTime?
+  status          OnboardingStatus          @default(pending)
+  answers         Json?
+  expiresAt       DateTime?
+  consumedAt      DateTime?
+  tokens          OnboardingPlatformToken[]
+  client          Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, status])
+  @@index([createdAt])
+  @@map("onboarding_sessions")
+}
+
+model User {
+  id                       Int                        @id @default(autoincrement())
+  email                    String?                    @unique
+  role                     String                     @default("user")
+  passwordEnc              String?
+  client                   Client?                    @relation("UserClient")
+  marketing_tracker        marketing_tracker[]
+  marketing_yearly_summary marketing_yearly_summary[]
+  signed_documents         signed_documents[]
+  tokens                   UserToken[]
+
+  @@map("users")
+}
+
+model OnboardingPlatformToken {
+  id           Int               @id @default(autoincrement())
+  sessionId    String
+  platform     Platform
+  accessToken  String
+  refreshToken String?
+  expiresAt    DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  session      OnboardingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, platform])
+  @@index([sessionId, platform])
+  @@map("onboarding_platform_tokens")
+}
+
+model UserToken {
+  id           Int      @id @default(autoincrement())
+  platform     String
+  accessToken  String
+  createdAt    DateTime @default(now())
+  userId       Int
+  refreshToken String?
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platform])
+  @@index([userId, platform])
+  @@map("user_tokens")
+}
+
+model authors {
+  id         Int          @id @default(autoincrement())
+  name       String
+  email      String?      @unique
+  bio        String?
+  is_test    Boolean?     @default(false)
+  blog_posts blog_posts[]
+}
+
+model blog_posts {
+  id             Int      @id @default(autoincrement())
+  author_id      Int
+  title          String
+  content        String
+  image_url      String?
+  published_date DateTime @default(now()) @db.Timestamp(6)
+  slug           String   @unique
+  is_test        Boolean? @default(false)
+  visits         Int?     @default(0)
+  tag            String?
+  authors        authors  @relation(fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_author")
+}
+
+model marketing_tracker {
+  id                    String   @id
+  userId                Int
+  year                  Int
+  month                 Int
+  attempt               Int      @default(0)
+  meetingsSet           Int      @default(0)
+  clientsClosed         Int      @default(0)
+  revenue               Float    @default(0)
+  attemptsToMeetingsPct Float    @default(0)
+  meetingsToClientsPct  Float    @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @default(now())
+  users                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, year, month])
+  @@index([userId, year])
+}
+
+model marketing_yearly_summary {
+  id                    String   @id
+  userId                Int
+  year                  Int
+  totalAttempt          Int      @default(0)
+  totalMeetingsSet      Int      @default(0)
+  totalClientsLosed     Int      @default(0)
+  totalRevenue          Float    @default(0)
+  attemptsToMeetingsPct Float    @default(0)
+  meetingsToClientsPct  Float    @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @default(now())
+  users                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, year])
+  @@index([userId, year])
+}
+
+model signed_documents {
+  id               String   @id
+  userId           Int
+  originalFilename String
+  signedPdfData    Bytes
+  fileSize         Int
+  signedAt         DateTime @default(now())
+  signerEmail      String?
+  sessionToken     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime
+  users            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionToken])
+  @@index([userId])
+}
+
+model staff {
+  id            Int     @id @default(autoincrement())
+  name          String
+  position      String
+  country       String
+  time_zone     String
+  mentor        String?
+  email         String
+  company_email String
+  strikes       String
+}
+
 enum OnboardingStatus {
   pending
   in_progress
@@ -27,90 +186,4 @@ enum Platform {
   facebook
   googleads
   linkedin
-}
-
-// ---------- Models ----------
-model Client {
-  id           String   @id @default(cuid())
-  name         String
-  email        String   @unique
-  businessName String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  // FK to users.id (1:1); keep it unique
-  userId Int?  @unique
-  // Name the relation so both sides match
-  user   User? @relation("UserClient", fields: [userId], references: [id], onDelete: SetNull)
-
-  onboardingSessions OnboardingSession[]
-
-  @@map("clients")
-}
-
-model OnboardingSession {
-  // Use the token/uuid as the primary key (easy to embed in URL)
-  id              String           @id @default(uuid())
-  clientId        String
-  createdAt       DateTime         @default(now())
-  firstAccessedAt DateTime?
-  lastUpdatedAt   DateTime?
-  submittedAt     DateTime?
-  status          OnboardingStatus @default(pending)
-  answers         Json?
-  expiresAt       DateTime?
-  consumedAt      DateTime?
-
-  tokens OnboardingPlatformToken[]
-
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-
-  @@index([clientId, status])
-  @@index([createdAt])
-  @@map("onboarding_sessions")
-}
-
-model User {
-  id           Int     @id @default(autoincrement())
-  email        String? @unique
-  passwordEnc  String?
-  role         String  @default("user")
-  tokens       UserToken[]
-
-  // Opposite side of the 1:1 relation; no fields/references here
-  client Client? @relation("UserClient")
-
-  @@map("users")
-}
-
-model OnboardingPlatformToken {
-  id           Int       @id @default(autoincrement())
-  sessionId    String
-  platform     String
-  accessToken  String    @db.Text   
-  refreshToken String?   @db.Text
-  expiresAt    DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  session OnboardingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@unique([sessionId, platform])            // one per platform per session
-  @@index([sessionId, platform])
-  @@map("onboarding_platform_tokens")
-}
-
-model UserToken {
-  id           Int      @id @default(autoincrement())
-  platform     String
-  accessToken  String // use @db.Text if tokens can be long:  @db.Text
-  refreshToken String?
-  createdAt    DateTime @default(now()) // add @db.Timestamptz(6) if column is timestamptz
-  userId       Int
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, platform]) // optional but recommended
-  @@index([userId, platform])
-  @@map("user_tokens") // maps to existing "user_tokens" table
 }
