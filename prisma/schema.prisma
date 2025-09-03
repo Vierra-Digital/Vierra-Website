@@ -66,7 +66,9 @@ model OnboardingPlatformToken {
   updatedAt    DateTime          @updatedAt
   session      OnboardingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@unique([sessionId, platform])
+  session OnboardingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, platform], name: "sessionId_platform") // one per platform per session
   @@index([sessionId, platform])
   @@map("onboarding_platform_tokens")
 }
@@ -78,9 +80,13 @@ model UserToken {
   createdAt    DateTime @default(now())
   userId       Int
   refreshToken String?
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt    DateTime?
+  createdAt    DateTime @default(now()) // add @db.Timestamptz(6) if column is timestamptz
+  userId       Int
 
-  @@unique([userId, platform])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platform], name: "userId_platform")
   @@index([userId, platform])
   @@map("user_tokens")
 }
