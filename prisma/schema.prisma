@@ -105,6 +105,7 @@ model UserToken {
   platform     String
   accessToken  String // use @db.Text if tokens can be long:  @db.Text
   refreshToken String?
+  expiresAt    DateTime?
   createdAt    DateTime @default(now()) // add @db.Timestamptz(6) if column is timestamptz
   userId       Int
 
