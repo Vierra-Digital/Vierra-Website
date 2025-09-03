@@ -95,7 +95,7 @@ model OnboardingPlatformToken {
 
   session OnboardingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@unique([sessionId, platform])            // one per platform per session
+  @@unique([sessionId, platform], name: "sessionId_platform") // one per platform per session
   @@index([sessionId, platform])
   @@map("onboarding_platform_tokens")
 }
@@ -111,7 +111,7 @@ model UserToken {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, platform]) // optional but recommended
+  @@unique([userId, platform], name: "userId_platform")
   @@index([userId, platform])
   @@map("user_tokens") // maps to existing "user_tokens" table
 }
