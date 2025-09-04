@@ -85,25 +85,25 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             </Link>
           </div>
           <div id="panel-nav" className="w-full h-full flex flex-col gap-y-[5px] items-center text-[#EDF1F5]">
-            <div id="panel-nav-item" onClick={() => setCurrentSection(0)} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
               <AiOutlineAppstore />
               <span className={`text-xs font-normal ${inter.className}`}>
                 Dashboard
               </span>
             </div>
-            <div id="panel-nav-item" onClick={() => setCurrentSection(1)} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
               <PiUsersThree />
               <span className={`text-xs ${inter.className}`}>
                 Clients
               </span>
             </div>
-            <div id="panel-nav-item" onClick={() => setCurrentSection(2)} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
               <BsPeople />
               <span className={`text-xs ${inter.className}`}>
                 Team
               </span>
             </div>
-            <div id="panel-nav-item" onClick={() => setCurrentSection(3)} className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer hover:bg-white rounded-xl hover:text-black">
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(3); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer hover:bg-white rounded-xl hover:text-black">
               <RiMoneyDollarBoxLine />
               <span className={`text-xs ${inter.className}`}>
                 Marketing
@@ -130,7 +130,10 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
           <div id="right-side-heading" className="flex w-full flex-row h-16 bg-[#F8F0FF]">
             <div className="md:hidden flex items-center pl-2">
               <button
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                onClick={() => {
+                  setIsSidebarOpen(!isSidebarOpen);
+                  setShowSettings(false);
+                }}
                 aria-label="Toggle sidebar"
               >
                 {/* Hamburger icon */}
@@ -186,11 +189,26 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
           </div>
           <div id="right-side-body" className="flex w-full h-full bg-white">
             {/* This is the working area. Put in different options (Dashboard, Clients, etc. ) as components */}
+            {showSettings ? (<>
+              <UserSettingsPage
+                user={
+                  session?.user || {
+                    name: "Test User",
+                    email: "test@vierra.com",
+                    image: "/assets/vierra-logo.png",
+                  }
+                }
+              />
+            </>)
+              : (
+                <>
+                  {currentSection === 0 && <DashboardSection />}
+                  {currentSection === 1 && <ClientsSection />}
+                  {currentSection === 2 && <TeamPanelSection />}
+                  {currentSection === 3 && <MarketingSection />}
+                </>
+              )}
 
-            {currentSection === 0 && <DashboardSection />}
-            {currentSection === 1 && <ClientsSection />}
-            {currentSection === 2 && <TeamPanelSection />}
-            {currentSection === 3 && <MarketingSection />}
 
           </div>
         </div>
