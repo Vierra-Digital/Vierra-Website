@@ -335,6 +335,32 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
     }
   }
 
+  const handleReactivateCampaign = async () => {
+    if (!selectedCampaign) return
+    
+    setIsUpdating(true)
+    try {
+      const response = await fetch('/api/update-campaign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaignId: selectedCampaign.campaignId,
+          status: 'active',
+          userId: session?.user?.id
+        })
+      })
+      
+      if (response.ok) {
+        loadCampaigns() // Refresh the campaigns
+        closeCampaignModal()
+      }
+    } catch (error) {
+      console.error('Error reactivating campaign:', error)
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const handleUpdateBudget = async () => {
     if (!selectedCampaign || !tempBudget) return
     
@@ -1067,6 +1093,17 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
                   >
                     <FiTarget className="w-4 h-4" />
                     {isUpdating ? 'Deactivating...' : 'Deactivate Campaign'}
+                  </button>
+                )}
+
+                {selectedCampaign.status === 'paused' && (
+                  <button
+                    onClick={handleReactivateCampaign}
+                    disabled={isUpdating}
+                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-60"
+                  >
+                    <FiTarget className="w-4 h-4" />
+                    {isUpdating ? 'Reactivating...' : 'Reactivate Campaign'}
                   </button>
                 )}
 
