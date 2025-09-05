@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { analyzeWebsite } from '@/lib/websiteAnalysis';
-import fs from 'fs';
-import path from 'path';
+import { requireSession } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
 export default async function handler(
   req: NextApiRequest,
@@ -12,8 +12,13 @@ export default async function handler(
   }
 
   try {
-    const { websiteUrl } = req.body;
+    // Require authentication
+    const session = await requireSession(req, res);
+    if (!session) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
 
+    const { websiteUrl } = req.body;
     if (!websiteUrl) {
       return res.status(400).json({ error: 'Website URL is required' });
     }
@@ -31,24 +36,31 @@ export default async function handler(
       return res.status(400).json({ error: 'Invalid URL format' });
     }
 
-    const result = await analyzeWebsite(normalizedUrl);
+    console.log('Session user ID:', session.user.id);
+    console.log('Session user:', session.user);
+    
+    // Check if user exists, create if not
+    const userId = Number(session.user.id);
+    let user = await prisma.user.findUnique({ where: { id: userId } });
+    
+    if (!user) {
+      console.log('User not found, creating user with ID:', userId);
+      user = await prisma.user.create({
+        data: {
+          id: userId,
+          email: session.user.email || `user${userId}@example.com`,
+          role: session.user.role || 'user'
+        }
+      });
+      console.log('Created user:', user);
+    }
+    
+    const result = await analyzeWebsite(normalizedUrl, userId);
 
     if (result.success) {
-      // Extract timestamp from the file content
-      const filePath = path.join(process.cwd(), 'public', 'analysis-results', 'website-analysis-latest.txt');
-      let timestamp = null;
-      
-      if (fs.existsSync(filePath)) {
-        const fileContent = fs.readFileSync(filePath, 'utf8');
-        const lines = fileContent.split('\n');
-        if (lines[0].startsWith('Analysis Timestamp: ')) {
-          timestamp = lines[0].replace('Analysis Timestamp: ', '');
-        }
-      }
-      
       res.status(200).json({
         ...result,
-        timestamp: timestamp
+        timestamp: result.timestamp
       });
     } else {
       res.status(500).json({ error: result.error });

@@ -6,8 +6,8 @@ import { useRouter } from "next/navigation"
 import SignPdfModal from "@/components/ui/SignPdfModal"
 import LtvCalculatorModal from "@/components/ui/LtvCalculatorModal"
 import Link from "next/link"
-import { FiLogOut, FiFileText, FiUsers, FiPlus } from "react-icons/fi"
-import { useSession, signOut } from "next-auth/react"
+import { FiLogOut, FiFileText, FiUsers, FiPlus, FiChevronDown } from "react-icons/fi"
+import { useSession, signOut, signIn } from "next-auth/react"
 import UserSettingsPage from "@/components/UserSettingsPage"
 import AddClientModal from "@/components/ui/AddClientModal"
 import type { SessionItem } from "@/types/session"
@@ -29,10 +29,168 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
   const [items, setItems] = useState<SessionItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showUserDropdown, setShowUserDropdown] = useState(false)
+  const [adminAccounts, setAdminAccounts] = useState<any[]>([])
+  const [showLoginModal, setShowLoginModal] = useState(false)
+  const [selectedAccount, setSelectedAccount] = useState<any>(null)
+  const [loginEmail, setLoginEmail] = useState("")
+  const [loginPassword, setLoginPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [loginError, setLoginError] = useState("")
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
+  const [isLoginMode, setIsLoginMode] = useState(true)
+  const [newAccountEmail, setNewAccountEmail] = useState("")
+  const [newAccountName, setNewAccountName] = useState("")
+  const [newAccountRole, setNewAccountRole] = useState("user")
+  const [addAccountError, setAddAccountError] = useState("")
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [createdAccount, setCreatedAccount] = useState<any>(null)
+  const [isImpersonating, setIsImpersonating] = useState(false)
+  const [impersonationData, setImpersonationData] = useState<any>(null)
 
   useEffect(() => {
     fetchSessions()
   }, [])
+
+  useEffect(() => {
+    // Check for impersonation data
+    const storedImpersonation = localStorage.getItem('impersonationData')
+    if (storedImpersonation) {
+      try {
+        const data = JSON.parse(storedImpersonation)
+        setImpersonationData(data)
+        setIsImpersonating(true)
+      } catch (error) {
+        console.error('Error parsing impersonation data:', error)
+        localStorage.removeItem('impersonationData')
+      }
+    }
+  }, [])
+
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+  };
+
+  // Fetch admin accounts for switch/add account dropdown
+  useEffect(() => {
+    const headers: HeadersInit = {}
+    if (isImpersonating) {
+      headers['x-impersonation'] = 'true'
+    }
+    
+    fetch("/api/admin/accounts", { headers })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.success) setAdminAccounts(data.accounts)
+      })
+      .catch((err) => console.error("Error fetching admin accounts:", err))
+  }, [isImpersonating])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showUserDropdown) {
+        const target = event.target as HTMLElement
+        if (!target.closest('.user-dropdown')) {
+          setShowUserDropdown(false)
+        }
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showUserDropdown]);
+
+  // Account controls (match manage-users behavior)
+  const handleAddAccount = () => {
+    setIsLoginMode(false)
+    setShowLoginModal(true)
+    setShowUserDropdown(false)
+  }
+
+  const handleSwitchAccount = async (account: any) => {
+    try {
+      const headers: HeadersInit = { 'Content-Type': 'application/json' }
+      if (isImpersonating) headers['x-impersonation'] = 'true'
+      const res = await fetch('/api/admin/switch-account', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ accountId: account.id }),
+      })
+      if (res.ok) {
+        setShowUserDropdown(false)
+        window.location.reload()
+      } else {
+        console.error('Failed to switch account')
+      }
+    } catch (err) {
+      console.error('Error switching account:', err)
+    }
+  }
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoggingIn(true)
+    setLoginError("")
+    try {
+      const result = await signIn('credentials', {
+        email: loginEmail,
+        password: loginPassword,
+        redirect: false,
+      })
+      if (result && !result.error) {
+        setShowLoginModal(false)
+        router.refresh()
+      } else {
+        setLoginError('Invalid credentials')
+      }
+    } catch (err) {
+      setLoginError('Login failed')
+    } finally {
+      setIsLoggingIn(false)
+    }
+  }
+
+  const handleCreateAccount = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsCreatingAccount(true)
+    setAddAccountError("")
+    try {
+      const response = await fetch('/api/admin/create-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newAccountEmail, name: newAccountName, role: newAccountRole })
+      })
+      const data = await response.json()
+      if (response.ok && data?.success) {
+        setCreatedAccount({ email: newAccountEmail, name: newAccountName, role: newAccountRole, password: data.password })
+        setShowSuccessModal(true)
+        setShowLoginModal(false)
+        setNewAccountEmail("")
+        setNewAccountName("")
+        setNewAccountRole("user")
+        // refresh accounts
+        fetch('/api/admin/accounts').then(r=>r.json()).then(d=>{ if (d?.success) setAdminAccounts(d.accounts) })
+      } else {
+        setAddAccountError(data?.error || 'Error creating account')
+      }
+    } catch (err) {
+      setAddAccountError('Error creating account')
+    } finally {
+      setIsCreatingAccount(false)
+    }
+  }
+
+  const handleCloseLoginModal = () => {
+    setShowLoginModal(false)
+    setSelectedAccount(null)
+    setLoginEmail("")
+    setLoginPassword("")
+    setLoginError("")
+  }
 
   async function fetchSessions() {
     try {
@@ -53,120 +211,147 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
       <Head>
         <title>Vierra | Admin Panel</title>
       </Head>
-      <div className="relative min-h-screen bg-[#18042A] text-white flex">
-        <div className="absolute top-4 left-4 z-20">
-          <Link
-            href={dashboardHref}
-            aria-label="Go to homepage"
-            className="block"
-          >
-            <Image
-              src="/assets/vierra-logo.png"
-              alt="Vierra Logo"
-              width={120}
-              height={40}
-              className="cursor-pointer h-10 w-auto"
-            />
-          </Link>
-        </div>
-
-        <div className="w-56 bg-[#2E0A4F] h-screen flex flex-col justify-between pt-20 pb-4 px-4">
-          <div className="flex flex-col space-y-2">
-            <button
-              onClick={() => setIsSignModalOpen(true)}
-              className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
-              aria-label="Prepare PDF for Signing"
-            >
-              <FiFileText className="w-5 h-5" />
-              <span className={`ml-3 text-sm font-medium ${inter.className}`}>
-                PDF Signer
-              </span>
-            </button>
-            <button
-              onClick={() => setIsLtvModalOpen(true)}
-              className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
-              aria-label="Open LTV Calculator"
-            >
-              <span className="w-5 h-5 flex items-center justify-center font-bold text-lg">
-                Σ
-              </span>
-              <span className={`ml-3 text-sm font-medium ${inter.className}`}>
-                LTV Calculator
-              </span>
-            </button>
-
-            <button
-              onClick={() => setIsAddClientOpen(true)}
-              className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
-              aria-label="Open LTV Calculator"
-            >
-              <FiUsers className="w-5 h-5" />
-              <span className={`ml-3 text-sm font-medium ${inter.className}`}>
-                Add Clients
-              </span>
-            </button>
-
-            <button
-              onClick={() => router.push("/manage-users")}
-              className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
-              aria-label="Manage Users"
-            >
-              <FiUsers className="w-5 h-5" />
-              <span className={`ml-3 text-sm font-medium ${inter.className}`}>
-                Manage Users
-              </span>
-            </button>
-
-            <button
-              onClick={() => router.push("/create-ads")}
-              className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
-              aria-label="Create Ads"
-            >
-              <FiPlus className="w-5 h-5" />
-              <span className={`ml-3 text-sm font-medium ${inter.className}`}>
-                Create Ads
-              </span>
-            </button>
-          </div>
-
-          <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
-            aria-label="Logout"
-          >
-            <FiLogOut className="w-5 h-5" />
-            <span className={`ml-3 text-sm font-medium ${inter.className}`}>
-              Logout
-            </span>
-          </button>
-        </div>
-
-        <div className="flex-1 flex flex-col">
-          {/* Top header bar */}
-          <div className="h-16 bg-[#2E0A4F] flex items-center pl-64 pr-8 justify-end relative">
-            <button
-              className="ml-4 flex items-center focus:outline-none absolute right-8 top-1/2 -translate-y-1/2"
-              aria-label="Open user settings"
-              onClick={() => setShowSettings((prev) => !prev)}
-            >
+      <div className="min-h-screen bg-gray-100 flex">
+        {/* Sidebar */}
+        <div className="w-64 bg-[#2E0A4F] flex-shrink-0 min-h-screen">
+          {/* Logo */}
+          <div className="p-6">
+            <Link href={dashboardHref} className="block">
               <Image
-                src={
-                  typeof session?.user?.image === "string" &&
-                  session.user.image.length > 0
-                    ? session.user.image
-                    : "/assets/vierra-logo.png"
-                }
-                alt="Profile"
-                width={48}
-                height={48}
-                className="object-cover w-full h-full"
-                priority
-                quality={100}
+                src="/assets/vierra-logo.png"
+                alt="Vierra Logo"
+                width={120}
+                height={40}
+                className="w-auto h-10"
               />
-            </button>
+            </Link>
           </div>
-          {/* Main content area */}
-          <div className="flex-1 bg-[#18042A] overflow-auto p-6">
+
+          {/* Navigation */}
+          <div className="px-4 pb-4">
+            <div className="space-y-2">
+              <button
+                onClick={() => setIsSignModalOpen(true)}
+                className="flex items-center w-full p-3 rounded-lg text-white bg-white/10 transition-colors"
+                aria-label="Prepare PDF for Signing"
+              >
+                <FiFileText className="w-5 h-5" />
+                <span className="ml-3 text-sm font-medium">PDF Signer</span>
+              </button>
+              <button
+                onClick={() => setIsLtvModalOpen(true)}
+                className="flex items-center w-full p-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Open LTV Calculator"
+              >
+                <span className="w-5 h-5 flex items-center justify-center font-bold text-lg">Σ</span>
+                <span className="ml-3 text-sm font-medium">LTV Calculator</span>
+              </button>
+              <button
+                onClick={() => setIsAddClientOpen(true)}
+                className="flex items-center w-full p-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Add Clients"
+              >
+                <FiUsers className="w-5 h-5" />
+                <span className="ml-3 text-sm font-medium">Add Clients</span>
+              </button>
+              <button
+                onClick={() => router.push("/manage-users")}
+                className="flex items-center w-full p-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Manage Users"
+              >
+                <FiUsers className="w-5 h-5" />
+                <span className="ml-3 text-sm font-medium">Manage Users</span>
+              </button>
+              <button
+                onClick={() => router.push("/create-ads")}
+                className="flex items-center w-full p-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Create Ads"
+              >
+                <FiPlus className="w-5 h-5" />
+                <span className="ml-3 text-sm font-medium">Create Ads</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col">
+          {/* Top Header */}
+          <div className="bg-white border-b border-gray-200 px-6 py-4">
+            <div className="flex items-center justify-end">
+              <div className="relative user-dropdown">
+                <div 
+                  className="flex items-center space-x-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg"
+                  onClick={() => setShowUserDropdown(!showUserDropdown)}
+                >
+                  <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                    <span className="text-sm font-medium text-gray-700">
+                      {session?.user?.name ? getInitials(session.user.name) : 'A'}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-gray-900">
+                      {session?.user?.name || session?.user?.email || 'Admin'}
+                    </span>
+                  </div>
+                  <FiChevronDown className="w-4 h-4 text-gray-500" />
+                </div>
+                
+                {/* Dropdown Menu (match manage-users) */}
+                {showUserDropdown && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                    <div className="py-2">
+                      <div className="px-4 py-2 text-sm text-gray-500 border-b border-gray-100">
+                        Switch Account
+                      </div>
+
+                      {adminAccounts.map((account) => (
+                        <button
+                          key={account.id}
+                          onClick={() => {
+                            handleSwitchAccount(account)
+                            setShowUserDropdown(false)
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3"
+                        >
+                          <div className="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
+                            <span className="text-xs font-medium text-gray-700">
+                              {getInitials(account.email || 'U')}
+                            </span>
+                          </div>
+                          <div>
+                            <div className="font-medium">{account.email || 'User'}</div>
+                            <div className="text-xs text-gray-500">{account.role}</div>
+                          </div>
+                        </button>
+                      ))}
+
+                      <div className="border-t border-gray-100 mt-2 pt-2">
+                        <button
+                          onClick={handleAddAccount}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3"
+                        >
+                          <FiPlus className="w-4 h-4 text-gray-500" />
+                          <span>Add Account</span>
+                        </button>
+
+                        <button
+                          onClick={() => { signOut({ callbackUrl: '/login' }); setShowUserDropdown(false) }}
+                          className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3"
+                        >
+                          <FiLogOut className="w-4 h-4" />
+                          <span>Logout</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Page Content */}
+          <div className="flex-1 p-6 bg-white">
             {showSettings ? (
               <UserSettingsPage
                 user={
@@ -180,61 +365,77 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             ) : (
               // Dashboard
               <>
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-bold">Onboarding Sessions</h2>
+                <div className="mb-6">
+                  <h1 className="text-3xl font-bold text-gray-900">Onboarding Sessions</h1>
                 </div>
 
                 {loading ? (
-                  <p>Loading sessions...</p>
+                  <p className="text-gray-600">Loading sessions...</p>
                 ) : error ? (
-                  <p className="text-red-400">{error}</p>
+                  <p className="text-red-600">{error}</p>
                 ) : items.length === 0 ? (
-                  <p>No sessions found.</p>
+                  <p className="text-gray-600">No sessions found.</p>
                 ) : (
-                  <table className="w-full border-collapse border border-gray-600">
-                    <thead>
-                      <tr className="bg-[#2E0A4F]">
-                        <th className="border border-gray-600 p-2">
-                          Client Name
-                        </th>
-                        <th className="border border-gray-600 p-2">Email</th>
-                        <th className="border border-gray-600 p-2">Business</th>
-                        <th className="border border-gray-600 p-2">Status</th>
-                        <th className="border border-gray-600 p-2">
-                          Created At
-                        </th>
-                        <th className="border border-gray-600 p-2">
-                          Submitted At
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((session) => (
-                        <tr key={session.token}>
-                          <td className="border border-gray-600 p-2">
-                            {session.clientName}
-                          </td>
-                          <td className="border border-gray-600 p-2">
-                            {session.clientEmail}
-                          </td>
-                          <td className="border border-gray-600 p-2">
-                            {session.businessName}
-                          </td>
-                          <td className="border border-gray-600 p-2">
-                            {session.status}
-                          </td>
-                          <td className="border border-gray-600 p-2">
-                            {new Date(session.createdAt).toLocaleString()}
-                          </td>
-                          <td className="border border-gray-600 p-2">
-                            {session.submittedAt
-                              ? new Date(session.submittedAt).toLocaleString()
-                              : "-"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Client Name
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Email
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Business
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Created At
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Submitted At
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {items.map((session) => (
+                            <tr key={session.token} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {session.clientName}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {session.clientEmail}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {session.businessName}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                  session.status === 'completed' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {session.status}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {new Date(session.createdAt).toLocaleString()}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {session.submittedAt
+                                  ? new Date(session.submittedAt).toLocaleString()
+                                  : "-"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 )}
               </>
             )}
@@ -268,6 +469,101 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             setItems((prev) => [row, ...prev])
           }}
         />
+      )}
+      {/* Login/Create Account Modal (simple) */}
+      {showLoginModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="relative bg-white rounded-lg p-6 w-[90%] max-w-md shadow-lg">
+            <button
+              onClick={handleCloseLoginModal}
+              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
+            >
+              ×
+            </button>
+
+            <h2 className="text-xl font-semibold mb-4">
+              {isLoginMode ? 'Login to Account' : 'Create New Account'}
+            </h2>
+
+            {isLoginMode && selectedAccount && (
+              <div className="mb-4 p-3 bg-gray-50 rounded border border-gray-200 text-sm">
+                <div className="font-medium">{selectedAccount.email}</div>
+                <div className="text-gray-500">{selectedAccount.role}</div>
+              </div>
+            )}
+
+            <form onSubmit={isLoginMode ? handleLogin : handleCreateAccount} className="space-y-3">
+              {isLoginMode ? (
+                <>
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="Email"
+                    className="w-full border border-gray-300 rounded p-2"
+                    required
+                  />
+                  <div>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="Password"
+                      className="w-full border border-gray-300 rounded p-2"
+                      required
+                    />
+                    <label className="text-xs text-gray-600 inline-flex items-center mt-1">
+                      <input type="checkbox" className="mr-2" checked={showPassword} onChange={() => setShowPassword(!showPassword)} />
+                      Show password
+                    </label>
+                  </div>
+                  {loginError && <div className="text-red-600 text-sm">{loginError}</div>}
+                  <button
+                    type="submit"
+                    disabled={isLoggingIn}
+                    className="w-full bg-[#2E0A4F] text-white rounded py-2 hover:bg-[#3A1A5F] disabled:opacity-60"
+                  >
+                    {isLoggingIn ? 'Logging in...' : 'Login'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <input
+                    type="email"
+                    value={newAccountEmail}
+                    onChange={(e) => setNewAccountEmail(e.target.value)}
+                    placeholder="Email"
+                    className="w-full border border-gray-300 rounded p-2"
+                    required
+                  />
+                  <input
+                    type="text"
+                    value={newAccountName}
+                    onChange={(e) => setNewAccountName(e.target.value)}
+                    placeholder="Name"
+                    className="w-full border border-gray-300 rounded p-2"
+                  />
+                  <select
+                    value={newAccountRole}
+                    onChange={(e) => setNewAccountRole(e.target.value)}
+                    className="w-full border border-gray-300 rounded p-2"
+                  >
+                    <option value="user">user</option>
+                    <option value="admin">admin</option>
+                  </select>
+                  {addAccountError && <div className="text-red-600 text-sm">{addAccountError}</div>}
+                  <button
+                    type="submit"
+                    disabled={isCreatingAccount}
+                    className="w-full bg-[#2E0A4F] text-white rounded py-2 hover:bg-[#3A1A5F] disabled:opacity-60"
+                  >
+                    {isCreatingAccount ? 'Creating...' : 'Create Account'}
+                  </button>
+                </>
+              )}
+            </form>
+          </div>
+        </div>
       )}
     </>
   )

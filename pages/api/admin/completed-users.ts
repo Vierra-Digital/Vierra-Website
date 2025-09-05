@@ -18,14 +18,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 id: true,
                 email: true,
                 passwordEnc: true,
-                client: { select: { name: true } },
+                client: { 
+                    select: { 
+                        name: true,
+                        businessName: true,
+                        email: true,
+                        onboardingSessions: {
+                            where: { status: "completed" },
+                            select: {
+                                answers: true,
+                                submittedAt: true
+                            },
+                            orderBy: { submittedAt: 'desc' },
+                            take: 1
+                        }
+                    } 
+                },
             },
         });
-
 
         const withDecrypted = users.map(u => ({
             ...u,
             password: u.passwordEnc ? decrypt(u.passwordEnc) : null,
+            surveyAnswers: u.client?.onboardingSessions?.[0]?.answers || null,
+            surveyDate: u.client?.onboardingSessions?.[0]?.submittedAt || null,
         }));
 
         res.json(withDecrypted);

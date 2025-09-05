@@ -6,7 +6,7 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  if (req.method !== 'GET') {
+  if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
@@ -19,21 +19,21 @@ export default async function handler(
 
     const userId = Number(session.user.id);
 
-    // Check if user has any website analysis
-    const analysis = await prisma.websiteAnalysis.findFirst({
+    // Set all contexts for this user to inactive
+    await prisma.clientContext.updateMany({
       where: { userId },
-      select: { id: true }
+      data: { isActive: false }
     });
 
-    const hasAnalysis = !!analysis;
+    console.log('Context cleared for user:', userId);
 
     res.status(200).json({ 
       success: true, 
-      hasAnalysis 
+      message: 'Context cleared successfully'
     });
 
   } catch (error) {
-    console.error('Error checking analysis:', error);
+    console.error('Error clearing context:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

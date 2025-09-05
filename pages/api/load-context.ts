@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import fs from 'fs';
-import path from 'path';
+import { requireSession } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
 export default async function handler(
   req: NextApiRequest,
@@ -11,34 +11,43 @@ export default async function handler(
   }
 
   try {
-    const filePath = path.join(process.cwd(), 'public', 'analysis-results', 'additional-context-latest.txt');
-    
-    if (!fs.existsSync(filePath)) {
-      return res.status(200).json({ hasContent: false });
+    // Require authentication
+    const session = await requireSession(req, res);
+    if (!session) {
+      return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const fileContent = fs.readFileSync(filePath, 'utf8');
-    
-    if (!fileContent.trim()) {
-      return res.status(200).json({ hasContent: false });
-    }
+    const userId = Number(session.user.id);
 
-    // Parse the content from the file (remove timestamp line and instruction)
-    const lines = fileContent.split('\n');
-    let content = fileContent;
-
-    if (lines[0].startsWith('Additional Context Timestamp: ')) {
-      // Remove the timestamp line and instruction to get just the user context content
-      content = lines.slice(4).join('\n');
-    }
-
-    res.status(200).json({
-      hasContent: true,
-      content: content
+    // Get the most recent active context for this user
+    const context = await prisma.clientContext.findFirst({
+      where: { 
+        userId,
+        isActive: true 
+      },
+      orderBy: { updatedAt: 'desc' }
     });
 
+    if (context) {
+      // Extract just the user's context (remove the instruction)
+      const lines = context.context.split('\n');
+      const userContext = lines.slice(2).join('\n').trim();
+      
+      res.status(200).json({ 
+        success: true, 
+        context: userContext,
+        isActive: context.isActive
+      });
+    } else {
+      res.status(200).json({ 
+        success: true, 
+        context: '',
+        isActive: false
+      });
+    }
+
   } catch (error) {
-    console.error('Error loading additional context:', error);
+    console.error('Error loading context:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

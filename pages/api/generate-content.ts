@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { generateImage, generateCaption } from '@/lib/contentGeneration';
+import { requireSession } from '@/lib/auth';
 
 export default async function handler(
   req: NextApiRequest,
@@ -10,9 +11,16 @@ export default async function handler(
   }
 
   try {
-    const { platform, contentType, includeContext } = req.body;
+    // Require authentication
+    const session = await requireSession(req, res);
+    if (!session) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const { platform, contentType, includeContext, imageUrls } = req.body;
 
     console.log('API received includeContext:', includeContext);
+    console.log('API received imageUrls:', imageUrls ? `${imageUrls.length} images` : 'not provided');
 
     if (!platform || !contentType) {
       return res.status(400).json({ 
@@ -24,11 +32,13 @@ export default async function handler(
       return res.status(400).json({ error: 'contentType must be either "image" or "caption"' });
     }
 
+    const userId = Number(session.user.id);
+
     let result;
     if (contentType === 'image') {
-      result = await generateImage(platform, includeContext);
+      result = await generateImage(platform, includeContext, imageUrls, userId);
     } else {
-      result = await generateCaption(platform, includeContext);
+      result = await generateCaption(platform, includeContext, imageUrls, userId);
     }
 
     if (result.success) {

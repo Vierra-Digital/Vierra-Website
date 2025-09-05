@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import fs from 'fs';
-import path from 'path';
+import { requireSession } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
 export default async function handler(
   req: NextApiRequest,
@@ -11,34 +11,35 @@ export default async function handler(
   }
 
   try {
-    const filePath = path.join(process.cwd(), 'public', 'analysis-results', 'website-analysis-latest.txt');
-    
-    if (!fs.existsSync(filePath)) {
-      return res.status(200).json({ hasContent: false });
+    // Require authentication
+    const session = await requireSession(req, res);
+    if (!session) {
+      return res.status(401).json({ error: 'Authentication required' });
     }
 
-    const fileContent = fs.readFileSync(filePath, 'utf8');
-    
-    if (!fileContent.trim()) {
-      return res.status(200).json({ hasContent: false });
-    }
+    const userId = Number(session.user.id);
 
-    // Parse the timestamp from the first line
-    const lines = fileContent.split('\n');
-    let timestamp = null;
-    let content = fileContent;
-
-    if (lines[0].startsWith('Analysis Timestamp: ')) {
-      timestamp = lines[0].replace('Analysis Timestamp: ', '');
-      // Remove the timestamp line and the next line (website URL) to get just the analysis content
-      content = lines.slice(2).join('\n');
-    }
-
-    res.status(200).json({
-      hasContent: true,
-      content: content,
-      timestamp: timestamp
+    // Get the most recent website analysis for this user
+    const analysis = await prisma.websiteAnalysis.findFirst({
+      where: { userId },
+      orderBy: { timestamp: 'desc' }
     });
+
+    if (analysis) {
+      res.status(200).json({ 
+        success: true, 
+        analysis: analysis.analysis,
+        timestamp: analysis.timestamp,
+        websiteUrl: analysis.websiteUrl
+      });
+    } else {
+      res.status(200).json({ 
+        success: true, 
+        analysis: null,
+        timestamp: null,
+        websiteUrl: null
+      });
+    }
 
   } catch (error) {
     console.error('Error loading analysis:', error);

@@ -8,6 +8,7 @@ import { signOut, useSession, signIn } from "next-auth/react"
 import type { GetServerSideProps } from "next"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/pages/api/auth/[...nextauth]"
+import Layout from "@/components/Layout"
 
 const inter = Inter({ subsets: ["latin"] })
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
@@ -51,19 +52,6 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [createdAccount, setCreatedAccount] = useState<any>(null)
   const [clientStatuses, setClientStatuses] = useState<{[key: string]: boolean}>({})
-  const [showLTVModal, setShowLTVModal] = useState(false)
-  const [showPDFModal, setShowPDFModal] = useState(false)
-  
-  // LTV Calculator state
-  const [ltvValues, setLTVValues] = useState({
-    averagePurchaseValue: 0,
-    costOfGoodsPercentage: 0,
-    returnsPerYear: 0,
-    customerTermYears: 0,
-    numberOfReferrals: 0,
-    numberOfClientsBroughtIn: 0
-  })
-  const [lifetimeValue, setLifetimeValue] = useState(0)
 
   useEffect(() => {
     fetch("/api/admin/completed-users")
@@ -277,23 +265,14 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
   }
 
 
-  const handleSwitchAccount = async (account: any) => {
-    try {
-      const headers: HeadersInit = { 'Content-Type': 'application/json' }
-      const res = await fetch('/api/admin/switch-account', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ accountId: account.id }),
-      })
-      if (res.ok) {
-        setShowUserDropdown(false)
-        window.location.reload()
-      } else {
-        console.error('Failed to switch account')
-      }
-    } catch (err) {
-      console.error('Error switching account:', err)
-    }
+  const handleSwitchAccount = (account: any) => {
+    // Show login modal for the selected account
+    setSelectedAccount(account)
+    setLoginEmail(account.email)
+    setLoginPassword("")
+    setLoginError("")
+    setShowLoginModal(true)
+    setShowUserDropdown(false)
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -385,28 +364,6 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
     setSelected(user)
   }
 
-  // LTV Calculator functions
-  const calculateLTV = () => {
-    const { averagePurchaseValue, costOfGoodsPercentage, returnsPerYear, customerTermYears, numberOfReferrals, numberOfClientsBroughtIn } = ltvValues
-    
-    // Basic LTV calculation: (Average Purchase Value - COGS) * Returns Per Year * Customer Term
-    const grossMargin = averagePurchaseValue * (1 - costOfGoodsPercentage / 100)
-    const baseLTV = grossMargin * returnsPerYear * customerTermYears
-    
-    // Add referral value (simplified calculation)
-    const referralValue = numberOfReferrals * numberOfClientsBroughtIn * grossMargin * 0.1 // 10% of gross margin per referral
-    
-    const totalLTV = baseLTV + referralValue
-    setLifetimeValue(totalLTV)
-  }
-
-  const handleLTVInputChange = (field: string, value: number) => {
-    setLTVValues(prev => ({
-      ...prev,
-      [field]: value
-    }))
-  }
-
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -424,169 +381,105 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
     }
   }, [showUserDropdown])
 
-  return (
-    <div className="min-h-screen bg-gray-100 flex">
-      {/* Sidebar */}
-      <div className="w-64 bg-[#2E0A4F] h-screen flex flex-col">
-        {/* Logo */}
-        <div className="p-6">
-          <Link href={dashboardHref} className="block">
-            <Image
-              src="/assets/vierra-logo.png"
-              alt="Vierra Logo"
-              width={120}
-              height={40}
-              className="w-auto h-10"
-            />
-          </Link>
+  // User info component for header
+  const userInfo = (
+    <div className="relative user-dropdown">
+      <div 
+        className="flex items-center space-x-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg"
+        onClick={() => setShowUserDropdown(!showUserDropdown)}
+      >
+        <div className="w-8 h-8 bg-[#701CC0] rounded-full flex items-center justify-center">
+          <span className="text-white text-sm font-medium">
+            {session?.user?.name ? getInitials(session.user.name) : 'A'}
+          </span>
         </div>
-
-                 {/* Navigation */}
-         <nav className="flex-1 px-4">
-           <div className="space-y-2">
-             <button
-               onClick={() => setShowPDFModal(true)}
-               className="flex items-center w-full p-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-             >
-               <FiFileText className="w-5 h-5" />
-               <span className="ml-3 text-sm font-medium">PDF Signer</span>
-             </button>
-
-             <button
-               onClick={() => setShowLTVModal(true)}
-               className="flex items-center w-full p-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-             >
-               <span className="w-5 h-5 flex items-center justify-center font-bold text-lg">Σ</span>
-               <span className="ml-3 text-sm font-medium">LTV Calculator</span>
-             </button>
-
-             <button
-               onClick={() => router.push("/panel")}
-               className="flex items-center w-full p-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-             >
-               <FiUsers className="w-5 h-5" />
-               <span className="ml-3 text-sm font-medium">Add Clients</span>
-             </button>
-
-             <button
-               onClick={() => router.push("/manage-users")}
-               className="flex items-center w-full p-3 rounded-lg text-white bg-white/10 transition-colors"
-             >
-               <FiUsers className="w-5 h-5" />
-               <span className="ml-3 text-sm font-medium">Manage Users</span>
-             </button>
-
-             <button
-               onClick={() => router.push("/create-ads")}
-               className="flex items-center w-full p-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-             >
-               <FiPlus className="w-5 h-5" />
-               <span className="ml-3 text-sm font-medium">Create Ads</span>
-             </button>
-           </div>
-         </nav>
+        <div className="flex flex-col">
+          <span className="text-sm font-medium text-gray-900">
+            {session?.user?.name || session?.user?.email || 'Admin'}
+          </span>
+        </div>
+        <FiChevronDown className="w-4 h-4 text-gray-500" />
       </div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Top Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-end">
-            <div className="relative user-dropdown">
-              <div 
-                className="flex items-center space-x-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg"
-                onClick={() => setShowUserDropdown(!showUserDropdown)}
+      
+      {/* Dropdown Menu */}
+      {showUserDropdown && (
+        <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+          <div className="py-2">
+            <div className="px-4 py-2 text-sm text-gray-500 border-b border-gray-100">
+              Switch Account
+            </div>
+            
+            {adminAccounts.map((account) => (
+              <button
+                key={account.id}
+                onClick={() => {
+                  handleSwitchAccount(account)
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3"
               >
-                <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
-                  <span className="text-sm font-medium text-gray-700">
-                    {session?.user?.name ? getInitials(session.user.name) : 'A'}
+                <div className="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
+                  <span className="text-xs font-medium text-gray-700">
+                    {getInitials(account.email || 'U')}
                   </span>
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-gray-900">
-                    {session?.user?.name || session?.user?.email || 'Admin'}
-                  </span>
+                <div>
+                  <div className="font-medium">{account.email || 'User'}</div>
+                  <div className="text-xs text-gray-500">{account.role}</div>
                 </div>
-                <FiChevronDown className="w-4 h-4 text-gray-500" />
-              </div>
+              </button>
+            ))}
+            
+            <div className="border-t border-gray-100 mt-2 pt-2">
+              <button
+                onClick={() => {
+                  handleAddAccount()
+                  setShowUserDropdown(false)
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3"
+              >
+                <FiPlus className="w-4 h-4 text-gray-500" />
+                <span>Add Account</span>
+              </button>
               
-              {/* Dropdown Menu */}
-              {showUserDropdown && (
-                <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                  <div className="py-2">
-                    <div className="px-4 py-2 text-sm text-gray-500 border-b border-gray-100">
-                      Switch Account
-                    </div>
-                    
-                    {adminAccounts.map((account) => (
-                      <button
-                        key={account.id}
-                        onClick={() => {
-                          handleSwitchAccount(account)
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3"
-                      >
-                        <div className="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
-                          <span className="text-xs font-medium text-gray-700">
-                            {getInitials(account.email || 'U')}
-                          </span>
-                        </div>
-                        <div>
-                          <div className="font-medium">{account.email || 'User'}</div>
-                          <div className="text-xs text-gray-500">{account.role}</div>
-                        </div>
-                      </button>
-                    ))}
-                    
-                    <div className="border-t border-gray-100 mt-2 pt-2">
-                      <button
-                        onClick={() => {
-                          handleAddAccount()
-                          setShowUserDropdown(false)
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3"
-                      >
-                        <FiPlus className="w-4 h-4 text-gray-500" />
-                        <span>Add Account</span>
-                      </button>
-                      
-                      <button
-                        onClick={() => {
-                          handleLogout()
-                          setShowUserDropdown(false)
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3"
-                      >
-                        <FiLogOut className="w-4 h-4" />
-                        <span>Logout</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              <button
+                onClick={() => {
+                  handleLogout()
+                  setShowUserDropdown(false)
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3"
+              >
+                <FiLogOut className="w-4 h-4" />
+                <span>Logout</span>
+              </button>
             </div>
           </div>
         </div>
+      )}
+    </div>
+  )
 
-                 {/* Page Content */}
-         <div className="flex-1 p-6 bg-white">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">Clients</h1>
-            <p className="text-gray-600 mt-1">All Clients</p>
-          </div>
+  // Add Client button
+  const actionButton = (
+    <button 
+      onClick={handleAddClient}
+      className="flex items-center px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5A0FA0] transition-colors"
+    >
+      <FiPlus className="w-4 h-4 mr-2" />
+      Add Client
+    </button>
+  )
 
-          {/* Action Bar */}
-          <div className="flex items-center justify-end mb-6">
-            <button 
-              onClick={handleAddClient}
-              className="flex items-center px-4 py-2 bg-[#2E0A4F] text-white rounded-lg hover:bg-[#3A1A5F] transition-colors"
-            >
-              <FiPlus className="w-4 h-4 mr-2" />
-              Add Client
-            </button>
-          </div>
-
-          {/* Table */}
+  return (
+    <>
+      <Layout
+        dashboardHref={dashboardHref}
+        currentPage="clients"
+        title="Clients"
+        subtitle="All Clients"
+        actionButton={actionButton}
+        userInfo={userInfo}
+      >
+        {/* Table */}
           <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -681,7 +574,7 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
             </div>
           </div>
         </div>
-      </div>
+      </Layout>
 
       {/* Impersonation Modal */}
       {selected && (
@@ -1007,175 +900,10 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
             </div>
           </div>
         </div>
-               )}
-
-       {/* LTV Calculator Modal */}
-       {showLTVModal && (
-         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-           <div className="relative bg-[#2E0A4F] rounded-lg p-8 w-[90%] max-w-md shadow-lg">
-             {/* Close Button */}
-             <button
-               onClick={() => setShowLTVModal(false)}
-               className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors"
-             >
-               <FiPlus className="w-6 h-6 rotate-45" />
-             </button>
-
-             {/* Logo */}
-             <div className="flex justify-center mb-6">
-               <Image
-                 src="/assets/vierra-logo.png"
-                 alt="Vierra Logo"
-                 width={150}
-                 height={50}
-                 className="w-auto h-12"
-               />
-             </div>
-
-             {/* Title */}
-             <h2 className={`text-2xl font-bold text-white text-center mb-6 ${bricolage.className}`}>
-               LTV Calculator
-             </h2>
-
-             {/* Input Fields */}
-             <div className="space-y-4 mb-6">
-               <div>
-                 <label className={`block text-sm font-medium text-white mb-2 ${bricolage.className}`}>
-                   Average Purchase Value
-                 </label>
-                 <input
-                   type="number"
-                   value={ltvValues.averagePurchaseValue}
-                   onChange={(e) => handleLTVInputChange('averagePurchaseValue', parseFloat(e.target.value) || 0)}
-                   className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-md text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
-                   placeholder="0"
-                 />
-               </div>
-
-               <div>
-                 <label className={`block text-sm font-medium text-white mb-2 ${bricolage.className}`}>
-                   Cost Of Goods/Services Sold (As A Percentage)
-                 </label>
-                 <input
-                   type="number"
-                   value={ltvValues.costOfGoodsPercentage}
-                   onChange={(e) => handleLTVInputChange('costOfGoodsPercentage', parseFloat(e.target.value) || 0)}
-                   className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-md text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
-                   placeholder="0"
-                 />
-               </div>
-
-               <div>
-                 <label className={`block text-sm font-medium text-white mb-2 ${bricolage.className}`}>
-                   Returns Per Year
-                 </label>
-                 <input
-                   type="number"
-                   value={ltvValues.returnsPerYear}
-                   onChange={(e) => handleLTVInputChange('returnsPerYear', parseFloat(e.target.value) || 0)}
-                   className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-md text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
-                   placeholder="0"
-                 />
-               </div>
-
-               <div>
-                 <label className={`block text-sm font-medium text-white mb-2 ${bricolage.className}`}>
-                   Customer Term In Years
-                 </label>
-                 <input
-                   type="number"
-                   value={ltvValues.customerTermYears}
-                   onChange={(e) => handleLTVInputChange('customerTermYears', parseFloat(e.target.value) || 0)}
-                   className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-md text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
-                   placeholder="0"
-                 />
-               </div>
-
-               <div>
-                 <label className={`block text-sm font-medium text-white mb-2 ${bricolage.className}`}>
-                   Number Of Referrals
-                 </label>
-                 <input
-                   type="number"
-                   value={ltvValues.numberOfReferrals}
-                   onChange={(e) => handleLTVInputChange('numberOfReferrals', parseFloat(e.target.value) || 0)}
-                   className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-md text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
-                   placeholder="0"
-                 />
-               </div>
-
-               <div>
-                 <label className={`block text-sm font-medium text-white mb-2 ${bricolage.className}`}>
-                   Number Of Clients Brought In
-                 </label>
-                 <input
-                   type="number"
-                   value={ltvValues.numberOfClientsBroughtIn}
-                   onChange={(e) => handleLTVInputChange('numberOfClientsBroughtIn', parseFloat(e.target.value) || 0)}
-                   className="w-full px-4 py-2 bg-white/10 border border-white/20 rounded-md text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30"
-                   placeholder="0"
-                 />
-               </div>
-             </div>
-
-             {/* Calculate Button */}
-             <button
-               onClick={calculateLTV}
-               className={`w-full px-4 py-2 bg-[#701CC0] text-white rounded-md shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-transform duration-300 hover:scale-105 ${inter.className} mb-4`}
-             >
-               Calculate LTV
-             </button>
-
-             {/* Result */}
-             <div className="text-center">
-               <p className="text-white text-lg font-bold">
-                 Lifetime Value: ${lifetimeValue.toFixed(2)}
-               </p>
-             </div>
-           </div>
-         </div>
-       )}
-
-       {/* PDF Signer Modal */}
-       {showPDFModal && (
-         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-           <div className="relative bg-[#2E0A4F] rounded-lg p-8 w-[90%] max-w-md shadow-lg">
-             {/* Close Button */}
-             <button
-               onClick={() => setShowPDFModal(false)}
-               className="absolute top-4 right-4 text-white hover:text-gray-300 transition-colors"
-             >
-               <FiPlus className="w-6 h-6 rotate-45" />
-             </button>
-
-             {/* Logo */}
-             <div className="flex justify-center mb-6">
-               <Image
-                 src="/assets/vierra-logo.png"
-                 alt="Vierra Logo"
-                 width={150}
-                 height={50}
-                 className="w-auto h-12"
-               />
-             </div>
-
-             {/* Title */}
-             <h2 className={`text-2xl font-bold text-white text-center mb-6 ${bricolage.className}`}>
-               Preparing The PDF
-             </h2>
-
-             {/* Upload Button */}
-             <button
-               className={`w-full px-4 py-2 bg-[#701CC0] text-white rounded-md shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-transform duration-300 hover:scale-105 ${inter.className}`}
-             >
-               Upload PDF
-             </button>
-           </div>
-         </div>
-       )}
-     </div>
-   )
- }
+      )}
+    </>
+  )
+}
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const session = await getServerSession(ctx.req, ctx.res, authOptions)
