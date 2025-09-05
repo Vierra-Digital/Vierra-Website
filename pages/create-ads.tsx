@@ -515,17 +515,63 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
     }
   }
 
-  // Function to publish campaign (placeholder)
+  // Function to publish campaign
   const handlePublishCampaign = async () => {
+    if (!campaignName.trim() || !budget || budget <= 0 || selectedPlatforms.length === 0) {
+      alert('Please ensure campaign name, budget, and at least one platform are set before publishing.');
+      return;
+    }
+
     setIsPublishingCampaign(true);
     
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // TODO: Implement actual campaign publishing logic
-    console.log('Publishing campaign...');
-    
-    setIsPublishingCampaign(false);
+    try {
+      // First save/update the campaign
+      const campaignResponse = await fetch('/api/save-campaign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          campaignName: campaignName.trim(),
+          budget: Number(budget),
+          platforms: selectedPlatforms,
+          userId: session?.user?.id,
+        }),
+      });
+
+      if (campaignResponse.ok) {
+        // Then publish it (update status to active and set start date)
+        const publishResponse = await fetch('/api/publish-campaign', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            campaignName: campaignName.trim(),
+            userId: session?.user?.id,
+          }),
+        });
+
+        if (publishResponse.ok) {
+          alert('Campaign published successfully!');
+          // Clear form
+          setCampaignName('');
+          setBudget('');
+          setSelectedPlatforms(['facebook']);
+        } else {
+          console.error('Failed to publish campaign');
+          alert('Failed to publish campaign. Please try again.');
+        }
+      } else {
+        console.error('Failed to save campaign');
+        alert('Failed to save campaign. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error publishing campaign:', error);
+      alert('Error publishing campaign. Please try again.');
+    } finally {
+      setIsPublishingCampaign(false);
+    }
   }
 
   // Function to save additional context

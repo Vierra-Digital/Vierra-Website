@@ -4,7 +4,7 @@ import { Inter } from "next/font/google"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { FiLogOut, FiFileText, FiUsers, FiPlus, FiCheck, FiLink, FiImage, FiArrowLeft, FiChevronDown, FiTarget, FiTrendingUp, FiCalendar, FiDollarSign } from "react-icons/fi"
+import { FiLogOut, FiFileText, FiUsers, FiPlus, FiCheck, FiLink, FiImage, FiArrowLeft, FiChevronDown, FiTarget, FiTrendingUp, FiCalendar, FiDollarSign, FiX } from "react-icons/fi"
 import { useSession, signOut, signIn } from "next-auth/react"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/pages/api/auth/[...nextauth]"
@@ -14,17 +14,19 @@ const inter = Inter({ subsets: ["latin"] })
 
 type Campaign = {
   id: string;
+  campaignId: string;
   name: string;
   platform: string;
-  status: 'active' | 'paused' | 'completed';
+  status: 'draft' | 'active' | 'paused' | 'completed' | 'cancelled';
   budget: number;
   spent: number;
   impressions: number;
   clicks: number;
   conversions: number;
-  startDate: string;
-  endDate?: string;
+  startDate: string | null;
+  endDate?: string | null;
   createdAt: string;
+  originalCampaignName: string;
 }
 
 type PageProps = { dashboardHref: string }
@@ -55,6 +57,16 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
   const [createdAccount, setCreatedAccount] = useState<any>(null)
   const [isImpersonating, setIsImpersonating] = useState(false)
   const [impersonationData, setImpersonationData] = useState<any>(null)
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [showImageModal, setShowImageModal] = useState(false)
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null)
+  const [showCampaignModal, setShowCampaignModal] = useState(false)
+  const [editingCaption, setEditingCaption] = useState(false)
+  const [editingBudget, setEditingBudget] = useState(false)
+  const [tempCaption, setTempCaption] = useState('')
+  const [tempBudget, setTempBudget] = useState<number | ''>('')
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [isRegenerating, setIsRegenerating] = useState(false)
 
   useEffect(() => {
     if (status === "loading") return
@@ -206,53 +218,17 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
   const loadCampaigns = async () => {
     try {
       setLoading(true)
-      // For now, we'll use mock data since there's no campaigns API yet
-      // In the future, this would fetch from /api/campaigns
-      const mockCampaigns: Campaign[] = [
-        {
-          id: '1',
-          name: 'Summer Sale Campaign',
-          platform: 'facebook',
-          status: 'active',
-          budget: 5000,
-          spent: 2340,
-          impressions: 125000,
-          clicks: 3200,
-          conversions: 45,
-          startDate: '2024-01-15',
-          endDate: '2024-02-15',
-          createdAt: '2024-01-15T10:00:00Z'
-        },
-        {
-          id: '2',
-          name: 'Product Launch',
-          platform: 'instagram',
-          status: 'paused',
-          budget: 3000,
-          spent: 1800,
-          impressions: 89000,
-          clicks: 2100,
-          conversions: 28,
-          startDate: '2024-01-20',
-          createdAt: '2024-01-20T14:30:00Z'
-        },
-        {
-          id: '3',
-          name: 'LinkedIn B2B',
-          platform: 'linkedin',
-          status: 'completed',
-          budget: 2000,
-          spent: 2000,
-          impressions: 45000,
-          clicks: 1200,
-          conversions: 15,
-          startDate: '2024-01-01',
-          endDate: '2024-01-31',
-          createdAt: '2024-01-01T09:00:00Z'
+      const response = await fetch('/api/campaigns')
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setCampaigns(data.campaigns)
+        } else {
+          setError('Failed to load campaigns')
         }
-      ]
-      
-      setCampaigns(mockCampaigns)
+      } else {
+        setError('Failed to load campaigns')
+      }
     } catch (error) {
       console.error('Error loading campaigns:', error)
       setError('Error loading campaigns')
@@ -290,7 +266,113 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
       case 'active': return 'bg-green-100 text-green-800'
       case 'paused': return 'bg-yellow-100 text-yellow-800'
       case 'completed': return 'bg-gray-100 text-gray-800'
+      case 'draft': return 'bg-blue-100 text-blue-800'
+      case 'cancelled': return 'bg-red-100 text-red-800'
       default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const handleImageClick = (imageUrl: string) => {
+    setSelectedImage(imageUrl)
+    setShowImageModal(true)
+  }
+
+  const closeImageModal = () => {
+    setSelectedImage(null)
+    setShowImageModal(false)
+  }
+
+  const handleCampaignClick = (campaign: Campaign) => {
+    setSelectedCampaign(campaign)
+    setTempCaption('') // We'll load this from the database later
+    setTempBudget(campaign.budget)
+    setShowCampaignModal(true)
+  }
+
+  const closeCampaignModal = () => {
+    setSelectedCampaign(null)
+    setShowCampaignModal(false)
+    setEditingCaption(false)
+    setEditingBudget(false)
+    setTempCaption('')
+    setTempBudget('')
+  }
+
+  const handleDeactivateCampaign = async () => {
+    if (!selectedCampaign) return
+    
+    setIsUpdating(true)
+    try {
+      const response = await fetch('/api/update-campaign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaignId: selectedCampaign.campaignId,
+          status: 'paused',
+          userId: session?.user?.id
+        })
+      })
+      
+      if (response.ok) {
+        loadCampaigns() // Refresh the campaigns
+        closeCampaignModal()
+      }
+    } catch (error) {
+      console.error('Error deactivating campaign:', error)
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const handleUpdateBudget = async () => {
+    if (!selectedCampaign || !tempBudget) return
+    
+    setIsUpdating(true)
+    try {
+      const response = await fetch('/api/update-campaign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaignId: selectedCampaign.campaignId,
+          budget: Number(tempBudget),
+          userId: session?.user?.id
+        })
+      })
+      
+      if (response.ok) {
+        loadCampaigns()
+        setEditingBudget(false)
+      }
+    } catch (error) {
+      console.error('Error updating budget:', error)
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const handleRegenerateImage = async () => {
+    if (!selectedCampaign) return
+    
+    setIsRegenerating(true)
+    try {
+      const response = await fetch('/api/regenerate-content', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: selectedCampaign.platform,
+          campaignName: selectedCampaign.originalCampaignName,
+          userId: session?.user?.id
+        })
+      })
+      
+      if (response.ok) {
+        // Refresh the image by adding a timestamp to break cache
+        setSelectedImage(`/generated-content/${selectedCampaign.platform}-image-latest.png?t=${Date.now()}`)
+      }
+    } catch (error) {
+      console.error('Error regenerating image:', error)
+    } finally {
+      setIsRegenerating(false)
     }
   }
 
@@ -549,6 +631,16 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
                     >
                       Completed ({campaigns.filter(c => c.status === 'completed').length})
                     </button>
+                    <button
+                      onClick={() => setSelectedStatus('draft')}
+                      className={`px-4 py-2 rounded-lg transition-colors ${
+                        selectedStatus === 'draft'
+                          ? 'bg-[#2E0A4F] text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Draft ({campaigns.filter(c => c.status === 'draft').length})
+                    </button>
                   </div>
 
                   {/* Campaigns grid */}
@@ -556,63 +648,104 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
                     {getFilteredCampaigns().map((campaign) => (
                       <div
                         key={campaign.id}
-                        className="bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow"
+                        className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
                       >
-                        <div className="flex items-start justify-between mb-4">
-                          <div>
-                            <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                              {campaign.name}
-                            </h3>
-                            <div className="flex items-center space-x-2">
-                              <span className={`px-2 py-1 rounded text-xs font-medium ${getPlatformColor(campaign.platform)} text-white`}>
-                                {getPlatformDisplayName(campaign.platform)}
+                        {/* Campaign Image Preview */}
+                        <div className="aspect-video relative bg-gray-100 overflow-hidden">
+                          {/* Try to show the actual generated image first */}
+                          <img
+                            src={`/generated-content/${campaign.platform}-image-latest.png`}
+                            alt={`${campaign.name} preview`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // Hide the image if it fails to load
+                              e.currentTarget.style.display = 'none';
+                            }}
+                            onLoad={(e) => {
+                              // Hide the placeholder when image loads successfully
+                              const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
+                              if (placeholder) placeholder.style.display = 'none';
+                            }}
+                          />
+                          
+                          {/* Placeholder - only shows when image fails to load */}
+                          <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                            <div className="text-center">
+                              <FiImage className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                              <p className="text-sm text-gray-500">Generated Content Preview</p>
+                              <p className="text-xs text-gray-400 mt-1">Click to view full size</p>
+                            </div>
+                          </div>
+                          
+                          {/* Overlay for click interaction */}
+                          <div 
+                            className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-10 transition-all cursor-pointer"
+                            onClick={() => handleCampaignClick(campaign)}
+                          />
+                        </div>
+
+                        <div className="p-6">
+                          <div className="flex items-start justify-between mb-4">
+                            <div>
+                              <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                                {campaign.name}
+                              </h3>
+                              <div className="flex items-center space-x-2">
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${getPlatformColor(campaign.platform)} text-white`}>
+                                  {getPlatformDisplayName(campaign.platform)}
+                                </span>
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(campaign.status)}`}>
+                                  {campaign.status}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600">Budget</span>
+                              <span className="text-sm font-medium text-gray-900">
+                                ${campaign.budget.toLocaleString()}
                               </span>
-                              <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(campaign.status)}`}>
-                                {campaign.status}
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600">Spent</span>
+                              <span className="text-sm font-medium text-gray-900">
+                                ${campaign.spent.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600">Impressions</span>
+                              <span className="text-sm font-medium text-gray-900">
+                                {campaign.impressions.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600">Clicks</span>
+                              <span className="text-sm font-medium text-gray-900">
+                                {campaign.clicks.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600">Conversions</span>
+                              <span className="text-sm font-medium text-gray-900">
+                                {campaign.conversions}
                               </span>
                             </div>
                           </div>
-                        </div>
 
-                        <div className="space-y-3">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-600">Budget</span>
-                            <span className="text-sm font-medium text-gray-900">
-                              ${campaign.budget.toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-600">Spent</span>
-                            <span className="text-sm font-medium text-gray-900">
-                              ${campaign.spent.toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-600">Impressions</span>
-                            <span className="text-sm font-medium text-gray-900">
-                              {campaign.impressions.toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-600">Clicks</span>
-                            <span className="text-sm font-medium text-gray-900">
-                              {campaign.clicks.toLocaleString()}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-600">Conversions</span>
-                            <span className="text-sm font-medium text-gray-900">
-                              {campaign.conversions}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 pt-4 border-t border-gray-100">
-                          <div className="flex items-center justify-between text-xs text-gray-500">
-                            <span>Started {new Date(campaign.startDate).toLocaleDateString()}</span>
-                            {campaign.endDate && (
-                              <span>Ended {new Date(campaign.endDate).toLocaleDateString()}</span>
-                            )}
+                          <div className="mt-4 pt-4 border-t border-gray-100">
+                            <div className="flex items-center justify-between text-xs text-gray-500">
+                              <span>
+                                {campaign.startDate 
+                                  ? `Started ${new Date(campaign.startDate).toLocaleDateString()}`
+                                  : 'Not started'
+                                }
+                              </span>
+                              {campaign.endDate && (
+                                <span>Ended {new Date(campaign.endDate).toLocaleDateString()}</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -716,6 +849,44 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
                 </>
               )}
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Image Modal */}
+      {showImageModal && selectedImage && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+          <div className="relative max-w-4xl max-h-[90vh] w-full h-full flex items-center justify-center p-4">
+            <button
+              onClick={closeImageModal}
+              className="absolute top-4 right-4 text-white hover:text-gray-300 z-10"
+            >
+              <FiX className="w-8 h-8" />
+            </button>
+            <img
+              src={selectedImage}
+              alt="Campaign Preview"
+              className="max-w-full max-h-full object-contain rounded-lg"
+              onError={(e) => {
+                // Show fallback when image fails to load
+                e.currentTarget.style.display = 'none';
+                const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                if (fallback) fallback.style.display = 'flex';
+              }}
+              onLoad={(e) => {
+                // Hide fallback when image loads successfully
+                const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+                if (fallback) fallback.style.display = 'none';
+              }}
+            />
+            {/* Fallback content when image fails to load */}
+            <div className="absolute inset-0 flex items-center justify-center" style={{ display: 'none' }}>
+              <div className="text-center text-white">
+                <FiImage className="w-24 h-24 mx-auto mb-4 text-gray-400" />
+                <p className="text-lg">Generated content preview</p>
+                <p className="text-sm text-gray-300 mt-2">Image will appear here when campaign content is generated</p>
+              </div>
+            </div>
           </div>
         </div>
       )}
