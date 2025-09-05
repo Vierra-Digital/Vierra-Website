@@ -19,6 +19,7 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
   const router = useRouter()
   const { data: session } = useSession()
   const [isImpersonating, setIsImpersonating] = useState(false)
+  const [impersonationData, setImpersonationData] = useState<any>(null)
   const [websiteUrl, setWebsiteUrl] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<string | null>(null)
@@ -336,8 +337,28 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
   useEffect(() => {
     const storedImpersonation = localStorage.getItem('impersonationData')
     if (storedImpersonation) {
-      setIsImpersonating(true)
+      try {
+        const data = JSON.parse(storedImpersonation)
+        setImpersonationData(data)
+        setIsImpersonating(true)
+      } catch {}
     }
+    // Fallback to cookies set by API (authoritative on server)
+    try {
+      const cookieMap = Object.fromEntries(document.cookie.split('; ').map(p => {
+        const idx = p.indexOf('=')
+        if (idx === -1) return [p, '']
+        return [p.substring(0, idx), p.substring(idx + 1)]
+      }))
+      if (cookieMap['impersonatedUserId']) {
+        setImpersonationData((prev: any) => ({
+          ...(prev || {}),
+          impersonatedUserId: Number(cookieMap['impersonatedUserId']),
+          impersonatedUserName: cookieMap['impersonatedUserName'] ? decodeURIComponent(cookieMap['impersonatedUserName']) : (prev?.impersonatedUserName || undefined)
+        }))
+        setIsImpersonating(true)
+      }
+    } catch {}
   }, []);
 
   // Close dropdown when clicking outside
@@ -455,14 +476,16 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
     setBudgetSaved(false);
     
     try {
+      const targetUserId = (isImpersonating && impersonationData?.impersonatedUserId) ? impersonationData.impersonatedUserId : session?.user?.id
       const response = await fetch('/api/save-budget', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(isImpersonating && impersonationData?.impersonatedUserId ? { 'x-impersonated-user-id': String(impersonationData.impersonatedUserId) } : {})
         },
         body: JSON.stringify({
           budget: Number(budget),
-          userId: session?.user?.id,
+          userId: targetUserId,
         }),
       });
 
@@ -489,16 +512,18 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
     setCampaignSaved(false);
     
     try {
+      const targetUserId = (isImpersonating && impersonationData?.impersonatedUserId) ? impersonationData.impersonatedUserId : session?.user?.id
       const response = await fetch('/api/save-campaign', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(isImpersonating && impersonationData?.impersonatedUserId ? { 'x-impersonated-user-id': String(impersonationData.impersonatedUserId) } : {})
         },
         body: JSON.stringify({
           campaignName: campaignName.trim(),
           budget: budget || 0,
           platforms: selectedPlatforms,
-          userId: session?.user?.id,
+          userId: targetUserId,
           generatedContent: generatedContent,
         }),
       });
@@ -527,16 +552,18 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
     
     try {
       // First save/update the campaign
+      const targetUserId = (isImpersonating && impersonationData?.impersonatedUserId) ? impersonationData.impersonatedUserId : session?.user?.id
       const campaignResponse = await fetch('/api/save-campaign', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(isImpersonating && impersonationData?.impersonatedUserId ? { 'x-impersonated-user-id': String(impersonationData.impersonatedUserId) } : {})
         },
         body: JSON.stringify({
           campaignName: campaignName.trim(),
           budget: Number(budget),
           platforms: selectedPlatforms,
-          userId: session?.user?.id,
+          userId: targetUserId,
           generatedContent: generatedContent,
         }),
       });
@@ -547,10 +574,11 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            ...(isImpersonating && impersonationData?.impersonatedUserId ? { 'x-impersonated-user-id': String(impersonationData.impersonatedUserId) } : {})
           },
           body: JSON.stringify({
             campaignName: campaignName.trim(),
-            userId: session?.user?.id,
+            userId: targetUserId,
           }),
         });
 
@@ -792,11 +820,14 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
               {isImpersonating && (
                 <div className="mb-4 p-3 bg-yellow-600/20 border border-yellow-500/30 rounded-lg">
                   <div className="text-yellow-200 text-xs mb-2">
-                    Impersonating User
+                    Impersonating: {impersonationData?.impersonatedUserName || 'Client'}
                   </div>
                   <button
                     onClick={() => {
                       localStorage.removeItem('impersonationData')
+                      // Clear cookies set by API
+                      document.cookie = 'impersonatedUserId=; Max-Age=0; path=/'
+                      document.cookie = 'impersonatedUserName=; Max-Age=0; path=/'
                       router.push('/manage-users')
                     }}
                     className="flex items-center w-full p-2 rounded bg-yellow-600 hover:bg-yellow-700 text-white transition-colors duration-200"
@@ -904,64 +935,30 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
                 >
                   <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
                     <span className="text-sm font-medium text-gray-700">
-                      {session?.user?.name ? getInitials(session.user.name) : 'A'}
+                      {isImpersonating && impersonationData?.impersonatedUserName
+                        ? getInitials(impersonationData.impersonatedUserName)
+                        : (session?.user?.name ? getInitials(session.user.name) : 'A')}
                     </span>
                   </div>
                   <div className="flex flex-col">
                     <span className="text-sm font-medium text-gray-900">
-                      {session?.user?.name || session?.user?.email || 'User'}
+                      {isImpersonating && impersonationData?.impersonatedUserName
+                        ? impersonationData.impersonatedUserName
+                        : (session?.user?.name || session?.user?.email || 'User')}
                     </span>
                   </div>
                   <FiChevronDown className="w-4 h-4 text-gray-500" />
                 </div>
                 
-                {/* Dropdown Menu (match manage-users) */}
                 {showUserDropdown && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                    <div className="py-2">
-                      <div className="px-4 py-2 text-sm text-gray-500 border-b border-gray-100">
-                        Switch Account
-                      </div>
-
-                      {adminAccounts.map((account) => (
-                        <button
-                          key={account.id}
-                          onClick={() => {
-                            handleSwitchAccount(account)
-                            setShowUserDropdown(false)
-                          }}
-                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3"
-                        >
-                          <div className="w-6 h-6 bg-gray-300 rounded-full flex items-center justify-center">
-                            <span className="text-xs font-medium text-gray-700">
-                              {getInitials(account.email || 'U')}
-                            </span>
-                          </div>
-                          <div>
-                            <div className="font-medium">{account.email || 'User'}</div>
-                            <div className="text-xs text-gray-500">{account.role}</div>
-                          </div>
-                        </button>
-                      ))}
-
-                      <div className="border-t border-gray-100 mt-2 pt-2">
-                        <button
-                          onClick={handleAddAccount}
-                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center space-x-3"
-                        >
-                          <FiPlus className="w-4 h-4 text-gray-500" />
-                          <span>Add Account</span>
-                        </button>
-
-                        <button
-                          onClick={() => { signOut({ callbackUrl: '/login' }); setShowUserDropdown(false) }}
-                          className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3"
-                        >
-                          <FiLogOut className="w-4 h-4" />
-                          <span>Logout</span>
-                        </button>
-                      </div>
-                    </div>
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                    <button
+                      onClick={() => { signOut({ callbackUrl: '/login' }); setShowUserDropdown(false) }}
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3"
+                    >
+                      <FiLogOut className="w-4 h-4" />
+                      <span>Logout</span>
+                    </button>
                   </div>
                 )}
               </div>

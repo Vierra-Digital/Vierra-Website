@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/pages/api/auth/[...nextauth]';
 import { prisma } from '@/lib/prisma';
+import { serialize } from 'cookie';
 import crypto from 'crypto';
 
 export default async function handler(
@@ -54,8 +55,24 @@ export default async function handler(
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
     };
 
-    // For now, we'll return the token and the impersonation details so the client
-    // can persist them in localStorage (a lightweight demo approach)
+    // Set HTTP-only cookie so server can honor impersonation on all API calls/SSR
+    const cookie = serialize('impersonatedUserId', String(targetUser.id), {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 60 * 60 * 24, // 1 day
+    });
+    const nameCookie = serialize('impersonatedUserName', encodeURIComponent(targetUser.client?.name || targetUser.email || 'User'), {
+      httpOnly: false,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 60 * 60 * 24,
+    });
+    res.setHeader('Set-Cookie', [cookie, nameCookie]);
+
+    // Return details to optionally store in localStorage for UI
     res.status(200).json({
       success: true,
       impersonationToken,
