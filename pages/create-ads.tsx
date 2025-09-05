@@ -60,6 +60,9 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
   const [budgetSaved, setBudgetSaved] = useState(false)
   const [showBudgetModal, setShowBudgetModal] = useState(false)
   const [isPublishingCampaign, setIsPublishingCampaign] = useState(false)
+  const [campaignName, setCampaignName] = useState('')
+  const [isSavingCampaign, setIsSavingCampaign] = useState(false)
+  const [campaignSaved, setCampaignSaved] = useState(false)
 
   const formatPlatformName = (platform: string) => {
     if (platform === 'googleads') return 'Google Ads';
@@ -473,6 +476,42 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
       console.error('Error saving budget:', error);
     } finally {
       setIsSavingBudget(false);
+    }
+  }
+
+  // Function to save campaign name
+  const handleSaveCampaign = async () => {
+    if (!campaignName.trim()) {
+      return;
+    }
+
+    setIsSavingCampaign(true);
+    setCampaignSaved(false);
+    
+    try {
+      const response = await fetch('/api/save-campaign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          campaignName: campaignName.trim(),
+          budget: budget || 0,
+          platforms: selectedPlatforms,
+          userId: session?.user?.id,
+        }),
+      });
+
+      if (response.ok) {
+        setCampaignSaved(true);
+        setTimeout(() => setCampaignSaved(false), 3000);
+      } else {
+        console.error('Failed to save campaign');
+      }
+    } catch (error) {
+      console.error('Error saving campaign:', error);
+    } finally {
+      setIsSavingCampaign(false);
     }
   }
 
@@ -1028,78 +1067,6 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
               </div>
             </div>
 
-            {/* Budget and Campaign Management Section */}
-            <div className="bg-white border border-gray-200 rounded-lg p-8 mb-6">
-              <h3 className="text-xl font-semibold mb-4 text-gray-900">Campaign Management</h3>
-              
-              <div className="flex gap-4 items-end">
-                {/* Budget Input */}
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Campaign Budget ($)
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="Enter budget amount"
-                    value={budget}
-                    onChange={(e) => setBudget(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#2E0A4F] focus:border-transparent transition-colors"
-                    min="0"
-                    step="0.01"
-                  />
-                </div>
-                
-                {/* Save Budget Button */}
-                <button
-                  onClick={handleSaveBudget}
-                  disabled={isSavingBudget || !budget || budget <= 0}
-                  className={`font-medium px-6 py-3 rounded-lg transition-colors duration-200 flex items-center gap-2 ${
-                    budgetSaved 
-                      ? 'bg-green-600 hover:bg-green-700' 
-                      : isSavingBudget 
-                        ? 'bg-gray-500 cursor-not-allowed' 
-                        : 'bg-[#2E0A4F] hover:bg-[#3A1A5F]'
-                  } text-white`}
-                >
-                  {budgetSaved ? (
-                    <>
-                      <FiCheck className="w-4 h-4" />
-                      Saved!
-                    </>
-                  ) : isSavingBudget ? (
-                    'Saving...'
-                  ) : (
-                    'Save Budget'
-                  )}
-                </button>
-                
-                {/* Publish Campaign Button */}
-                <button
-                  onClick={handlePublishCampaign}
-                  disabled={isPublishingCampaign}
-                  className={`font-medium px-6 py-3 rounded-lg transition-colors duration-200 flex items-center gap-2 ${
-                    isPublishingCampaign 
-                      ? 'bg-gray-500 cursor-not-allowed' 
-                      : 'bg-green-600 hover:bg-green-700'
-                  } text-white`}
-                >
-                  {isPublishingCampaign ? (
-                    'Publishing...'
-                  ) : (
-                    <>
-                      <FiTarget className="w-4 h-4" />
-                      Publish Campaign
-                    </>
-                  )}
-                </button>
-              </div>
-              
-              {budget && budget > 0 && (
-                <div className="mt-3 text-sm text-gray-600">
-                  Budget set to: ${budget.toLocaleString()}
-                </div>
-              )}
-            </div>
 
             {/* Additional Context Section */}
             <div className="bg-white border border-gray-200 rounded-lg p-8 mb-6">
@@ -1372,6 +1339,124 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
                 </div>
               </div>
             ))}
+
+            {/* Budget and Campaign Management Section - Bottom of Page */}
+            <div className="bg-white border border-gray-200 rounded-lg p-8 mb-6">
+              <h3 className="text-xl font-semibold mb-4 text-gray-900">Campaign Management</h3>
+              
+              {/* Campaign Name Section */}
+              <div className="flex gap-4 items-end mb-6">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Campaign Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Enter campaign name"
+                    value={campaignName}
+                    onChange={(e) => setCampaignName(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#2E0A4F] focus:border-transparent transition-colors"
+                  />
+                </div>
+                
+                {/* Save Campaign Button */}
+                <button
+                  onClick={handleSaveCampaign}
+                  disabled={isSavingCampaign || !campaignName.trim()}
+                  className={`font-medium px-6 py-3 rounded-lg transition-colors duration-200 flex items-center gap-2 ${
+                    campaignSaved 
+                      ? 'bg-green-600 hover:bg-green-700' 
+                      : isSavingCampaign 
+                        ? 'bg-gray-500 cursor-not-allowed' 
+                        : 'bg-[#2E0A4F] hover:bg-[#3A1A5F]'
+                  } text-white`}
+                >
+                  {campaignSaved ? (
+                    <>
+                      <FiCheck className="w-4 h-4" />
+                      Saved!
+                    </>
+                  ) : isSavingCampaign ? (
+                    'Saving...'
+                  ) : (
+                    'Save Campaign'
+                  )}
+                </button>
+              </div>
+              
+              <div className="flex gap-4 items-end">
+                {/* Budget Input */}
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Campaign Budget ($)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="Enter budget amount"
+                    value={budget}
+                    onChange={(e) => setBudget(e.target.value ? Number(e.target.value) : '')}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-3 text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#2E0A4F] focus:border-transparent transition-colors"
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                
+                {/* Save Budget Button */}
+                <button
+                  onClick={handleSaveBudget}
+                  disabled={isSavingBudget || !budget || budget <= 0}
+                  className={`font-medium px-6 py-3 rounded-lg transition-colors duration-200 flex items-center gap-2 ${
+                    budgetSaved 
+                      ? 'bg-green-600 hover:bg-green-700' 
+                      : isSavingBudget 
+                        ? 'bg-gray-500 cursor-not-allowed' 
+                        : 'bg-[#2E0A4F] hover:bg-[#3A1A5F]'
+                  } text-white`}
+                >
+                  {budgetSaved ? (
+                    <>
+                      <FiCheck className="w-4 h-4" />
+                      Saved!
+                    </>
+                  ) : isSavingBudget ? (
+                    'Saving...'
+                  ) : (
+                    'Save Budget'
+                  )}
+                </button>
+                
+                {/* Publish Campaign Button */}
+                <button
+                  onClick={handlePublishCampaign}
+                  disabled={isPublishingCampaign}
+                  className={`font-medium px-6 py-3 rounded-lg transition-colors duration-200 flex items-center gap-2 ${
+                    isPublishingCampaign 
+                      ? 'bg-gray-500 cursor-not-allowed' 
+                      : 'bg-green-600 hover:bg-green-700'
+                  } text-white`}
+                >
+                  {isPublishingCampaign ? (
+                    'Publishing...'
+                  ) : (
+                    <>
+                      <FiTarget className="w-4 h-4" />
+                      Publish Campaign
+                    </>
+                  )}
+                </button>
+              </div>
+              
+              {campaignName && (
+                <div className="mt-3 text-sm text-gray-600">
+                  Campaign: {campaignName}
+                </div>
+              )}
+              {budget && budget > 0 && (
+                <div className="mt-1 text-sm text-gray-600">
+                  Budget: ${budget.toLocaleString()}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

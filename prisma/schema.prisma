@@ -55,6 +55,7 @@ model User {
   signed_documents         signed_documents[]
   tokens                   UserToken[]
   websiteAnalyses          WebsiteAnalysis[]
+  campaigns                Campaign[]
   
   // NextAuth.js relations
   accounts                 Account[]
@@ -295,4 +296,34 @@ model VerificationToken {
 
   @@unique([identifier, token])
   @@map("verificationtokens")
+}
+
+model Campaign {
+  id          String   @id @default(cuid())
+  userId      Int
+  name        String
+  budget      Float    @default(0)
+  spent       Float    @default(0)
+  status      CampaignStatus @default(draft)
+  platforms   String[] // JSON array of platform names
+  impressions Int      @default(0)
+  clicks      Int      @default(0)
+  conversions Int      @default(0)
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([createdAt])
+  @@map("campaigns")
+}
+
+enum CampaignStatus {
+  draft
+  active
+  paused
+  completed
+  cancelled
 }
