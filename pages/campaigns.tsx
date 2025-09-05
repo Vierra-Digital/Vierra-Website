@@ -67,6 +67,8 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
   const [tempBudget, setTempBudget] = useState<number | ''>('')
   const [isUpdating, setIsUpdating] = useState(false)
   const [isRegenerating, setIsRegenerating] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   useEffect(() => {
     if (status === "loading") return
@@ -282,11 +284,27 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
     setShowImageModal(false)
   }
 
-  const handleCampaignClick = (campaign: Campaign) => {
+  const handleCampaignClick = async (campaign: Campaign) => {
     setSelectedCampaign(campaign)
-    setTempCaption('') // We'll load this from the database later
     setTempBudget(campaign.budget)
     setShowCampaignModal(true)
+    
+    // Prevent body scroll when modal is open
+    document.body.style.overflow = 'hidden'
+    
+    // Load caption from database
+    try {
+      const response = await fetch(`/api/get-campaign-caption?campaignId=${campaign.campaignId}&platform=${campaign.platform}`)
+      if (response.ok) {
+        const data = await response.json()
+        setTempCaption(data.caption || '')
+      } else {
+        setTempCaption('')
+      }
+    } catch (error) {
+      console.error('Error loading caption:', error)
+      setTempCaption('')
+    }
   }
 
   const closeCampaignModal = () => {
@@ -296,6 +314,10 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
     setEditingBudget(false)
     setTempCaption('')
     setTempBudget('')
+    setShowDeleteConfirm(false)
+    
+    // Restore body scroll
+    document.body.style.overflow = 'unset'
   }
 
   const handleDeactivateCampaign = async () => {
@@ -350,6 +372,32 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
     }
   }
 
+  const handleUpdateCaption = async () => {
+    if (!selectedCampaign) return
+    
+    setIsUpdating(true)
+    try {
+      const response = await fetch('/api/save-campaign-caption', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaignId: selectedCampaign.campaignId,
+          platform: selectedCampaign.platform,
+          caption: tempCaption.trim(),
+          userId: session?.user?.id
+        })
+      })
+      
+      if (response.ok) {
+        setEditingCaption(false)
+      }
+    } catch (error) {
+      console.error('Error updating caption:', error)
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   const handleRegenerateImage = async () => {
     if (!selectedCampaign) return
     
@@ -373,6 +421,34 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
       console.error('Error regenerating image:', error)
     } finally {
       setIsRegenerating(false)
+    }
+  }
+
+  const handleDeleteCampaign = async () => {
+    if (!selectedCampaign) return
+    
+    setIsDeleting(true)
+    try {
+      const response = await fetch('/api/delete-campaign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaignId: selectedCampaign.campaignId,
+          userId: session?.user?.id
+        })
+      })
+      
+      if (response.ok) {
+        loadCampaigns() // Refresh the campaigns list
+        closeCampaignModal()
+      } else {
+        console.error('Failed to delete campaign')
+      }
+    } catch (error) {
+      console.error('Error deleting campaign:', error)
+    } finally {
+      setIsDeleting(false)
+      setShowDeleteConfirm(false)
     }
   }
 
@@ -855,7 +931,7 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
 
       {/* Campaign Management Modal */}
       {showCampaignModal && selectedCampaign && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
           <div className="relative bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden">
             <button
               onClick={closeCampaignModal}
@@ -864,7 +940,7 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
               <FiX className="w-6 h-6" />
             </button>
             
-            <div className="p-6">
+            <div className="p-6 max-h-[90vh] overflow-y-auto">
               {/* Campaign Header */}
               <div className="mb-6">
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">{selectedCampaign.name}</h2>
@@ -924,7 +1000,7 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
                     />
                     <div className="flex gap-2">
                       <button
-                        onClick={() => {/* Save caption */}}
+                        onClick={handleUpdateCaption}
                         disabled={isUpdating}
                         className="bg-[#2E0A4F] hover:bg-[#3A1A5F] text-white px-4 py-2 rounded-lg text-sm disabled:opacity-60"
                       >
@@ -1015,7 +1091,52 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
                     {isUpdating ? 'Deactivating...' : 'Deactivate Campaign'}
                   </button>
                 )}
+
+                <button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  disabled={isDeleting}
+                  className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-60"
+                >
+                  <FiX className="w-4 h-4" />
+                  Delete Campaign
+                </button>
               </div>
+
+              {/* Delete Confirmation */}
+              {showDeleteConfirm && (
+                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0">
+                      <FiX className="w-5 h-5 text-red-400" />
+                    </div>
+                    <div className="ml-3 w-0 flex-1">
+                      <h3 className="text-sm font-medium text-red-800">
+                        Delete Campaign
+                      </h3>
+                      <div className="mt-2 text-sm text-red-700">
+                        <p>
+                          Are you sure you want to delete "{selectedCampaign.name}"? This action cannot be undone and will remove all campaign data including captions and metrics.
+                        </p>
+                      </div>
+                      <div className="mt-4 flex gap-2">
+                        <button
+                          onClick={handleDeleteCampaign}
+                          disabled={isDeleting}
+                          className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm disabled:opacity-60"
+                        >
+                          {isDeleting ? 'Deleting...' : 'Yes, Delete'}
+                        </button>
+                        <button
+                          onClick={() => setShowDeleteConfirm(false)}
+                          className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-3 py-1 rounded text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
