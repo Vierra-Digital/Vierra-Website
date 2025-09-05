@@ -19,9 +19,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const userId = parseInt(session.user.id as string)
 
-    // Fetch user's campaigns from database
+    // Fetch user's campaigns from database with captions
     const campaigns = await prisma.campaign.findMany({
       where: { userId },
+      include: {
+        captions: true
+      },
       orderBy: { createdAt: 'desc' }
     })
 
@@ -30,6 +33,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     campaigns.forEach(campaign => {
       campaign.platforms.forEach(platform => {
+        // Find the caption/image for this platform
+        const caption = campaign.captions.find(c => c.platform === platform)
+        
         platformCampaigns.push({
           id: `${campaign.id}-${platform}`,
           campaignId: campaign.id,
@@ -44,7 +50,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           startDate: campaign.startDate,
           endDate: campaign.endDate,
           createdAt: campaign.createdAt,
-          originalCampaignName: campaign.name
+          originalCampaignName: campaign.name,
+          caption: caption?.caption || '',
+          imageData: caption?.imageData || ''
         })
       })
     })

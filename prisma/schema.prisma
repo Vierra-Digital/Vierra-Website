@@ -326,6 +326,7 @@ model CampaignCaption {
   campaignId String
   platform   String
   caption    String
+  imageData  String?  // Base64 image data
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)

@@ -27,6 +27,8 @@ type Campaign = {
   endDate?: string | null;
   createdAt: string;
   originalCampaignName: string;
+  caption: string;
+  imageData: string;
 }
 
 type PageProps = { dashboardHref: string }
@@ -287,24 +289,11 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
   const handleCampaignClick = async (campaign: Campaign) => {
     setSelectedCampaign(campaign)
     setTempBudget(campaign.budget)
+    setTempCaption(campaign.caption || '')
     setShowCampaignModal(true)
     
     // Prevent body scroll when modal is open
     document.body.style.overflow = 'hidden'
-    
-    // Load caption from database
-    try {
-      const response = await fetch(`/api/get-campaign-caption?campaignId=${campaign.campaignId}&platform=${campaign.platform}`)
-      if (response.ok) {
-        const data = await response.json()
-        setTempCaption(data.caption || '')
-      } else {
-        setTempCaption('')
-      }
-    } catch (error) {
-      console.error('Error loading caption:', error)
-      setTempCaption('')
-    }
   }
 
   const closeCampaignModal = () => {
@@ -728,30 +717,23 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
                       >
                         {/* Campaign Image Preview */}
                         <div className="aspect-video relative bg-gray-100 overflow-hidden">
-                          {/* Try to show the actual generated image first */}
-                          <img
-                            src={`/generated-content/${campaign.platform}-image-latest.png`}
-                            alt={`${campaign.name} preview`}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              // Hide the image if it fails to load
-                              e.currentTarget.style.display = 'none';
-                            }}
-                            onLoad={(e) => {
-                              // Hide the placeholder when image loads successfully
-                              const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
-                              if (placeholder) placeholder.style.display = 'none';
-                            }}
-                          />
-                          
-                          {/* Placeholder - only shows when image fails to load */}
-                          <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                            <div className="text-center">
-                              <FiImage className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-                              <p className="text-sm text-gray-500">Generated Content Preview</p>
-                              <p className="text-xs text-gray-400 mt-1">Click to view full size</p>
+                          {campaign.imageData ? (
+                            // Show the actual saved image
+                            <img
+                              src={`data:image/png;base64,${campaign.imageData}`}
+                              alt={`${campaign.name} preview`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            // Show placeholder when no image is available
+                            <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                              <div className="text-center">
+                                <FiImage className="w-12 h-12 text-gray-300 mx-auto mb-2" />
+                                <p className="text-sm text-gray-500">Generated Content Preview</p>
+                                <p className="text-xs text-gray-400 mt-1">Click to view full size</p>
+                              </div>
                             </div>
-                          </div>
+                          )}
                           
                           {/* Overlay for click interaction */}
                           <div 
@@ -957,24 +939,20 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
               {/* Campaign Image */}
               <div className="mb-6">
                 <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden relative">
-                  <img
-                    src={`/generated-content/${selectedCampaign.platform}-image-latest.png`}
-                    alt={selectedCampaign.name}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                    onLoad={(e) => {
-                      const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
-                      if (placeholder) placeholder.style.display = 'none';
-                    }}
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                    <div className="text-center">
-                      <FiImage className="w-16 h-16 text-gray-300 mx-auto mb-2" />
-                      <p className="text-gray-500">Generated Content Preview</p>
+                  {selectedCampaign.imageData ? (
+                    <img
+                      src={`data:image/png;base64,${selectedCampaign.imageData}`}
+                      alt={selectedCampaign.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                      <div className="text-center">
+                        <FiImage className="w-16 h-16 text-gray-300 mx-auto mb-2" />
+                        <p className="text-gray-500">Generated Content Preview</p>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
 

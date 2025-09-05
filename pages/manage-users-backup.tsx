@@ -576,7 +576,7 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
         </div>
       </Layout>
 
-      {/* Impersonation Modal */}
+          {/* Impersonation Modal */}
       {selected && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">

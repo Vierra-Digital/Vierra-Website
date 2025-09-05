@@ -499,6 +499,7 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
           budget: budget || 0,
           platforms: selectedPlatforms,
           userId: session?.user?.id,
+          generatedContent: generatedContent,
         }),
       });
 
@@ -536,6 +537,7 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
           budget: Number(budget),
           platforms: selectedPlatforms,
           userId: session?.user?.id,
+          generatedContent: generatedContent,
         }),
       });
 
@@ -696,13 +698,47 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
 
       if (response.ok) {
         // Update generated content
-        setGeneratedContent(prev => ({
-          ...prev,
-          [platform]: {
-            ...prev[platform],
-            [contentType]: contentType === 'image' ? data.imagePath : data.caption
+        if (contentType === 'image') {
+          // Fetch the actual image data as base64
+          try {
+            const imageResponse = await fetch(data.imagePath)
+            const imageBlob = await imageResponse.blob()
+            const reader = new FileReader()
+            reader.onload = function() {
+              const base64data = reader.result as string
+              // Remove the data:image/png;base64, prefix to get just the base64 string
+              const base64String = base64data.split(',')[1]
+              
+              setGeneratedContent(prev => ({
+                ...prev,
+                [platform]: {
+                  ...prev[platform],
+                  image: base64String
+                }
+              }))
+            }
+            reader.readAsDataURL(imageBlob)
+          } catch (error) {
+            console.error('Error converting image to base64:', error)
+            // Fallback to storing the URL
+            setGeneratedContent(prev => ({
+              ...prev,
+              [platform]: {
+                ...prev[platform],
+                image: data.imagePath
+              }
+            }))
           }
-        }));
+        } else {
+          // For captions, store as usual
+          setGeneratedContent(prev => ({
+            ...prev,
+            [platform]: {
+              ...prev[platform],
+              caption: data.caption
+            }
+          }))
+        };
       } else {
         setError(data.error || `${contentType} generation failed`);
       }
@@ -1338,7 +1374,11 @@ const CreateAdsPage = ({ dashboardHref }: PageProps) => {
                   <div className="bg-gray-100 border border-gray-300 rounded-lg p-4 text-center h-64 flex items-center justify-center">
                     {generatedContent[platform]?.image ? (
                       <img 
-                        src={generatedContent[platform].image} 
+                        src={
+                          generatedContent[platform].image?.startsWith('data:') || generatedContent[platform].image?.startsWith('/api/') 
+                            ? generatedContent[platform].image 
+                            : `data:image/png;base64,${generatedContent[platform].image}`
+                        }
                         alt={`Generated ${platform} ad image`}
                         className="max-w-full max-h-full object-contain"
                       />
