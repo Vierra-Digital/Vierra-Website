@@ -853,7 +853,175 @@ export default function CampaignsPage({ dashboardHref }: PageProps) {
         </div>
       )}
 
-      {/* Image Modal */}
+      {/* Campaign Management Modal */}
+      {showCampaignModal && selectedCampaign && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+          <div className="relative bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden">
+            <button
+              onClick={closeCampaignModal}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 z-10"
+            >
+              <FiX className="w-6 h-6" />
+            </button>
+            
+            <div className="p-6">
+              {/* Campaign Header */}
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">{selectedCampaign.name}</h2>
+                <div className="flex items-center space-x-2">
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${getPlatformColor(selectedCampaign.platform)} text-white`}>
+                    {getPlatformDisplayName(selectedCampaign.platform)}
+                  </span>
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(selectedCampaign.status)}`}>
+                    {selectedCampaign.status}
+                  </span>
+                </div>
+              </div>
+
+              {/* Campaign Image */}
+              <div className="mb-6">
+                <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden relative">
+                  <img
+                    src={`/generated-content/${selectedCampaign.platform}-image-latest.png`}
+                    alt={selectedCampaign.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                    onLoad={(e) => {
+                      const placeholder = e.currentTarget.nextElementSibling as HTMLElement;
+                      if (placeholder) placeholder.style.display = 'none';
+                    }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                    <div className="text-center">
+                      <FiImage className="w-16 h-16 text-gray-300 mx-auto mb-2" />
+                      <p className="text-gray-500">Generated Content Preview</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Caption Section */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-lg font-semibold text-gray-900">Caption</h3>
+                  <button
+                    onClick={() => setEditingCaption(!editingCaption)}
+                    className="text-[#2E0A4F] hover:text-[#3A1A5F] text-sm"
+                  >
+                    {editingCaption ? 'Cancel' : 'Edit'}
+                  </button>
+                </div>
+                {editingCaption ? (
+                  <div className="space-y-3">
+                    <textarea
+                      value={tempCaption}
+                      onChange={(e) => setTempCaption(e.target.value)}
+                      placeholder="Enter campaign caption..."
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#2E0A4F] focus:border-transparent resize-none"
+                      rows={3}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {/* Save caption */}}
+                        disabled={isUpdating}
+                        className="bg-[#2E0A4F] hover:bg-[#3A1A5F] text-white px-4 py-2 rounded-lg text-sm disabled:opacity-60"
+                      >
+                        {isUpdating ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        onClick={() => setEditingCaption(false)}
+                        className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-lg text-sm"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-gray-700">
+                      {tempCaption || 'No caption available. Click Edit to add one.'}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Budget Section */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-lg font-semibold text-gray-900">Budget</h3>
+                  <button
+                    onClick={() => setEditingBudget(!editingBudget)}
+                    className="text-[#2E0A4F] hover:text-[#3A1A5F] text-sm"
+                  >
+                    {editingBudget ? 'Cancel' : 'Edit'}
+                  </button>
+                </div>
+                {editingBudget ? (
+                  <div className="space-y-3">
+                    <input
+                      type="number"
+                      value={tempBudget}
+                      onChange={(e) => setTempBudget(e.target.value ? Number(e.target.value) : '')}
+                      placeholder="Enter budget amount"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#2E0A4F] focus:border-transparent"
+                      min="0"
+                      step="0.01"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleUpdateBudget}
+                        disabled={isUpdating}
+                        className="bg-[#2E0A4F] hover:bg-[#3A1A5F] text-white px-4 py-2 rounded-lg text-sm disabled:opacity-60"
+                      >
+                        {isUpdating ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        onClick={() => setEditingBudget(false)}
+                        className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-lg text-sm"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-gray-700 text-lg font-medium">
+                      ${selectedCampaign.budget.toLocaleString()}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={handleRegenerateImage}
+                  disabled={isRegenerating}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-60"
+                >
+                  <FiImage className="w-4 h-4" />
+                  {isRegenerating ? 'Regenerating...' : 'Regenerate Image'}
+                </button>
+                
+                {selectedCampaign.status === 'active' && (
+                  <button
+                    onClick={handleDeactivateCampaign}
+                    disabled={isUpdating}
+                    className="flex items-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-60"
+                  >
+                    <FiTarget className="w-4 h-4" />
+                    {isUpdating ? 'Deactivating...' : 'Deactivate Campaign'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Simple Image Modal (kept for backward compatibility) */}
       {showImageModal && selectedImage && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
           <div className="relative max-w-4xl max-h-[90vh] w-full h-full flex items-center justify-center p-4">
