@@ -1,25 +1,39 @@
-import { useSession, signOut, signIn } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
-import Image from "next/image"
-import Link from "next/link"
-import { FiLogOut, FiFileText, FiLink, FiPlus, FiImage, FiArrowLeft, FiChevronDown, FiTarget } from "react-icons/fi"
+import React, { useState, useEffect } from "react"
+import Head from "next/head"
 import { Inter } from "next/font/google"
-import type { GetServerSideProps } from "next"
+import Image from "next/image"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
+import { FiLogOut, FiFileText, FiUsers, FiPlus, FiCheck, FiLink, FiImage, FiArrowLeft, FiChevronDown, FiTarget } from "react-icons/fi"
+import { useSession, signOut, signIn } from "next-auth/react"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/pages/api/auth/[...nextauth]"
-import UserSettingsPage from "@/components/UserSettingsPage"
-
-type PageProps = { dashboardHref: string }
+import type { GetServerSideProps } from "next"
 
 const inter = Inter({ subsets: ["latin"] })
 
-export default function ClientsPage({ dashboardHref }: PageProps) {
+type GalleryImage = {
+  id: string;
+  platform: string;
+  content: string;
+  urlLink: string | null;
+  metadata: any;
+  createdAt: string;
+}
+
+type ImagesByPlatform = {
+  [platform: string]: GalleryImage[];
+}
+
+type PageProps = { dashboardHref: string }
+
+export default function GalleryPage({ dashboardHref }: PageProps) {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const [showSettings, setShowSettings] = useState(false)
-  const [isImpersonating, setIsImpersonating] = useState(false)
-  const [impersonationData, setImpersonationData] = useState<any>(null)
+  const [images, setImages] = useState<ImagesByPlatform>({})
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null)
   const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [adminAccounts, setAdminAccounts] = useState<any[]>([])
   const [showLoginModal, setShowLoginModal] = useState(false)
@@ -37,11 +51,19 @@ export default function ClientsPage({ dashboardHref }: PageProps) {
   const [isCreatingAccount, setIsCreatingAccount] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [createdAccount, setCreatedAccount] = useState<any>(null)
+  const [isImpersonating, setIsImpersonating] = useState(false)
+  const [impersonationData, setImpersonationData] = useState<any>(null)
 
   useEffect(() => {
     if (status === "loading") return
     if (!session) router.replace("/login")
   }, [session, status, router])
+
+  useEffect(() => {
+    if (session) {
+      loadGalleryImages()
+    }
+  }, [session])
 
   useEffect(() => {
     // Check for impersonation data
@@ -58,6 +80,10 @@ export default function ClientsPage({ dashboardHref }: PageProps) {
     }
   }, [])
 
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+  };
+
   const stopImpersonation = () => {
     localStorage.removeItem('impersonationData')
     setIsImpersonating(false)
@@ -65,21 +91,18 @@ export default function ClientsPage({ dashboardHref }: PageProps) {
     router.push('/manage-users')
   }
 
-  const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase();
-  };
-
-  // Fetch admin accounts for switch/add account dropdown (mirror admin pages; allow while impersonating)
+  // Fetch admin accounts for switch/add account dropdown
   useEffect(() => {
-    const headers: HeadersInit = { 'x-impersonation': 'true' }
+    const headers: HeadersInit = {}
+    if (isImpersonating && impersonationData?.impersonatedUserId) {
+      headers['x-impersonation'] = 'true'
+      headers['x-impersonated-user-id'] = String(impersonationData.impersonatedUserId)
+    }
+    
     fetch("/api/admin/accounts", { headers })
       .then((res) => res.json())
       .then((data) => {
-        if (Array.isArray(data?.accounts)) {
-          setAdminAccounts(data.accounts)
-        } else if (data?.success && Array.isArray(data?.accounts)) {
-          setAdminAccounts(data.accounts)
-        }
+        if (data?.success) setAdminAccounts(data.accounts)
       })
       .catch((err) => console.error("Error fetching admin accounts:", err))
   }, [isImpersonating])
@@ -179,6 +202,56 @@ export default function ClientsPage({ dashboardHref }: PageProps) {
     setLoginError("")
   }
 
+  const loadGalleryImages = async () => {
+    try {
+      setLoading(true)
+      const headers: HeadersInit = {}
+      if (isImpersonating && impersonationData?.impersonatedUserId) {
+        headers['x-impersonated-user-id'] = String(impersonationData.impersonatedUserId)
+      }
+      const response = await fetch('/api/gallery/images', { headers })
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
+          setImages(data.images)
+        } else {
+          setError('Failed to load gallery images')
+        }
+      } else {
+        setError('Failed to load gallery images')
+      }
+    } catch (error) {
+      console.error('Error loading gallery images:', error)
+      setError('Error loading gallery images')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getTotalImages = () => {
+    return Object.values(images).reduce((total, platformImages) => total + platformImages.length, 0)
+  }
+
+  const getPlatformDisplayName = (platform: string) => {
+    switch (platform) {
+      case 'facebook': return 'Facebook'
+      case 'instagram': return 'Instagram'
+      case 'linkedin': return 'LinkedIn'
+      case 'googleads': return 'Google Ads'
+      default: return platform.charAt(0).toUpperCase() + platform.slice(1)
+    }
+  }
+
+  const getPlatformColor = (platform: string) => {
+    switch (platform) {
+      case 'facebook': return 'bg-blue-600'
+      case 'instagram': return 'bg-pink-600'
+      case 'linkedin': return 'bg-blue-700'
+      case 'googleads': return 'bg-green-600'
+      default: return 'bg-gray-600'
+    }
+  }
+
   if (status === "loading") {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -187,8 +260,17 @@ export default function ClientsPage({ dashboardHref }: PageProps) {
     )
   }
 
+  if (!session) {
+    return null
+  }
+
   return (
     <>
+      <Head>
+        <title>Gallery - Vierra</title>
+        <meta name="description" content="View your generated ad images" />
+      </Head>
+
       <div className="min-h-screen bg-gray-100 flex">
         {/* Sidebar */}
         <div className="w-64 bg-[#2E0A4F] flex-shrink-0 min-h-screen">
@@ -226,7 +308,7 @@ export default function ClientsPage({ dashboardHref }: PageProps) {
               )}
               <button
                 onClick={() => router.push("/client")}
-                className="flex items-center w-full p-3 rounded-lg text-white bg-white/10 transition-colors"
+                className="flex items-center w-full p-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
               >
                 <FiFileText className="w-5 h-5" />
                 <span className="ml-3 text-sm font-medium">Dashboard</span>
@@ -250,7 +332,7 @@ export default function ClientsPage({ dashboardHref }: PageProps) {
               )}
               <button
                 onClick={() => router.push("/gallery")}
-                className="flex items-center w-full p-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                className="flex items-center w-full p-3 rounded-lg text-white bg-white/10 transition-colors"
               >
                 <FiImage className="w-5 h-5" />
                 <span className="ml-3 text-sm font-medium">Gallery</span>
@@ -270,69 +352,156 @@ export default function ClientsPage({ dashboardHref }: PageProps) {
         <div className="flex-1 flex flex-col">
           {/* Top Header */}
           <div className="bg-white border-b border-gray-200 px-6 py-4">
-            <div className="flex items-center justify-end">
-              <div className="relative user-dropdown">
-                <div 
-                  className="flex items-center space-x-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg"
-                  onClick={() => setShowUserDropdown(!showUserDropdown)}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={() => router.push("/create-ads")}
+                  className="flex items-center text-gray-600 hover:text-gray-900 transition-colors"
                 >
-                  <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
-                    <span className="text-sm font-medium text-gray-700">
-                      {session?.user?.name ? getInitials(session.user.name) : 'A'}
-                    </span>
+                  <FiArrowLeft className="w-5 h-5 mr-2" />
+                  Back to Create Ads
+                </button>
+              </div>
+              <div className="flex items-center space-x-4">
+                <div className="relative user-dropdown">
+                  <div 
+                    className="flex items-center space-x-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg"
+                    onClick={() => setShowUserDropdown(!showUserDropdown)}
+                  >
+                    <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                      <span className="text-sm font-medium text-gray-700">
+                        {session?.user?.name ? getInitials(session.user.name) : 'A'}
+                      </span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium text-gray-900">
+                        {isImpersonating && impersonationData?.impersonatedUserName
+                          ? impersonationData.impersonatedUserName
+                          : (session?.user?.name || session?.user?.email || 'User')}
+                      </span>
+                    </div>
+                    <FiChevronDown className="w-4 h-4 text-gray-500" />
                   </div>
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-gray-900">
-                      {isImpersonating && impersonationData?.impersonatedUserName
-                        ? impersonationData.impersonatedUserName
-                        : (session?.user?.name || session?.user?.email || 'User')}
-                    </span>
-                  </div>
-                  <FiChevronDown className="w-4 h-4 text-gray-500" />
+
+                  {showUserDropdown && (
+                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                      <button
+                        onClick={() => { signOut({ callbackUrl: '/login' }); setShowUserDropdown(false) }}
+                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3"
+                      >
+                        <FiLogOut className="w-4 h-4" />
+                        <span>Logout</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
-                
-                {showUserDropdown && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                    <button
-                      onClick={() => { signOut({ callbackUrl: '/login' }); setShowUserDropdown(false) }}
-                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3"
-                    >
-                      <FiLogOut className="w-4 h-4" />
-                      <span>Logout</span>
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           </div>
 
           {/* Page Content */}
           <div className="flex-1 p-6 bg-white">
-            {showSettings ? (
-              <UserSettingsPage
-                user={
-                  session?.user || {
-                    name: "Test User",
-                    email: "test@vierra.com",
-                    image: "/assets/vierra-logo.png",
-                  }
-                }
-              />
-            ) : (
-              <>
-                <div className="mb-6">
-                  <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+            <div className="max-w-7xl mx-auto">
+              <div className="mb-8">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">Image Gallery</h1>
+                <p className="text-gray-600">
+                  View all your generated ad images organized by platform
+                </p>
+              </div>
+
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-gray-600">Loading gallery images...</div>
                 </div>
-                <div className="bg-white border border-gray-200 rounded-lg p-8">
-                  <h2 className="text-xl font-semibold mb-4 text-gray-900">Welcome</h2>
-                  <p className="text-gray-600">
-                    Welcome, {isImpersonating && impersonationData?.impersonatedUserName
-                      ? impersonationData.impersonatedUserName
-                      : (session?.user?.email)}
-                  </p>
+              ) : error ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-red-600">{error}</div>
                 </div>
-              </>
-            )}
+              ) : getTotalImages() === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <FiImage className="w-16 h-16 text-gray-300 mb-4" />
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">No images yet</h3>
+                  <p className="text-gray-600 mb-6">Generate some ad images to see them here</p>
+                  <button
+                    onClick={() => router.push("/create-ads")}
+                    className="bg-[#2E0A4F] hover:bg-[#3A1A5F] text-white px-6 py-3 rounded-lg transition-colors"
+                  >
+                    Create Ads
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-8">
+                  {/* Platform filter */}
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      onClick={() => setSelectedPlatform(null)}
+                      className={`px-4 py-2 rounded-lg transition-colors ${
+                        selectedPlatform === null
+                          ? 'bg-[#2E0A4F] text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      All ({getTotalImages()})
+                    </button>
+                    {Object.keys(images).map((platform) => (
+                      <button
+                        key={platform}
+                        onClick={() => setSelectedPlatform(platform)}
+                        className={`px-4 py-2 rounded-lg transition-colors ${
+                          selectedPlatform === platform
+                            ? 'bg-[#2E0A4F] text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        {getPlatformDisplayName(platform)} ({images[platform].length})
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Images grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {Object.entries(images).map(([platform, platformImages]) => {
+                      if (selectedPlatform && selectedPlatform !== platform) return null
+                      
+                      return platformImages.map((image) => (
+                        <div
+                          key={image.id}
+                          className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow"
+                        >
+                          <div className="aspect-square relative">
+                            <img
+                              src={`data:image/png;base64,${image.content}`}
+                              alt={`Generated ${platform} ad`}
+                              className="w-full h-full object-cover"
+                            />
+                            <div className="absolute top-2 left-2">
+                              <span className={`px-2 py-1 rounded text-xs font-medium text-white ${getPlatformColor(platform)}`}>
+                                {getPlatformDisplayName(platform)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="p-4">
+                            <div className="text-sm text-gray-600">
+                              {new Date(image.createdAt).toLocaleDateString()}
+                            </div>
+                            {image.urlLink && (
+                              <a
+                                href={image.urlLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#2E0A4F] hover:text-[#3A1A5F] text-sm mt-1 block"
+                              >
+                                View Shareable Link
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -435,12 +604,21 @@ export default function ClientsPage({ dashboardHref }: PageProps) {
   )
 }
 
-export const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const session = await getServerSession(ctx.req, ctx.res, authOptions)
-
+export const getServerSideProps: GetServerSideProps = async (context) => {
+  const session = await getServerSession(context.req, context.res, authOptions)
+  
   if (!session) {
-    return { redirect: { destination: "/login", permanent: false } }
+    return {
+      redirect: {
+        destination: "/login",
+        permanent: false,
+      },
+    }
   }
-  const role = (session.user as any).role
-  return { props: { dashboardHref: role === "user" ? "/client" : "/panel" } }
+
+  return {
+    props: {
+      dashboardHref: process.env.NEXTAUTH_URL || "http://localhost:3000",
+    },
+  }
 }

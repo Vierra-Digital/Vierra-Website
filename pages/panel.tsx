@@ -6,25 +6,14 @@ import { useRouter } from "next/navigation"
 import SignPdfModal from "@/components/ui/SignPdfModal"
 import LtvCalculatorModal from "@/components/ui/LtvCalculatorModal"
 import Link from "next/link"
-import { FiLogOut, FiFileText, FiUsers } from "react-icons/fi"
-import { IoIosNotificationsOutline } from "react-icons/io";
-import { AiOutlineAppstore } from "react-icons/ai";
-import { PiUsersThree, PiCalculator } from "react-icons/pi";
-import { BsPeople } from "react-icons/bs";
-import { CiSearch } from "react-icons/ci";
-import { RiArrowDropDownLine, RiMoneyDollarBoxLine } from "react-icons/ri";
-import { FaRegFilePdf } from "react-icons/fa6";
-import { useSession, signOut } from "next-auth/react"
+import { FiLogOut, FiFileText, FiUsers, FiPlus, FiChevronDown } from "react-icons/fi"
+import { useSession, signOut, signIn } from "next-auth/react"
 import UserSettingsPage from "@/components/UserSettingsPage"
 import AddClientModal from "@/components/ui/AddClientModal"
 import type { SessionItem } from "@/types/session"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/pages/api/auth/[...nextauth]"
 import type { GetServerSideProps } from "next"
-import DashboardSection from "@/components/PanelPages/DashboardSection"
-import ClientsSection from "@/components/PanelPages/ClientsSection"
-import MarketingSection from "@/components/PanelPages/MarketingSection"
-import TeamPanelSection from "@/components/PanelPages/TeamPanelSection"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -34,23 +23,174 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
   const router = useRouter()
   const [isSignModalOpen, setIsSignModalOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
-
-  const [currentSection, setCurrentSection] = useState(0);
-  // [0: dashboard, 1: clients, 2: team, 3: marketing]
-
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  // controlling the sidebar
-
   const [isLtvModalOpen, setIsLtvModalOpen] = useState(false)
   const { data: session } = useSession()
   const [isAddClientOpen, setIsAddClientOpen] = useState(false)
   const [items, setItems] = useState<SessionItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showUserDropdown, setShowUserDropdown] = useState(false)
+  const [adminAccounts, setAdminAccounts] = useState<any[]>([])
+  const [showLoginModal, setShowLoginModal] = useState(false)
+  const [selectedAccount, setSelectedAccount] = useState<any>(null)
+  const [loginEmail, setLoginEmail] = useState("")
+  const [loginPassword, setLoginPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [loginError, setLoginError] = useState("")
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
+  const [isLoginMode, setIsLoginMode] = useState(true)
+  const [newAccountEmail, setNewAccountEmail] = useState("")
+  const [newAccountName, setNewAccountName] = useState("")
+  const [newAccountRole, setNewAccountRole] = useState("user")
+  const [addAccountError, setAddAccountError] = useState("")
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false)
+  const [showSuccessModal, setShowSuccessModal] = useState(false)
+  const [createdAccount, setCreatedAccount] = useState<any>(null)
+  const [isImpersonating, setIsImpersonating] = useState(false)
+  const [impersonationData, setImpersonationData] = useState<any>(null)
 
   useEffect(() => {
     fetchSessions()
   }, [])
+
+  useEffect(() => {
+    // Check for impersonation data
+    const storedImpersonation = localStorage.getItem('impersonationData')
+    if (storedImpersonation) {
+      try {
+        const data = JSON.parse(storedImpersonation)
+        setImpersonationData(data)
+        setIsImpersonating(true)
+      } catch (error) {
+        console.error('Error parsing impersonation data:', error)
+        localStorage.removeItem('impersonationData')
+      }
+    }
+  }, [])
+
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+  };
+
+  // Fetch admin accounts for switch/add account dropdown
+  useEffect(() => {
+    const headers: HeadersInit = {}
+    if (isImpersonating) {
+      headers['x-impersonation'] = 'true'
+    }
+    
+    fetch("/api/admin/accounts", { headers })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.success) setAdminAccounts(data.accounts)
+      })
+      .catch((err) => console.error("Error fetching admin accounts:", err))
+  }, [isImpersonating])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showUserDropdown) {
+        const target = event.target as HTMLElement
+        if (!target.closest('.user-dropdown')) {
+          setShowUserDropdown(false)
+        }
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showUserDropdown]);
+
+  // Account controls (match manage-users behavior)
+  const handleAddAccount = () => {
+    setIsLoginMode(false)
+    setShowLoginModal(true)
+    setShowUserDropdown(false)
+  }
+
+  const handleSwitchAccount = async (account: any) => {
+    try {
+      const headers: HeadersInit = { 'Content-Type': 'application/json' }
+      if (isImpersonating) headers['x-impersonation'] = 'true'
+      const res = await fetch('/api/admin/switch-account', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ accountId: account.id }),
+      })
+      if (res.ok) {
+        setShowUserDropdown(false)
+        window.location.reload()
+      } else {
+        console.error('Failed to switch account')
+      }
+    } catch (err) {
+      console.error('Error switching account:', err)
+    }
+  }
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoggingIn(true)
+    setLoginError("")
+    try {
+      const result = await signIn('credentials', {
+        email: loginEmail,
+        password: loginPassword,
+        redirect: false,
+      })
+      if (result && !result.error) {
+        setShowLoginModal(false)
+        router.refresh()
+      } else {
+        setLoginError('Invalid credentials')
+      }
+    } catch (err) {
+      setLoginError('Login failed')
+    } finally {
+      setIsLoggingIn(false)
+    }
+  }
+
+  const handleCreateAccount = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsCreatingAccount(true)
+    setAddAccountError("")
+    try {
+      const response = await fetch('/api/admin/create-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newAccountEmail, name: newAccountName, role: newAccountRole })
+      })
+      const data = await response.json()
+      if (response.ok && data?.success) {
+        setCreatedAccount({ email: newAccountEmail, name: newAccountName, role: newAccountRole, password: data.password })
+        setShowSuccessModal(true)
+        setShowLoginModal(false)
+        setNewAccountEmail("")
+        setNewAccountName("")
+        setNewAccountRole("user")
+        // refresh accounts
+        fetch('/api/admin/accounts').then(r=>r.json()).then(d=>{ if (d?.success) setAdminAccounts(d.accounts) })
+      } else {
+        setAddAccountError(data?.error || 'Error creating account')
+      }
+    } catch (err) {
+      setAddAccountError('Error creating account')
+    } finally {
+      setIsCreatingAccount(false)
+    }
+  }
+
+  const handleCloseLoginModal = () => {
+    setShowLoginModal(false)
+    setSelectedAccount(null)
+    setLoginEmail("")
+    setLoginPassword("")
+    setLoginError("")
+  }
 
   async function fetchSessions() {
     try {
@@ -71,125 +211,110 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
       <Head>
         <title>Vierra | Admin Panel</title>
       </Head>
-      <div id="main-panel" className="w-screen h-screen bg-white flex flex-row">
-        <div id="left-side" className={`flex flex-col  h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
-          <div id="vierra-nameplate-body" className="w-full h-20 flex items-center justify-center mb-4">
-            <Link href="/">
+      <div className="min-h-screen bg-gray-100 flex">
+        {/* Sidebar */}
+        <div className="w-64 bg-[#2E0A4F] flex-shrink-0 min-h-screen">
+          {/* Logo */}
+          <div className="p-6">
+            <Link href={dashboardHref} className="block">
               <Image
-                src={"/assets/vierra-logo-black-3.png"}
-                alt={"Vierra Go Home"}
-                width={56}
-                height={32}
-                className="w-24 bg-white rounded-sm pt-1 px-2"
+                src="/assets/vierra-logo.png"
+                alt="Vierra Logo"
+                width={120}
+                height={40}
+                className="w-auto h-10"
               />
             </Link>
           </div>
-          <div id="panel-nav" className="w-full h-full flex flex-col gap-y-[5px] items-center text-[#EDF1F5]">
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
-              <AiOutlineAppstore />
-              <span className={`text-xs font-normal ${inter.className}`}>
-                Dashboard
-              </span>
-            </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
-              <PiUsersThree />
-              <span className={`text-xs ${inter.className}`}>
-                Clients
-              </span>
-            </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
-              <BsPeople />
-              <span className={`text-xs ${inter.className}`}>
-                Team
-              </span>
-            </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(3); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer hover:bg-white rounded-xl hover:text-black">
-              <RiMoneyDollarBoxLine />
-              <span className={`text-xs ${inter.className}`}>
-                Marketing
-              </span>
-            </div>
-            <div id="panel-nav-item" className="w-full flex h-[47px] flex-row items-center gap-x-[10px] pl-8 hover:text-black">
 
-            </div>
-            <div id="panel-nav-item" onClick={() => setIsSignModalOpen(true)} className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer hover:bg-white rounded-xl hover:text-black">
-              <FaRegFilePdf />
-              <span className={`text-xs ${inter.className}`}>
-                PDF Signer
-              </span>
-            </div>
-            <div id="panel-nav-item" onClick={() => setIsLtvModalOpen(true)} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
-              <PiCalculator />
-              <span className={`text-xs ${inter.className}`}>
-                LTV Calculator
-              </span>
+          {/* Navigation */}
+          <div className="px-4 pb-4">
+            <div className="space-y-2">
+              <button
+                onClick={() => setIsSignModalOpen(true)}
+                className="flex items-center w-full p-3 rounded-lg text-white bg-white/10 transition-colors"
+                aria-label="Prepare PDF for Signing"
+              >
+                <FiFileText className="w-5 h-5" />
+                <span className="ml-3 text-sm font-medium">PDF Signer</span>
+              </button>
+              <button
+                onClick={() => setIsLtvModalOpen(true)}
+                className="flex items-center w-full p-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Open LTV Calculator"
+              >
+                <span className="w-5 h-5 flex items-center justify-center font-bold text-lg">Σ</span>
+                <span className="ml-3 text-sm font-medium">LTV Calculator</span>
+              </button>
+              <button
+                onClick={() => setIsAddClientOpen(true)}
+                className="flex items-center w-full p-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Add Clients"
+              >
+                <FiUsers className="w-5 h-5" />
+                <span className="ml-3 text-sm font-medium">Add Clients</span>
+              </button>
+              <button
+                onClick={() => router.push("/manage-users")}
+                className="flex items-center w-full p-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Manage Users"
+              >
+                <FiUsers className="w-5 h-5" />
+                <span className="ml-3 text-sm font-medium">Manage Users</span>
+              </button>
+              <button
+                onClick={() => router.push("/create-ads")}
+                className="flex items-center w-full p-3 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Create Ads"
+              >
+                <FiPlus className="w-5 h-5" />
+                <span className="ml-3 text-sm font-medium">Create Ads</span>
+              </button>
             </div>
           </div>
         </div>
-        <div id="right-side" className="flex flex-col w-full h-full">
-          <div id="right-side-heading" className="flex w-full flex-row h-16 bg-[#F8F0FF]">
-            <div className="md:hidden flex items-center pl-2">
-              <button
-                onClick={() => {
-                  setIsSidebarOpen(!isSidebarOpen);
-                  setShowSettings(false);
-                }}
-                aria-label="Toggle sidebar"
-              >
-                {/* Hamburger icon */}
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6 text-[#701CC0]"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col">
+          {/* Top Header */}
+          <div className="bg-white border-b border-gray-200 px-6 py-4">
+            <div className="flex items-center justify-end">
+              <div className="relative user-dropdown">
+                <div 
+                  className="flex items-center space-x-3 cursor-pointer hover:bg-gray-50 p-2 rounded-lg"
+                  onClick={() => setShowUserDropdown(!showUserDropdown)}
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-            </div>
-            <div id="left-side-search-holder" className="flex w-1/2 h-full pl-4 items-center">
-              <div id="search-bar" className="w-[270px] h-[36px] z-40 flex items-center border border-[#A6A9AC] rounded-lg gap-x-2 p-2 text-[#A6A9AC] cursor-pointer">
-                <CiSearch height={10} width={10} className="w-6 h-6" />
-                <span className={`text-sm ${inter.className}`}>Search</span>
-              </div>
-            </div>
-            <div id="right-side-info-holder" className="flex w-1/2 h-full items-center justify-end p-2 gap-x-4 md:gap-x-8 text-[#A6A9AC]">
-              <IoIosNotificationsOutline height={10} width={10} className="w-8 h-8" />
-              <div id="user-holder" className="flex items-center w-auto h-auto">
-                <button
-                  className="flex items-center gap-x-2"
-                  aria-label="Open user settings"
-                  onClick={() => setShowSettings((prev) => !prev)}
-                >
-                  <Image
-                    src={
-                      typeof session?.user?.image === "string" &&
-                        session.user.image.length > 0
-                        ? session.user.image
-                        : "/assets/vierra-logo-black.png"
-                    }
-                    alt="Profile"
-                    width={32}
-                    height={32}
-                    className="object-cover w-8 h-8 rounded-full bg-black"
-                    priority
-                    quality={100}
-                  />
-                  <div id="name-holder" className="hidden w-auto h-auto text-[#111014] md:flex items-center font-semibold">
-                    <span className="">{session?.user?.name ? session.user.name : "Vierra Admin"}</span>
+                  <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                    <span className="text-sm font-medium text-gray-700">
+                      {session?.user?.name ? getInitials(session.user.name) : 'A'}
+                    </span>
                   </div>
-                  <div id="dropdowner" className="hidden md:flex">
-                    <RiArrowDropDownLine width={32}
-                      height={32} className="w-8 h-8" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-gray-900">
+                      {session?.user?.name || session?.user?.email || 'Admin'}
+                    </span>
                   </div>
-                </button>
+                  <FiChevronDown className="w-4 h-4 text-gray-500" />
+                </div>
+                
+                {showUserDropdown && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                    <button
+                      onClick={() => { signOut({ callbackUrl: '/login' }); setShowUserDropdown(false) }}
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3"
+                    >
+                      <FiLogOut className="w-4 h-4" />
+                      <span>Logout</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
-          <div id="right-side-body" className="flex w-full h-full bg-white">
-            {/* This is the working area. Put in different options (Dashboard, Clients, etc. ) as components */}
-            {showSettings ? (<>
+
+          {/* Page Content */}
+          <div className="flex-1 p-6 bg-white">
+            {showSettings ? (
               <UserSettingsPage
                 user={
                   session?.user || {
@@ -199,17 +324,83 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                   }
                 }
               />
-            </>)
-              : (
-                <>
-                  {currentSection === 0 && <DashboardSection />}
-                  {currentSection === 1 && <ClientsSection />}
-                  {currentSection === 2 && <TeamPanelSection />}
-                  {currentSection === 3 && <MarketingSection />}
-                </>
-              )}
+            ) : (
+              // Dashboard
+              <>
+                <div className="mb-6">
+                  <h1 className="text-3xl font-bold text-gray-900">Onboarding Sessions</h1>
+                </div>
 
-
+                {loading ? (
+                  <p className="text-gray-600">Loading sessions...</p>
+                ) : error ? (
+                  <p className="text-red-600">{error}</p>
+                ) : items.length === 0 ? (
+                  <p className="text-gray-600">No sessions found.</p>
+                ) : (
+                  <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Client Name
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Email
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Business
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Status
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Created At
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Submitted At
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {items.map((session) => (
+                            <tr key={session.token} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                {session.clientName}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {session.clientEmail}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {session.businessName}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                  session.status === 'completed' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {session.status}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {new Date(session.createdAt).toLocaleString()}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                {session.submittedAt
+                                  ? new Date(session.submittedAt).toLocaleString()
+                                  : "-"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -240,6 +431,101 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             setItems((prev) => [row, ...prev])
           }}
         />
+      )}
+      {/* Login/Create Account Modal (simple) */}
+      {showLoginModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="relative bg-white rounded-lg p-6 w-[90%] max-w-md shadow-lg">
+            <button
+              onClick={handleCloseLoginModal}
+              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
+            >
+              ×
+            </button>
+
+            <h2 className="text-xl font-semibold mb-4">
+              {isLoginMode ? 'Login to Account' : 'Create New Account'}
+            </h2>
+
+            {isLoginMode && selectedAccount && (
+              <div className="mb-4 p-3 bg-gray-50 rounded border border-gray-200 text-sm">
+                <div className="font-medium">{selectedAccount.email}</div>
+                <div className="text-gray-500">{selectedAccount.role}</div>
+              </div>
+            )}
+
+            <form onSubmit={isLoginMode ? handleLogin : handleCreateAccount} className="space-y-3">
+              {isLoginMode ? (
+                <>
+                  <input
+                    type="email"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="Email"
+                    className="w-full border border-gray-300 rounded p-2"
+                    required
+                  />
+                  <div>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="Password"
+                      className="w-full border border-gray-300 rounded p-2"
+                      required
+                    />
+                    <label className="text-xs text-gray-600 inline-flex items-center mt-1">
+                      <input type="checkbox" className="mr-2" checked={showPassword} onChange={() => setShowPassword(!showPassword)} />
+                      Show password
+                    </label>
+                  </div>
+                  {loginError && <div className="text-red-600 text-sm">{loginError}</div>}
+                  <button
+                    type="submit"
+                    disabled={isLoggingIn}
+                    className="w-full bg-[#2E0A4F] text-white rounded py-2 hover:bg-[#3A1A5F] disabled:opacity-60"
+                  >
+                    {isLoggingIn ? 'Logging in...' : 'Login'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <input
+                    type="email"
+                    value={newAccountEmail}
+                    onChange={(e) => setNewAccountEmail(e.target.value)}
+                    placeholder="Email"
+                    className="w-full border border-gray-300 rounded p-2"
+                    required
+                  />
+                  <input
+                    type="text"
+                    value={newAccountName}
+                    onChange={(e) => setNewAccountName(e.target.value)}
+                    placeholder="Name"
+                    className="w-full border border-gray-300 rounded p-2"
+                  />
+                  <select
+                    value={newAccountRole}
+                    onChange={(e) => setNewAccountRole(e.target.value)}
+                    className="w-full border border-gray-300 rounded p-2"
+                  >
+                    <option value="user">user</option>
+                    <option value="admin">admin</option>
+                  </select>
+                  {addAccountError && <div className="text-red-600 text-sm">{addAccountError}</div>}
+                  <button
+                    type="submit"
+                    disabled={isCreatingAccount}
+                    className="w-full bg-[#2E0A4F] text-white rounded py-2 hover:bg-[#3A1A5F] disabled:opacity-60"
+                  >
+                    {isCreatingAccount ? 'Creating...' : 'Create Account'}
+                  </button>
+                </>
+              )}
+            </form>
+          </div>
+        </div>
       )}
     </>
   )
