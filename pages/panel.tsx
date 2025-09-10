@@ -2,11 +2,9 @@ import React, { useEffect, useState } from "react"
 import Head from "next/head"
 import { Inter } from "next/font/google"
 import Image from "next/image"
-import { useRouter } from "next/navigation"
 import SignPdfModal from "@/components/ui/SignPdfModal"
 import LtvCalculatorModal from "@/components/ui/LtvCalculatorModal"
 import Link from "next/link"
-import { FiLogOut, FiFileText, FiUsers } from "react-icons/fi"
 import { IoIosNotificationsOutline } from "react-icons/io";
 import { AiOutlineAppstore } from "react-icons/ai";
 import { PiUsersThree, PiCalculator } from "react-icons/pi";
@@ -28,10 +26,7 @@ import TeamPanelSection from "@/components/PanelPages/TeamPanelSection"
 
 const inter = Inter({ subsets: ["latin"] })
 
-type PageProps = { dashboardHref: string }
-
-const PanelPage = ({ dashboardHref }: PageProps) => {
-  const router = useRouter()
+const PanelPage = () => {
   const [isSignModalOpen, setIsSignModalOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
 
@@ -85,25 +80,25 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             </Link>
           </div>
           <div id="panel-nav" className="w-full h-full flex flex-col gap-y-[5px] items-center text-[#EDF1F5]">
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(0); setShowSettings(false); setIsSidebarOpen(false) }} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
               <AiOutlineAppstore />
               <span className={`text-xs font-normal ${inter.className}`}>
                 Dashboard
               </span>
             </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false) }} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
               <PiUsersThree />
               <span className={`text-xs ${inter.className}`}>
                 Clients
               </span>
             </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false) }} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
               <BsPeople />
               <span className={`text-xs ${inter.className}`}>
                 Team
               </span>
             </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(3); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer hover:bg-white rounded-xl hover:text-black">
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(3); setShowSettings(false); setIsSidebarOpen(false) }} className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer hover:bg-white rounded-xl hover:text-black">
               <RiMoneyDollarBoxLine />
               <span className={`text-xs ${inter.className}`}>
                 Marketing
@@ -201,15 +196,13 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               />
             </>)
               : (
-                <>
+                (items && !loading && !error) && (<>
                   {currentSection === 0 && <DashboardSection />}
                   {currentSection === 1 && <ClientsSection />}
                   {currentSection === 2 && <TeamPanelSection />}
                   {currentSection === 3 && <MarketingSection />}
-                </>
+                </>)
               )}
-
-
           </div>
         </div>
       </div>

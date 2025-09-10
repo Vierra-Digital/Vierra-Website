@@ -1,5 +1,3 @@
-import React, { useState, useEffect } from "react"
-
 const TeamPanelSection = () => {
     return (
         <div className="w-full h-full flex items-center justify-center text-black">
