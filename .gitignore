@@ -20,3 +20,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 /lib/generated/prisma
+
+# Analysis results files
+public/analysis-results/*.txt
+
+# Generated content files
+public/generated-content/*.txt
+public/generated-content/*.png

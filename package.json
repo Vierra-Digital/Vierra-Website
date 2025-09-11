@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "create-temp-admin": "npx tsx scripts/create-temp-admin.ts",
+    "remove-temp-admin": "npx tsx scripts/remove-temp-admin.ts"
   },
   "dependencies": {
     "@next-auth/prisma-adapter": "^1.0.7",
@@ -27,6 +29,7 @@
     "next": "^15.3.0",
     "next-auth": "^4.24.11",
     "nodemailer": "^6.10.1",
+    "openai": "^4.104.0",
     "particles.js": "^2.0.0",
     "pdf-lib": "^1.17.1",
     "react": "^19.0.0",
@@ -54,6 +57,7 @@
     "postcss": "^8",
     "prisma": "^6.13.0",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.19.2",
     "typescript": "^5"
   }
 }

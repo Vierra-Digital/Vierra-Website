@@ -27,11 +27,13 @@ type Question =
   | { label: string; name: string; type: "social" };
 
 const questions: Question[] = [
-  { label: "How are you doing?", name: "Q1", placeholder: "Answer", type: "text" },
+  { label: "What is the name of your Business?", name: "Q1", placeholder: "Answer", type: "text" },
   { label: "Watch this short introduction video before continuing.", name: "Video", type: "video", videoUrl: "/assets/onboarding-intro.mp4" },
   { label: "Connect your accounts", name: "Social", type: "social" },
-  { label: "What is your Major?", name: "Q2", placeholder: "Answer", type: "text" },
-  { label: "What is the name of your Business?", name: "Q3", placeholder: "Answer", type: "text" },
+  { label: "What’s your company website or main online presence??", name: "Q2", placeholder: "Answer", type: "text" },
+  { label: "Who is your target audience (age, location, interests, demographics)?", name: "Q3", placeholder: "Answer", type: "text" },
+  { label: "What’s the primary goal of your ads (sales, leads, awareness, event signups, etc.)?", name: "Q4", placeholder: "Answer", type: "text" },
+  { label: "Do you have a preferred brand tone/voice (professional, playful, luxury, etc.)?", name: "Q5", placeholder: "Answer", type: "text" },
 ];
 
 
