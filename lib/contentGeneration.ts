@@ -2,17 +2,17 @@ import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 
 const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY 
+  apiKey: process.env.OPENAI_API_KEY
 });
 
 // Function to upload image to URL generator service
 async function uploadImageToUrlGenerator(b64Image: string, platform: string) {
   try {
-    const response = await fetch('https://urlgenerator-production.up.railway.app/upload', {
+    const response = await fetch(process.env.URL_GENERATOR_ENDPOINT || '', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer Ronni1939'
+        'Authorization': `Bearer ${process.env.URL_GENERATOR_TOKEN}`
       },
       body: JSON.stringify({
         b64: b64Image,

@@ -31,11 +31,11 @@ export default async function handler(
     console.log(`Uploading image: ${base64SizeInMB.toFixed(2)} MB`);
 
     // Forward the request to the URL generator service
-    const response = await fetch('https://urlgenerator-production.up.railway.app/upload', {
+    const response = await fetch(process.env.URL_GENERATOR_ENDPOINT || '', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer Ronni1939'
+        'Authorization': `Bearer ${process.env.URL_GENERATOR_TOKEN}`
       },
       body: JSON.stringify({ b64, ext })
     });
