@@ -82,20 +82,6 @@ model UserToken {
   @@map("user_tokens")
 }
 
-enum OnboardingStatus {
-  pending
-  in_progress
-  completed
-  expired
-  canceled
-}
-
-enum Platform {
-  facebook
-  googleads
-  linkedin
-}
-
 model Author {
   id        Int        @id @default(autoincrement())
   name      String
@@ -121,4 +107,85 @@ model BlogPost {
   author         Author   @relation(fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_author")
 
   @@map("blog_posts")
+}
+
+model MarketingTracker {
+  id                    String   @id
+  userId                Int
+  year                  Int
+  month                 Int
+  attempt               Int      @default(0)
+  meetingsSet           Int      @default(0)
+  clientsClosed         Int      @default(0)
+  revenue               Float    @default(0)
+  attemptsToMeetingsPct Float    @default(0)
+  meetingsToClientsPct  Float    @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @default(now())
+  users                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, year, month])
+  @@index([userId, year])
+  @@map("marketing_tracker")
+}
+
+model MarketingYearlySummary {
+  id                    String   @id
+  userId                Int
+  year                  Int
+  totalAttempt          Int      @default(0)
+  totalMeetingsSet      Int      @default(0)
+  totalClientsLosed     Int      @default(0)
+  totalRevenue          Float    @default(0)
+  attemptsToMeetingsPct Float    @default(0)
+  meetingsToClientsPct  Float    @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @default(now())
+  users                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, year])
+  @@index([userId, year])
+  @@map("marketing_yearly_summary")
+}
+
+model SignedDocuments {
+  id               String   @id
+  userId           Int
+  originalFilename String
+  signedPdfData    Bytes
+  fileSize         Int
+  signedAt         DateTime @default(now())
+  signerEmail      String?
+  sessionToken     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime
+  users            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([sessionToken])
+  @@index([userId])
+  @@map("signed_documents")
+}
+
+model Staff {
+  id            Int     @id @default(autoincrement())
+  name          String
+  position      String
+  country       String
+  time_zone     String
+  mentor        String?
+  email         String
+  company_email String
+  strikes       String
+  @@map("staff")
+}
+
+enum OnboardingStatus {
+  pending
+  in_progress
+  completed
+  expired
+  canceled
+}
+
+enum Platform {
+  facebook
+  googleads
+  linkedin
 }
