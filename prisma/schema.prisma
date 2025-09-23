@@ -1,6 +1,5 @@
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -42,15 +41,12 @@ model OnboardingSession {
 }
 
 model User {
-  id                       Int                        @id @default(autoincrement())
-  email                    String?                    @unique
-  role                     String                     @default("user")
-  passwordEnc              String?
-  client                   Client?                    @relation("UserClient")
-  marketing_tracker        marketing_tracker[]
-  marketing_yearly_summary marketing_yearly_summary[]
-  signed_documents         signed_documents[]
-  tokens                   UserToken[]
+  id          Int         @id @default(autoincrement())
+  email       String?     @unique
+  role        String      @default("user")
+  passwordEnc String?
+  client      Client?     @relation("UserClient")
+  tokens      UserToken[]
 
   @@map("users")
 }
@@ -66,41 +62,38 @@ model OnboardingPlatformToken {
   updatedAt    DateTime          @updatedAt
   session      OnboardingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  session OnboardingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@unique([sessionId, platform], name: "sessionId_platform") // one per platform per session
+  @@unique([sessionId, platform], name: "sessionId_platform")
   @@index([sessionId, platform])
   @@map("onboarding_platform_tokens")
 }
 
 model UserToken {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   platform     String
   accessToken  String
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
   userId       Int
   refreshToken String?
   expiresAt    DateTime?
-  createdAt    DateTime @default(now()) // add @db.Timestamptz(6) if column is timestamptz
-  userId       Int
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, platform], name: "userId_platform")
   @@index([userId, platform])
   @@map("user_tokens")
 }
 
-model authors {
-  id         Int          @id @default(autoincrement())
-  name       String
-  email      String?      @unique
-  bio        String?
-  is_test    Boolean?     @default(false)
-  blog_posts blog_posts[]
+model Author {
+  id        Int        @id @default(autoincrement())
+  name      String
+  email     String?    @unique
+  bio       String?
+  is_test   Boolean?   @default(false)
+  blogPosts BlogPost[]
+
+  @@map("authors")
 }
 
-model blog_posts {
+model BlogPost {
   id             Int      @id @default(autoincrement())
   author_id      Int
   title          String
@@ -111,10 +104,12 @@ model blog_posts {
   is_test        Boolean? @default(false)
   visits         Int?     @default(0)
   tag            String?
-  authors        authors  @relation(fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_author")
+  author         Author   @relation(fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_author")
+
+  @@map("blog_posts")
 }
 
-model marketing_tracker {
+model MarketingTracker {
   id                    String   @id
   userId                Int
   year                  Int
@@ -128,12 +123,12 @@ model marketing_tracker {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @default(now())
   users                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@unique([userId, year, month])
   @@index([userId, year])
+  @@map("marketing_tracker")
 }
 
-model marketing_yearly_summary {
+model MarketingYearlySummary {
   id                    String   @id
   userId                Int
   year                  Int
@@ -146,12 +141,12 @@ model marketing_yearly_summary {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @default(now())
   users                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@unique([userId, year])
   @@index([userId, year])
+  @@map("marketing_yearly_summary")
 }
 
-model signed_documents {
+model SignedDocuments {
   id               String   @id
   userId           Int
   originalFilename String
@@ -163,12 +158,12 @@ model signed_documents {
   createdAt        DateTime @default(now())
   updatedAt        DateTime
   users            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@index([sessionToken])
   @@index([userId])
+  @@map("signed_documents")
 }
 
-model staff {
+model Staff {
   id            Int     @id @default(autoincrement())
   name          String
   position      String
@@ -178,6 +173,7 @@ model staff {
   email         String
   company_email String
   strikes       String
+  @@map("staff")
 }
 
 enum OnboardingStatus {
