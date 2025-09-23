@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useRouter } from "next/router";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import type { GetServerSideProps } from "next"; import { prisma } from "@/lib/prisma";
-import cookie from "cookie";
+import { serialize as serializeCookie } from "cookie";
 
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
@@ -382,7 +382,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   // set resume cookie so OAuth redirects can come back without token
   ctx.res.setHeader(
     "Set-Cookie",
-    cookie.serialize("ob_session", token, {
+    serializeCookie("ob_session", token, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",

@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import cookie from "cookie";
+import { parse as parseCookie, serialize as serializeCookie } from "cookie";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
 import { requireSession } from "@/lib/auth";
@@ -9,7 +9,9 @@ const asStr = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") { res.status(405).end(); return; }
 
-  const code  = asStr(req.query.code);
+  console.log("[LI] start", { url: req.url, query: req.query });
+
+  const code = asStr(req.query.code);
   const state = asStr(req.query.state);
   if (!code) { res.status(400).send("Missing code"); return; }
 
@@ -27,6 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
   if (!tokenRes.ok) {
     const text = await tokenRes.text();
+    console.error("[LI] token exchange failed", tokenRes.status, text);
     res.status(400).send(`LinkedIn token exchange failed: ${text}`);
     return;
   }
@@ -38,19 +41,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
   if (!access_token) { res.status(400).send("No access token received"); return; }
 
-  const encAccess  = encrypt(access_token);
+  const encAccess = encrypt(access_token);
   const encRefresh = refresh_token ? encrypt(refresh_token) : undefined;
-  const expiresAt  = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
+  const expiresAt = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
 
   // Decide flow by presence of state cookie
-  const cookies = cookie.parse(req.headers.cookie || "");
+  const cookies = parseCookie(req.headers.cookie || "");
   const hasStateCookie = !!cookies.li_oauth_state;
+  console.log("[LI] cookies", Object.keys(cookies));
+  console.log("[LI] env.redirect_uri", process.env.LINKEDIN_REDIRECT_URI);
+  console.log("[LI] hasStateCookie", !!cookies.li_oauth_state);
 
   if (hasStateCookie) {
     // logged-in connect flow
     if (!state || cookies.li_oauth_state !== state) { res.status(400).send("Invalid state"); return; }
     // clear state cookie
-    res.setHeader("Set-Cookie", cookie.serialize("li_oauth_state", "", {
+    res.setHeader("Set-Cookie", serializeCookie("li_oauth_state", "", {
       path: "/api/linkedin/callback",
       maxAge: 0,
     }));
@@ -81,7 +87,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
 
   // ensure resume cookie exists so /session (no token) can load
-  res.setHeader("Set-Cookie", cookie.serialize("ob_session", state, {
+  res.setHeader("Set-Cookie", serializeCookie("ob_session", state, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",

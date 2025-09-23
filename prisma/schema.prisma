@@ -62,7 +62,7 @@ model OnboardingPlatformToken {
   updatedAt    DateTime          @updatedAt
   session      OnboardingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  @@unique([sessionId, platform])
+  @@unique([sessionId, platform], name: "sessionId_platform")
   @@index([sessionId, platform])
   @@map("onboarding_platform_tokens")
 }
@@ -77,7 +77,7 @@ model UserToken {
   expiresAt    DateTime?
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, platform])
+  @@unique([userId, platform], name: "userId_platform")
   @@index([userId, platform])
   @@map("user_tokens")
 }

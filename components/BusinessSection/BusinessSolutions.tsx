@@ -1,19 +1,19 @@
-import { useEffect, useState } from "react";
-import { Bricolage_Grotesque, Inter, Figtree } from "next/font/google";
-import { Button } from "@/components/ui/button";
-import { StatsGrid } from "./StatsGrid";
-import { motion, AnimatePresence } from "framer-motion";
-import Timeline from "./Timeline";
-import GridComponent from "./GridComponent";
+import { useEffect, useState } from "react"
+import { Bricolage_Grotesque, Inter, Figtree } from "next/font/google"
+import { Button } from "@/components/ui/button"
+import { StatsGrid } from "./StatsGrid"
+import { motion, AnimatePresence } from "framer-motion"
+import Timeline from "./Timeline"
+import GridComponent from "./GridComponent"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
-const inter = Inter({ subsets: ["latin"] });
-const figtree = Figtree({ subsets: ["latin"] });
+const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
+const inter = Inter({ subsets: ["latin"] })
+const figtree = Figtree({ subsets: ["latin"] })
 
 interface TabItem {
-  id: string;
-  title: string;
-  content: string;
+  id: string
+  title: string
+  content: string
 }
 
 const tabs: TabItem[] = [
@@ -24,8 +24,8 @@ const tabs: TabItem[] = [
       "We start immediately. Our onboarding process is fast and simple, working towards starting your lead generation swiftly.",
   },
   {
-    id: "efficiency",
-    title: "Increasing Efficiency",
+    id: "time",
+    title: "Increase Your Time",
     content:
       "We take responsibility for your online presence so you can spend more time doing the work you enjoy.",
   },
@@ -39,35 +39,40 @@ const tabs: TabItem[] = [
     id: "streamline",
     title: "Streamline Systems",
     content:
-      "Automate client acquisition with our case study-driven systems. Patients discover your office through organic outreach.",
+      "Automate client and partner acquisition with our case study-driven systems. Leads discover your business through organic outreach.",
   },
-];
+]
 
 export function BusinessSolutions() {
-  const [activeTab, setActiveTab] = useState(tabs[0].id);
+  const [activeTab, setActiveTab] = useState(tabs[0].id)
 
   useEffect(() => {
     const interval = setInterval(() => {
       setActiveTab((prevTab) => {
-        const currentIndex = tabs.findIndex((tab) => tab.id === prevTab);
-        const nextIndex = (currentIndex + 1) % tabs.length;
-        return tabs[nextIndex].id;
-      });
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [activeTab]);
+        const currentIndex = tabs.findIndex((tab) => tab.id === prevTab)
+        const nextIndex = (currentIndex + 1) % tabs.length
+        return tabs[nextIndex].id
+      })
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [activeTab])
 
   return (
     <section className="w-full py-20 px-6 bg-[#F3F3F3]" id="solutions">
       <div className="max-w-7xl mx-auto px-6 max-md:px-2">
         <div className="grid md:grid-cols-2 gap-12 mb-16">
-          <h2 className={`text-3xl font-semibold text-[#18042A] mb-4 ${bricolage.className}`}>
+          <h2
+            className={`text-3xl font-semibold text-[#18042A] mb-4 ${bricolage.className}`}
+          >
             We Are Not Your Average
             <br />
             “Consultants”
           </h2>
           <p className={`text-[#8A9197] text-lg ${inter.className}`}>
-            We reduce complexity by eliminating corporate formalities. We implement a clear-cut and simple approach to increasing the return on ad spending. Our team hand-picks clients so we can offer more leads and focus on your success.
+            We reduce complexity by eliminating corporate formalities. We
+            implement a clear-cut and simple approach to increasing the return
+            on ad spending. Our team hand-picks leads so we can offer more
+            clients and increase your time.
           </p>
         </div>
         <div className="grid md:grid-cols-2 gap-12 mb-20 place-items-center">
@@ -184,5 +189,5 @@ export function BusinessSolutions() {
         <StatsGrid />
       </div>
     </section>
-  );
+  )
 }
