@@ -91,8 +91,6 @@ const inter = Inter({ subsets: ["latin"] });
 const tags: string[] = ["All Blog Posts", "Case Studies", "Technology", "AI & Automation", "Finance", "Marketing", "Sales", "Management", "Leadership"]
 
 
-
-
 const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
 
     const [tagSelected, setTagSelected] = useState(0);
