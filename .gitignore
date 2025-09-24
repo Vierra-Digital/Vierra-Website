@@ -8,7 +8,9 @@
 !.yarn/releases
 !.yarn/versions
 /coverage
-/.next/
+.next/
+.netlify/
+/.vercel
 /out/
 /build
 .DS_Store
