@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
-import { X, Search } from "lucide-react";
+import { X } from "lucide-react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import { motion } from "framer-motion";
 import Link from "next/link";
@@ -40,7 +40,6 @@ const formatDate = (dateString: string): string => {
 };
 
 export function AllPostsModal({ isOpen, onClose }: ModalProps) {
-  const [errors, setErrors] = useState<Record<string, string>>({});
   const [allPosts, setAllPosts] = useState<BlogPostType[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -111,11 +110,11 @@ export function AllPostsModal({ isOpen, onClose }: ModalProps) {
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 md:gap-4 w-full">
-                {allPosts.map(blog => (
-                  <Link href={`/blog/${blog.slug}`} passHref>
+                {allPosts.map((blog) => (
+                  <Link key={blog.slug} href={`/blog/${blog.slug}`} passHref>
                     <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
-                      <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
-                        <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
+                      <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0 relative">
+                        <Image src={blog.image_url ?? "/assets/vierra-logo.png"} alt={blog.title} fill className="object-cover" />
                       </div>
                       <div id="editor-blog-text-container" className="flex flex-col justify-center">
                         <span className={`text-sm md:text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>

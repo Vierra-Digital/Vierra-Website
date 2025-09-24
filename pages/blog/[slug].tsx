@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect } from 'react';
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
 import { Header } from "@/components/Header";
@@ -7,6 +6,7 @@ import { motion } from "framer-motion";
 import Footer from "@/components/FooterSection/Footer";
 import { prisma } from '@/lib/prisma';
 import { GetStaticPaths, GetStaticProps } from 'next';
+import Image from 'next/image';
 
 
 
@@ -23,10 +23,10 @@ declare global {
 type BlogPostProps = {
     title: string;
     content: string;
-    image_url?: string;
+    image_url?: string | null;
     author: { name: string };
-    publishedDate: Date;
-    tag: string;
+    publishedDate: string;
+    tag?: string | null;
 };
 
 const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
@@ -55,6 +55,10 @@ const BlogViewPage = ({
             });
         }
     };
+
+    useEffect(() => {
+        initParticles();
+    }, []);
 
     return (
         <>
@@ -132,7 +136,6 @@ const BlogViewPage = ({
                             <div id="header-text-holder" className="my-4 max-w-2xl mb-5">
                                 <h1 className={`text-5xl md:text-6xl font-bold leading-tight lg:mb-6 text-[#EFF3FF] ${bricolage.className}`}>
                                     {title ? title : "Blog not found."}
-                                    {/* Lorem ipsum dolor sit amet, consectetur  */}
                                 </h1>
                             </div>
                             <div id="blog-description" className="w-[70%]">
@@ -154,19 +157,17 @@ const BlogViewPage = ({
                 </main>
                 <div id="view-section" className="bg-[#F3F3F3] px-8 lg:px-20">
                     <div id="heading-image" className="w-full flex flex-col justify-center items-center py-20">
-                        <img alt="blog image" src={image_url} className="min-w-full lg:min-w-[75%] max-h-[500px] aspect-auto" />
+                        <Image alt={title ?? 'blog image'} src={image_url ?? '/assets/vierra-logo.png'} width={1200} height={500} className="min-w-full lg:min-w-[75%] max-h-[500px] aspect-auto object-cover" />
                     </div>
                     <div id="blog-text" className="lg:px-32 flex flex-col pb-20">
                         <div id="blog-text-heading">
                             <h1 className={`font-semibold text-[#18042A] text-3xl mb-3 ${bricolage.className}`}>
                                 {title}
-                                {/* We Are Not Your Average “Consultants” */}
                             </h1>
                         </div>
                         <div id="blog-text-content">
                             <p className={`text-[#8A9197]  md:text-lg/[180%] md:w-[50%] ${inter.className}`}>
                                 {content}
-                                {/* We reduce complexity by eliminating corporate formalities. We implement a clear-cut and simple approach to increasing the return on ad spending. Our team hand-picks clients so we can offer more leads and focus on your success. We reduce complexity by eliminating corporate formalities. We implement a clear-cut and simple approach to increasing the return on ad spending. Our team hand-picks clients so we can offer more leads and focus on your success. */}
                             </p>
                         </div>
                     </div>
@@ -231,7 +232,7 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
             publishedDate: post.published_date.toISOString(),
             tag: post.tag
         },
-        revalidate: 60, // ISR: re-generate every 60s
+        revalidate: 60,
     };
 };
 

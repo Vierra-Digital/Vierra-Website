@@ -2,11 +2,10 @@ import React, { useEffect, useState } from "react"
 import Head from "next/head"
 import { Inter } from "next/font/google"
 import Image from "next/image"
-import { useRouter } from "next/navigation"
+import { useRouter } from "next/router"
 import SignPdfModal from "@/components/ui/SignPdfModal"
 import LtvCalculatorModal from "@/components/ui/LtvCalculatorModal"
 import Link from "next/link"
-import { FiLogOut, FiFileText, FiUsers } from "react-icons/fi"
 import { IoIosNotificationsOutline } from "react-icons/io";
 import { AiOutlineAppstore } from "react-icons/ai";
 import { PiUsersThree, PiCalculator } from "react-icons/pi";
@@ -14,7 +13,7 @@ import { BsPeople } from "react-icons/bs";
 import { CiSearch } from "react-icons/ci";
 import { RiArrowDropDownLine, RiMoneyDollarBoxLine } from "react-icons/ri";
 import { FaRegFilePdf } from "react-icons/fa6";
-import { useSession, signOut } from "next-auth/react"
+import { useSession } from "next-auth/react"
 import UserSettingsPage from "@/components/UserSettingsPage"
 import AddClientModal from "@/components/ui/AddClientModal"
 import type { SessionItem } from "@/types/session"
@@ -36,10 +35,8 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
   const [showSettings, setShowSettings] = useState(false)
 
   const [currentSection, setCurrentSection] = useState(0);
-  // [0: dashboard, 1: clients, 2: team, 3: marketing]
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  // controlling the sidebar
 
   const [isLtvModalOpen, setIsLtvModalOpen] = useState(false)
   const { data: session } = useSession()
@@ -136,7 +133,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                 }}
                 aria-label="Toggle sidebar"
               >
-                {/* Hamburger icon */}
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   className="h-6 w-6 text-[#701CC0]"
@@ -151,11 +147,15 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             <div id="left-side-search-holder" className="flex w-1/2 h-full pl-4 items-center">
               <div id="search-bar" className="w-[270px] h-[36px] z-40 flex items-center border border-[#A6A9AC] rounded-lg gap-x-2 p-2 text-[#A6A9AC] cursor-pointer">
                 <CiSearch height={10} width={10} className="w-6 h-6" />
-                <span className={`text-sm ${inter.className}`}>Search</span>
+                  <span className={`text-sm ${inter.className}`}>Search</span>
+                  {loading && <span className={`ml-3 text-xs ${inter.className}`}>Loading sessions...</span>}
               </div>
             </div>
             <div id="right-side-info-holder" className="flex w-1/2 h-full items-center justify-end p-2 gap-x-4 md:gap-x-8 text-[#A6A9AC]">
-              <IoIosNotificationsOutline height={10} width={10} className="w-8 h-8" />
+              <div className="relative">
+                <IoIosNotificationsOutline height={10} width={10} className="w-8 h-8" />
+                <span className="absolute -top-1 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{items.length}</span>
+              </div>
               <div id="user-holder" className="flex items-center w-auto h-auto">
                 <button
                   className="flex items-center gap-x-2"
@@ -179,6 +179,14 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                   <div id="name-holder" className="hidden w-auto h-auto text-[#111014] md:flex items-center font-semibold">
                     <span className="">{session?.user?.name ? session.user.name : "Vierra Admin"}</span>
                   </div>
+                  {dashboardHref && (
+                    <button
+                      onClick={() => router.push(dashboardHref)}
+                      className="ml-3 hidden md:inline-flex items-center px-3 py-1 bg-[#701CC0] text-white rounded-lg text-sm"
+                    >
+                      Open dashboard
+                    </button>
+                  )}
                   <div id="dropdowner" className="hidden md:flex">
                     <RiArrowDropDownLine width={32}
                       height={32} className="w-8 h-8" />
@@ -188,7 +196,11 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             </div>
           </div>
           <div id="right-side-body" className="flex w-full h-full bg-white">
-            {/* This is the working area. Put in different options (Dashboard, Clients, etc. ) as components */}
+            {error && (
+              <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-red-100 text-red-700 px-4 py-2 rounded-md">
+                {error}
+              </div>
+            )}
             {showSettings ? (<>
               <UserSettingsPage
                 user={
@@ -218,11 +230,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
         isOpen={isSignModalOpen}
         onClose={() => setIsSignModalOpen(false)}
       />
-      {/* <UserSettingsModal
-          open={isSettingsModalOpen}
-          onClose={() => setIsSettingsModalOpen(false)}
-          user={session?.user || {}}
-        /> */}
       {isLtvModalOpen && (
         <LtvCalculatorModal
           isOpen={isLtvModalOpen}
@@ -234,7 +241,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
           isOpen={isAddClientOpen}
           onClose={() => {
             setIsAddClientOpen(false)
-            fetchSessions() // safety refetch
+            fetchSessions()
           }}
           onCreated={(row) => {
             setItems((prev) => [row, ...prev])
@@ -243,8 +250,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
       )}
     </>
   )
-
-  return null
 }
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {

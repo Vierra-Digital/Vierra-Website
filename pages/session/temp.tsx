@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import Head from "next/head";
 import Image from "next/image";
 import { useRouter } from "next/router";
@@ -68,7 +68,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
     window.location.href = `/api/${provider}/initiate?session=${encodeURIComponent(sessionIdForOauth)}`;
   }
 
-  async function refreshSocial() {
+  const refreshSocial = useCallback(async () => {
     if (!sessionIdForOauth) return;
     setSocialLoading(true);
     try {
@@ -81,7 +81,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
     } finally {
       setSocialLoading(false);
     }
-  }
+  }, [sessionIdForOauth]);
 
 
   // Debounce handle
@@ -90,12 +90,12 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
   useEffect(() => {
     const cur = questions[step];
     if (cur?.type === "social") refreshSocial();
-  }, [step, sessionIdForOauth]);
+  }, [step, sessionIdForOauth, refreshSocial]);
 
   useEffect(() => {
     if (!router.isReady) return;
     if (router.query.linked) refreshSocial();
-  }, [router.isReady, router.query.linked, sessionIdForOauth]);
+  }, [router.isReady, router.query.linked, sessionIdForOauth, refreshSocial]);
 
 
   // Fetch session once router is ready and token is a string

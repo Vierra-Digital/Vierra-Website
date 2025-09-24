@@ -1,16 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/router";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
 import { prisma } from "@/lib/prisma"
 import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { ArrowUpRight } from "lucide-react";
 import { Search } from "lucide-react";
-import { FooterSection } from "@/components/FooterSection/MainComponent";
-import { Modal } from "@/components/Modal";
-import Main from "@/components/ServicesSection/Main";
+import Image from 'next/image';
 import Footer from "@/components/FooterSection/Footer";
 import { GetStaticProps } from "next";
 import Link from "next/link";
@@ -19,15 +16,15 @@ import { AllPostsModal } from "@/components/Blog/AllPostsModal";
 
 type BlogPostType = {
     id: number;
-    author_id: number;
+    author_id?: number | null;
     title: string;
     content: string;
     image_url?: string | null;
-    published_date: Date;
+    published_date?: string | null;
     slug: string;
     is_test?: boolean | null;
-    visits: number;
-    tag?: string;
+    visits?: number | null;
+    tag?: string | null;
     author: {
         name: string;
     };
@@ -56,7 +53,7 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
         props: {
             latestPosts: latestPosts.map(post => ({
                 ...post,
-                published_date: post.published_date.toISOString(), // convert Date → string
+                published_date: post.published_date.toISOString(),
                 author: { name: post.author.name },
             })),
             trendingPosts: trendingPosts.map(post => ({
@@ -78,8 +75,10 @@ declare global {
     }
 }
 
-const formatDate = (dateString: string): string => {
+const formatDate = (dateString?: string | null): string => {
+    if (!dateString) return "";
     const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "";
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const day = date.getDate().toString().padStart(2, '0');
     const year = date.getFullYear();
@@ -115,7 +114,6 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
         setLoading(true);
 
         try {
-            // Filter both latest and trending posts by the selected tag
             const filteredLatest = filterPostsByTag(name, latestPosts);
             const filteredTrending = filterPostsByTag(name, trendingPosts);
 
@@ -135,7 +133,6 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
     const router = useRouter();
 
 
-    // Initialize filtered posts on component mount
     useEffect(() => {
         setFilteredLatestPosts(latestPosts);
         setFilteredTrendingPosts(trendingPosts);
@@ -270,7 +267,6 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                     <div id="view-part-1" className="pt-20">
                         <h1 id="part-1-header" className={`text-2xl md:text-3xl font-bold leading-tight mb-6 text-[#18042A] ${bricolage.className}`}>All Blog Posts</h1>
                         <div id="vp-1-blogs-container" className="w-full flex flex-col lg:flex-row gap-6">
-                            {/* Featured Blog Post (Top on mobile, Left Half on desktop) */}
                             {!loading && (
                                 <div
                                     className="w-full lg:flex-[0.5] relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
@@ -283,8 +279,6 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                 >
                                     {filteredLatestPosts[0] ? (
                                         <Link href={`/blog/${filteredLatestPosts[0].slug}`} passHref>
-
-                                            {/* Content overlay */}
                                             <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
                                                 <div className="mb-4">
                                                     <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium">
@@ -305,8 +299,6 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                                     </div>
                                                 </div>
                                             </div>
-
-                                            {/* Hover overlay */}
                                             <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
                                         </Link>
                                     ) : (
@@ -318,14 +310,11 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
 
                                 </div>
                             )}
-
-                            {/* 2x2 Grid (Bottom on mobile, Right Half on desktop) */}
                             <div className="w-full lg:flex-[0.5] grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {filteredLatestPosts.slice(1, 5).map((blog) => (
-                                    <Link href={`/blog/${blog.slug}`} passHref>
+                                    <Link key={blog.id} href={`/blog/${blog.slug}`} passHref>
 
                                         <div
-                                            key={blog.id}
                                             className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
                                             style={{
                                                 backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image_url})`,
@@ -334,9 +323,6 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                                 backgroundRepeat: 'no-repeat'
                                             }}
                                         >
-
-
-                                            {/* Content overlay */}
                                             <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
                                                 <div className="mb-4">
                                                     <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-xs font-medium">
@@ -349,8 +335,6 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                                     </h3>
                                                 </div>
                                             </div>
-
-                                            {/* Hover overlay */}
                                             <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
                                         </div>
                                     </Link>
@@ -366,10 +350,9 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                         <div id="vp-2-blogs-container" className="w-full flex flex-col lg:flex-row gap-6">
                             <div className="w-full grid lg:grid-cols-4 gap-4">
                                 {filteredTrendingPosts[0] ? filteredTrendingPosts.slice(0, 4).map((blog) => (
-                                    <Link href={`/blog/${blog.slug}`} passHref>
+                                    <Link key={blog.id} href={`/blog/${blog.slug}`} passHref>
 
                                         <div
-                                            key={blog.id}
                                             className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
                                             style={{
                                                 backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image_url})`,
@@ -378,8 +361,6 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                                 backgroundRepeat: 'no-repeat'
                                             }}
                                         >
-
-                                            {/* Content overlay */}
                                             <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
                                                 <div className="mb-4">
                                                     <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-xs font-medium">
@@ -392,8 +373,6 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                                     </h3>
                                                 </div>
                                             </div>
-
-                                            {/* Hover overlay */}
                                             <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
                                         </div>
                                     </Link>
@@ -407,8 +386,6 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                             backgroundRepeat: 'no-repeat'
                                         }}
                                     >
-
-                                        {/* Content overlay */}
                                         <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
                                             <div className="mb-4">
 
@@ -430,17 +407,16 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                     </div>
                     <div id="view-part-3" className="pt-20">
                         <div id="part-3-heading-row" className="flex w-full flex-row justify-between items-center">
-                            <h1 id="part-3-header" className={`text-2xl md:text-3xl font-bold leading-tight mt-6 mb-6 text-[#18042A] ${bricolage.className}`}>Editor's Pick</h1>
+                            <h1 id="part-3-header" className={`text-2xl md:text-3xl font-bold leading-tight mt-6 mb-6 text-[#18042A] ${bricolage.className}`}>Editor&apos;s Pick</h1>
                             <Button onClick={() => setIsAllPostModalOpen(true)} className={`h-fit px-4 py-2 border border-[#646A69] text-[#646A69] rounded-lg ${bricolage.className} hover:text-[#EFF3FF] bg-transparent`}>View All Posts</Button>
                         </div>
                         <div id="vp-3-blogs-container" className="w-full flex gap-6 pb-5">
-                            {/* Blog rectangle cards: Editor's pick  */}
                             <div className="w-full grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                                 {filteredTrendingPosts[0] ? filteredTrendingPosts.slice(0, 6).map((blog) => (
-                                    <Link href={`/blog/${blog.slug}`} passHref>
+                                    <Link key={blog.id} href={`/blog/${blog.slug}`} passHref>
                                         <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
                                             <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
-                                                <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
+                                                <Image alt={blog.title ?? "blog image"} src={blog.image_url ?? "/assets/vierra-logo.png"} width={80} height={80} className="object-cover" />
                                             </div>
                                             <div id="editor-blog-text-container" className="flex flex-col justify-center">
                                                 <span className={`text-sm md:text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
@@ -488,8 +464,6 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                                 backgroundRepeat: 'no-repeat'
                                             }}
                                         >
-
-                                            {/* Content overlay */}
                                             <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
                                                 <div className="mb-4">
                                                     <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium">
@@ -511,8 +485,6 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                                     </div>
                                                 </div>
                                             </div>
-
-                                            {/* Hover overlay */}
                                             <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
                                         </div>
                                     </Link>
@@ -550,12 +522,12 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                             <div id="part-4-weekly-other-container" className="mt-4">
                                 <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     {filteredTrendingPosts.slice(0, 6).map((blog) => (
-                                        <Link href={`/blog/${blog.slug}`} passHref>
+                                            <Link key={blog.id} href={`/blog/${blog.slug}`} passHref>
 
-                                            <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
-                                                <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
-                                                    <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
-                                                </div>
+                                                <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
+                                                    <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
+                                                        <Image alt={blog.title ?? "blog image"} src={blog.image_url ?? "/assets/vierra-logo.png"} width={80} height={80} className="object-cover" />
+                                                    </div>
                                                 <div id="editor-blog-text-container" className="flex flex-col justify-center">
                                                     <span className={`text-sm md:text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
                                                         {blog.title}
@@ -577,11 +549,11 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                 <h1 className={`text-[#18042A] font-semibold ${bricolage.className}`}>Popular Posts</h1>
                                 <div className="w-full grid grid-cols-1 sm:grid-cols-1 md:grid-cols-1 gap-4">
                                     {filteredTrendingPosts.slice(0, 6).map((blog) => (
-                                        <Link href={`/blog/${blog.slug}`} passHref>
+                                        <Link key={blog.id} href={`/blog/${blog.slug}`} passHref>
 
                                             <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
                                                 <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
-                                                    <img src={blog.image_url ?? "/assets/vierra-logo.png"} className="object-cover" />
+                                                    <Image alt={blog.title ?? "blog image"} src={blog.image_url ?? "/assets/vierra-logo.png"} width={80} height={80} className="object-cover" />
                                                 </div>
                                                 <div id="editor-blog-text-container" className="flex flex-col justify-center">
                                                     <span className={`text-sm md:text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>

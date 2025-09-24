@@ -342,7 +342,7 @@ export default function OnboardingQuestionnaire({ initialSession }: { initialSes
                       <div className="min-w-0 flex-1">
                         <div className="font-bold text-black text-sm lg:text-base">Agreement</div>
                         <div className="text-xs lg:text-sm text-gray-500 line-clamp-2 lg:line-clamp-none">
-                          Vierra Digital LLC Non-Disclosure Agreement This nondisclosure agreement (hereinafter referred to as the "Agreement") is entered by and...
+                          Vierra Digital LLC Non-Disclosure Agreement This nondisclosure agreement (hereinafter referred to as the &quot;Agreement&quot;) is entered by and...
                         </div>
                       </div>
                     </div>
@@ -377,7 +377,7 @@ export default function OnboardingQuestionnaire({ initialSession }: { initialSes
 
               {step.fields && (
                 <div className="space-y-11">
-                  {step.fields.map((field, index) => (
+                  {step.fields.map((field) => (
                     <div key={field.name}>
                       {field.label && (
                         <label className="block text-sm font-medium text-gray-900 mb-2">

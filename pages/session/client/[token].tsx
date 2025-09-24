@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import Head from "next/head";
 import Image from "next/image";
 import { useRouter } from "next/router";
@@ -44,7 +44,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
   const [answers, setAnswers] = useState<Record<string, string>>(initialSession?.answers ?? {});
   const [sessionData, setSessionData] = useState<ClientSessionData | null>(initialSession ?? null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [fbConnected, setFb] = useState(false);
   const [liConnected, setLi] = useState(false);
@@ -70,7 +70,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
     window.location.href = `/api/${provider}/initiate?session=${encodeURIComponent(sessionIdForOauth)}`;
   }
 
-  async function refreshSocial() {
+  const refreshSocial = useCallback(async () => {
     if (!sessionIdForOauth) return;
     setSocialLoading(true);
     try {
@@ -83,7 +83,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
     } finally {
       setSocialLoading(false);
     }
-  }
+  }, [sessionIdForOauth]);
 
 
   // Debounce handle
@@ -92,12 +92,12 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
   useEffect(() => {
     const cur = questions[step];
     if (cur?.type === "social") refreshSocial();
-  }, [step, sessionIdForOauth]);
+  }, [step, refreshSocial]);
 
   useEffect(() => {
     if (!router.isReady) return;
     if (router.query.linked) refreshSocial();
-  }, [router.isReady, router.query.linked, sessionIdForOauth]);
+  }, [router.isReady, router.query.linked, refreshSocial]);
 
 
   // Fetch session once router is ready and token is a string
@@ -403,7 +403,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
 
                       try {
                         // Use the same API structure as onboarding
-                        const response = await fetch('/api/onboarding/saveAnswers', {
+                        await fetch('/api/onboarding/saveAnswers', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ 
