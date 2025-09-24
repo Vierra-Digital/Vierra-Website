@@ -2,7 +2,7 @@ import { prisma } from '../lib/prisma';
 
 async function main() {
     // Create an author
-    const author = await prisma.Author.create({
+    const author = await prisma.author.create({
         data: {
             name: 'Thomas Walsh',
             email: 'thomas@example.com',
