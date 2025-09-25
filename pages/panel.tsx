@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react"
 import Head from "next/head"
 import { Inter } from "next/font/google"
 import Image from "next/image"
-import { useRouter } from "next/router"
 import SignPdfModal from "@/components/ui/SignPdfModal"
 import LtvCalculatorModal from "@/components/ui/LtvCalculatorModal"
 import Link from "next/link"
@@ -30,7 +29,6 @@ const inter = Inter({ subsets: ["latin"] })
 type PageProps = { dashboardHref: string }
 
 const PanelPage = ({ dashboardHref }: PageProps) => {
-  const router = useRouter()
   const [isSignModalOpen, setIsSignModalOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
 
