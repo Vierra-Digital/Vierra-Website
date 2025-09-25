@@ -180,12 +180,12 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                     <span className="">{session?.user?.name ? session.user.name : "Vierra Admin"}</span>
                   </div>
                   {dashboardHref && (
-                    <button
-                      onClick={() => router.push(dashboardHref)}
+                    <Link
+                      href={dashboardHref}
                       className="ml-3 hidden md:inline-flex items-center px-3 py-1 bg-[#701CC0] text-white rounded-lg text-sm"
                     >
                       Open dashboard
-                    </button>
+                    </Link>
                   )}
                   <div id="dropdowner" className="hidden md:flex">
                     <RiArrowDropDownLine width={32}
@@ -215,7 +215,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               : (
                 <>
                   {currentSection === 0 && <DashboardSection />}
-                  {currentSection === 1 && <ClientsSection />}
+                  {currentSection === 1 && <ClientsSection onAddClient={() => setIsAddClientOpen(true)} />}
                   {currentSection === 2 && <TeamPanelSection />}
                   {currentSection === 3 && <MarketingSection />}
                 </>
