@@ -44,6 +44,9 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // keep prop used to satisfy linting after removing the button usage
+  void dashboardHref
+
   useEffect(() => {
     fetchSessions()
   }, [])
