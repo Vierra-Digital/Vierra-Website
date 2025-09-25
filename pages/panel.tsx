@@ -66,7 +66,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
       <Head>
         <title>Vierra | Admin Panel</title>
       </Head>
-      <div id="main-panel" className="w-screen h-screen bg-white flex flex-row">
+      <div id="main-panel" className="w-full h-screen bg-white flex flex-row overflow-hidden">
         <div id="left-side" className={`flex flex-col  h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
           <div id="vierra-nameplate-body" className="w-full h-20 flex items-center justify-center mb-4">
             <Link href="/">
@@ -121,7 +121,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             </div>
           </div>
         </div>
-        <div id="right-side" className="flex flex-col w-full h-full">
+        <div id="right-side" className="flex flex-col w-full h-full overflow-y-auto">
           <div id="right-side-heading" className="flex w-full flex-row h-16 bg-[#F8F0FF]">
             <div className="md:hidden flex items-center pl-2">
               <button
