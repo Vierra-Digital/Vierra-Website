@@ -69,7 +69,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
                     Add Client
                 </button>
             </div>
-            <div className="overflow-x-auto w-full">
+            <div className="overflow-x-hidden w-full">
                 <table className="min-w-full text-left border-separate border-spacing-y-3">
                     <thead>
                         <tr className="text-[#677489] text-xs">

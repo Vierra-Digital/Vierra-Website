@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react"
 import Head from "next/head"
 import { Inter } from "next/font/google"
 import Image from "next/image"
-import { useRouter } from "next/router"
 import SignPdfModal from "@/components/ui/SignPdfModal"
 import LtvCalculatorModal from "@/components/ui/LtvCalculatorModal"
 import Link from "next/link"
@@ -13,7 +12,8 @@ import { BsPeople } from "react-icons/bs";
 import { CiSearch } from "react-icons/ci";
 import { RiArrowDropDownLine, RiMoneyDollarBoxLine } from "react-icons/ri";
 import { FaRegFilePdf } from "react-icons/fa6";
-import { useSession } from "next-auth/react"
+import { useSession, signOut } from "next-auth/react"
+import { FiLogOut } from "react-icons/fi"
 import UserSettingsPage from "@/components/UserSettingsPage"
 import AddClientModal from "@/components/ui/AddClientModal"
 import type { SessionItem } from "@/types/session"
@@ -30,7 +30,6 @@ const inter = Inter({ subsets: ["latin"] })
 type PageProps = { dashboardHref: string }
 
 const PanelPage = ({ dashboardHref }: PageProps) => {
-  const router = useRouter()
   const [isSignModalOpen, setIsSignModalOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
 
@@ -44,6 +43,9 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
   const [items, setItems] = useState<SessionItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // keep prop used to satisfy linting after removing the button usage
+  void dashboardHref
 
   useEffect(() => {
     fetchSessions()
@@ -68,7 +70,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
       <Head>
         <title>Vierra | Admin Panel</title>
       </Head>
-      <div id="main-panel" className="w-screen h-screen bg-white flex flex-row">
+      <div id="main-panel" className="w-full h-screen bg-white flex flex-row overflow-hidden">
         <div id="left-side" className={`flex flex-col  h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
           <div id="vierra-nameplate-body" className="w-full h-20 flex items-center justify-center mb-4">
             <Link href="/">
@@ -121,9 +123,18 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                 LTV Calculator
               </span>
             </div>
+            <div className="w-full flex justify-center mt-auto mb-4">
+              <button
+                onClick={() => signOut({ callbackUrl: "/login" })}
+                className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer rounded-xl text-white/80 hover:bg-white hover:text-black"
+              >
+                <FiLogOut className="w-5 h-5" />
+                <span className={`text-xs ${inter.className}`}>Logout</span>
+              </button>
+            </div>
           </div>
         </div>
-        <div id="right-side" className="flex flex-col w-full h-full">
+        <div id="right-side" className="flex flex-col w-full h-full overflow-y-auto">
           <div id="right-side-heading" className="flex w-full flex-row h-16 bg-[#F8F0FF]">
             <div className="md:hidden flex items-center pl-2">
               <button
@@ -179,14 +190,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                   <div id="name-holder" className="hidden w-auto h-auto text-[#111014] md:flex items-center font-semibold">
                     <span className="">{session?.user?.name ? session.user.name : "Vierra Admin"}</span>
                   </div>
-                  {dashboardHref && (
-                    <Link
-                      href={dashboardHref}
-                      className="ml-3 hidden md:inline-flex items-center px-3 py-1 bg-[#701CC0] text-white rounded-lg text-sm"
-                    >
-                      Open dashboard
-                    </Link>
-                  )}
                   <div id="dropdowner" className="hidden md:flex">
                     <RiArrowDropDownLine width={32}
                       height={32} className="w-8 h-8" />
