@@ -9,8 +9,19 @@ const OutreachSection = () => {
             <div className="max-w-7xl mx-auto">
                 <div className="flex justify-between items-center mb-8">
                     <h1 className="text-2xl font-semibold text-[#111827]">Dashboard</h1>
-                    <select className="border border-[#D1D5DB] rounded-lg px-3 py-2 text-sm bg-white">
+                    <select className="border border-[#D1D5DB] rounded-lg px-3 py-2 text-sm bg-white text-black">
+                        <option>January</option>
+                        <option>February</option>
+                        <option>March</option>
+                        <option>April</option>
+                        <option>May</option>
+                        <option>June</option>
+                        <option>July</option>
+                        <option>August</option>
                         <option>September</option>
+                        <option>October</option>
+                        <option>November</option>
+                        <option>December</option>
                     </select>
                 </div>
                 {/* Social Media Platforms Grid */}
