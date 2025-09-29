@@ -4,7 +4,6 @@ import { Inter } from "next/font/google"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import SignPdfModal from "@/components/ui/SignPdfModal"
-import LtvCalculatorModal from "@/components/ui/LtvCalculatorModal"
 import Link from "next/link"
 import { FiLogOut, FiFileText, FiUsers } from "react-icons/fi"
 import { IoIosNotificationsOutline } from "react-icons/io";
@@ -25,6 +24,8 @@ import DashboardSection from "@/components/PanelPages/DashboardSection"
 import ClientsSection from "@/components/PanelPages/ClientsSection"
 import MarketingSection from "@/components/PanelPages/MarketingSection"
 import TeamPanelSection from "@/components/PanelPages/TeamPanelSection"
+import LtvCalculatorSection from "@/components/PanelPages/LTVCalculatorSection"
+import OutreachSection from "@/components/PanelPages/OutreachSection"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -41,7 +42,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   // controlling the sidebar
 
-  const [isLtvModalOpen, setIsLtvModalOpen] = useState(false)
   const { data: session } = useSession()
   const [isAddClientOpen, setIsAddClientOpen] = useState(false)
   const [items, setItems] = useState<SessionItem[]>([])
@@ -109,6 +109,12 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                 Marketing
               </span>
             </div>
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(5); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer hover:bg-white rounded-xl hover:text-black">
+              <FiUsers />
+              <span className={`text-xs ${inter.className}`}>
+                Outreach
+              </span>
+            </div>
             <div id="panel-nav-item" className="w-full flex h-[47px] flex-row items-center gap-x-[10px] pl-8 hover:text-black">
 
             </div>
@@ -118,7 +124,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                 PDF Signer
               </span>
             </div>
-            <div id="panel-nav-item" onClick={() => setIsLtvModalOpen(true)} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(4); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
               <PiCalculator />
               <span className={`text-xs ${inter.className}`}>
                 LTV Calculator
@@ -206,6 +212,8 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                   {currentSection === 1 && <ClientsSection />}
                   {currentSection === 2 && <TeamPanelSection />}
                   {currentSection === 3 && <MarketingSection />}
+                  {currentSection === 4 && <LtvCalculatorSection />}
+                  {currentSection === 5 && <OutreachSection />}
                 </>
               )}
 
@@ -223,24 +231,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
           onClose={() => setIsSettingsModalOpen(false)}
           user={session?.user || {}}
         /> */}
-      {isLtvModalOpen && (
-        <LtvCalculatorModal
-          isOpen={isLtvModalOpen}
-          onClose={() => setIsLtvModalOpen(false)}
-        />
-      )}
-      {isAddClientOpen && (
-        <AddClientModal
-          isOpen={isAddClientOpen}
-          onClose={() => {
-            setIsAddClientOpen(false)
-            fetchSessions() // safety refetch
-          }}
-          onCreated={(row) => {
-            setItems((prev) => [row, ...prev])
-          }}
-        />
-      )}
     </>
   )
 
