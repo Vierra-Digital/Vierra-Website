@@ -1,29 +1,228 @@
 import React, { useState, useEffect } from "react"
 import { Inter } from "next/font/google"
 import Image from "next/image"
+import { useSession } from "next-auth/react"
 const inter = Inter({ subsets: ["latin"] })
 
+const statFields = [
+    { key: "attempts", label: "Attempts" },
+    { key: "meetings", label: "Meetings Set" },
+    { key: "clients", label: "Clients Closed" },
+    { key: "revenue", label: "revenue($)" }
+];
+
+type CardKey =
+    | "LinkedIn"
+    | "Instagram"
+    | "Facebook"
+    | "ColdCall"
+    | "ColdMail"
+    | "ColdMessage"
+    | "WalkInNetworking"
+    | "AutoResponder"
+    | "Other";
+
+type StatField = "attempts" | "meetings" | "clients" | "revenue";
+
+type StatsType = {
+    [key in CardKey]: {
+        attempts: number;
+        meetings: number;
+        clients: number;
+        revenue: number;
+    };
+};
+
+const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+];
+
 const OutreachSection = () => {
+    const { data: session } = useSession()
+    const [isUpdating, setIsUpdating] = useState(false)
+    const [isLoading, setIsLoading] = useState(false)
+
+    const [stats, setStats] = useState<StatsType>({
+        LinkedIn: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+        Instagram: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+        Facebook: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+        ColdCall: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+        ColdMail: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+        ColdMessage: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+        WalkInNetworking: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+        AutoResponder: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+        Other: { attempts: 0, meetings: 0, clients: 0, revenue: 0 }
+    });
+
+    const [selectedMonth, setSelectedMonth] = useState(() => {
+        const now = new Date();
+        return months[now.getMonth()];
+    });
+
+    const now = new Date();
+    const currentMonth = months[now.getMonth()];
+
+    function getPercent(numerator: number, denominator: number) {
+        if (!denominator) return "0%";
+        return `${Math.round(((numerator + denominator)/2) * 100)}%`;
+    }
+
+    function handleStatChange(card: CardKey, field: StatField, value: string) {
+        setStats(prev => ({
+            ...prev,
+            [card]: {
+                ...prev[card],
+                [field]: field === "revenue" ? Number(value) : parseInt(value) || 0
+            }
+        }));
+    }
+
+    function getInputValue(val: number) {
+        return val === 0 ? "" : val;
+    }
+
+    const summary = Object.values(stats).reduce(
+        (acc, curr) => {
+            acc.attempts += curr.attempts;
+            acc.meetings += curr.meetings;
+            acc.clients += curr.clients;
+            acc.revenue += curr.revenue;
+            return acc;
+        },
+        { attempts: 0, meetings: 0, clients: 0, revenue: 0 }
+    );
+
+    const handleUpdate = async () => {
+        if (!session?.user) return;
+        setIsUpdating(true);
+        try {
+            const year = now.getFullYear();
+            const month = months.indexOf(selectedMonth) + 1;
+            const outreachMap: Record<CardKey, string> = {
+                LinkedIn: "linkedin",
+                Instagram: "instagram", 
+                Facebook: "facebook",
+                ColdCall: "coldcall",
+                ColdMail: "coldmail",
+                ColdMessage: "coldmessage",
+                WalkInNetworking: "walkinnetworking",
+                AutoResponder: "autoresponder",
+                Other: "other"
+            };
+            const trackerData = Object.entries(stats).map(([cardKey, data]) => ({
+                outreach: outreachMap[cardKey as CardKey],
+                attempt: data.attempts,
+                meetingsSet: data.meetings,
+                clientsClosed: data.clients,
+                revenue: data.revenue,
+                attemptsToMeetingsPct: data.attempts ? ((data.meetings + data.attempts)/2) * 100 : 0,
+                meetingsToClientsPct: data.meetings ? ((data.clients + data.meetings)/2) * 100 : 0
+            }));
+            const response = await fetch("/api/marketing/tracker", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    year,
+                    month,
+                    trackerData
+                })
+            });
+            if (!response.ok) {
+                throw new Error("Failed to update marketing data");
+            }
+            alert("Marketing data updated successfully!");
+        } catch (error) {
+            console.error("Error updating marketing data:", error);
+            alert("Failed to update marketing data. Please try again.");
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+    
+    useEffect(() => {
+        const fetchStats = async () => {
+            setIsLoading(true);
+            try {
+                const year = now.getFullYear();
+                const month = months.indexOf(selectedMonth) + 1;
+                const response = await fetch(`/api/marketing/tracker?year=${year}&month=${month}`);
+                if (!response.ok) throw new Error("Failed to fetch stats");
+                const data = await response.json();
+                // Map backend data to StatsType
+                const outreachMap: Record<string, CardKey> = {
+                    linkedin: "LinkedIn",
+                    instagram: "Instagram",
+                    facebook: "Facebook",
+                    coldcall: "ColdCall",
+                    coldmail: "ColdMail",
+                    coldmessage: "ColdMessage",
+                    walkinnetworking: "WalkInNetworking",
+                    autoresponder: "AutoResponder",
+                    other: "Other"
+                };
+                const newStats: StatsType = {
+                    LinkedIn: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+                    Instagram: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+                    Facebook: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+                    ColdCall: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+                    ColdMail: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+                    ColdMessage: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+                    WalkInNetworking: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+                    AutoResponder: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+                    Other: { attempts: 0, meetings: 0, clients: 0, revenue: 0 }
+                };
+                if (Array.isArray(data.trackerData)) {
+                    data.trackerData.forEach((item: any) => {
+                        const key = outreachMap[item.outreach];
+                        if (key) {
+                            newStats[key] = {
+                                attempts: item.attempt ?? 0,
+                                meetings: item.meetingsSet ?? 0,
+                                clients: item.clientsClosed ?? 0,
+                                revenue: item.revenue ?? 0
+                            };
+                        }
+                    });
+                }
+                setStats(newStats);
+            } catch (err) {
+                // Optionally show error
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchStats();
+    }, [selectedMonth]);
+
     return (
         <div className="w-full h-full bg-[#F8F0FF] p-8 overflow-y-auto">
             <div className="max-w-7xl mx-auto">
                 <div className="flex justify-between items-center mb-8">
                     <h1 className="text-2xl font-semibold text-[#111827]">Dashboard</h1>
-                    <select className="border border-[#D1D5DB] rounded-lg px-3 py-2 text-sm bg-white text-black">
-                        <option>January</option>
-                        <option>February</option>
-                        <option>March</option>
-                        <option>April</option>
-                        <option>May</option>
-                        <option>June</option>
-                        <option>July</option>
-                        <option>August</option>
-                        <option>September</option>
-                        <option>October</option>
-                        <option>November</option>
-                        <option>December</option>
-                    </select>
+                    <div className="flex items-center gap-3">
+                        <button
+                            className={`px-4 py-2 rounded-lg font-semibold text-white bg-[#701CC0] hover:bg-[#8F42FF] cursor-pointer`}
+                            disabled={isUpdating}
+                            onClick={handleUpdate}
+                        >
+                            {isUpdating ? "Updating..." : "Update"}
+                        </button>
+                        <select
+                            className="border border-[#D1D5DB] rounded-lg px-3 py-2 text-sm bg-white text-black"
+                            value={selectedMonth}
+                            onChange={e => setSelectedMonth(e.target.value)}
+                        >
+                            {months.map(month => (
+                                <option key={month}>{month}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
+                {isLoading ? (
+                    <div className="text-center py-8 text-lg text-gray-500">Loading data...</div>
+                ) : (
+                <>
                 {/* Social Media Platforms Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                     {/* LinkedIn */}
@@ -36,29 +235,32 @@ const OutreachSection = () => {
                         </div>
                         <div className="p-6">
                             <div className="space-y-3">
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Attempts</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Meetings Set</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Clients Closed</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Revenue</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>$0</span>
-                                </div>
+                                {statFields.map(field => (
+                                    <div className="flex justify-between" key={field.key}>
+                                        <span className="text-sm text-[#6B7280]">{field.label}</span>
+                                        <input
+                                            type={field.key === "revenue" ? "number" : "number"}
+                                            className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
+                                            value={getInputValue(stats.LinkedIn[field.key as keyof typeof stats.LinkedIn] as number)}
+                                            onChange={e => handleStatChange("LinkedIn", field.key as StatField, e.target.value)}
+                                            min={0}
+                                            step={field.key === "revenue" ? "any" : "1"}
+                                            placeholder="0"
+                                            disabled={isUpdating}
+                                        />
+                                    </div>
+                                ))}
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Attempts to Meetings %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.LinkedIn.meetings, stats.LinkedIn.attempts)}
+                                    </span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Meetings to Clients %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.LinkedIn.clients, stats.LinkedIn.meetings)}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -73,29 +275,32 @@ const OutreachSection = () => {
                         </div>
                         <div className="p-6">
                             <div className="space-y-3">
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Attempts</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Meetings Set</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Clients Closed</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Revenue</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>$0</span>
-                                </div>
+                                {statFields.map(field => (
+                                    <div className="flex justify-between" key={field.key}>
+                                        <span className="text-sm text-[#6B7280]">{field.label}</span>
+                                        <input
+                                            type={field.key === "revenue" ? "number" : "number"}
+                                            className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
+                                            value={getInputValue(stats.Instagram[field.key as keyof typeof stats.Instagram] as number)}
+                                            onChange={e => handleStatChange("Instagram", field.key as StatField, e.target.value)}
+                                            min={0}
+                                            step={field.key === "revenue" ? "any" : "1"}
+                                            placeholder="0"
+                                            disabled={isUpdating}
+                                        />
+                                    </div>
+                                ))}
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Attempts to Meetings %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.Instagram.meetings, stats.Instagram.attempts)}
+                                    </span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Meetings to Clients %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.Instagram.clients, stats.Instagram.meetings)}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -110,29 +315,32 @@ const OutreachSection = () => {
                         </div>
                         <div className="p-6">
                             <div className="space-y-3">
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Attempts</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Meetings Set</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Clients Closed</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Revenue</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>$0</span>
-                                </div>
+                                {statFields.map(field => (
+                                    <div className="flex justify-between" key={field.key}>
+                                        <span className="text-sm text-[#6B7280]">{field.label}</span>
+                                        <input
+                                            type={field.key === "revenue" ? "number" : "number"}
+                                            className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
+                                            value={getInputValue(stats.Facebook[field.key as keyof typeof stats.Facebook] as number)}
+                                            onChange={e => handleStatChange("Facebook", field.key as StatField, e.target.value)}
+                                            min={0}
+                                            step={field.key === "revenue" ? "any" : "1"}
+                                            placeholder="0"
+                                            disabled={isUpdating}
+                                        />
+                                    </div>
+                                ))}
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Attempts to Meetings %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.Facebook.meetings, stats.Facebook.attempts)}
+                                    </span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Meetings to Clients %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.Facebook.clients, stats.Facebook.meetings)}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -150,29 +358,32 @@ const OutreachSection = () => {
                         </div>
                         <div className="p-6">
                             <div className="space-y-3">
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Attempts</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Meetings Set</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Clients Closed</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Revenue</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>$0</span>
-                                </div>
+                                {statFields.map(field => (
+                                    <div className="flex justify-between" key={field.key}>
+                                        <span className="text-sm text-[#6B7280]">{field.label}</span>
+                                        <input
+                                            type={field.key === "revenue" ? "number" : "number"}
+                                            className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
+                                            value={getInputValue(stats.ColdCall[field.key as keyof typeof stats.ColdCall] as number)}
+                                            onChange={e => handleStatChange("ColdCall", field.key as StatField, e.target.value)}
+                                            min={0}
+                                            step={field.key === "revenue" ? "any" : "1"}
+                                            placeholder="0"
+                                            disabled={isUpdating}
+                                        />
+                                    </div>
+                                ))}
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Attempts to Meetings %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.ColdCall.meetings, stats.ColdCall.attempts)}
+                                    </span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Meetings to Clients %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.ColdCall.clients, stats.ColdCall.meetings)}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -187,29 +398,32 @@ const OutreachSection = () => {
                         </div>
                         <div className="p-6">
                             <div className="space-y-3">
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Attempts</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Meetings Set</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Clients Closed</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Revenue</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>$0</span>
-                                </div>
+                                {statFields.map(field => (
+                                    <div className="flex justify-between" key={field.key}>
+                                        <span className="text-sm text-[#6B7280]">{field.label}</span>
+                                        <input
+                                            type={field.key === "revenue" ? "number" : "number"}
+                                            className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
+                                            value={getInputValue(stats.ColdMail[field.key as keyof typeof stats.ColdMail] as number)}
+                                            onChange={e => handleStatChange("ColdMail", field.key as StatField, e.target.value)}
+                                            min={0}
+                                            step={field.key === "revenue" ? "any" : "1"}
+                                            placeholder="0"
+                                            disabled={isUpdating}
+                                        />
+                                    </div>
+                                ))}
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Attempts to Meetings %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.ColdMail.meetings, stats.ColdMail.attempts)}
+                                    </span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Meetings to Clients %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.ColdMail.clients, stats.ColdMail.meetings)}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -224,29 +438,32 @@ const OutreachSection = () => {
                         </div>
                         <div className="p-6">
                             <div className="space-y-3">
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Attempts</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Meetings Set</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Clients Closed</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Revenue</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>$0</span>
-                                </div>
+                                {statFields.map(field => (
+                                    <div className="flex justify-between" key={field.key}>
+                                        <span className="text-sm text-[#6B7280]">{field.label}</span>
+                                        <input
+                                            type={field.key === "revenue" ? "number" : "number"}
+                                            className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
+                                            value={getInputValue(stats.ColdMessage[field.key as keyof typeof stats.ColdMessage] as number)}
+                                            onChange={e => handleStatChange("ColdMessage", field.key as StatField, e.target.value)}
+                                            min={0}
+                                            step={field.key === "revenue" ? "any" : "1"}
+                                            placeholder="0"
+                                            disabled={isUpdating}
+                                        />
+                                    </div>
+                                ))}
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Attempts to Meetings %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.ColdMessage.meetings, stats.ColdMessage.attempts)}
+                                    </span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Meetings to Clients %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.ColdMessage.clients, stats.ColdMessage.meetings)}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -264,29 +481,32 @@ const OutreachSection = () => {
                         </div>
                         <div className="p-6">
                             <div className="space-y-3">
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Attempts</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Meetings Set</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Clients Closed</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Revenue</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>$0</span>
-                                </div>
+                                {statFields.map(field => (
+                                    <div className="flex justify-between" key={field.key}>
+                                        <span className="text-sm text-[#6B7280]">{field.label}</span>
+                                        <input
+                                            type={field.key === "revenue" ? "number" : "number"}
+                                            className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
+                                            value={getInputValue(stats.WalkInNetworking[field.key as keyof typeof stats.WalkInNetworking] as number)}
+                                            onChange={e => handleStatChange("WalkInNetworking", field.key as StatField, e.target.value)}
+                                            min={0}
+                                            step={field.key === "revenue" ? "any" : "1"}
+                                            placeholder="0"
+                                            disabled={isUpdating}
+                                        />
+                                    </div>
+                                ))}
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Attempts to Meetings %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.WalkInNetworking.meetings, stats.WalkInNetworking.attempts)}
+                                    </span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Meetings to Clients %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.WalkInNetworking.clients, stats.WalkInNetworking.meetings)}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -301,29 +521,32 @@ const OutreachSection = () => {
                         </div>
                         <div className="p-6">
                             <div className="space-y-3">
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Attempts</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Meetings Set</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Clients Closed</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Revenue</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>$0</span>
-                                </div>
+                                {statFields.map(field => (
+                                    <div className="flex justify-between" key={field.key}>
+                                        <span className="text-sm text-[#6B7280]">{field.label}</span>
+                                        <input
+                                            type={field.key === "revenue" ? "number" : "number"}
+                                            className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
+                                            value={getInputValue(stats.AutoResponder[field.key as keyof typeof stats.AutoResponder] as number)}
+                                            onChange={e => handleStatChange("AutoResponder", field.key as StatField, e.target.value)}
+                                            min={0}
+                                            step={field.key === "revenue" ? "any" : "1"}
+                                            placeholder="0"
+                                            disabled={isUpdating}
+                                        />
+                                    </div>
+                                ))}
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Attempts to Meetings %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.AutoResponder.meetings, stats.AutoResponder.attempts)}
+                                    </span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Meetings to Clients %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.AutoResponder.clients, stats.AutoResponder.meetings)}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -338,29 +561,32 @@ const OutreachSection = () => {
                         </div>
                         <div className="p-6">
                             <div className="space-y-3">
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Attempts</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Meetings Set</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Clients Closed</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Revenue</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>$0</span>
-                                </div>
+                                {statFields.map(field => (
+                                    <div className="flex justify-between" key={field.key}>
+                                        <span className="text-sm text-[#6B7280]">{field.label}</span>
+                                        <input
+                                            type={field.key === "revenue" ? "number" : "number"}
+                                            className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
+                                            value={getInputValue(stats.Other[field.key as keyof typeof stats.Other] as number)}
+                                            onChange={e => handleStatChange("Other", field.key as StatField, e.target.value)}
+                                            min={0}
+                                            step={field.key === "revenue" ? "any" : "1"}
+                                            placeholder="0"
+                                            disabled={isUpdating}
+                                        />
+                                    </div>
+                                ))}
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Attempts to Meetings %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.Other.meetings, stats.Other.attempts)}
+                                    </span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-sm text-[#6B7280]">Meetings to Clients %</span>
-                                    <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                    <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                        {getPercent(stats.Other.clients, stats.Other.meetings)}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -375,31 +601,37 @@ const OutreachSection = () => {
                         <div className="space-y-4">
                             <div className="flex justify-between">
                                 <span className="text-sm text-[#6B7280]">Attempts</span>
-                                <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
+                                <span className={`text-sm font-bold text-black ${inter.className}`}>{summary.attempts}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-sm text-[#6B7280]">Meetings Set</span>
-                                <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
+                                <span className={`text-sm font-bold text-black ${inter.className}`}>{summary.meetings}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-sm text-[#6B7280]">Clients Closed</span>
-                                <span className={`text-sm font-bold text-black ${inter.className}`}>0</span>
+                                <span className={`text-sm font-bold text-black ${inter.className}`}>{summary.clients}</span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-sm text-[#6B7280]">Revenue</span>
-                                <span className={`text-sm font-bold text-black ${inter.className}`}>$0</span>
+                                <span className="text-sm text-[#6B7280]">revenue($)</span>
+                                <span className={`text-sm font-bold text-black ${inter.className}`}>${summary.revenue}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-sm text-[#6B7280]">Attempts to Meetings %</span>
-                                <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                    {getPercent(summary.meetings, summary.attempts)}
+                                </span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-sm text-[#6B7280]">Meetings to Clients %</span>
-                                <span className={`text-sm font-bold text-black ${inter.className}`}>0%</span>
+                                <span className={`text-sm font-bold text-black ${inter.className}`}>
+                                    {getPercent(summary.clients, summary.meetings)}
+                                </span>
                             </div>
                         </div>
                     </div>
                 </div>
+                </>
+                )}
             </div>
         </div>
     )
