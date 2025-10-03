@@ -165,14 +165,29 @@ interface ClientSessionData {
   clientEmail: string;
   businessName: string;
   token: string;
+  answers?: Record<string, any>;
 }
 
 export default function OnboardingQuestionnaire({ initialSession }: { initialSession: ClientSessionData }) {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(0);
-  const [formData, setFormData] = useState<Record<string, string>>({});
+  const [formData, setFormData] = useState<Record<string, any>>(initialSession?.answers || {});
   const [loading, setLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [selectedMeetingTimes, setSelectedMeetingTimes] = useState<Array<{date: Date | null, time: string}>>(() => {
+
+    const savedMeetingTimes = initialSession?.answers?.meetingTimes;
+    if (savedMeetingTimes) {
+      return Array(4).fill(null).map((_, index) => {
+        const savedTime = savedMeetingTimes[`meetingTime${index + 1}`];
+        return {
+          date: savedTime?.date ? new Date(savedTime.date) : null,
+          time: savedTime?.time || ''
+        };
+      });
+    }
+    return Array(4).fill({ date: null, time: '' });
+  });
 
   const token = router.query.token as string;
   const step = onboardingSteps[currentStep];
@@ -181,23 +196,142 @@ export default function OnboardingQuestionnaire({ initialSession }: { initialSes
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
+
+    await saveCurrentStepData();
     if (currentStep < onboardingSteps.length - 1) {
       setCurrentStep(prev => prev + 1);
     }
   };
 
-  const handlePrevious = () => {
-    if (currentStep > 0) {
-      setCurrentStep(prev => prev - 1);
+  function getOrderedAnswersObject(formData: Record<string, any>, selectedMeetingTimes: Array<{date: Date | null, time: string}>) {
+    const orderedAnswersObj: Record<string, any> = {};
+    onboardingSteps.forEach((stepItem) => {
+      if (stepItem.fields) {
+        stepItem.fields.forEach((field, idx) => {
+          if (field.name.startsWith('meetingTime')) {
+
+            const mtIndex = Number(field.name.replace('meetingTime', '')) - 1;
+            if (selectedMeetingTimes[mtIndex]) {
+              orderedAnswersObj[field.name] = {
+                date: selectedMeetingTimes[mtIndex].date ? selectedMeetingTimes[mtIndex].date.toISOString().split('T')[0] : '',
+                time: selectedMeetingTimes[mtIndex].time || ''
+              };
+            } else {
+              orderedAnswersObj[field.name] = { date: '', time: '' };
+            }
+          } else {
+            orderedAnswersObj[field.name] = formData[field.name] || '';
+          }
+        });
+      }
+    });
+    return orderedAnswersObj;
+  }
+
+  const saveCurrentStepData = async () => {
+    try {
+
+      let dataToSave = { ...formData };
+
+      // Only update meeting times for operations step
+      if (step.id === 'operations') {
+        selectedMeetingTimes.forEach((mt, index) => {
+          const fieldName = `meetingTime${index + 1}`;
+          if (mt.date || mt.time) {
+            dataToSave[fieldName] = {
+              date: mt.date?.toISOString().split('T')[0] || '',
+              time: mt.time
+            };
+          }
+        });
+      }
+
+      const orderedAnswersObj = getOrderedAnswersObject(dataToSave, selectedMeetingTimes);
+
+      // Only keep answers for current step's fields
+      Object.keys(orderedAnswersObj).forEach(key => {
+        if (!(step.fields?.some(f => f.name === key))) {
+          orderedAnswersObj[key] = '';
+        }
+      });
+
+      // Create orderedAnswers array for current step
+      const orderedAnswers: any[] = [];
+      if (step.fields) {
+        step.fields.forEach(field => {
+          const value = orderedAnswersObj[field.name];
+          if (value && (typeof value === 'string' ? value.trim() : true)) {
+            orderedAnswers.push({
+              questionKey: field.name,
+              answer: typeof value === 'object' ? JSON.stringify(value) : value,
+              timestamp: new Date().toISOString(),
+              stepIndex: currentStep,
+              stepId: step.id,
+              questionLabel: field.label || field.name
+            });
+          }
+        });
+      }
+
+      await fetch('/api/onboarding/saveAnswers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: token,
+          answers: orderedAnswersObj,
+          orderedAnswers: orderedAnswers,
+          completed: false
+        }),
+      });
+    } catch (err) {
+      console.error('Error saving step data:', err);
     }
   };
 
   const handleFinish = async () => {
     setLoading(true);
-    // For now, just show success modal
-    setLoading(false);
-    setShowSuccessModal(true);
+    try {
+
+      const finalOrderedAnswersObj = getOrderedAnswersObject(formData, selectedMeetingTimes);
+
+      const finalOrderedAnswers: any[] = [];
+      onboardingSteps.forEach((stepItem, stepIndex) => {
+        if (stepItem.fields) {
+          stepItem.fields.forEach(field => {
+            const value = finalOrderedAnswersObj[field.name];
+            if (value && (typeof value === 'string' ? value.trim() : true)) {
+              finalOrderedAnswers.push({
+                questionKey: field.name,
+                answer: typeof value === 'object' ? JSON.stringify(value) : value,
+                timestamp: new Date().toISOString(),
+                stepIndex: stepIndex,
+                stepId: stepItem.id,
+                questionLabel: field.label || field.name
+              });
+            }
+          });
+        }
+      });
+
+      await fetch('/api/onboarding/saveAnswers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: token,
+          answers: finalOrderedAnswersObj,
+          orderedAnswers: finalOrderedAnswers,
+          completed: true
+        }),
+      });
+
+      setShowSuccessModal(true);
+    } catch (err) {
+      console.error('Error completing onboarding:', err);
+      setShowSuccessModal(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const isStepComplete = () => {
@@ -208,6 +342,20 @@ export default function OnboardingQuestionnaire({ initialSession }: { initialSes
   };
 
   const canProceed = currentStep === onboardingSteps.length - 1 || isStepComplete();
+
+  const handlePrevious = () => {
+    if (currentStep > 0) {
+      setCurrentStep(prev => prev - 1);
+    }
+  };
+
+  const handleMeetingTimeChange = (index: number, field: 'date' | 'time', value: Date | string | null) => {
+    setSelectedMeetingTimes(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
 
   return (
     <>
@@ -377,14 +525,68 @@ export default function OnboardingQuestionnaire({ initialSession }: { initialSes
 
               {step.fields && (
                 <div className="space-y-11">
-                  {step.fields.map((field) => (
+                  {step.fields.map((field, fieldIndex) => (
                     <div key={field.name}>
                       {field.label && (
                         <label className="block text-sm font-medium text-gray-900 mb-2">
                           {field.label}
                         </label>
                       )}
-                      {field.type === 'textarea' ? (
+                      
+                      {field.name.startsWith('meetingTime') && field.type === 'date' ? (
+                        <div className="space-y-4">
+                          {fieldIndex === 1 && ( 
+                            <>
+                              {selectedMeetingTimes.map((meetingTime, index) => (
+                                <div key={index} className="flex flex-col sm:flex-row gap-4 p-4 border border-gray-200 rounded-lg">
+                                  <div className="flex-1">
+                                    <label className="block text-base font-medium text-black mb-2">
+                                      Date {index + 1}
+                                    </label>
+                                    <input
+                                      type="date"
+                                      value={meetingTime.date ? meetingTime.date.toISOString().split('T')[0] : ''}
+                                      onChange={(e) => handleMeetingTimeChange(index, 'date', e.target.value ? new Date(e.target.value) : null)}
+                                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7A13D0] focus:border-transparent text-black text-base"
+                                    />
+                                  </div>
+                                  <div className="flex-1">
+                                    <label className="block text-base font-medium text-black mb-2">
+                                      Time {index + 1}
+                                    </label>
+                                    <select
+                                      value={meetingTime.time}
+                                      onChange={(e) => handleMeetingTimeChange(index, 'time', e.target.value)}
+                                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7A13D0] focus:border-transparent text-black text-base"
+                                    >
+                                      <option value="">Select time</option>
+                                      <option value="09:00">9:00 AM</option>
+                                      <option value="09:30">9:30 AM</option>
+                                      <option value="10:00">10:00 AM</option>
+                                      <option value="10:30">10:30 AM</option>
+                                      <option value="11:00">11:00 AM</option>
+                                      <option value="11:30">11:30 AM</option>
+                                      <option value="12:00">12:00 PM</option>
+                                      <option value="12:30">12:30 PM</option>
+                                      <option value="13:00">1:00 PM</option>
+                                      <option value="13:30">1:30 PM</option>
+                                      <option value="14:00">2:00 PM</option>
+                                      <option value="14:30">2:30 PM</option>
+                                      <option value="15:00">3:00 PM</option>
+                                      <option value="15:30">3:30 PM</option>
+                                      <option value="16:00">4:00 PM</option>
+                                      <option value="16:30">4:30 PM</option>
+                                      <option value="17:00">5:00 PM</option>
+                                    </select>
+                                  </div>
+                                </div>
+                              ))}
+                            </>
+                          )}
+                        </div>
+                      ) : field.name.startsWith('meetingTime') ? (
+                        null
+                      ) : field.type === 'textarea' ? (
                         <textarea
                           value={formData[field.name] || ''}
                           onChange={(e) => handleInputChange(field.name, e.target.value)}
@@ -392,24 +594,6 @@ export default function OnboardingQuestionnaire({ initialSession }: { initialSes
                           rows={field.name === 'additionalInfo' ? 6 : 4}
                           className={`w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7A13D0] focus:border-transparent text-black ${inter.className}`}
                         />
-                      ) : field.type === 'date' ? (
-                        <div className="relative">
-                          <input
-                            type="text"
-                            value={formData[field.name] || ''}
-                            onChange={(e) => handleInputChange(field.name, e.target.value)}
-                            placeholder={field.placeholder}
-                            className={`w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#7A13D0] focus:border-transparent pl-10 text-black ${inter.className}`}
-                          />
-                          <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400">
-                              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                              <line x1="16" y1="2" x2="16" y2="6"></line>
-                              <line x1="8" y1="2" x2="8" y2="6"></line>
-                              <line x1="3" y1="10" x2="21" y2="10"></line>
-                            </svg>
-                          </div>
-                        </div>
                       ) : (
                         <input
                           type={field.type}
@@ -423,59 +607,55 @@ export default function OnboardingQuestionnaire({ initialSession }: { initialSes
                   ))}
                 </div>
               )}
-
-              <div className="flex flex-col sm:flex-row justify-between gap-4 mt-8">
-                <button
-                  onClick={handlePrevious}
-                  disabled={currentStep === 0}
-                  className={`px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition ${
-                    currentStep === 0 ? 'opacity-50 cursor-not-allowed' : ''
-                  } ${inter.className}`}
-                >
-                  Previous
-                </button>
-
-                {currentStep === onboardingSteps.length - 1 ? (
+                <div className="flex flex-col sm:flex-row justify-between gap-4 mt-8">
                   <button
-                    onClick={handleFinish}
-                    disabled={loading}
-                    className={`px-6 py-3 bg-[#7A13D0] text-white rounded-lg font-medium hover:bg-[#6B11B8] transition ${inter.className}`}
+                    type="button"
+                    onClick={handlePrevious}
+                    disabled={currentStep === 0}
+                    className={`px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition ${inter.className} ${currentStep === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    {loading ? 'Processing...' : 'Done'}
+                    Previous
                   </button>
-                ) : (
-                  <button
-                    onClick={handleNext}
-                    disabled={!canProceed}
-                    className={`px-6 py-3 bg-[#7A13D0] text-white rounded-lg font-medium hover:bg-[#6B11B8] transition ${
-                      !canProceed ? 'opacity-50 cursor-not-allowed' : ''
-                    } ${inter.className}`}
-                  >
-                    Next
-                  </button>
-                )}
+                  {currentStep === onboardingSteps.length - 1 ? (
+                    <button
+                      type="button"
+                      onClick={handleFinish}
+                      disabled={loading}
+                      className={`px-6 py-3 bg-[#7A13D0] text-white rounded-lg font-medium hover:bg-[#6B11B8] transition ${inter.className} ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {loading ? 'Processing...' : 'Done'}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleNext}
+                      disabled={!canProceed}
+                      className={`px-6 py-3 bg-[#7A13D0] text-white rounded-lg font-medium hover:bg-[#6B11B8] transition ${inter.className} ${!canProceed ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      Next
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-      
-      <OnboardingSuccessModal
-        isOpen={showSuccessModal}
-        onClose={() => setShowSuccessModal(false)}
-        token={token}
-      />
-    </>
+        <OnboardingSuccessModal
+          isOpen={showSuccessModal}
+          onClose={() => setShowSuccessModal(false)}
+          token={token}
+        />
+      </>
   );
 }
-
+      
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const token = String(ctx.params?.token || "");
   const sess = await prisma.onboardingSession.findUnique({
     where: { id: token },
     include: { client: true },
   });
-  
+
   if (!sess) return { notFound: true };
 
   return {
@@ -485,6 +665,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
         clientEmail: sess.client.email,
         businessName: sess.client.businessName,
         token: sess.id,
+        answers: (sess.answers as any) || {},
       },
     },
   };
