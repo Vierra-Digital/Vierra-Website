@@ -62,10 +62,11 @@ const OutreachSection = () => {
 
     const now = new Date();
     const currentMonth = months[now.getMonth()];
+    const isCurrentMonth = selectedMonth === currentMonth;
 
     function getPercent(numerator: number, denominator: number) {
         if (!denominator) return "0%";
-        return `${Math.round(((numerator + denominator)/2) * 100)}%`;
+        return `${Math.round(((numerator + denominator)/2) * 100).toLocaleString()}%`;
     }
 
     function handleStatChange(card: CardKey, field: StatField, value: string) {
@@ -79,7 +80,15 @@ const OutreachSection = () => {
     }
 
     function getInputValue(val: number) {
-        return val === 0 ? "" : val;
+        return val === 0 ? "" : val.toLocaleString();
+    }
+
+    function formatNumber(num: number) {
+        return num.toLocaleString();
+    }
+
+    function formatCurrency(num: number) {
+        return `$${num.toLocaleString()}`;
     }
 
     const summary = Object.values(stats).reduce(
@@ -196,14 +205,14 @@ const OutreachSection = () => {
     }, [selectedMonth]);
 
     return (
-        <div className="w-full h-full bg-[#F8F0FF] p-8 overflow-y-auto">
+        <div className="w-full h-full bg-[#F8F0FF] p-8 overflow-auto">
             <div className="max-w-7xl mx-auto">
                 <div className="flex justify-between items-center mb-8">
                     <h1 className="text-2xl font-semibold text-[#111827]">Dashboard</h1>
                     <div className="flex items-center gap-3">
                         <button
-                            className={`px-4 py-2 rounded-lg font-semibold text-white bg-[#701CC0] hover:bg-[#8F42FF] cursor-pointer`}
-                            disabled={isUpdating}
+                            className={`px-4 py-2 rounded-lg font-semibold text-white bg-[#701CC0] hover:bg-[#8F42FF] cursor-pointer ${!isCurrentMonth ? "bg-gray-300 text-gray-400 cursor-not-allowed" : ""}`}
+                            disabled={!isCurrentMonth || isUpdating}
                             onClick={handleUpdate}
                         >
                             {isUpdating ? "Updating..." : "Update"}
@@ -239,14 +248,15 @@ const OutreachSection = () => {
                                     <div className="flex justify-between" key={field.key}>
                                         <span className="text-sm text-[#6B7280]">{field.label}</span>
                                         <input
-                                            type={field.key === "revenue" ? "number" : "number"}
+                                            type="text"
                                             className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
                                             value={getInputValue(stats.LinkedIn[field.key as keyof typeof stats.LinkedIn] as number)}
-                                            onChange={e => handleStatChange("LinkedIn", field.key as StatField, e.target.value)}
-                                            min={0}
-                                            step={field.key === "revenue" ? "any" : "1"}
+                                            onChange={e => {
+                                                const value = e.target.value.replace(/,/g, '');
+                                                handleStatChange("LinkedIn", field.key as StatField, value);
+                                            }}
                                             placeholder="0"
-                                            disabled={isUpdating}
+                                            disabled={!isCurrentMonth || isUpdating}
                                         />
                                     </div>
                                 ))}
@@ -279,14 +289,15 @@ const OutreachSection = () => {
                                     <div className="flex justify-between" key={field.key}>
                                         <span className="text-sm text-[#6B7280]">{field.label}</span>
                                         <input
-                                            type={field.key === "revenue" ? "number" : "number"}
+                                            type="text"
                                             className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
                                             value={getInputValue(stats.Instagram[field.key as keyof typeof stats.Instagram] as number)}
-                                            onChange={e => handleStatChange("Instagram", field.key as StatField, e.target.value)}
-                                            min={0}
-                                            step={field.key === "revenue" ? "any" : "1"}
+                                            onChange={e => {
+                                                const value = e.target.value.replace(/,/g, '');
+                                                handleStatChange("Instagram", field.key as StatField, value);
+                                            }}
                                             placeholder="0"
-                                            disabled={isUpdating}
+                                            disabled={!isCurrentMonth || isUpdating}
                                         />
                                     </div>
                                 ))}
@@ -319,14 +330,15 @@ const OutreachSection = () => {
                                     <div className="flex justify-between" key={field.key}>
                                         <span className="text-sm text-[#6B7280]">{field.label}</span>
                                         <input
-                                            type={field.key === "revenue" ? "number" : "number"}
+                                            type="text"
                                             className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
                                             value={getInputValue(stats.Facebook[field.key as keyof typeof stats.Facebook] as number)}
-                                            onChange={e => handleStatChange("Facebook", field.key as StatField, e.target.value)}
-                                            min={0}
-                                            step={field.key === "revenue" ? "any" : "1"}
+                                            onChange={e => {
+                                                const value = e.target.value.replace(/,/g, '');
+                                                handleStatChange("Facebook", field.key as StatField, value);
+                                            }}
                                             placeholder="0"
-                                            disabled={isUpdating}
+                                            disabled={!isCurrentMonth || isUpdating}
                                         />
                                     </div>
                                 ))}
@@ -362,14 +374,15 @@ const OutreachSection = () => {
                                     <div className="flex justify-between" key={field.key}>
                                         <span className="text-sm text-[#6B7280]">{field.label}</span>
                                         <input
-                                            type={field.key === "revenue" ? "number" : "number"}
+                                            type="text"
                                             className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
                                             value={getInputValue(stats.ColdCall[field.key as keyof typeof stats.ColdCall] as number)}
-                                            onChange={e => handleStatChange("ColdCall", field.key as StatField, e.target.value)}
-                                            min={0}
-                                            step={field.key === "revenue" ? "any" : "1"}
+                                            onChange={e => {
+                                                const value = e.target.value.replace(/,/g, '');
+                                                handleStatChange("ColdCall", field.key as StatField, value);
+                                            }}
                                             placeholder="0"
-                                            disabled={isUpdating}
+                                            disabled={!isCurrentMonth || isUpdating}
                                         />
                                     </div>
                                 ))}
@@ -402,14 +415,15 @@ const OutreachSection = () => {
                                     <div className="flex justify-between" key={field.key}>
                                         <span className="text-sm text-[#6B7280]">{field.label}</span>
                                         <input
-                                            type={field.key === "revenue" ? "number" : "number"}
+                                            type="text"
                                             className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
                                             value={getInputValue(stats.ColdMail[field.key as keyof typeof stats.ColdMail] as number)}
-                                            onChange={e => handleStatChange("ColdMail", field.key as StatField, e.target.value)}
-                                            min={0}
-                                            step={field.key === "revenue" ? "any" : "1"}
+                                            onChange={e => {
+                                                const value = e.target.value.replace(/,/g, '');
+                                                handleStatChange("ColdMail", field.key as StatField, value);
+                                            }}
                                             placeholder="0"
-                                            disabled={isUpdating}
+                                            disabled={!isCurrentMonth || isUpdating}
                                         />
                                     </div>
                                 ))}
@@ -442,14 +456,15 @@ const OutreachSection = () => {
                                     <div className="flex justify-between" key={field.key}>
                                         <span className="text-sm text-[#6B7280]">{field.label}</span>
                                         <input
-                                            type={field.key === "revenue" ? "number" : "number"}
+                                            type="text"
                                             className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
                                             value={getInputValue(stats.ColdMessage[field.key as keyof typeof stats.ColdMessage] as number)}
-                                            onChange={e => handleStatChange("ColdMessage", field.key as StatField, e.target.value)}
-                                            min={0}
-                                            step={field.key === "revenue" ? "any" : "1"}
+                                            onChange={e => {
+                                                const value = e.target.value.replace(/,/g, '');
+                                                handleStatChange("ColdMessage", field.key as StatField, value);
+                                            }}
                                             placeholder="0"
-                                            disabled={isUpdating}
+                                            disabled={!isCurrentMonth || isUpdating}
                                         />
                                     </div>
                                 ))}
@@ -485,14 +500,15 @@ const OutreachSection = () => {
                                     <div className="flex justify-between" key={field.key}>
                                         <span className="text-sm text-[#6B7280]">{field.label}</span>
                                         <input
-                                            type={field.key === "revenue" ? "number" : "number"}
+                                            type="text"
                                             className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
                                             value={getInputValue(stats.WalkInNetworking[field.key as keyof typeof stats.WalkInNetworking] as number)}
-                                            onChange={e => handleStatChange("WalkInNetworking", field.key as StatField, e.target.value)}
-                                            min={0}
-                                            step={field.key === "revenue" ? "any" : "1"}
+                                            onChange={e => {
+                                                const value = e.target.value.replace(/,/g, '');
+                                                handleStatChange("WalkInNetworking", field.key as StatField, value);
+                                            }}
                                             placeholder="0"
-                                            disabled={isUpdating}
+                                            disabled={!isCurrentMonth || isUpdating}
                                         />
                                     </div>
                                 ))}
@@ -525,14 +541,15 @@ const OutreachSection = () => {
                                     <div className="flex justify-between" key={field.key}>
                                         <span className="text-sm text-[#6B7280]">{field.label}</span>
                                         <input
-                                            type={field.key === "revenue" ? "number" : "number"}
+                                            type="text"
                                             className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
                                             value={getInputValue(stats.AutoResponder[field.key as keyof typeof stats.AutoResponder] as number)}
-                                            onChange={e => handleStatChange("AutoResponder", field.key as StatField, e.target.value)}
-                                            min={0}
-                                            step={field.key === "revenue" ? "any" : "1"}
+                                            onChange={e => {
+                                                const value = e.target.value.replace(/,/g, '');
+                                                handleStatChange("AutoResponder", field.key as StatField, value);
+                                            }}
                                             placeholder="0"
-                                            disabled={isUpdating}
+                                            disabled={!isCurrentMonth || isUpdating}
                                         />
                                     </div>
                                 ))}
@@ -565,14 +582,15 @@ const OutreachSection = () => {
                                     <div className="flex justify-between" key={field.key}>
                                         <span className="text-sm text-[#6B7280]">{field.label}</span>
                                         <input
-                                            type={field.key === "revenue" ? "number" : "number"}
+                                            type="text"
                                             className={`text-sm font-bold text-black ${inter.className} w-16 bg-transparent border-b border-gray-200 focus:outline-none text-right placeholder-black`}
                                             value={getInputValue(stats.Other[field.key as keyof typeof stats.Other] as number)}
-                                            onChange={e => handleStatChange("Other", field.key as StatField, e.target.value)}
-                                            min={0}
-                                            step={field.key === "revenue" ? "any" : "1"}
+                                            onChange={e => {
+                                                const value = e.target.value.replace(/,/g, '');
+                                                handleStatChange("Other", field.key as StatField, value);
+                                            }}
                                             placeholder="0"
-                                            disabled={isUpdating}
+                                            disabled={!isCurrentMonth || isUpdating}
                                         />
                                     </div>
                                 ))}
@@ -601,19 +619,19 @@ const OutreachSection = () => {
                         <div className="space-y-4">
                             <div className="flex justify-between">
                                 <span className="text-sm text-[#6B7280]">Attempts</span>
-                                <span className={`text-sm font-bold text-black ${inter.className}`}>{summary.attempts}</span>
+                                <span className={`text-sm font-bold text-black ${inter.className}`}>{formatNumber(summary.attempts)}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-sm text-[#6B7280]">Meetings Set</span>
-                                <span className={`text-sm font-bold text-black ${inter.className}`}>{summary.meetings}</span>
+                                <span className={`text-sm font-bold text-black ${inter.className}`}>{formatNumber(summary.meetings)}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-sm text-[#6B7280]">Clients Closed</span>
-                                <span className={`text-sm font-bold text-black ${inter.className}`}>{summary.clients}</span>
+                                <span className={`text-sm font-bold text-black ${inter.className}`}>{formatNumber(summary.clients)}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-sm text-[#6B7280]">revenue($)</span>
-                                <span className={`text-sm font-bold text-black ${inter.className}`}>${summary.revenue}</span>
+                                <span className={`text-sm font-bold text-black ${inter.className}`}>{formatCurrency(summary.revenue)}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-sm text-[#6B7280]">Attempts to Meetings %</span>

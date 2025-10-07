@@ -1,7 +1,10 @@
 import React, { useState } from "react"
+import { Inter } from "next/font/google"
+
+const inter = Inter({ subsets: ["latin"] })
 
 const LTVCalculatorSection = () => {
-    const [activeTab, setActiveTab] = useState<"ltv" | "spreadsheet">("ltv");
+    const [activeTab, setActiveTab] = useState<"ltv">("ltv");
     const [averagePurchaseValue, setAveragePurchaseValue] = useState(0);
     const [costOfGoods, setCostOfGoods] = useState(0);
     const [numReferrals, setNumReferrals] = useState(0);
@@ -40,7 +43,7 @@ const LTVCalculatorSection = () => {
     });
 
     return (
-        <div className="w-full h-full bg-[#F8F0FF] p-4">
+        <div className={`w-full h-full bg-[#F8F0FF] p-4 ${inter.className}`}>
             <div className="max-w-2xl">
                 {/* Tabs */}
                 <div className="flex mb-4">
@@ -53,16 +56,6 @@ const LTVCalculatorSection = () => {
                         onClick={() => setActiveTab("ltv")}
                     >
                         LTV Calculator
-                    </button>
-                    <button
-                        className={`px-0 py-3 text-lg font-medium border-b-2 ${
-                            activeTab === "spreadsheet" 
-                                ? "text-[#4F46E5] border-[#4F46E5]" 
-                                : "text-[#9CA3AF] border-transparent hover:text-[#6B7280]"
-                        } focus:outline-none transition-colors`}
-                        onClick={() => setActiveTab("spreadsheet")}
-                    >
-                        Spreadsheet
                     </button>
                 </div>
                 
@@ -159,11 +152,6 @@ const LTVCalculatorSection = () => {
                                     Retainer Pricing = <span className="font-normal">{isNaN(retainer) ? 0 : Math.round(retainer)}</span>
                                 </div>
                             </div>
-                        </div>
-                    )}
-                    {activeTab === "spreadsheet" && (
-                        <div className="text-[#9CA3AF] text-lg py-16 text-center">
-                            Spreadsheet view coming soon.
                         </div>
                     )}
                 </div>

@@ -193,7 +193,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               </div>
             </div>
           </div>
-          <div id="right-side-body" className="flex w-full h-full bg-white">
+          <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-hidden overflow-x-hidden">
             {/* This is the working area. Put in different options (Dashboard, Clients, etc. ) as components */}
             {showSettings ? (<>
               <UserSettingsPage
