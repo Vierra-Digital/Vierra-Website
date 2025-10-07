@@ -26,13 +26,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
           <tr>
             <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="cid:vierra" alt="Vierra logo" style="width: 140px; height: auto; background: white; border-radius: 4px; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
+              <img src="https://vierradev.com/assets/vierra-logo-black-3.png" alt="Vierra logo" style="width: 140px; height: auto; background: white; border-radius: 4px; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
             </td>
           </tr>
           <tr>
             <td style="padding:50px 40px;text-align:center;vertical-align:top;">
               <div style="margin-bottom:30px;">
-                <img src="cid:dove" alt="Welcome" style="width:100px;height:100px;border-radius:50%;border:4px solid #f0f0f0;background:#fff;padding:10px;">
+                <img src="https://vierradev.com/assets/Onboarding/Dove.png" alt="Welcome" style="width:100px;height:100px;border-radius:50%;border:4px solid #f0f0f0;background:#fff;padding:10px;">
               </div>
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">
                 Hi ${clientName || "there"}, Welcome To Vierra.<br/>Begin Your Onboarding
@@ -52,16 +52,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               </div>
               <div style="margin:40px 0 30px;">
                 <a href="https://facebook.com" style="margin:0 12px;display:inline-block;transition:transform 0.3s ease;">
-                  <img src="cid:facebook" alt="Facebook" style="width:32px;height:32px;">
+                  <img src="https://vierradev.com/assets/Onboarding/facebook.png" alt="Facebook" style="width:32px;height:32px;">
                 </a>
                 <a href="https://pinterest.com" style="margin:0 12px;display:inline-block;transition:transform 0.3s ease;">
-                  <img src="cid:pinterest" alt="Pinterest" style="width:32px;height:32px;">
+                  <img src="https://vierradev.com/assets/Onboarding/pinterest.png" alt="Pinterest" style="width:32px;height:32px;">
                 </a>
                 <a href="https://twitter.com" style="margin:0 12px;display:inline-block;transition:transform 0.3s ease;">
-                  <img src="cid:twitter" alt="Twitter" style="width:32px;height:32px;">
+                  <img src="https://vierradev.com/assets/Onboarding/twitter.png" alt="Twitter" style="width:32px;height:32px;">
                 </a>
                 <a href="https://dribbble.com" style="margin:0 12px;display:inline-block;transition:transform 0.3s ease;">
-                  <img src="cid:dribble" alt="Dribbble" style="width:32px;height:32px;">
+                  <img src="https://vierradev.com/assets/Onboarding/dribble.png" alt="Dribbble" style="width:32px;height:32px;">
                 </a>
               </div>
               <div style="color:#999;font-size:14px;margin-top:30px;padding-top:20px;border-top:1px solid #eee;">
@@ -71,39 +71,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           </tr>
         </table>
       </div>
-    `,
-    attachments: [
-      {
-        filename: 'dove.png',
-        path: './public/assets/Onboarding/dove.png', 
-        cid: 'dove' 
-      },
-      {
-        filename: 'vierralogo.png',
-        path: './public/assets/Onboarding/vierra.png', 
-        cid: 'vierra' 
-      },
-      {
-        filename: 'facebook.png',
-        path: './public/assets/Onboarding/facebook.png', 
-        cid: 'facebook' 
-      },
-      {
-        filename: 'pinterest.png',
-        path: './public/assets/Onboarding/pinterest.png', 
-        cid: 'pinterest' 
-      },
-      {
-        filename: 'twitter.png',
-        path: './public/assets/Onboarding/twitter.png', 
-        cid: 'twitter' 
-      },
-      {
-        filename: 'dribble.png',
-        path: './public/assets/Onboarding/dribble.png',
-        cid: 'dribble'
-      }
-    ]
+    `
   };
 
   try {
