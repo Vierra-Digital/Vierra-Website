@@ -15,8 +15,8 @@ interface ClientSessionData {
   clientName: string;
   clientEmail: string;
   businessName: string;
-  token: string;            // we’ll set this from the URL
-  createdAt: number;        // epoch ms (we’ll convert server Date->ms)
+  token: string;           
+  createdAt: number;        
   answers?: Record<string, string>;
   status?: "pending" | "in_progress" | "completed" | "expired" | "canceled";
   submittedAt?: number | null;
@@ -50,10 +50,10 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
   const [liConnected, setLi] = useState(false);
   const [gaConnected, setGa] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
-  const [feedback, setFeedback] = useState<string>(initialSession?.answers?.feedback || "");
+  
+  const [moduleFeedback, setModuleFeedback] = useState<string>(initialSession?.answers?.[`feedbackVideoModules_${step}`] || "");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // read token safely
   const token =
     router.query.token
       ? Array.isArray(router.query.token)
@@ -61,12 +61,11 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
         : router.query.token
       : undefined;
 
-
   const sessionIdForOauth = sessionData?.token;
 
   function startOauth(provider: "facebook" | "linkedin" | "googleads") {
     if (!sessionIdForOauth) return;
-    // onboarding flow uses the onboarding session id in `state`
+    
     window.location.href = `/api/${provider}/initiate?session=${encodeURIComponent(sessionIdForOauth)}`;
   }
 
@@ -86,7 +85,6 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
   }, [sessionIdForOauth]);
 
 
-  // Debounce handle
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -100,35 +98,66 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
   }, [router.isReady, router.query.linked, refreshSocial]);
 
 
-  // Fetch session once router is ready and token is a string
   useEffect(() => {
-    if (!initialSession || loading) {
-      setLoading(false);
-      return;
+    async function fetchSession() {
+      if (!token) return;
+      setLoading(true);
+      try {
+        const resp = await fetch(`/api/session/${token}`);
+        if (!resp.ok) throw new Error("Session not found or expired");
+        const data = await resp.json();
+        setSessionData({
+          clientName: data.client.name,
+          clientEmail: data.client.email,
+          businessName: data.client.businessName,
+          token: data.id,
+          createdAt: new Date(data.createdAt).getTime(),
+          answers: data.answers || {},
+          status: data.status,
+          submittedAt: data.submittedAt ? new Date(data.submittedAt).getTime() : null,
+        });
+        setAnswers(data.answers || {});
+        setModuleFeedback(data.answers?.[`feedbackVideoModules_${step}`] || "");
+      } catch (e) {
+        setSessionData(initialSession);
+        setAnswers(initialSession.answers || {});
+        setModuleFeedback(initialSession.answers?.[`feedbackVideoModules_${step}`] || "");
+      } finally {
+        setLoading(false);
+      }
     }
+    fetchSession();
+  }, [token, step]);
 
-    setSessionData(initialSession);
-    setAnswers(initialSession.answers || {});
-    setFeedback(initialSession.answers?.feedback || "");
-    setLoading(false);
-  }, [initialSession, loading]);
-
-  // Auto-save whenever answers change
   useEffect(() => {
     if (typeof token !== "string") return;
     if (!sessionData) return;
-
-    // Don’t autosave if nothing to save
-    if (Object.keys(answers).length === 0) return;
+    if (Object.keys(answers).length === 0 && !moduleFeedback) return;
 
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(async () => {
       setIsSaving(true);
       try {
-        await fetch("/api/session/submitClientAnswers", {
+
+        const orderedAnswers = Object.entries({ ...answers, [`feedbackVideoModules_${step}`]: moduleFeedback })
+          .filter(([_, value]) => value && (typeof value === 'string' ? value.trim() : true))
+          .map(([key, value]) => ({
+            questionKey: key,
+            answer: typeof value === 'string' ? value : String(value),
+            timestamp: new Date().toISOString(),
+            stepIndex: key.startsWith('feedbackVideoModules_') ? parseInt(key.split('_')[1]) : questions.findIndex(q => q.name === key)
+          }))
+          .sort((a, b) => a.stepIndex - b.stepIndex);
+
+        await fetch("/api/onboarding/saveAnswers", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token, answers }),
+          body: JSON.stringify({
+            token,
+            answers: { ...answers, [`feedbackVideoModules_${step}`]: moduleFeedback },
+            orderedAnswers: orderedAnswers,
+            clientAnswers: true,
+          }),
         });
       } catch (err) {
         console.error("Error auto-saving answers:", err);
@@ -140,19 +169,25 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
     return () => {
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     };
-  }, [answers, token, sessionData]);
+  }, [answers, moduleFeedback, token, sessionData, step]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setAnswers((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
   const handleFeedbackChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setFeedback(e.target.value);
-    setAnswers((prev) => ({ ...prev, feedback: e.target.value }));
+    setModuleFeedback(e.target.value);
   };
 
-  const nextStep = () => setStep((s) => Math.min(s + 1, questions.length - 1));
-  const prevStep = () => setStep((s) => Math.max(s - 1, 0));
+  const nextStep = () => {
+    setStep((s) => Math.min(s + 1, questions.length - 1));
+    
+    setModuleFeedback(answers[`feedbackVideoModules_${step + 1}`] || "");
+  };
+  const prevStep = () => {
+    setStep((s) => Math.max(s - 1, 0));
+    setModuleFeedback(answers[`feedbackVideoModules_${step - 1}`] || "");
+  };
   const isLastStep = step === questions.length - 1;
 
   if (loading) {
@@ -360,7 +395,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                 <textarea
                   placeholder="Type your thoughts..."
                   rows={4}
-                  value={feedback}
+                  value={moduleFeedback}
                   onChange={handleFeedbackChange}
                   className={`w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-[#7A13D0] focus:border-transparent text-black ${inter.className}`}
                 />
@@ -402,13 +437,42 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                       }
 
                       try {
-                        // Use the same API structure as onboarding
+
+                        const finalOrderedAnswers = Object.entries(answers)
+                          .filter(([_, value]) => value && (typeof value === 'string' ? value.trim() : true))
+                          .map(([key, value]) => ({
+                            questionKey: key,
+                            answer: typeof value === 'string' ? value : String(value),
+                            timestamp: new Date().toISOString(),
+                            stepIndex: questions.findIndex(q => q.name === key),
+                            questionLabel: questions.find(q => q.name === key)?.label || key
+                          }))
+                          .sort((a, b) => a.stepIndex - b.stepIndex);
+
+                        Object.entries(answers)
+                          .filter(([key]) => key.startsWith('feedbackVideoModules_'))
+                          .forEach(([key, value]) => {
+                            if (value && (typeof value === 'string' ? value.trim() : true)) {
+                              const stepIndex = parseInt(key.split('_')[1]);
+                              finalOrderedAnswers.push({
+                                questionKey: key,
+                                answer: typeof value === 'string' ? value : String(value),
+                                timestamp: new Date().toISOString(),
+                                stepIndex: stepIndex,
+                                questionLabel: `Feedback for ${questions[stepIndex]?.label || 'Module'}`
+                              });
+                            }
+                          });
+
+                        finalOrderedAnswers.sort((a, b) => a.stepIndex - b.stepIndex);
+
                         await fetch('/api/onboarding/saveAnswers', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ 
                             token: sessionId, 
                             answers,
+                            orderedAnswers: finalOrderedAnswers,
                             clientAnswers: true,
                             completed: true
                           }),
@@ -418,7 +482,6 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                         setShowSuccessModal(true);
                       } catch (err) {
                         console.error("Error completing questionnaire:", err);
-                        // Show success modal since the user completed the modules
                         setShowSuccessModal(true);
                       }
                     }}

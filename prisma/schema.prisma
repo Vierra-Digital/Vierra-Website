@@ -117,6 +117,7 @@ model MarketingTracker {
   userId                Int
   year                  Int
   month                 Int
+  outreach              Outreach
   attempt               Int      @default(0)
   meetingsSet           Int      @default(0)
   clientsClosed         Int      @default(0)
@@ -126,7 +127,7 @@ model MarketingTracker {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @default(now())
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  @@unique([userId, year, month])
+  @@unique([userId, year, month, outreach])
   @@index([userId, year])
   @@map("marketing_tracker")
 }
@@ -191,4 +192,17 @@ enum Platform {
   facebook
   googleads
   linkedin
+}
+
+enum Outreach {
+  facebook
+  googleads
+  linkedin
+  instagram
+  coldcall
+  coldmail
+  coldmessage
+  walkinnetworking
+  autoresponder
+  other
 }
