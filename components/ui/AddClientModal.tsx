@@ -24,9 +24,6 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   const [emailError, setEmailError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [selectedMeetingTimes, setSelectedMeetingTimes] = useState<{ date: Date | null; time: string }[]>(
-    Array(3).fill({ date: null, time: "" })
-  );
 
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -129,13 +126,9 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   const handleFinish = async () => {
     setLoading(true);
     try {
-      // Combine all form data including meeting times
+      // Combine all form data
       const allFormData = {
         ...clientData,
-        meetingTimes: selectedMeetingTimes.map((mt) => ({
-          date: mt.date?.toISOString().split("T")[0] || "",
-          time: mt.time,
-        })),
       };
 
       const response = await fetch("/api/onboarding/saveAnswers", {
