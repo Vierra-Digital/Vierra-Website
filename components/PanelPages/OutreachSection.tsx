@@ -153,6 +153,7 @@ const OutreachSection = () => {
         const fetchStats = async () => {
             setIsLoading(true);
             try {
+                const now = new Date();
                 const year = now.getFullYear();
                 const month = months.indexOf(selectedMonth) + 1;
                 const response = await fetch(`/api/marketing/tracker?year=${year}&month=${month}`);
@@ -195,8 +196,8 @@ const OutreachSection = () => {
                     });
                 }
                 setStats(newStats);
-            } catch (err) {
-                // Optionally show error
+            } catch {
+                // Optional
             } finally {
                 setIsLoading(false);
             }
