@@ -4,7 +4,7 @@ import nodemailer from "nodemailer";
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
 
-  const { email, link, clientName, businessName } = req.body ?? {};
+  const { email, link, clientName } = req.body ?? {};
   if (!email || !link) {
     return res.status(400).json({ message: "Missing email or link." });
   }

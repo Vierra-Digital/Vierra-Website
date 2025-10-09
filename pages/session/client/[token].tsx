@@ -118,7 +118,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
         });
         setAnswers(data.answers || {});
         setModuleFeedback(data.answers?.[`feedbackVideoModules_${step}`] || "");
-      } catch (e) {
+      } catch {
         setSessionData(initialSession);
         setAnswers(initialSession.answers || {});
         setModuleFeedback(initialSession.answers?.[`feedbackVideoModules_${step}`] || "");
@@ -127,7 +127,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
       }
     }
     fetchSession();
-  }, [token, step]);
+  }, [token, step, initialSession]);
 
   useEffect(() => {
     if (typeof token !== "string") return;
@@ -140,7 +140,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
       try {
 
         const orderedAnswers = Object.entries({ ...answers, [`feedbackVideoModules_${step}`]: moduleFeedback })
-          .filter(([_, value]) => value && (typeof value === 'string' ? value.trim() : true))
+          .filter(([, value]) => value && (typeof value === 'string' ? value.trim() : true))
           .map(([key, value]) => ({
             questionKey: key,
             answer: typeof value === 'string' ? value : String(value),
@@ -439,15 +439,15 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                       try {
 
                         const finalOrderedAnswers = Object.entries(answers)
-                          .filter(([_, value]) => value && (typeof value === 'string' ? value.trim() : true))
-                          .map(([key, value]) => ({
-                            questionKey: key,
-                            answer: typeof value === 'string' ? value : String(value),
-                            timestamp: new Date().toISOString(),
-                            stepIndex: questions.findIndex(q => q.name === key),
-                            questionLabel: questions.find(q => q.name === key)?.label || key
-                          }))
-                          .sort((a, b) => a.stepIndex - b.stepIndex);
+          .filter(([, value]) => value && (typeof value === 'string' ? value.trim() : true))
+          .map(([key, value]) => ({
+            questionKey: key,
+            answer: typeof value === 'string' ? value : String(value),
+            timestamp: new Date().toISOString(),
+            stepIndex: questions.findIndex(q => q.name === key),
+            questionLabel: questions.find(q => q.name === key)?.label || key
+          }))
+          .sort((a, b) => a.stepIndex - b.stepIndex);
 
                         Object.entries(answers)
                           .filter(([key]) => key.startsWith('feedbackVideoModules_'))

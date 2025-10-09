@@ -208,9 +208,9 @@ export default function OnboardingQuestionnaire({ initialSession }: { initialSes
     const orderedAnswersObj: Record<string, any> = {};
     onboardingSteps.forEach((stepItem) => {
       if (stepItem.fields) {
-        stepItem.fields.forEach((field, idx) => {
+        stepItem.fields.forEach((field) => {
           if (field.name.startsWith('meetingTime')) {
-
+            // For meetingTime fields, use selectedMeetingTimes array
             const mtIndex = Number(field.name.replace('meetingTime', '')) - 1;
             if (selectedMeetingTimes[mtIndex]) {
               orderedAnswersObj[field.name] = {
@@ -231,8 +231,8 @@ export default function OnboardingQuestionnaire({ initialSession }: { initialSes
 
   const saveCurrentStepData = async () => {
     try {
-
-      let dataToSave = { ...formData };
+      // Build ordered answers object for all steps, but only fill current step's fields
+      const dataToSave = { ...formData };
 
       // Only update meeting times for operations step
       if (step.id === 'operations') {
