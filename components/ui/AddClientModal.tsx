@@ -19,6 +19,14 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   const [origin, setOrigin] = useState<string>(""); // SSR-safe origin
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [selectedMeetingTimes, setSelectedMeetingTimes] = useState<{ date: Date | null; time: string }[]>(
+    Array(3).fill({ date: null, time: "" })
+  );
 
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -32,7 +40,6 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
       setStep(1);
       setSessionLink(null);
       setErr(null);
-
     }
   }, [isOpen]);
 
@@ -85,6 +92,73 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
       setErr(e?.message ?? "Failed to generate session");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    // When sessionLink is set, send email
+    if (step === 3 && sessionLink && clientData.clientEmail) {
+      setEmailSending(true);
+      setEmailError(null);
+      fetch("/api/sendSessionLinkEmail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: clientData.clientEmail,
+          link: `${origin}${sessionLink}`,
+          clientName: clientData.clientName,
+          businessName: clientData.businessName,
+        }),
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const j = await res.json().catch(() => ({}));
+            throw new Error(j?.message || "Failed to send email");
+          }
+          setEmailSent(true);
+        })
+        .catch((err) => {
+          setEmailError(err.message || "Failed to send email");
+        })
+        .finally(() => {
+          setEmailSending(false);
+        });
+    }
+  }, [step, sessionLink, clientData.clientEmail, origin, clientData.clientName, clientData.businessName]);
+
+  const handleFinish = async () => {
+    setLoading(true);
+    try {
+      // Combine all form data including meeting times
+      const allFormData = {
+        ...clientData,
+        meetingTimes: selectedMeetingTimes.map((mt) => ({
+          date: mt.date?.toISOString().split("T")[0] || "",
+          time: mt.time,
+        })),
+      };
+
+      const response = await fetch("/api/onboarding/saveAnswers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: sessionLink?.split("/").pop() || "",
+          answers: allFormData,
+          completed: true,
+        }),
+      });
+
+      if (response.ok) {
+        setShowSuccessModal(true);
+      } else {
+        console.error("Failed to save answers");
+        setShowSuccessModal(true); 
+      }
+    } catch (err) {
+      console.error("Error saving answers:", err);
+      setShowSuccessModal(true); 
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -208,16 +282,13 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
         {step === 3 && (
           <>
             <h3 className={`mb-3 text-lg font-semibold ${Bricolage_Grotesque.className}`}>Session Link Generated</h3>
-
             <div className="mt-6">
               <p className={`mb-2 text-sm ${inter.className}`}>Share this link with {clientData.clientName}:</p>
-
               <div className="mb-4 break-all rounded border border-[#701CC0]/50 bg-[#18042A]/50 p-3">
                 <p className={`text-sm text-blue-300 ${inter.className}`}>
                   {sessionLink ? `${origin}${sessionLink}` : "Generating..."}
                 </p>
               </div>
-
               <button
                 className={`mb-4 w-full rounded-md bg-blue-500 px-4 py-2 text-white shadow transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60 ${inter.className}`}
                 onClick={() => {
@@ -230,17 +301,49 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
               >
                 Copy Link
               </button>
+              {/* Email sending status */}
+              <div className="mb-2">
+                {emailSending && (
+                  <span className="text-yellow-200 text-sm">Sending session link to {clientData.clientEmail}...</span>
+                )}
+                {emailSent && (
+                  <span className="text-green-300 text-sm">Session link emailed to {clientData.clientEmail}!</span>
+                )}
+                {emailError && (
+                  <span className="text-red-300 text-sm">Failed to send email: {emailError}</span>
+                )}
+              </div>
             </div>
-
             <div className="mt-6 flex justify-end">
               <button
                 className={`rounded-md bg-green-500 px-4 py-2 text-white shadow transition-transform hover:scale-105 ${Bricolage_Grotesque.className}`}
-                onClick={onClose}
+                onClick={handleFinish}
+                disabled={loading}
               >
-                Finish
+                {loading ? "Saving..." : "Finish and Save"}
               </button>
             </div>
           </>
+        )}
+
+        {showSuccessModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+            <div className="rounded-lg bg-white p-6 text-center">
+              <h3 className="mb-4 text-lg font-semibold">Success!</h3>
+              <p className="mb-4 text-sm text-gray-700">
+                Client information and session link have been successfully saved.
+              </p>
+              <button
+                className="rounded-md bg-green-500 px-4 py-2 text-white transition-transform hover:scale-105"
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  onClose();
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>

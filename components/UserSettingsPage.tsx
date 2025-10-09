@@ -1,4 +1,5 @@
 import React from "react";
+import { signOut } from "next-auth/react";
 import Image from "next/image";
 
 interface UserSettingsPageProps {
@@ -81,6 +82,13 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user }) => (
             Update Password
           </button>
         </div>
+
+        <button
+          onClick={() => signOut({ callbackUrl: "/login" })}
+          className="w-full max-w-xs mt-6 p-2 rounded-lg bg-purple-600 text-white hover:bg-red-700 transition font-semibold"
+        >
+          Logout
+        </button>
 
       </div>
     </div>
