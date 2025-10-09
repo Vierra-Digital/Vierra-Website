@@ -2,10 +2,9 @@ import React, { useEffect, useState } from "react"
 import Head from "next/head"
 import { Inter } from "next/font/google"
 import Image from "next/image"
-import { useRouter } from "next/navigation"
 import SignPdfModal from "@/components/ui/SignPdfModal"
 import Link from "next/link"
-import { FiLogOut, FiFileText, FiUsers } from "react-icons/fi"
+import { FiLogOut, FiUsers } from "react-icons/fi"
 import { IoIosNotificationsOutline } from "react-icons/io";
 import { AiOutlineAppstore } from "react-icons/ai";
 import { PiUsersThree, PiCalculator } from "react-icons/pi";
@@ -32,21 +31,21 @@ const inter = Inter({ subsets: ["latin"] })
 type PageProps = { dashboardHref: string }
 
 const PanelPage = ({ dashboardHref }: PageProps) => {
-  const router = useRouter()
   const [isSignModalOpen, setIsSignModalOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
 
   const [currentSection, setCurrentSection] = useState(0);
-  // [0: dashboard, 1: clients, 2: team, 3: marketing]
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  // controlling the sidebar
 
   const { data: session } = useSession()
   const [isAddClientOpen, setIsAddClientOpen] = useState(false)
   const [items, setItems] = useState<SessionItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // keep prop used to satisfy linting after removing the button usage
+  void dashboardHref
 
   useEffect(() => {
     fetchSessions()
@@ -71,7 +70,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
       <Head>
         <title>Vierra | Admin Panel</title>
       </Head>
-      <div id="main-panel" className="w-screen h-screen bg-white flex flex-row">
+      <div id="main-panel" className="w-full h-screen bg-white flex flex-row overflow-hidden">
         <div id="left-side" className={`flex flex-col  h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
           <div id="vierra-nameplate-body" className="w-full h-20 flex items-center justify-center mb-4">
             <Link href="/">
@@ -130,9 +129,18 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                 LTV Calculator
               </span>
             </div>
+            <div className="w-full flex justify-center mt-auto mb-4">
+              <button
+                onClick={() => signOut({ callbackUrl: "/login" })}
+                className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer rounded-xl text-white/80 hover:bg-white hover:text-black"
+              >
+                <FiLogOut className="w-5 h-5" />
+                <span className={`text-xs ${inter.className}`}>Logout</span>
+              </button>
+            </div>
           </div>
         </div>
-        <div id="right-side" className="flex flex-col w-full h-full">
+        <div id="right-side" className="flex flex-col w-full h-full overflow-y-auto">
           <div id="right-side-heading" className="flex w-full flex-row h-16 bg-[#F8F0FF]">
             <div className="md:hidden flex items-center pl-2">
               <button
@@ -142,7 +150,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                 }}
                 aria-label="Toggle sidebar"
               >
-                {/* Hamburger icon */}
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   className="h-6 w-6 text-[#701CC0]"
@@ -157,11 +164,15 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             <div id="left-side-search-holder" className="flex w-1/2 h-full pl-4 items-center">
               <div id="search-bar" className="w-[270px] h-[36px] z-40 flex items-center border border-[#A6A9AC] rounded-lg gap-x-2 p-2 text-[#A6A9AC] cursor-pointer">
                 <CiSearch height={10} width={10} className="w-6 h-6" />
-                <span className={`text-sm ${inter.className}`}>Search</span>
+                  <span className={`text-sm ${inter.className}`}>Search</span>
+                  {loading && <span className={`ml-3 text-xs ${inter.className}`}>Loading sessions...</span>}
               </div>
             </div>
             <div id="right-side-info-holder" className="flex w-1/2 h-full items-center justify-end p-2 gap-x-4 md:gap-x-8 text-[#A6A9AC]">
-              <IoIosNotificationsOutline height={10} width={10} className="w-8 h-8" />
+              <div className="relative">
+                <IoIosNotificationsOutline height={10} width={10} className="w-8 h-8" />
+                <span className="absolute -top-1 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{items.length}</span>
+              </div>
               <div id="user-holder" className="flex items-center w-auto h-auto">
                 <button
                   className="flex items-center gap-x-2"
@@ -194,7 +205,11 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             </div>
           </div>
           <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-hidden overflow-x-hidden">
-            {/* This is the working area. Put in different options (Dashboard, Clients, etc. ) as components */}
+            {error && (
+              <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-red-100 text-red-700 px-4 py-2 rounded-md">
+                {error}
+              </div>
+            )}
             {showSettings ? (<>
               <UserSettingsPage
                 user={
@@ -209,7 +224,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               : (
                 <>
                   {currentSection === 0 && <DashboardSection />}
-                  {currentSection === 1 && <ClientsSection />}
+                  {currentSection === 1 && <ClientsSection onAddClient={() => setIsAddClientOpen(true)} />}
                   {currentSection === 2 && <TeamPanelSection />}
                   {currentSection === 3 && <MarketingSection />}
                   {currentSection === 4 && <LtvCalculatorSection />}
@@ -226,15 +241,20 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
         isOpen={isSignModalOpen}
         onClose={() => setIsSignModalOpen(false)}
       />
-      {/* <UserSettingsModal
-          open={isSettingsModalOpen}
-          onClose={() => setIsSettingsModalOpen(false)}
-          user={session?.user || {}}
-        /> */}
+      {isAddClientOpen && (
+        <AddClientModal
+          isOpen={isAddClientOpen}
+          onClose={() => {
+            setIsAddClientOpen(false)
+            fetchSessions()
+          }}
+          onCreated={(row) => {
+            setItems((prev) => [row, ...prev])
+          }}
+        />
+      )}
     </>
   )
-
-  return null
 }
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
