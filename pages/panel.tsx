@@ -244,7 +244,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               : (
                 <>
                   {currentSection === 0 && <DashboardSection />}
-                  {currentSection === 1 && <ClientsSection />}
+                  {currentSection === 1 && <ClientsSection onAddClient={() => setIsAddClientOpen(true)} />}
                   {currentSection === 2 && <TeamPanelSection />}
                   {currentSection === 3 && <MarketingSection />}
                   {currentSection === 4 && <LtvCalculatorSection />}
