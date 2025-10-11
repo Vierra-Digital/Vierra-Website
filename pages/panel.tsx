@@ -10,7 +10,7 @@ import { AiOutlineAppstore } from "react-icons/ai";
 import { PiUsersThree, PiCalculator } from "react-icons/pi";
 import { BsPeople } from "react-icons/bs";
 import { CiSearch } from "react-icons/ci";
-import { RiArrowDropDownLine, RiMoneyDollarBoxLine } from "react-icons/ri";
+import { RiArrowDropDownLine, RiMoneyDollarBoxLine, RiFolder3Line } from "react-icons/ri";
 import { FaRegFilePdf } from "react-icons/fa6";
 import { useSession, signOut } from "next-auth/react"
 import UserSettingsPage from "@/components/UserSettingsPage"
@@ -25,6 +25,7 @@ import MarketingSection from "@/components/PanelPages/MarketingSection"
 import TeamPanelSection from "@/components/PanelPages/TeamPanelSection"
 import LtvCalculatorSection from "@/components/PanelPages/LTVCalculatorSection"
 import OutreachSection from "@/components/PanelPages/OutreachSection"
+import ProjectManagement from "../components/PanelPages/ProjectManagement"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -75,11 +76,11 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
           <div id="vierra-nameplate-body" className="w-full h-20 flex items-center justify-center mb-4">
             <Link href="/">
               <Image
-                src={"/assets/vierra-logo-black-3.png"}
-                alt={"Vierra Go Home"}
+                src="/assets/vierra-logo.png"
+                alt="Vierra Go Home"
                 width={56}
                 height={32}
-                className="w-24 bg-white rounded-sm pt-1 px-2"
+                className="w-24 rounded-sm"
               />
             </Link>
           </div>
@@ -112,6 +113,12 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               <FiUsers />
               <span className={`text-xs ${inter.className}`}>
                 Outreach
+              </span>
+            </div>
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(6); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer hover:bg-white rounded-xl hover:text-black">
+              <RiFolder3Line />
+              <span className={`text-xs ${inter.className}`}>
+                Project Tasks
               </span>
             </div>
             <div id="panel-nav-item" className="w-full flex h-[47px] flex-row items-center gap-x-[10px] pl-8 hover:text-black">
@@ -184,7 +191,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                       typeof session?.user?.image === "string" &&
                         session.user.image.length > 0
                         ? session.user.image
-                        : "/assets/vierra-logo-black.png"
+                        : "/assets/vierra-logo.png"
                     }
                     alt="Profile"
                     width={32}
@@ -204,7 +211,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               </div>
             </div>
           </div>
-          <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-hidden overflow-x-hidden">
+    <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden">
             {error && (
               <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-red-100 text-red-700 px-4 py-2 rounded-md">
                 {error}
@@ -229,6 +236,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                   {currentSection === 3 && <MarketingSection />}
                   {currentSection === 4 && <LtvCalculatorSection />}
                   {currentSection === 5 && <OutreachSection />}
+                  {currentSection === 6 && <ProjectManagement />}
                 </>
               )}
 
