@@ -72,7 +72,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
         <title>Vierra | Admin Panel</title>
       </Head>
       <div id="main-panel" className="w-full h-screen bg-white flex flex-row overflow-hidden">
-        <div id="left-side" className={`flex flex-col  h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
+  <div id="left-side" className={`relative flex flex-col  h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden pb-8 md:pb-12`}>
           <div id="vierra-nameplate-body" className="w-full h-20 flex items-center justify-center mb-4">
             <Link href="/">
               <Image
@@ -121,30 +121,35 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                 Project Tasks
               </span>
             </div>
-            <div id="panel-nav-item" className="w-full flex h-[47px] flex-row items-center gap-x-[10px] pl-8 hover:text-black">
-
-            </div>
+            
             <div id="panel-nav-item" onClick={() => setIsSignModalOpen(true)} className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer hover:bg-white rounded-xl hover:text-black">
               <FaRegFilePdf />
               <span className={`text-xs ${inter.className}`}>
                 PDF Signer
               </span>
             </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(4); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
+            <div
+              id="panel-nav-item"
+              onClick={() => { setCurrentSection(4); setShowSettings(false); setIsSidebarOpen(false)}}
+              className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 4 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+            >
               <PiCalculator />
               <span className={`text-xs ${inter.className}`}>
                 LTV Calculator
               </span>
             </div>
-            <div className="w-full flex justify-center mt-auto mb-4">
-              <button
-                onClick={() => signOut({ callbackUrl: "/login" })}
-                className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer rounded-xl text-white/80 hover:bg-white hover:text-black"
-              >
-                <FiLogOut className="w-5 h-5" />
-                <span className={`text-xs ${inter.className}`}>Logout</span>
-              </button>
-            </div>
+            {/* Logout moved to bottom of sidebar */}
+          </div>
+
+          {/* Bottom logout button: keep as the last item in the sidebar with some breathing room */}
+          <div className="w-full flex justify-center absolute bottom-6 left-0">
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="group w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 justify-start rounded-xl text-white bg-transparent hover:bg-white hover:text-black transition"
+            >
+              <FiLogOut className="w-5 h-5 text-white group-hover:text-black transition-colors" />
+              <span className={`text-xs ${inter.className} ml-2`}>Logout</span>
+            </button>
           </div>
         </div>
         <div id="right-side" className="flex flex-col w-full h-full overflow-y-auto">
@@ -169,10 +174,18 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               </button>
             </div>
             <div id="left-side-search-holder" className="flex w-1/2 h-full pl-4 items-center">
-              <div id="search-bar" className="w-[270px] h-[36px] z-40 flex items-center border border-[#A6A9AC] rounded-lg gap-x-2 p-2 text-[#A6A9AC] cursor-pointer">
-                <CiSearch height={10} width={10} className="w-6 h-6" />
-                  <span className={`text-sm ${inter.className}`}>Search</span>
-                  {loading && <span className={`ml-3 text-xs ${inter.className}`}>Loading sessions...</span>}
+              <div id="search-bar" className="w-full max-w-xs md:max-w-md z-40">
+                <label htmlFor="panel-search" className="sr-only">Search</label>
+                <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
+                  <CiSearch className="w-5 h-5 text-[#701CC0] flex-shrink-0" />
+                  <input
+                    id="panel-search"
+                    type="search"
+                    placeholder="Search"
+                    className={`flex-1 text-sm placeholder:text-[#9CA3AF] bg-transparent outline-none ${inter.className}`}
+                  />
+                  {loading && <span className={`ml-3 text-xs text-[#6B7280] ${inter.className}`}>Loading...</span>}
+                </div>
               </div>
             </div>
             <div id="right-side-info-holder" className="flex w-1/2 h-full items-center justify-end p-2 gap-x-4 md:gap-x-8 text-[#A6A9AC]">
@@ -211,7 +224,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               </div>
             </div>
           </div>
-    <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden">
+  <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden pl-4 md:pl-8">
             {error && (
               <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-red-100 text-red-700 px-4 py-2 rounded-md">
                 {error}
@@ -231,7 +244,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               : (
                 <>
                   {currentSection === 0 && <DashboardSection />}
-                  {currentSection === 1 && <ClientsSection onAddClient={() => setIsAddClientOpen(true)} />}
+                  {currentSection === 1 && <ClientsSection />}
                   {currentSection === 2 && <TeamPanelSection />}
                   {currentSection === 3 && <MarketingSection />}
                   {currentSection === 4 && <LtvCalculatorSection />}
