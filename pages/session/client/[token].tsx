@@ -218,11 +218,11 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
         {/* Header */}
         <div className="bg-[#7A13D0] px-4 py-5 flex justify-center">
           <Image
-            src={"/assets/vierra-logo-black-3.png"}
+            src={"/assets/vierra-logo.png"}
             alt={"Vierra Logo"}
             width={120}
             height={70}
-            className="w-30 bg-white rounded-sm pt-2 px-3"
+            className="w-30 rounded-sm pt-2 px-3"
           />
         </div>
 
