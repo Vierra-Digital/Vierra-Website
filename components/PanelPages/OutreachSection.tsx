@@ -8,7 +8,7 @@ const statFields = [
     { key: "attempts", label: "Attempts" },
     { key: "meetings", label: "Meetings Set" },
     { key: "clients", label: "Clients Closed" },
-    { key: "revenue", label: "revenue($)" }
+    { key: "revenue", label: "Revenue($)" }
 ];
 
 type CardKey =
@@ -206,10 +206,10 @@ const OutreachSection = () => {
     }, [selectedMonth]);
 
     return (
-        <div className="w-full h-full bg-[#F8F0FF] p-8 overflow-auto">
+        <div className="w-full h-full bg-[#FFFFFF] p-8 overflow-auto">
             <div className="max-w-7xl mx-auto">
                 <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-2xl font-semibold text-[#111827]">Dashboard</h1>
+                    <h1 className="text-2xl font-semibold text-[#111827]">Outreach Tracker</h1>
                     <div className="flex items-center gap-3">
                         <button
                             className={`px-4 py-2 rounded-lg font-semibold text-white bg-[#701CC0] hover:bg-[#8F42FF] cursor-pointer ${!isCurrentMonth ? "bg-gray-300 text-gray-400 cursor-not-allowed" : ""}`}
@@ -631,7 +631,7 @@ const OutreachSection = () => {
                                 <span className={`text-sm font-bold text-black ${inter.className}`}>{formatNumber(summary.clients)}</span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-sm text-[#6B7280]">revenue($)</span>
+                                <span className="text-sm text-[#6B7280]">Revenue($)</span>
                                 <span className={`text-sm font-bold text-black ${inter.className}`}>{formatCurrency(summary.revenue)}</span>
                             </div>
                             <div className="flex justify-between">
