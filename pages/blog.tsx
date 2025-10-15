@@ -137,6 +137,8 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
         <>
             <Head>
                 <title>Vierra | Blog</title>
+                <meta name="description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients." />
+                <link rel="canonical" href="https://vierradev.com/blog" />
             </Head>
             <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden z-0">
                 {Array.from({ length: 7 }).map((_, index) => (
