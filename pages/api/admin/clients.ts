@@ -33,6 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const targetAudience = answers.targetAudience ?? "";
       const adGoal = answers.socialMediaGoals ?? "N/A";
       const brandTone = answers.brandTone ?? "N/A";
+      const industry = answers.industry ?? "";
       
       // Determine display status based on session state and expiration
       let displayStatus: string = latest?.status ?? "pending";
@@ -57,6 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         targetAudience,
         adGoal,
         brandTone,
+        industry,
         status: displayStatus,
         isActive: c.isActive,
         isExpired: isExpired || false,
