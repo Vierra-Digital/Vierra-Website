@@ -162,6 +162,11 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [currentPage, setCurrentPage] = useState(0)
+    const [searchQuery, setSearchQuery] = useState("")
+    const [isFilterOpen, setIsFilterOpen] = useState(false)
+    const [nameSort, setNameSort] = useState<'none' | 'asc' | 'desc'>("none")
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>("all")
+    const [retainerSort, setRetainerSort] = useState<'none' | 'asc' | 'desc'>("none")
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
     const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(null)
     const pageSize = 10
@@ -245,6 +250,57 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
         []
     )
 
+    const filteredRows = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase()
+        let base = rows
+        // status filter
+        if (statusFilter !== 'all') {
+            base = base.filter((r) => {
+                const statusKey = r.status === 'completed' ? 'active' : (r.status === 'pending' || r.status === 'in_progress') ? 'pending' : 'inactive'
+                return statusKey === statusFilter
+            })
+        }
+        // search filter
+        if (query) {
+            base = base.filter((r) => {
+            return [
+                r.name,
+                r.email,
+                r.businessName,
+                r.industry,
+                r.clientGoal,
+                r.adGoal,
+                r.status,
+            ]
+                .filter(Boolean)
+                .some((v) => String(v).toLowerCase().includes(query))
+            })
+        }
+        // sorting
+        const sorted = [...base]
+        if (retainerSort !== 'none') {
+            sorted.sort((a, b) => {
+                const av = typeof a.monthlyRetainer === 'number' ? a.monthlyRetainer : -1
+                const bv = typeof b.monthlyRetainer === 'number' ? b.monthlyRetainer : -1
+                return retainerSort === 'asc' ? av - bv : bv - av
+            })
+        } else if (nameSort !== 'none') {
+            sorted.sort((a, b) => {
+                const an = (a.name || '').toLowerCase()
+                const bn = (b.name || '').toLowerCase()
+                if (an < bn) return nameSort === 'asc' ? -1 : 1
+                if (an > bn) return nameSort === 'asc' ? 1 : -1
+                return 0
+            })
+        }
+        return sorted
+    }, [rows, searchQuery, statusFilter, nameSort, retainerSort])
+
+    useEffect(() => {
+        // reset to first page when search changes
+        setCurrentPage(0)
+    }, [searchQuery])
+
     return (
         <div className="w-full h-full bg-white text-[#111014] flex flex-col p-4">
                                     <div className="w-full flex justify-between items-center mb-2">
@@ -253,15 +309,63 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
                                                 <p className="text-sm text-[#6B7280] mt-0">All Clients</p>
                                             </div>
                                 <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
-                        <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
+                    <form
+                        className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition"
+                        onSubmit={(e) => e.preventDefault()}
+                    >
+                        <button type="submit" aria-label="Search" className="flex items-center">
+                            <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
+                        </button>
                         <label htmlFor="clients-search" className="sr-only">Search Clients</label>
-                        <input id="clients-search" type="search" placeholder="Search Clients" className="w-64 md:w-80 text-sm placeholder:text-[#9CA3AF] bg-transparent outline-none" />
+                        <input
+                            id="clients-search"
+                            type="search"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search Clients"
+                            className="w-64 md:w-80 text-sm placeholder:text-[#9CA3AF] bg-transparent outline-none"
+                        />
+                    </form>
+                    <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsFilterOpen(false) }} tabIndex={-1}>
+                        <button
+                            type="button"
+                            onClick={() => setIsFilterOpen((v) => !v)}
+                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50"
+                        >
+                            <FiFilter className="w-4 h-4" />
+                            <span className="text-sm">Filter</span>
+                        </button>
+                        {isFilterOpen && (
+                            <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl border border-[#E5E7EB] shadow-lg z-20 p-5 text-sm space-y-4">
+                                <div className="mb-4">
+                                    <div className="text-xs font-semibold text-[#6B7280] mb-1 uppercase tracking-wide">Name</div>
+                                    <div className="flex gap-3">
+                                        <button onClick={() => { setNameSort('asc'); setRetainerSort('none'); }} className={`px-3 py-1.5 rounded-lg border ${nameSort==='asc' ? 'bg-[#701CC0] text-white border-[#701CC0]' : 'border-[#E5E7EB] hover:bg-gray-50'}`}>A–Z</button>
+                                        <button onClick={() => { setNameSort('desc'); setRetainerSort('none'); }} className={`px-3 py-1.5 rounded-lg border ${nameSort==='desc' ? 'bg-[#701CC0] text-white border-[#701CC0]' : 'border-[#E5E7EB] hover:bg-gray-50'}`}>Z–A</button>
+                                    </div>
+                                </div>
+                                <div className="mb-4">
+                                    <div className="text-xs font-semibold text-[#6B7280] mb-1 uppercase tracking-wide">Status</div>
+                                    <div className="flex flex-wrap gap-3">
+                                        {(['all','active','inactive','pending'] as const).map(s => (
+                                            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg border capitalize ${statusFilter===s ? 'bg-[#701CC0] text-white border-[#701CC0]' : 'border-[#E5E7EB] hover:bg-gray-50'}`}>{s}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="mb-4">
+                                    <div className="text-xs font-semibold text-[#6B7280] mb-1 uppercase tracking-wide">Monthly Retainer</div>
+                                    <div className="flex gap-3">
+                                        <button onClick={() => { setRetainerSort('asc'); setNameSort('none'); }} className={`px-3 py-1.5 rounded-lg border ${retainerSort==='asc' ? 'bg-[#701CC0] text-white border-[#701CC0]' : 'border-[#E5E7EB] hover:bg-gray-50'}`}>Low → High</button>
+                                        <button onClick={() => { setRetainerSort('desc'); setNameSort('none'); }} className={`px-3 py-1.5 rounded-lg border ${retainerSort==='desc' ? 'bg-[#701CC0] text-white border-[#701CC0]' : 'border-[#E5E7EB] hover:bg-gray-50'}`}>High → Low</button>
+                                    </div>
+                                </div>
+                                <div className="flex justify-between mt-2 text-xs">
+                                    <button onClick={() => { setNameSort('none'); setRetainerSort('none'); setStatusFilter('all'); }} className="text-[#6B7280] hover:underline">Clear</button>
+                                    <button onClick={() => setIsFilterOpen(false)} className="text-[#701CC0] font-medium">Close</button>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                    <button className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50">
-                        <FiFilter className="w-4 h-4" />
-                        <span className="text-sm">Filter</span>
-                    </button>
                     <button
                         onClick={onAddClient}
                         className="inline-flex items-center px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
@@ -287,12 +391,24 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
                                 <td className="px-4 py-6 text-sm text-gray-500" colSpan={columns.length}>Loading...</td>
                             </tr>
                         )}
-                        {!loading && rows.length === 0 && (
+                        {!loading && filteredRows.length === 0 && (
                             <tr>
-                                <td className="px-4 py-6 text-sm text-gray-500" colSpan={columns.length}>No clients found</td>
+                                <td className="px-4 py-12" colSpan={columns.length}>
+                                    <div className="w-full h-full flex flex-col items-center justify-center text-center">
+                                        <img src="/assets/no-client.png" alt="No clients" className="w-56 h-auto mb-3" />
+                                        <p className="text-sm text-gray-500 mb-3">You have no clients added.</p>
+                                        <button
+                                            onClick={onAddClient}
+                                            className="inline-flex items-center px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
+                                        >
+                                            <FiPlus className="w-4 h-4 mr-2" />
+                                            Add Client
+                                        </button>
+                                    </div>
+                                </td>
                             </tr>
                         )}
-                        {rows.slice(currentPage * pageSize, (currentPage + 1) * pageSize).map((r) => (
+                        {filteredRows.slice(currentPage * pageSize, (currentPage + 1) * pageSize).map((r) => (
                             <tr key={r.id} className="bg-white hover:bg-[#F8F0FF] rounded-xl transition-colors">
                                 <td className="px-4 py-4">
                                     <div className="flex items-center gap-3">
@@ -327,14 +443,14 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
             </div>
 
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
-            {!loading && rows.length > 0 && (
+            {!loading && filteredRows.length > 0 && (
                 <div className="mt-4 text-xs text-[#677489]">
                     <div className="w-full flex items-center justify-between">
                         <div className="text-xs text-[#677489]">
-                            Showing {Math.min(rows.length, currentPage * pageSize + 1)}–{Math.min(rows.length, (currentPage + 1) * pageSize)} of {rows.length} entries
+                            Showing {Math.min(filteredRows.length, currentPage * pageSize + 1)}–{Math.min(filteredRows.length, (currentPage + 1) * pageSize)} of {filteredRows.length} Entries
                         </div>
                         <div className="text-xs text-[#677489] text-center">
-                            Page {Math.min(currentPage + 1, Math.max(1, Math.ceil(rows.length / pageSize)))} of {Math.max(1, Math.ceil(rows.length / pageSize))}
+                            Page {Math.min(currentPage + 1, Math.max(1, Math.ceil(filteredRows.length / pageSize)))} of {Math.max(1, Math.ceil(filteredRows.length / pageSize))}
                         </div>
                         <div className="flex items-center gap-2">
                             <button
@@ -345,8 +461,8 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
                                 Previous
                             </button>
                             <button
-                                onClick={() => setCurrentPage(p => Math.min(p + 1, Math.max(0, Math.ceil(rows.length / pageSize) - 1)))}
-                                disabled={currentPage >= Math.ceil(rows.length / pageSize) - 1}
+                                onClick={() => setCurrentPage(p => Math.min(p + 1, Math.max(0, Math.ceil(filteredRows.length / pageSize) - 1)))}
+                                disabled={currentPage >= Math.ceil(filteredRows.length / pageSize) - 1}
                                 className={`px-3 py-1 rounded-md border ${currentPage >= Math.ceil(rows.length / pageSize) - 1 ? 'text-gray-400 border-gray-200' : 'text-[#111827] border-[#D1D5DB] hover:bg-gray-50'}`}
                             >
                                 Next
