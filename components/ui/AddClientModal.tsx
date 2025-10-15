@@ -17,8 +17,8 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   const [step, setStep] = useState(1);
   const [clientData, setClientData] = useState({ clientName: "", clientEmail: "", businessName: "", industry: "" });
   const [sessionLink, setSessionLink] = useState<string | null>(null);
-  const [origin, setOrigin] = useState<string>(""); // SSR-safe origin
-  const [submitting, setSubmitting] = useState(false);
+  const [origin, setOrigin] = useState<string>("");
+  const [submitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [emailSending, setEmailSending] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
@@ -32,7 +32,6 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   }, []);
 
   useEffect(() => {
-    // Reset form when reopened
     if (isOpen) {
       setStep(1);
       setSessionLink(null);
