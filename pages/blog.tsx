@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-// import { useRouter } from "next/router";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
 import { prisma } from "@/lib/prisma"
@@ -129,16 +128,10 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
     };
 
 
-
-    // const router = useRouter();
-
-
     useEffect(() => {
         setFilteredLatestPosts(latestPosts);
         setFilteredTrendingPosts(trendingPosts);
     }, [latestPosts, trendingPosts]);
-
-    // Removed self-redirect to prevent infinite reloads and repeated data fetches
 
     return (
         <>
