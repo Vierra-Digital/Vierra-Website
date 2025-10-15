@@ -1,14 +1,164 @@
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { RiArrowDropDownLine } from "react-icons/ri"
 import { FiTrendingUp, FiCalendar, FiClock } from "react-icons/fi"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
 
 const DashboardSection = () => {
-    const [timeFilter] = useState("This Week")
-    const [platformFilter] = useState("Facebook")
+    const [platformFilter, setPlatformFilter] = useState("Overall")
     const [monthFilter] = useState("March")
-    const [calendarMonth] = useState("November")
-    const [calendarYear] = useState("2024")
+    const [activeClientsCount, setActiveClientsCount] = useState(0)
+    const [loading, setLoading] = useState(true)
+
+    // Get current month and year for default calendar
+    const currentDate = new Date()
+    const currentMonth = currentDate.toLocaleString('default', { month: 'long' })
+    const currentYear = currentDate.getFullYear().toString()
+    
+    const [calendarMonth, setCalendarMonth] = useState(currentMonth)
+    const [calendarYear, setCalendarYear] = useState(currentYear)
+
+    // Generate week options dynamically
+    const generateWeekOptions = () => {
+        const options = []
+        const today = new Date()
+        const currentWeekStart = new Date(today)
+        
+        // Find Monday of current week
+        const dayOfWeek = today.getDay()
+        const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+        currentWeekStart.setDate(today.getDate() + daysToMonday)
+        
+        // Generate past 3 weeks, current week, and future 3 weeks
+        for (let i = -3; i <= 3; i++) {
+            const weekDate = new Date(currentWeekStart)
+            weekDate.setDate(currentWeekStart.getDate() + (i * 7))
+            
+            const month = weekDate.getMonth() + 1
+            const day = weekDate.getDate()
+            const formattedDate = `${month.toString().padStart(2, '0')}/${day.toString().padStart(2, '0')}`
+            
+            let label
+            if (i === 0) {
+                label = "This Week"
+            } else if (i < 0) {
+                label = `${Math.abs(i)} Week${Math.abs(i) > 1 ? 's' : ''} Ago`
+            } else {
+                label = `In ${i} Week${i > 1 ? 's' : ''}`
+            }
+            
+            options.push({
+                value: formattedDate,
+                label: label,
+                date: formattedDate
+            })
+        }
+        
+        return options
+    }
+
+    // Fetch active clients count
+    useEffect(() => {
+        const fetchActiveClients = async () => {
+            try {
+                const response = await fetch('/api/admin/clients')
+                if (response.ok) {
+                    const clients = await response.json()
+                    const activeCount = clients.filter((client: any) => 
+                        client.status === 'completed' || client.status === 'in_progress'
+                    ).length
+                    setActiveClientsCount(activeCount)
+                }
+            } catch (error) {
+                console.error('Error fetching clients:', error)
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        fetchActiveClients()
+    }, [])
+
+    const weekOptions = generateWeekOptions()
+    const currentWeekValue = weekOptions.find(option => option.label === "This Week")?.value || weekOptions[3]?.value || ""
+    const [timeFilter, setTimeFilter] = useState(currentWeekValue)
+
+    // Generate calendar days for selected month/year
+    const generateCalendarDays = () => {
+        const monthNames = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ]
+        
+        const monthIndex = monthNames.indexOf(calendarMonth)
+        const year = parseInt(calendarYear)
+        
+        // Get first day of month and number of days
+        const firstDay = new Date(year, monthIndex, 1)
+        const lastDay = new Date(year, monthIndex + 1, 0)
+        const daysInMonth = lastDay.getDate()
+        
+        // Convert Sunday=0 to Monday=0 system
+        let startingDayOfWeek = firstDay.getDay()
+        startingDayOfWeek = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1 // Monday=0, Sunday=6
+        
+        const days = []
+        
+        // Add empty cells for days before the first day of the month
+        for (let i = 0; i < startingDayOfWeek; i++) {
+            days.push(null)
+        }
+        
+        // Add days of the month
+        for (let day = 1; day <= daysInMonth; day++) {
+            days.push(day)
+        }
+        
+        return days
+    }
+
+    // Get highlighted days based on selected week
+    const getHighlightedDays = () => {
+        if (!timeFilter) return []
+        
+        // Parse the selected week date (format: MM/DD)
+        const [month, day] = timeFilter.split('/').map(Number)
+        const year = parseInt(calendarYear)
+        
+        // Create date for the Monday of the selected week
+        const selectedDate = new Date(year, month - 1, day)
+        
+        // Check if the selected week is in the current calendar month
+        const selectedMonth = selectedDate.getMonth()
+        const calendarMonthIndex = ["January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"].indexOf(calendarMonth)
+        
+        if (selectedMonth !== calendarMonthIndex) {
+            return [] // Selected week is not in the current calendar month
+        }
+        
+        // Get all days in the selected week (Monday to Sunday)
+        const highlightedDays = []
+        for (let i = 0; i < 7; i++) {
+            const weekDay = new Date(selectedDate)
+            weekDay.setDate(selectedDate.getDate() + i)
+            
+            // Only highlight days that are in the current calendar month
+            if (weekDay.getMonth() === calendarMonthIndex) {
+                highlightedDays.push(weekDay.getDate())
+            }
+        }
+        
+        return highlightedDays
+    }
+
+    const calendarDays = generateCalendarDays()
+    const highlightedDays = getHighlightedDays()
+    const platformOptions = ["Overall", "Clients", "Revenue", "Marketing"]
+    const monthOptions = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ]
+    const yearOptions = Array.from({ length: 5 }, (_, i) => (2022 + i).toString())
 
     // Sample data for charts
     const websiteVisitsData = [
@@ -46,13 +196,33 @@ const DashboardSection = () => {
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold text-[#111827]">Dashboard</h1>
                 <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200">
-                        <span className="text-sm text-[#6B7280]">{timeFilter}</span>
-                        <RiArrowDropDownLine className="w-4 h-4 text-[#6B7280]" />
+                    <div className="relative">
+                        <select 
+                            value={timeFilter} 
+                            onChange={(e) => setTimeFilter(e.target.value)}
+                            className="appearance-none bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200 text-sm text-[#6B7280] pr-8 cursor-pointer hover:bg-gray-50"
+                        >
+                            {weekOptions.map((option, index) => (
+                                <option key={index} value={option.value}>
+                                    {option.label} - {option.date}
+                                </option>
+                            ))}
+                        </select>
+                        <RiArrowDropDownLine className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
                     </div>
-                    <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200">
-                        <span className="text-sm text-[#6B7280]">{platformFilter}</span>
-                        <RiArrowDropDownLine className="w-4 h-4 text-[#6B7280]" />
+                    <div className="relative">
+                        <select 
+                            value={platformFilter} 
+                            onChange={(e) => setPlatformFilter(e.target.value)}
+                            className="appearance-none bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200 text-sm text-[#6B7280] pr-8 cursor-pointer hover:bg-gray-50"
+                        >
+                            {platformOptions.map((option, index) => (
+                                <option key={index} value={option}>
+                                    {option}
+                                </option>
+                            ))}
+                        </select>
+                        <RiArrowDropDownLine className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
                     </div>
                 </div>
             </div>
@@ -89,7 +259,9 @@ const DashboardSection = () => {
                             <div className="mb-2">
                                 <h3 className="text-sm font-medium text-[#6B7280]">CLIENTS</h3>
                             </div>
-                            <div className="text-2xl font-bold text-blue-600 mb-1">500</div>
+                            <div className="text-2xl font-bold text-blue-600 mb-1">
+                                {loading ? "..." : activeClientsCount}
+                            </div>
                             <div className="flex items-center text-sm text-green-600">
                                 <FiTrendingUp className="w-3 h-3 mr-1" />
                                 8.5%
@@ -219,28 +391,49 @@ const DashboardSection = () => {
                 <div className="w-80 space-y-6">
                     {/* Calendar */}
                     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="text-lg font-semibold text-[#111827]">Calendar</h3>
+                        <div className="mb-6">
+                            <h3 className="text-lg font-semibold text-[#111827] mb-4">Calendar</h3>
                             <div className="flex items-center gap-2">
-                                <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200">
-                                    <span className="text-sm text-[#6B7280]">{calendarMonth}</span>
-                                    <RiArrowDropDownLine className="w-4 h-4 text-[#6B7280]" />
+                                <div className="relative">
+                                    <select 
+                                        value={calendarMonth} 
+                                        onChange={(e) => setCalendarMonth(e.target.value)}
+                                        className="appearance-none bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200 text-sm text-[#6B7280] pr-8 cursor-pointer hover:bg-gray-50"
+                                    >
+                                        {monthOptions.map((month, index) => (
+                                            <option key={index} value={month}>
+                                                {month}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <RiArrowDropDownLine className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
                                 </div>
-                                <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200">
-                                    <span className="text-sm text-[#6B7280]">{calendarYear}</span>
-                                    <RiArrowDropDownLine className="w-4 h-4 text-[#6B7280]" />
+                                <div className="relative">
+                                    <select 
+                                        value={calendarYear} 
+                                        onChange={(e) => setCalendarYear(e.target.value)}
+                                        className="appearance-none bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200 text-sm text-[#6B7280] pr-8 cursor-pointer hover:bg-gray-50"
+                                    >
+                                        {yearOptions.map((year, index) => (
+                                            <option key={index} value={year}>
+                                                {year}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <RiArrowDropDownLine className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
                                 </div>
                             </div>
                         </div>
                         <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
+                            {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(day => (
                                 <div key={day} className="p-2 text-[#6B7280] font-medium">{day}</div>
                             ))}
-                            {Array.from({ length: 30 }, (_, i) => i + 1).map(day => (
+                            {calendarDays.map((day, index) => (
                                 <div 
-                                    key={day} 
+                                    key={index} 
                                     className={`p-2 text-sm cursor-pointer hover:bg-gray-100 rounded ${
-                                        day >= 6 && day <= 10 ? 'bg-blue-500 text-white' : 'text-[#111827]'
+                                        day === null ? 'invisible' : 
+                                        highlightedDays.includes(day) ? 'bg-blue-500 text-white' : 'text-[#111827]'
                                     }`}
                                 >
                                     {day}
