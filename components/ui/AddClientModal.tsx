@@ -161,14 +161,14 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
           <>
             <div className="space-y-4">
               <div>
-                <label htmlFor="clientName" className={`block text-sm font-medium text-[#374151] ${inter.className}`}>Client Name</label>
+                <label htmlFor="clientName" className={`block text-sm font-medium text-[#374151] mb-1 ${inter.className}`}>Client Name</label>
                 <div className="relative mt-1">
                   <FiUser className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
                   <input id="clientName" name="clientName" value={clientData.clientName} onChange={handleChange} placeholder="Ex: John Doe" className="w-full rounded-lg border border-[#E5E7EB] bg-white pl-9 pr-3 py-3 text-sm text-[#111827] placeholder-[#9CA3AF]" />
                 </div>
               </div>
               <div>
-                <label htmlFor="clientEmail" className={`block text-sm font-medium text-[#374151] ${inter.className}`}>Client Email</label>
+                <label htmlFor="clientEmail" className={`block text-sm font-medium text-[#374151] mb-1 ${inter.className}`}>Client Email</label>
                 <div className="relative mt-1">
                   <FiMail className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
                   <input id="clientEmail" name="clientEmail" type="email" value={clientData.clientEmail} onChange={handleChange} placeholder="Ex: johndoe@email.com" className="w-full rounded-lg border border-[#E5E7EB] bg-white pl-9 pr-3 py-3 text-sm text-[#111827] placeholder-[#9CA3AF]" />
@@ -176,14 +176,14 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
                 {!emailValid && clientData.clientEmail && (<p className="mt-1 text-xs text-red-600">Please enter a valid email.</p>)}
               </div>
               <div>
-                <label htmlFor="businessName" className={`block text-sm font-medium text-[#374151] ${inter.className}`}>Business Name</label>
+                <label htmlFor="businessName" className={`block text-sm font-medium text-[#374151] mb-1 ${inter.className}`}>Business Name</label>
                 <div className="relative mt-1">
                   <FiBriefcase className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
                   <input id="businessName" name="businessName" value={clientData.businessName} onChange={handleChange} placeholder="Ex: Healthcare" className="w-full rounded-lg border border-[#E5E7EB] bg-white pl-9 pr-3 py-3 text-sm text-[#111827] placeholder-[#9CA3AF]" />
                 </div>
               </div>
               <div>
-                <label htmlFor="industry" className={`block text-sm font-medium text-[#374151] ${inter.className}`}>Industry</label>
+                <label htmlFor="industry" className={`block text-sm font-medium text-[#374151] mb-1 ${inter.className}`}>Industry</label>
                 <div className="relative mt-1">
                   <FiTag className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]" />
                   <input id="industry" name="industry" value={clientData.industry} onChange={handleChange} placeholder="Ex: Technology" className="w-full rounded-lg border border-[#E5E7EB] bg-white pl-9 pr-3 py-3 text-sm text-[#111827] placeholder-[#9CA3AF]" />

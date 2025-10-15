@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from "react"
+import Image from "next/image"
 import { FiPlus, FiSearch, FiFilter, FiTrash2, FiMoreVertical, FiCheckCircle, FiXCircle } from 'react-icons/fi'
 
 type ClientRow = {
@@ -395,7 +396,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
                             <tr>
                                 <td className="px-4 py-12" colSpan={columns.length}>
                                     <div className="w-full h-full flex flex-col items-center justify-center text-center">
-                                        <img src="/assets/no-client.png" alt="No clients" className="w-56 h-auto mb-3" />
+                                        <Image src="/assets/no-client.png" alt="No clients" width={224} height={224} className="w-56 h-auto mb-3" />
                                         <p className="text-sm text-gray-500 mb-3">You have no clients added.</p>
                                         <button
                                             onClick={onAddClient}

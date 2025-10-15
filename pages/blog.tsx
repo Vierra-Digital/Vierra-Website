@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useRouter } from "next/router";
+// import { useRouter } from "next/router";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
 import { prisma } from "@/lib/prisma"
@@ -130,7 +130,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
 
 
 
-    const router = useRouter();
+    // const router = useRouter();
 
 
     useEffect(() => {

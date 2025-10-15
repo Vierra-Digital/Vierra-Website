@@ -43,7 +43,6 @@ const formatDate = (dateString: string): string => {
 const BlogViewPage = ({
     title,
     content,
-    image_url,
     author,
     publishedDate,
     tag

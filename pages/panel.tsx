@@ -169,7 +169,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             </button>
           </div>
         </div>
-        <div id="right-side" className="flex flex-col w-full h-full overflow-y-auto">
+          <div id="right-side" className="flex flex-col w-full h-full overflow-y-auto relative">
           <div id="right-side-heading" className="flex w-full flex-row h-16 bg-[#F8F0FF]">
             <div className="md:hidden flex items-center pl-2">
               <button
@@ -241,7 +241,12 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               </div>
             </div>
           </div>
-  <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden pl-4 md:pl-8">
+  <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden pl-4 md:pl-8 relative">
+            {loading && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-white/60 backdrop-blur-sm">
+                <div className="h-10 w-10 border-4 border-[#E5E7EB] border-t-[#701CC0] rounded-full animate-spin" aria-label="Loading" />
+              </div>
+            )}
             {error && (
               <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-red-100 text-red-700 px-4 py-2 rounded-md">
                 {error}
