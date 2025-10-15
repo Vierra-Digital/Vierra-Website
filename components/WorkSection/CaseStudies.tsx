@@ -27,13 +27,15 @@ export function CaseStudies() {
               from the most current professionals in the field.
             </p>
             <div className="flex gap-4 flex-wrap">
-              <Button
-                variant="ghost"
-                className={`${inter.className} bg-[#701CC0] text-white md:px-8 py-4 md:py-6 rounded-full hover:bg-purple-700 transition-all transform duration-300 hover:scale-105 group w-full sm:w-auto shadow-[0px_4px_15.9px_0px_#701CC0CC]`}
-              >
-                <span>Free Case Study</span>
-                <ArrowUpRight className="w-4 h-4 ml-2" />
-              </Button>
+              <a href="/blog" className="w-full sm:w-auto">
+                <Button
+                  variant="ghost"
+                  className={`${inter.className} bg-[#701CC0] text-white md:px-8 py-4 md:py-6 rounded-full hover:bg-purple-700 transition-all transform duration-300 hover:scale-105 group w-full sm:w-auto shadow-[0px_4px_15.9px_0px_#701CC0CC]`}
+                >
+                  <span>Free Case Study</span>
+                  <ArrowUpRight className="w-4 h-4 ml-2" />
+                </Button>
+              </a>
               <Button
                 className={`${inter.className} border-2 border-[#7A13D0] bg-transparent text-white md:px-8 py-4 md:py-6 rounded-full hover:bg-transparent transform transition-transform duration-300 hover:scale-105 will-change-transform w-full sm:w-auto shadow-[0px_4px_15.9px_0px_#701CC061]`}
               >
