@@ -94,10 +94,10 @@ export function Modal({ isOpen, onClose }: ModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[200]" onClick={handleOutsideClick}>
-      <div ref={modalRef} className="bg-white/10 backdrop-blur-md rounded-lg p-6 w-[90%] max-w-2xl shadow-lg relative">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200]" onClick={handleOutsideClick}>
+      <div ref={modalRef} className="bg-[#18042A] text-white rounded-2xl p-6 md:p-8 w-[90%] max-w-2xl shadow-xl relative" onClick={(e) => e.stopPropagation()}>
         <button
-          className="absolute top-4 right-4 text-white hover:text-[#FF0000] transition-colors"
+          className="absolute top-4 right-4 text-gray-300 hover:text-red-400 transition-colors"
           onClick={onClose}
         >
           <X size={24} />
@@ -109,7 +109,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
           {currentStep === 1 && (
             <>
               <div>
-                <label htmlFor="fullName" className={`block text-sm font-medium ${bricolage.className}`}>
+                <label htmlFor="fullName" className={`block text-sm font-medium text-gray-200 mb-1 ${inter.className}`}>
                   Full Name <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -117,13 +117,13 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                   id="fullName"
                   value={formData.fullName}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-md p-2 bg-[#18042A] text-white placeholder-gray-400"
+                  className="w-full border border-[#701CC0]/40 rounded-lg p-3 bg-[#1F0A33] text-white placeholder-gray-400"
                   placeholder="Enter your full name"
                 />
                 {errors.fullName && <p className="text-red-500 text-sm">{errors.fullName}</p>}
               </div>
               <div>
-                <label htmlFor="email" className={`block text-sm font-medium ${bricolage.className}`}>
+                <label htmlFor="email" className={`block text-sm font-medium text-gray-200 mb-1 ${inter.className}`}>
                   Email <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -131,13 +131,13 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                   id="email"
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-md p-2 bg-[#18042A] text-white placeholder-gray-400"
+                  className="w-full border border-[#701CC0]/40 rounded-lg p-3 bg-[#1F0A33] text-white placeholder-gray-400"
                   placeholder="Enter your email"
                 />
                 {errors.email && <p className="text-red-500 text-sm">{errors.email}</p>}
               </div>
               <div>
-                <label htmlFor="phoneNumber" className={`block text-sm font-medium ${bricolage.className}`}>
+                <label htmlFor="phoneNumber" className={`block text-sm font-medium text-gray-200 mb-1 ${inter.className}`}>
                   Phone Number <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -145,7 +145,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                   id="phoneNumber"
                   value={formData.phoneNumber}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-md p-2 bg-[#18042A] text-white placeholder-gray-400"
+                  className="w-full border border-[#701CC0]/40 rounded-lg p-3 bg-[#1F0A33] text-white placeholder-gray-400"
                   placeholder="Enter your phone number"
                 />
                 {errors.phoneNumber && <p className="text-red-500 text-sm">{errors.phoneNumber}</p>}
@@ -153,7 +153,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
               <div className="flex justify-end mt-6">
                 <motion.button
                   type="button"
-                  className="px-4 py-2 bg-[#701CC0] text-white rounded-md shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-transform duration-300 hover:scale-105"
+                  className="px-4 py-2 bg-[#701CC0] text-white rounded-lg shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-transform duration-300 hover:scale-105"
                   onClick={handleNextStep}
                 >
                   Next
@@ -164,7 +164,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
           {currentStep === 2 && (
             <>
               <div>
-                <label htmlFor="website" className={`block text-sm font-medium ${bricolage.className}`}>
+                <label htmlFor="website" className={`block text-sm font-medium text-gray-200 mb-1 ${inter.className}`}>
                   Website <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -172,13 +172,13 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                   id="website"
                   value={formData.website}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-md p-2 bg-[#18042A] text-white placeholder-gray-400"
+                  className="w-full border border-[#701CC0]/40 rounded-lg p-3 bg-[#1F0A33] text-white placeholder-gray-400"
                   placeholder="Enter your website"
                 />
                 {errors.website && <p className="text-red-500 text-sm">{errors.website}</p>}
               </div>
               <div>
-                <label htmlFor="socialMedia" className={`block text-sm font-medium ${bricolage.className}`}>
+                <label htmlFor="socialMedia" className={`block text-sm font-medium text-gray-200 mb-1 ${inter.className}`}>
                   Social Media
                 </label>
                 <input
@@ -186,19 +186,19 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                   id="socialMedia"
                   value={formData.socialMedia}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-md p-2 bg-[#18042A] text-white placeholder-gray-400"
+                  className="w-full border border-[#701CC0]/40 rounded-lg p-3 bg-[#1F0A33] text-white placeholder-gray-400"
                   placeholder="Enter your social media links"
                 />
               </div>
               <div>
-                <label htmlFor="monthlyRevenue" className={`block text-sm font-medium ${bricolage.className}`}>
+                <label htmlFor="monthlyRevenue" className={`block text-sm font-medium text-gray-200 mb-1 ${inter.className}`}>
                   What&apos;s your current monthly revenue? <span className="text-red-500">*</span>
                 </label>
                 <select
                   id="monthlyRevenue"
                   value={formData.monthlyRevenue}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-md p-2 bg-[#18042A] text-white"
+                  className="w-full border border-[#701CC0]/40 rounded-lg p-3 bg-[#1F0A33] text-white"
                 >
                   <option value="">Select your monthly revenue</option>
                   <option value="$10k - $25k">$10k - $25k per month</option>
@@ -211,7 +211,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                 {errors.monthlyRevenue && <p className="text-red-500 text-sm">{errors.monthlyRevenue}</p>}
               </div>
               <div>
-                <label htmlFor="desiredRevenue" className={`block text-sm font-medium ${bricolage.className}`}>
+                <label htmlFor="desiredRevenue" className={`block text-sm font-medium text-gray-200 mb-1 ${inter.className}`}>
                   What&apos;s your desired monthly revenue in 12 months? <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -219,7 +219,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                   id="desiredRevenue"
                   value={formData.desiredRevenue}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-md p-2 bg-[#18042A] text-white placeholder-gray-400"
+                  className="w-full border border-[#701CC0]/40 rounded-lg p-3 bg-[#1F0A33] text-white placeholder-gray-400"
                   placeholder="Enter your desired revenue"
                 />
                 {errors.desiredRevenue && <p className="text-red-500 text-sm">{errors.desiredRevenue}</p>}
@@ -227,14 +227,14 @@ export function Modal({ isOpen, onClose }: ModalProps) {
               <div className="flex justify-between mt-6">
                 <motion.button
                   type="button"
-                  className="px-4 py-2 bg-gray-300 text-black rounded-md shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-transform duration-300 hover:scale-105"
+                  className="px-4 py-2 bg-transparent text-white rounded-lg border border-white/20 hover:bg-white/10 transform transition-transform duration-300"
                   onClick={handlePreviousStep}
                 >
                   Previous
                 </motion.button>
                 <motion.button
                   type="button"
-                  className="px-4 py-2 bg-[#701CC0] text-white rounded-md shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-transform duration-300 hover:scale-105"
+                  className="px-4 py-2 bg-[#701CC0] text-white rounded-lg shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-transform duration-300 hover:scale-105"
                   onClick={handleNextStep}
                 >
                   Next
@@ -245,7 +245,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
           {currentStep === 3 && (
             <>
               <div>
-                <label htmlFor="startTimeline" className={`block text-sm font-medium ${bricolage.className}`}>
+                <label htmlFor="startTimeline" className={`block text-sm font-medium text-gray-200 mb-1 ${inter.className}`}>
                   If you&apos;re accepted, how soon can you get started?
                 </label>
                 <input
@@ -253,57 +253,57 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                   id="startTimeline"
                   value={formData.startTimeline}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-md p-2 bg-[#18042A] text-white placeholder-gray-400"
+                  className="w-full border border-[#701CC0]/40 rounded-lg p-3 bg-[#1F0A33] text-white placeholder-gray-400"
                   placeholder="Enter your timeline"
                 />
               </div>
               <div>
-                <label htmlFor="agencyExperience" className={`block text-sm font-medium ${bricolage.className}`}>
+                <label htmlFor="agencyExperience" className={`block text-sm font-medium text-gray-200 mb-1 ${inter.className}`}>
                   Have you ever worked with an agency before? (If yes, what was your experience?)
                 </label>
                 <textarea
                   id="agencyExperience"
                   value={formData.agencyExperience}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-md p-2 bg-[#18042A] text-white placeholder-gray-400"
+                  className="w-full border border-[#701CC0]/40 rounded-lg p-3 bg-[#1F0A33] text-white placeholder-gray-400"
                   placeholder="Describe your experience"
                 />
               </div>
               <div>
-                <label htmlFor="uniqueTraits" className={`block text-sm font-medium ${bricolage.className}`}>
+                <label htmlFor="uniqueTraits" className={`block text-sm font-medium text-gray-200 mb-1 ${inter.className}`}>
                   What sets you apart from other applicants wanting to work with us?
                 </label>
                 <textarea
                   id="uniqueTraits"
                   value={formData.uniqueTraits}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-md p-2 bg-[#18042A] text-white placeholder-gray-400"
+                  className="w-full border border-[#701CC0]/40 rounded-lg p-3 bg-[#1F0A33] text-white placeholder-gray-400"
                   placeholder="Describe your unique traits"
                 />
               </div>
               <div>
-                <label htmlFor="businessIssues" className={`block text-sm font-medium ${bricolage.className}`}>
+                <label htmlFor="businessIssues" className={`block text-sm font-medium text-gray-200 mb-1 ${inter.className}`}>
                   What are the biggest issues in your industry right now?
                 </label>
                 <textarea
                   id="businessIssues"
                   value={formData.businessIssues}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-md p-2 bg-[#18042A] text-white placeholder-gray-400"
+                  className="w-full border border-[#701CC0]/40 rounded-lg p-3 bg-[#1F0A33] text-white placeholder-gray-400"
                   placeholder="Describe the issues in your industry"
                 />
               </div>
               <div className="flex justify-between mt-6">
                 <motion.button
                   type="button"
-                  className="px-4 py-2 bg-gray-300 text-black rounded-md shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-transform duration-300 hover:scale-105"
+                  className="px-4 py-2 bg-transparent text-white rounded-lg border border-white/20 hover:bg-white/10 transform transition-transform duration-300"
                   onClick={handlePreviousStep}
                 >
                   Previous
                 </motion.button>
                 <motion.button
                   type="submit"
-                  className="px-4 py-2 bg-[#701CC0] text-white rounded-md shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-transform duration-300 hover:scale-105"
+                  className="px-4 py-2 bg-[#701CC0] text-white rounded-lg shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-transform duration-300 hover:scale-105"
                 >
                   Submit
                 </motion.button>
@@ -336,7 +336,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                 We will review your information and get back to you shortly.
               </p>
               <motion.button
-                className="mt-6 px-4 py-2 bg-[#701CC0] text-white rounded-md shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-transform duration-300 hover:scale-105"
+                className="mt-6 px-4 py-2 bg-[#701CC0] text-white rounded-lg shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-transform duration-300 hover:scale-105"
                 onClick={onClose}
               >
                 Close
