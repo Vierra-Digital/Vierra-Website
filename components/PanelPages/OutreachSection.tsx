@@ -2,13 +2,14 @@ import React, { useState, useEffect } from "react"
 import { Inter } from "next/font/google"
 import Image from "next/image"
 import { useSession } from "next-auth/react"
+import { RiArrowDropDownLine } from "react-icons/ri"
 const inter = Inter({ subsets: ["latin"] })
 
 const statFields = [
     { key: "attempts", label: "Attempts" },
     { key: "meetings", label: "Meetings Set" },
     { key: "clients", label: "Clients Closed" },
-    { key: "revenue", label: "Revenue($)" }
+    { key: "revenue", label: "Revenue" }
 ];
 
 type CardKey =
@@ -88,7 +89,7 @@ const OutreachSection = () => {
     }
 
     function formatCurrency(num: number) {
-        return `$${num.toLocaleString()}`;
+        return `${num.toLocaleString()}`;
     }
 
     const summary = Object.values(stats).reduce(
@@ -218,15 +219,30 @@ const OutreachSection = () => {
                         >
                             {isUpdating ? "Updating..." : "Update"}
                         </button>
-                        <select
-                            className="border border-[#D1D5DB] rounded-lg px-3 py-2 text-sm bg-white text-black"
-                            value={selectedMonth}
-                            onChange={e => setSelectedMonth(e.target.value)}
-                        >
-                            {months.map(month => (
-                                <option key={month}>{month}</option>
-                            ))}
-                        </select>
+                        <div className="relative">
+                            <select
+                                className="appearance-none bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200 text-sm text-[#6B7280] pr-8 cursor-pointer hover:bg-gray-50"
+                                value={selectedMonth}
+                                onChange={e => setSelectedMonth(e.target.value)}
+                            >
+                                {months.map(month => (
+                                    <option key={month} value={month}>{month}</option>
+                                ))}
+                            </select>
+                            <RiArrowDropDownLine className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
+                        </div>
+                        <div className="relative">
+                            <select
+                                className="appearance-none bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200 text-sm text-[#6B7280] pr-8 cursor-pointer hover:bg-gray-50"
+                                value={now.getFullYear()}
+                                onChange={() => {}}
+                            >
+                                {[now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1].map(year => (
+                                    <option key={year} value={year}>{year} Year Summary</option>
+                                ))}
+                            </select>
+                            <RiArrowDropDownLine className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
+                        </div>
                     </div>
                 </div>
                 {isLoading ? (
@@ -262,13 +278,13 @@ const OutreachSection = () => {
                                     </div>
                                 ))}
                                 <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Attempts to Meetings %</span>
+                                    <span className="text-sm text-[#6B7280]">Attempts To Meetings %</span>
                                     <span className={`text-sm font-bold text-black ${inter.className}`}>
                                         {getPercent(stats.LinkedIn.meetings, stats.LinkedIn.attempts)}
                                     </span>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span className="text-sm text-[#6B7280]">Meetings to Clients %</span>
+                                    <span className="text-sm text-[#6B7280]">Meetings To Clients %</span>
                                     <span className={`text-sm font-bold text-black ${inter.className}`}>
                                         {getPercent(stats.LinkedIn.clients, stats.LinkedIn.meetings)}
                                     </span>
@@ -612,9 +628,9 @@ const OutreachSection = () => {
                     </div>
                 </div>
                 {/* Summary Section */}
-                <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
+                    <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
                     <div className="bg-[#3B82F6] text-white text-center py-3">
-                        <h3 className="font-medium">SUMMARY</h3>
+                        <h3 className="font-medium">MONTHLY SUMMARY</h3>
                     </div>
                     <div className="p-6">
                         <div className="space-y-4">
@@ -631,7 +647,7 @@ const OutreachSection = () => {
                                 <span className={`text-sm font-bold text-black ${inter.className}`}>{formatNumber(summary.clients)}</span>
                             </div>
                             <div className="flex justify-between">
-                                <span className="text-sm text-[#6B7280]">Revenue($)</span>
+                                <span className="text-sm text-[#6B7280]">Revenue</span>
                                 <span className={`text-sm font-bold text-black ${inter.className}`}>{formatCurrency(summary.revenue)}</span>
                             </div>
                             <div className="flex justify-between">
