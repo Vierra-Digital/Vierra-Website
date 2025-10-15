@@ -1,6 +1,13 @@
 /node_modules
 /.pnp
 .env
+/.env.local
+/.env.prod
+/.env.production
+/.env.development
+/.env.backup*
+/.env.*.bak
+db_dumps/
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -24,3 +31,12 @@ yarn-error.log*
 next-env.d.ts
 /lib/generated/prisma
 .env
+todo.txt
+/scripts/create-client.js
+/scripts/generate-env.js
+/scripts/sync-db.js
+/scripts/update-env.js
+/scripts/update-env.js
+/scripts/README.md
+
+

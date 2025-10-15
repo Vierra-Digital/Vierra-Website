@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react"
-import { FiPlus, FiSearch, FiFilter } from 'react-icons/fi'
+import React, { useEffect, useMemo, useState, useRef } from "react"
+import { FiPlus, FiSearch, FiFilter, FiTrash2, FiMoreVertical, FiCheckCircle, FiXCircle } from 'react-icons/fi'
 
 type ClientRow = {
     id: string
@@ -14,15 +14,144 @@ type ClientRow = {
     monthlyRetainer?: number
     clientGoal?: string
     status: string
+    isActive: boolean
+    isExpired: boolean
 }
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
-    const isActive = status === "completed" || status === "in_progress"
-    const label = status === "completed" ? "Active" : status === "in_progress" ? "Active" : "Inactive"
+    // pending (yellow) - session generated but not expired and not completed
+    // completed (green) - session completed
+    // expired/inactive (red) - session expired or manually deactivated
+    
+    let bgColor = "bg-red-100";
+    let textColor = "text-red-700";
+    let label = "Inactive";
+    
+    if (status === "completed") {
+        bgColor = "bg-green-100";
+        textColor = "text-green-700";
+        label = "Active";
+    } else if (status === "pending" || status === "in_progress") {
+        bgColor = "bg-yellow-100";
+        textColor = "text-yellow-700";
+        label = "Pending";
+    }
+    
     return (
-        <span className={`px-3 py-1 rounded-full text-xs ${isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+        <span className={`px-3 py-1 rounded-full text-xs ${bgColor} ${textColor}`}>
             {label}
         </span>
+    )
+}
+
+const ConfirmDeleteModal: React.FC<{
+    isOpen: boolean
+    clientName: string
+    onConfirm: () => void
+    onCancel: () => void
+}> = ({ isOpen, clientName, onConfirm, onCancel }) => {
+    if (!isOpen) return null
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onCancel}>
+            <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                        <FiTrash2 className="w-6 h-6 text-red-600" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-[#111827]">Delete Client</h3>
+                </div>
+                <p className="text-sm text-[#6B7280] mb-6">
+                    Are you sure you want to delete <span className="font-semibold text-[#111827]">{clientName}</span>? 
+                    This action is permanent and cannot be undone. All associated data will be removed.
+                </p>
+                <div className="flex gap-3 justify-end">
+                    <button
+                        onClick={onCancel}
+                        className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm font-medium"
+                    >
+                        Delete Client
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+const ClientActionsMenu: React.FC<{
+    clientId: string
+    clientName: string
+    isActive: boolean
+    onDelete: () => void
+    onToggleStatus: (isActive: boolean) => void
+}> = ({ clientId, clientName, isActive, onDelete, onToggleStatus }) => {
+    const [isOpen, setIsOpen] = useState(false)
+    const menuRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setIsOpen(false)
+            }
+        }
+
+        if (isOpen) {
+            document.addEventListener('mousedown', handleClickOutside)
+            return () => document.removeEventListener('mousedown', handleClickOutside)
+        }
+    }, [isOpen])
+
+    return (
+        <div className="relative" ref={menuRef}>
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                aria-label={`Manage ${clientName}`}
+                className="p-2 rounded hover:bg-gray-100 transition-colors"
+            >
+                <FiMoreVertical className="w-5 h-5 text-[#6B7280]" />
+            </button>
+            {isOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-[#E5E7EB] py-1 z-10">
+                    <button
+                        onClick={() => {
+                            setIsOpen(false)
+                            onToggleStatus(!isActive)
+                        }}
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
+                            isActive ? 'text-orange-600' : 'text-green-600'
+                        }`}
+                    >
+                        {isActive ? (
+                            <>
+                                <FiXCircle className="w-4 h-4" />
+                                Mark Inactive
+                            </>
+                        ) : (
+                            <>
+                                <FiCheckCircle className="w-4 h-4" />
+                                Mark Active
+                            </>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => {
+                            setIsOpen(false)
+                            onDelete()
+                        }}
+                        className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                    >
+                        <FiTrash2 className="w-4 h-4" />
+                        Remove Client
+                    </button>
+                </div>
+            )}
+        </div>
     )
 }
 
@@ -33,23 +162,79 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [currentPage, setCurrentPage] = useState(0)
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+    const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(null)
+    const [deleting, setDeleting] = useState(false)
     const pageSize = 10
 
+    const fetchClients = async () => {
+        try {
+            setLoading(true)
+            const r = await fetch("/api/admin/clients")
+            if (!r.ok) throw new Error(`HTTP ${r.status}`)
+            const data: ClientRow[] = await r.json()
+            setRows(data)
+        } catch (e: any) {
+            setError(e?.message ?? "Failed to load clients")
+        } finally {
+            setLoading(false)
+        }
+    }
+
     useEffect(() => {
-        ;(async () => {
-            try {
-                setLoading(true)
-                const r = await fetch("/api/admin/clients")
-                if (!r.ok) throw new Error(`HTTP ${r.status}`)
-                const data: ClientRow[] = await r.json()
-                setRows(data)
-            } catch (e: any) {
-                setError(e?.message ?? "Failed to load clients")
-            } finally {
-                setLoading(false)
-            }
-        })()
+        fetchClients()
     }, [])
+
+    const handleDeleteClient = async () => {
+        if (!clientToDelete) return
+
+        try {
+            setDeleting(true)
+            const r = await fetch(`/api/admin/deleteClient?clientId=${clientToDelete.id}`, {
+                method: "DELETE",
+            })
+            
+            if (!r.ok) {
+                const data = await r.json()
+                throw new Error(data.message || `HTTP ${r.status}`)
+            }
+
+            // Remove client from local state
+            setRows(prev => prev.filter(client => client.id !== clientToDelete.id))
+            setDeleteModalOpen(false)
+            setClientToDelete(null)
+        } catch (e: any) {
+            setError(e?.message ?? "Failed to delete client")
+        } finally {
+            setDeleting(false)
+        }
+    }
+
+    const openDeleteModal = (client: { id: string; name: string }) => {
+        setClientToDelete(client)
+        setDeleteModalOpen(true)
+    }
+
+    const handleToggleStatus = async (clientId: string, newStatus: boolean) => {
+        try {
+            const r = await fetch("/api/admin/toggleClientStatus", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ clientId, isActive: newStatus }),
+            })
+            
+            if (!r.ok) {
+                const data = await r.json()
+                throw new Error(data.message || `HTTP ${r.status}`)
+            }
+
+            // Refresh the client list to get the updated status from the server
+            // This ensures the status is calculated correctly based on session state
+            await fetchClients()
+        } catch (e: any) {
+            setError(e?.message ?? "Failed to update client status")
+        }
+    }
 
     const columns = useMemo(
         () => [
@@ -130,7 +315,13 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
                                 <td className="px-4 py-4 text-sm">{r.clientGoal || r.adGoal || "—"}</td>
                                 <td className="px-4 py-4 text-sm"><StatusBadge status={r.status} /></td>
                                 <td className="px-4 py-4 text-sm text-[#6B7280]">
-                                    <button aria-label={`Manage ${r.name}`} className="px-2 py-1 rounded hover:bg-white/20">⋯</button>
+                                    <ClientActionsMenu
+                                        clientId={r.id}
+                                        clientName={r.name}
+                                        isActive={r.isActive}
+                                        onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
+                                        onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
+                                    />
                                 </td>
                             </tr>
                         ))}
@@ -168,6 +359,16 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
                     </div>
                 </div>
             )}
+
+            <ConfirmDeleteModal
+                isOpen={deleteModalOpen}
+                clientName={clientToDelete?.name || ""}
+                onConfirm={handleDeleteClient}
+                onCancel={() => {
+                    setDeleteModalOpen(false)
+                    setClientToDelete(null)
+                }}
+            />
         </div>
     )
 }

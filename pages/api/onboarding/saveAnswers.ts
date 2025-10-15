@@ -21,6 +21,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const existingAnswers = (session.answers as any) || {};
     const updatedAnswers = { ...existingAnswers, ...answers };
 
+    // Determine status: completed takes precedence over in_progress
+    let newStatus: string | undefined;
+    if (completed) {
+      newStatus = "completed";
+    } else if (clientAnswers && session.status === "pending") {
+      newStatus = "in_progress";
+    }
+
     await prisma.onboardingSession.update({
       where: { id: token },
       data: {
@@ -28,10 +36,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         lastUpdatedAt: new Date(),
         ...(completed && {
           submittedAt: new Date(),
-          status: "completed"
         }),
-        ...(clientAnswers && {
-          status: "in_progress"
+        ...(newStatus && {
+          status: newStatus
         })
       },
     });
