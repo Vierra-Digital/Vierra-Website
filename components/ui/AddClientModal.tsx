@@ -22,8 +22,6 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   const [emailSending, setEmailSending] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -123,36 +121,10 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
     }
   }, [step, sessionLink, clientData.clientEmail, origin, clientData.clientName, clientData.businessName]);
 
-  const handleFinish = async () => {
-    setLoading(true);
-    try {
-      // Combine all form data
-      const allFormData = {
-        ...clientData,
-      };
-
-      const response = await fetch("/api/onboarding/saveAnswers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token: sessionLink?.split("/").pop() || "",
-          answers: allFormData,
-          completed: true,
-        }),
-      });
-
-      if (response.ok) {
-        setShowSuccessModal(true);
-      } else {
-        console.error("Failed to save answers");
-        setShowSuccessModal(true); 
-      }
-    } catch (err) {
-      console.error("Error saving answers:", err);
-      setShowSuccessModal(true); 
-    } finally {
-      setLoading(false);
-    }
+  const handleFinish = () => {
+    // Just close the modal - the client will complete the session themselves
+    // by filling out the onboarding form via the link we sent them
+    onClose();
   };
 
   if (!isOpen) return null;
@@ -311,33 +283,13 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
               <button
                 className={`rounded-md bg-green-500 px-4 py-2 text-white shadow transition-transform hover:scale-105 ${Bricolage_Grotesque.className}`}
                 onClick={handleFinish}
-                disabled={loading}
               >
-                {loading ? "Saving..." : "Finish and Save"}
+                Done
               </button>
             </div>
           </>
         )}
 
-        {showSuccessModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
-            <div className="rounded-lg bg-white p-6 text-center">
-              <h3 className="mb-4 text-lg font-semibold">Success!</h3>
-              <p className="mb-4 text-sm text-gray-700">
-                Client information and session link have been successfully saved.
-              </p>
-              <button
-                className="rounded-md bg-green-500 px-4 py-2 text-white transition-transform hover:scale-105"
-                onClick={() => {
-                  setShowSuccessModal(false);
-                  onClose();
-                }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

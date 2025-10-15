@@ -23,6 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       orderBy: { createdAt: "desc" },
     });
 
+    const now = new Date();
     const rows = clients.map((c) => {
       const latest = c.onboardingSessions?.[0] ?? null;
       const answers: any = (latest?.answers as any) ?? {};
@@ -32,7 +33,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const targetAudience = answers.targetAudience ?? "";
       const adGoal = answers.socialMediaGoals ?? "N/A";
       const brandTone = answers.brandTone ?? "N/A";
-      const status = latest?.status ?? "pending";
+      
+      // Determine display status based on session state and expiration
+      let displayStatus: string = latest?.status ?? "pending";
+      const isExpired = latest?.expiresAt && now > latest.expiresAt;
+      
+      // If session is pending/in_progress but expired and not completed, mark as inactive
+      if (isExpired && displayStatus !== "completed") {
+        displayStatus = "expired";
+      }
+      
+      // Override with client's isActive flag if manually set to inactive
+      if (!c.isActive) {
+        displayStatus = "inactive";
+      }
 
       return {
         id: c.id,
@@ -43,7 +57,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         targetAudience,
         adGoal,
         brandTone,
-        status,
+        status: displayStatus,
+        isActive: c.isActive,
+        isExpired: isExpired || false,
       };
     });
 

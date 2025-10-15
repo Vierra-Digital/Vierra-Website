@@ -4,7 +4,7 @@ import { Inter } from "next/font/google"
 import Image from "next/image"
 import SignPdfModal from "@/components/ui/SignPdfModal"
 import Link from "next/link"
-import { FiLogOut } from "react-icons/fi"
+import { FiLogOut, FiShield } from "react-icons/fi"
 import { IoIosNotificationsOutline } from "react-icons/io";
 import { AiOutlineAppstore } from "react-icons/ai";
 import { PiUsersThree, PiCalculator } from "react-icons/pi";
@@ -12,6 +12,7 @@ import { BsPeople } from "react-icons/bs";
 import { CiSearch } from "react-icons/ci";
 import { RiArrowDropDownLine, RiMoneyDollarBoxLine, RiFolder3Line } from "react-icons/ri";
 import { FaRegFilePdf } from "react-icons/fa6";
+import { HiOutlineDocumentText } from "react-icons/hi";
 import { HiGlobeAlt } from "react-icons/hi2";
 import { useSession, signOut } from "next-auth/react"
 import UserSettingsPage from "@/components/UserSettingsPage"
@@ -27,6 +28,8 @@ import TeamPanelSection from "@/components/PanelPages/TeamPanelSection"
 import LtvCalculatorSection from "@/components/PanelPages/LTVCalculatorSection"
 import OutreachSection from "@/components/PanelPages/OutreachSection"
 import ProjectManagement from "../components/PanelPages/ProjectManagement"
+import BlogEditorSection from "@/components/PanelPages/BlogEditorSection"
+import AdminEditorSection from "@/components/PanelPages/AdminEditorSection"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -137,6 +140,26 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               <PiCalculator />
               <span className={`text-xs ${inter.className}`}>
                 LTV Calculator
+              </span>
+            </div>
+            <div
+              id="panel-nav-item"
+              onClick={() => { setCurrentSection(7); setShowSettings(false); setIsSidebarOpen(false)}}
+              className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 7 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+            >
+              <HiOutlineDocumentText />
+              <span className={`text-xs ${inter.className}`}>
+                Blog Editor
+              </span>
+            </div>
+            <div
+              id="panel-nav-item"
+              onClick={() => { setCurrentSection(8); setShowSettings(false); setIsSidebarOpen(false)}}
+              className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 8 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+            >
+              <FiShield />
+              <span className={`text-xs ${inter.className}`}>
+                Admin Editor
               </span>
             </div>
             {/* Logout moved to bottom of sidebar */}
@@ -251,6 +274,8 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                   {currentSection === 4 && <LtvCalculatorSection />}
                   {currentSection === 5 && <OutreachSection />}
                   {currentSection === 6 && <ProjectManagement />}
+                  {currentSection === 7 && <BlogEditorSection />}
+                  {currentSection === 8 && <AdminEditorSection />}
                 </>
               )}
 
