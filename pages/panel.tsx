@@ -4,7 +4,7 @@ import { Inter } from "next/font/google"
 import Image from "next/image"
 import SignPdfModal from "@/components/ui/SignPdfModal"
 import Link from "next/link"
-import { FiLogOut, FiUsers, FiShield } from "react-icons/fi"
+import { FiLogOut, FiShield } from "react-icons/fi"
 import { IoIosNotificationsOutline } from "react-icons/io";
 import { AiOutlineAppstore } from "react-icons/ai";
 import { PiUsersThree, PiCalculator } from "react-icons/pi";
