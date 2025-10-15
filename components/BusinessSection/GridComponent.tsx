@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo, useCallback } from "react"
 import Image from "next/image"
 import { motion } from "framer-motion"
 
@@ -11,20 +11,7 @@ const gridLayout = [
   [false, true, false, false, false, false],
 ]
 
-{
-  /*
 
-const titlesMap = {
-  "2-2": "Instagram",
-  "3-0": "Facebook",
-  "1-4": "GoogleAnalytics",
-  "2-5": "SEO",
-  "4-2": "LinkedIn",
-  "4-4": "Email",
-};
-
-*/
-}
 
 const animationSets = [
   {
@@ -84,12 +71,48 @@ function GridComponent() {
     "drawing" | "showing" | "erasing" | "idle"
   >("idle")
   const [activeNodes, setActiveNodes] = useState<string[]>([])
+  const [iconCursor, setIconCursor] = useState(0)
+  const [cellIconMap, setCellIconMap] = useState<Record<string, number>>({})
+  const usedIconsRef = React.useRef<Set<number>>(new Set())
+
+  type IconEntry = { src: string; alt: string; gradient: string }
+  const socialIcons = useMemo<IconEntry[]>(() => [
+    { src: "/assets/Socials/Facebook.png", alt: "Facebook", gradient: "linear-gradient(135deg,#EAF2FF,#F5E9FF)" },
+    { src: "/assets/Socials/Instagram.png", alt: "Instagram", gradient: "linear-gradient(135deg,#FFE6F2,#FFF0E6)" },
+    { src: "/assets/Socials/LinkedIn.png", alt: "LinkedIn", gradient: "linear-gradient(135deg,#E6F0FF,#EAF7FF)" },
+    { src: "/assets/Socials/GoogleAnalytics.png", alt: "Google Analytics", gradient: "linear-gradient(135deg,#FFF4E6,#FFF9E6)" },
+    { src: "/assets/Socials/GoogleBusiness.png", alt: "Google Business", gradient: "linear-gradient(135deg,#E6F3FF,#EAF0FF)" },
+    { src: "/assets/Socials/Email.png", alt: "Email", gradient: "linear-gradient(135deg,#EAFBF1,#F0FFFB)" },
+    { src: "/assets/Socials/SEO.png", alt: "SEO", gradient: "linear-gradient(135deg,#F2F6FF,#F6F2FF)" },
+    { src: "/assets/Socials/TikTok.png", alt: "TikTok", gradient: "linear-gradient(135deg,#FDECF0,#EAFBFB)" },
+    { src: "/assets/Socials/Twitter.png", alt: "Twitter", gradient: "linear-gradient(135deg,#E7F6FF,#F0FBFF)" },
+    { src: "/assets/Socials/YouTube.png", alt: "YouTube", gradient: "linear-gradient(135deg,#FFECEC,#FFF6F6)" },
+    { src: "/assets/Socials/SnapChat.png", alt: "SnapChat", gradient: "linear-gradient(135deg,#FFFDE6,#FFFCEB)" },
+    { src: "/assets/Socials/Discord.png", alt: "Discord", gradient: "linear-gradient(135deg,#EEF0FF,#F2EFFF)" },
+    { src: "/assets/Socials/GoHighLevel.png", alt: "GoHighLevel", gradient: "linear-gradient(135deg,#EAF8FF,#EFFFF7)" },
+  ], [])
+
+  const getIconIndexByAlt = useCallback((alt: string) => socialIcons.findIndex((i) => i.alt === alt), [socialIcons])
+
+  const assignIconToKey = useCallback((key: string) => {
+    setCellIconMap((prev) => {
+      if (prev[key] !== undefined) return prev
+      let probe = iconCursor
+      const total = socialIcons.length
+      while (usedIconsRef.current.has(probe % total) && usedIconsRef.current.size < total) {
+        probe++
+      }
+      const assigned = probe % total
+      usedIconsRef.current.add(assigned)
+      return { ...prev, [key]: assigned }
+    })
+    setIconCursor((c) => (c + 1) % socialIcons.length)
+  }, [iconCursor, socialIcons])
 
   useEffect(() => {
     let targetTimer: NodeJS.Timeout
     let eraseTimer: NodeJS.Timeout
     let resetTimer: NodeJS.Timeout
-    let dataFlowInterval: NodeJS.Timer
     let intervalTimer: ReturnType<typeof setInterval>
 
     const runAnimation = () => {
@@ -98,66 +121,82 @@ function GridComponent() {
       setIsAnimating(true)
       setAnimationPhase("drawing")
       setActiveNodes([currentSet.source])
+      assignIconToKey(currentSet.source)
 
-      // Draw the main lines
       targetTimer = setTimeout(() => {
         setActiveNodes([currentSet.source, ...currentSet.targets])
+        if (currentSet.source === "2-2" && currentSet.targets.length >= 2) {
+          const discordIdx = getIconIndexByAlt("Discord")
+          const ghlIdx = getIconIndexByAlt("GoHighLevel")
+          setCellIconMap((prev) => {
+            const next = { ...prev }
+            if (discordIdx >= 0) next[currentSet.targets[0]] = discordIdx
+            if (ghlIdx >= 0) next[currentSet.targets[1]] = ghlIdx
+            return next
+          })
+          if (discordIdx >= 0) usedIconsRef.current.add(discordIdx)
+          if (ghlIdx >= 0) usedIconsRef.current.add(ghlIdx)
+        } else {
+          currentSet.targets.forEach(assignIconToKey)
+        }
         setAnimationPhase("showing")
-
-        // Start data flow animation
-        let progress = 0
-        dataFlowInterval = setInterval(() => {
-          progress = (progress + 0.02) % 1
-        }, 25)
       }, 500)
 
       eraseTimer = setTimeout(() => {
         setAnimationPhase("erasing")
-      }, 2000)
+      }, 3500)
 
       resetTimer = setTimeout(() => {
         setIsAnimating(false)
         setAnimationPhase("idle")
         setActiveNodes([])
-        setActiveSet((prev) => (prev + 1) % animationSets.length)
-      }, 2500)
+        setActiveSet((prev) => {
+          const next = (prev + 1) % animationSets.length
+          if (next === 0) {
+            // one full runthrough completed; reset for next pass
+            setCellIconMap({})
+            setIconCursor(0)
+            usedIconsRef.current.clear()
+          }
+          return next
+        })
+      }, 4000)
     }
 
     const startAnimationLoop = () => {
       runAnimation()
-      intervalTimer = setInterval(runAnimation, 3000)
+      intervalTimer = setInterval(runAnimation, 4500)
     }
 
     const stopAnimationLoop = () => {
       clearTimeout(targetTimer)
       clearTimeout(eraseTimer)
       clearTimeout(resetTimer)
-      clearInterval(dataFlowInterval as NodeJS.Timeout)
       clearInterval(intervalTimer)
     }
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        stopAnimationLoop() // Clear all timers and intervals
-        setActiveSet(0) // Reset to the first animation set
+        stopAnimationLoop()
+        setActiveSet(0)
         setAnimationPhase("idle")
         setActiveNodes([])
         setIsAnimating(false)
-        startAnimationLoop() // Restart the animation loop
+        startAnimationLoop()
       } else {
-        stopAnimationLoop() // Stop the animation when the tab is hidden
+        stopAnimationLoop()
       }
     }
 
     document.addEventListener("visibilitychange", handleVisibilityChange)
 
-    startAnimationLoop() // Start the animation loop initially
+    startAnimationLoop()
 
     return () => {
-      stopAnimationLoop() // Cleanup on component unmount
+      stopAnimationLoop()
       document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
-  }, [activeSet])
+  }, [activeSet, assignIconToKey, getIconIndexByAlt])
 
   const isNodeActive = (key: string) => {
     return activeNodes.includes(key)
@@ -222,116 +261,12 @@ function GridComponent() {
       },
     },
   }
-
-  // Renders SVG
   const renderSVG = (key: string, isActive: boolean) => {
     switch (key) {
-      /*
-      case "0-2": // Tax
-        return (
-          <svg
-            className={`${svgSize}`}
-            viewBox="0 0 40 40"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            stroke={strokeColor}
-          >
-            <path
-              d="M19.049.00995851C22.4341.325767 25.7367 1.28014 28.7794 2.83046c3.0426 1.55031 5.756 3.66123 8.0012 6.2142.9142 1.03954.6576 2.61624-.4624 3.42994L20.5259 23.9483c-1.6569 1.2039-3.98.0202-3.98-2.0279V2.40011c0-1.38439 1.1247-2.518749 2.5031-2.39015149z"
-              fill={isActive ? "url(#product-icon-tax-Sticky-a)" : "none"}
-            ></path>
-            <circle
-              cx="17.6666"
-              cy="24.3334"
-              transform="rotate(-90 17.6666 24.3334)"
-              fill={isActive ? "#96F" : "none"}
-              r="15.6666"
-            ></circle>
-            <path
-              d="M31.099 16.2665l-10.5731 7.6818c-1.6569 1.2038-3.98.0201-3.98-2.028V8.70618c.37-.02614.7436-.03943 1.1202-.03943 5.7019 0 10.6924 3.04605 13.4329 7.59975z"
-              fill={isActive ? "url(#product-icon-tax-Sticky-b)" : "none"}
-            ></path>
-            <defs>
-              <linearGradient
-                id="product-icon-tax-Sticky-a"
-                x1="27.6927"
-                y1="-.106484"
-                x2="27.6927"
-                y2="20.5734"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop offset=".23665" stopColor="#FF5191"></stop>
-                <stop offset="1" stopColor="#E03071"></stop>
-              </linearGradient>
-              <linearGradient
-                id="product-icon-tax-Sticky-b"
-                x1="23.3061"
-                y1="24.96"
-                x2="18.8407"
-                y2="7.43349"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop stopColor="#6E00F5"></stop>
-                <stop offset="1" stopColor="#9860FE"></stop>
-              </linearGradient>
-            </defs>
-          </svg>
-        );
-
-      case "3-3": // Radar
-        return (
-          <svg
-            className={`${svgSize}`}
-            viewBox="0 0 40 40"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            stroke={strokeColor}
-          >
-            <path
-              d="M24.87 4.46a1.26 1.26 0 0 0-1.8.2l-4.6 5.82L3.42 29.45c.27.22.54.45.78.7a9.42 9.42 0 0 1 1.13 1.32l.1.13a9.15 9.15 0 0 1 .8 1.43c.29.62.5 1.28.65 1.95a2.5 2.5 0 0 0 2.45 1.93H38.7a1.27 1.27 0 0 0 1.27-1.3 42.43 42.43 0 0 0-15.1-31.15z"
-              fill={isActive ? "#9A66FF" : "none"}
-            ></path>
-            <path
-              d="M27.8 21.98A33.82 33.82 0 0 0 5.95 4.28a1.29 1.29 0 0 0-1.56.98L.1 25.4a2.54 2.54 0 0 0 1.4 2.88 9.48 9.48 0 0 1 2.72 1.87l.17.17c.35.36.67.74.96 1.15l.1.13a9.15 9.15 0 0 1 .8 1.43l20.94-9.31a1.29 1.29 0 0 0 .62-1.74z"
-              fill={isActive ? "url(#product-icon-radar-Sticky-a)" : "none"}
-            ></path>
-            <path
-              d="M18.46 10.48l.47.38a33.82 33.82 0 0 1 8.87 11.12 1.29 1.29 0 0 1-.62 1.74L6.25 33.03a9.15 9.15 0 0 0-.8-1.43l-.1-.13-.23-.3c-.23-.3-.47-.58-.74-.85a9.7 9.7 0 0 0-.95-.86l15.03-18.98z"
-              fill={isActive ? "url(#product-icon-radar-Sticky-b)" : "none"}
-            ></path>
-            <defs>
-              <linearGradient
-                id="product-icon-radar-Sticky-a"
-                x1="13.98"
-                y1="4.24"
-                x2="13.98"
-                y2="33.03"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop offset=".26" stopColor="#FF5091"></stop>
-                <stop offset=".91" stopColor="#E03071"></stop>
-              </linearGradient>
-              <linearGradient
-                id="product-icon-radar-Sticky-b"
-                x1="15.68"
-                y1="10.48"
-                x2="15.68"
-                y2="33.03"
-                gradientUnits="userSpaceOnUse"
-              >
-                <stop stopColor="#6E00F5"></stop>
-                <stop offset="1" stopColor="#9860FE"></stop>
-              </linearGradient>
-            </defs>
-          </svg>
-        );
-        */
-      case "3-0": // Facebook
+      case "3-0":
         return (
           <div
-            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${
-              isActive ? "border-transparent" : "border-[#D9DEDD]"
-            } border flex items-center justify-center`}
+            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}
           >
             {isActive && (
               <Image
@@ -344,12 +279,10 @@ function GridComponent() {
             )}
           </div>
         )
-      case "1-4": // Google Analytics
+      case "1-4":
         return (
           <div
-            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${
-              isActive ? "border-transparent" : "border-[#D9DEDD]"
-            } border flex items-center justify-center`}
+            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}
           >
             {isActive && (
               <Image
@@ -362,12 +295,10 @@ function GridComponent() {
             )}
           </div>
         )
-      case "2-2": // Instagram
+      case "2-2":
         return (
           <div
-            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${
-              isActive ? "border-transparent" : "border-[#D9DEDD]"
-            } border flex items-center justify-center`}
+            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}
           >
             {isActive && (
               <Image
@@ -381,12 +312,10 @@ function GridComponent() {
           </div>
         )
 
-      case "2-5": //SEO
+      case "2-5":
         return (
           <div
-            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${
-              isActive ? "border-transparent" : "border-[#D9DEDD]"
-            } border flex items-center justify-center`}
+            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}
           >
             {isActive && (
               <Image
@@ -399,7 +328,55 @@ function GridComponent() {
             )}
           </div>
         )
-      case "4-2": // LinkedIn
+      case "0-0":
+        return (
+          <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
+            {isActive && (
+              <Image src="/assets/Socials/TikTok.png" alt="TikTok" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+            )}
+          </div>
+        )
+      case "0-5":
+        return (
+          <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
+            {isActive && (
+              <Image src="/assets/Socials/Twitter.png" alt="Twitter" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+            )}
+          </div>
+        )
+      case "5-0":
+        return (
+          <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
+            {isActive && (
+              <Image src="/assets/Socials/YouTube.png" alt="YouTube" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+            )}
+          </div>
+        )
+      case "1-0":
+        return (
+          <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
+            {isActive && (
+              <Image src="/assets/Socials/SnapChat.png" alt="SnapChat" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+            )}
+          </div>
+        )
+      case "1-5":
+        return (
+          <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
+            {isActive && (
+              <Image src="/assets/Socials/Discord.png" alt="Discord" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+            )}
+          </div>
+        )
+      case "5-5":
+        return (
+          <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
+            {isActive && (
+              <Image src="/assets/Socials/GoogleBusiness.png" alt="Google Business" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+            )}
+          </div>
+        )
+      case "4-2":
         return (
           <div
             className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${
@@ -417,7 +394,7 @@ function GridComponent() {
             )}
           </div>
         )
-      case "4-4": // Email
+      case "4-4":
         return (
           <div
             className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${
@@ -458,14 +435,50 @@ function GridComponent() {
       <motion.div
         key={cellKey}
         aria-label={`Grid cell ${cellKey}`}
-        className={`w-full h-full flex flex-col items-center justify-center border border-[#D9DEDD] rounded-lg ${
-          isActive && "shadow-md"
-        }`}
+        className={`w-full h-full flex flex-col items-center justify-center rounded-lg ${isActive ? "shadow-md" : ""}`}
+        style={{
+          background:
+            isActive && cellKey === "3-0"
+              ? "linear-gradient(135deg,#EAF2FF,#F5E9FF)"
+              : isActive && cellKey === "2-2"
+              ? "linear-gradient(135deg,#FFE6F2,#FFF0E6)"
+              : isActive && cellKey === "4-2"
+              ? "linear-gradient(135deg,#E6F0FF,#EAF7FF)"
+              : isActive && cellKey === "1-4"
+              ? "linear-gradient(135deg,#FFF4E6,#FFF9E6)"
+              : isActive && cellKey === "5-5"
+              ? "linear-gradient(135deg,#E6F3FF,#EAF0FF)"
+              : isActive && cellKey === "4-4"
+              ? "linear-gradient(135deg,#EAFBF1,#F0FFFB)"
+              : isActive && cellKey === "2-5"
+              ? "linear-gradient(135deg,#F2F6FF,#F6F2FF)"
+              : isActive && cellKey === "0-0"
+              ? "linear-gradient(135deg,#FDECF0,#EAFBFB)"
+              : isActive && cellKey === "0-5"
+              ? "linear-gradient(135deg,#E7F6FF,#F0FBFF)"
+              : isActive && cellKey === "5-0"
+              ? "linear-gradient(135deg,#FFECEC,#FFF6F6)"
+              : isActive && cellKey === "1-0"
+              ? "linear-gradient(135deg,#FFFDE6,#FFFCEB)"
+              : isActive && cellKey === "1-5"
+              ? "linear-gradient(135deg,#EEF0FF,#F2EFFF)"
+              : isActive && cellKey === "3-5"
+              ? "linear-gradient(135deg,#EAF8FF,#EFFFF7)"
+              : "#F7F7F8",
+        }}
         variants={iconVariants}
         initial={false} // Prevent re-initialization
         animate={isActive ? "active" : "inactive"} // Only change when `isActive` changes
       >
-        {renderSVG(cellKey, isActive)}
+        {renderSVG(cellKey, isActive) || (isActive && cellIconMap[cellKey] !== undefined ? (
+          <Image
+            src={socialIcons[cellIconMap[cellKey]].src}
+            alt={socialIcons[cellIconMap[cellKey]].alt}
+            width={56}
+            height={56}
+            className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
+          />
+        ) : null)}
         {/*
         {isActive && (
           <p
