@@ -138,15 +138,12 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
         setFilteredTrendingPosts(trendingPosts);
     }, [latestPosts, trendingPosts]);
 
-    useEffect(() => {
-        router.push("/blog")
-
-    }, [router]);
+    // Removed self-redirect to prevent infinite reloads and repeated data fetches
 
     return (
         <>
             <Head>
-                <title>Vierra | Home</title>
+                <title>Vierra | Blog</title>
             </Head>
             <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden z-0">
                 {Array.from({ length: 7 }).map((_, index) => (
@@ -271,7 +268,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                 <div
                                     className="w-full lg:flex-[0.5] relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
                                     style={{
-                                        backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${filteredLatestPosts[0] ? filteredLatestPosts[0].image_url : ""})`,
+                                        backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(/assets/meta-banner.png)`,
                                         backgroundSize: 'cover',
                                         backgroundPosition: 'center',
                                         backgroundRepeat: 'no-repeat'
@@ -317,7 +314,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                         <div
                                             className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
                                             style={{
-                                                backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image_url})`,
+                                                backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(/assets/meta-banner.png)`,
                                                 backgroundSize: 'cover',
                                                 backgroundPosition: 'center',
                                                 backgroundRepeat: 'no-repeat'
@@ -355,7 +352,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                         <div
                                             className="relative aspect-square rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
                                             style={{
-                                                backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${blog.image_url})`,
+                                                backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(/assets/meta-banner.png)`,
                                                 backgroundSize: 'cover',
                                                 backgroundPosition: 'center',
                                                 backgroundRepeat: 'no-repeat'
@@ -415,9 +412,9 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                 {filteredTrendingPosts[0] ? filteredTrendingPosts.slice(0, 6).map((blog) => (
                                     <Link key={blog.id} href={`/blog/${blog.slug}`} passHref>
                                         <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
-                                            <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
-                                                <Image alt={blog.title ?? "blog image"} src={blog.image_url ?? "/assets/vierra-logo.png"} width={80} height={80} className="object-cover" />
-                                            </div>
+                                                <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
+                                                <Image alt={blog.title ?? "blog image"} src={(blog.image_url && (blog.image_url.startsWith('http://') || blog.image_url.startsWith('https://'))) ? "/assets/meta-banner.png" : (blog.image_url || "/assets/meta-banner.png")} width={80} height={80} className="object-cover" />
+                                                </div>
                                             <div id="editor-blog-text-container" className="flex flex-col justify-center">
                                                 <span className={`text-sm md:text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
                                                     {blog.title}
@@ -458,7 +455,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                         <div
                                             className="w-full lg:flex-[0.5] relative h-[453px] rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
                                             style={{
-                                                backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${filteredTrendingPosts[0].image_url})`,
+                                                backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(/assets/meta-banner.png)`,
                                                 backgroundSize: 'cover',
                                                 backgroundPosition: 'center',
                                                 backgroundRepeat: 'no-repeat'
@@ -492,7 +489,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
                                     <div
                                         className="w-full lg:flex-[0.5] relative h-[453px] rounded-2xl overflow-hidden group cursor-pointer transition-transform duration-300"
                                         style={{
-                                            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(${filteredTrendingPosts[0] ? filteredTrendingPosts[0].image_url : ""})`,
+                                            backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.6)), url(/assets/meta-banner.png)`,
                                             backgroundSize: 'cover',
                                             backgroundPosition: 'center',
                                             backgroundRepeat: 'no-repeat'
@@ -526,7 +523,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
 
                                                 <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
                                                     <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
-                                                        <Image alt={blog.title ?? "blog image"} src={blog.image_url ?? "/assets/vierra-logo.png"} width={80} height={80} className="object-cover" />
+                                                        <Image alt={blog.title ?? "blog image"} src={(blog.image_url && (blog.image_url.startsWith('http://') || blog.image_url.startsWith('https://'))) ? "/assets/meta-banner.png" : (blog.image_url || "/assets/meta-banner.png")} width={80} height={80} className="object-cover" />
                                                     </div>
                                                 <div id="editor-blog-text-container" className="flex flex-col justify-center">
                                                     <span className={`text-sm md:text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
@@ -553,7 +550,7 @@ const BlogPage = ({ latestPosts, trendingPosts }: Props) => {
 
                                             <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
                                                 <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0">
-                                                    <Image alt={blog.title ?? "blog image"} src={blog.image_url ?? "/assets/vierra-logo.png"} width={80} height={80} className="object-cover" />
+                                                    <Image alt={blog.title ?? "blog image"} src={(blog.image_url && (blog.image_url.startsWith('http://') || blog.image_url.startsWith('https://'))) ? "/assets/meta-banner.png" : (blog.image_url || "/assets/meta-banner.png")} width={80} height={80} className="object-cover" />
                                                 </div>
                                                 <div id="editor-blog-text-container" className="flex flex-col justify-center">
                                                     <span className={`text-sm md:text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>

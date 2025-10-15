@@ -157,7 +157,7 @@ const BlogViewPage = ({
                 </main>
                 <div id="view-section" className="bg-[#F3F3F3] px-8 lg:px-20">
                     <div id="heading-image" className="w-full flex flex-col justify-center items-center py-20">
-                        <Image alt={title ?? 'blog image'} src={image_url ?? '/assets/vierra-logo.png'} width={1200} height={500} className="min-w-full lg:min-w-[75%] max-h-[500px] aspect-auto object-cover" />
+                        <Image alt={title ?? 'blog image'} src={'/assets/meta-banner.png'} width={1200} height={500} className="min-w-full lg:min-w-[75%] max-h-[500px] aspect-auto object-cover" />
                     </div>
                     <div id="blog-text" className="lg:px-32 flex flex-col pb-20">
                         <div id="blog-text-heading">
