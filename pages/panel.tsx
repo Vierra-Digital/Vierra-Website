@@ -10,7 +10,7 @@ import { AiOutlineAppstore } from "react-icons/ai";
 import { PiUsersThree, PiCalculator } from "react-icons/pi";
 import { BsPeople } from "react-icons/bs";
 import { CiSearch } from "react-icons/ci";
-import { RiArrowDropDownLine, RiMoneyDollarBoxLine, RiFolder3Line } from "react-icons/ri";
+import { RiArrowDropDownLine, RiFolder3Line } from "react-icons/ri";
 import { FaRegFilePdf } from "react-icons/fa6";
 import { HiOutlineDocumentText } from "react-icons/hi";
 import { HiGlobeAlt } from "react-icons/hi2";
@@ -23,7 +23,6 @@ import { authOptions } from "@/pages/api/auth/[...nextauth]"
 import type { GetServerSideProps } from "next"
 import DashboardSection from "@/components/PanelPages/DashboardSection"
 import ClientsSection from "@/components/PanelPages/ClientsSection"
-import MarketingSection from "@/components/PanelPages/MarketingSection"
 import TeamPanelSection from "@/components/PanelPages/TeamPanelSection"
 import LtvCalculatorSection from "@/components/PanelPages/LTVCalculatorSection"
 import OutreachSection from "@/components/PanelPages/OutreachSection"
@@ -105,12 +104,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               <BsPeople />
               <span className={`text-xs ${inter.className}`}>
                 Team
-              </span>
-            </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(3); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 3 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-              <RiMoneyDollarBoxLine />
-              <span className={`text-xs ${inter.className}`}>
-                Marketing
               </span>
             </div>
             <div id="panel-nav-item" onClick={() => { setCurrentSection(5); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 5 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
@@ -270,7 +263,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                   {currentSection === 0 && <DashboardSection />}
                   {currentSection === 1 && <ClientsSection onAddClient={() => setIsAddClientOpen(true)} />}
                   {currentSection === 2 && <TeamPanelSection />}
-                  {currentSection === 3 && <MarketingSection />}
                   {currentSection === 4 && <LtvCalculatorSection />}
                   {currentSection === 5 && <OutreachSection />}
                   {currentSection === 6 && <ProjectManagement />}
