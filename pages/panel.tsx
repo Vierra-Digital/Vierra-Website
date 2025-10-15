@@ -4,7 +4,7 @@ import { Inter } from "next/font/google"
 import Image from "next/image"
 import SignPdfModal from "@/components/ui/SignPdfModal"
 import Link from "next/link"
-import { FiLogOut, FiUsers } from "react-icons/fi"
+import { FiLogOut } from "react-icons/fi"
 import { IoIosNotificationsOutline } from "react-icons/io";
 import { AiOutlineAppstore } from "react-icons/ai";
 import { PiUsersThree, PiCalculator } from "react-icons/pi";
@@ -12,6 +12,7 @@ import { BsPeople } from "react-icons/bs";
 import { CiSearch } from "react-icons/ci";
 import { RiArrowDropDownLine, RiMoneyDollarBoxLine, RiFolder3Line } from "react-icons/ri";
 import { FaRegFilePdf } from "react-icons/fa6";
+import { HiGlobeAlt } from "react-icons/hi2";
 import { useSession, signOut } from "next-auth/react"
 import UserSettingsPage from "@/components/UserSettingsPage"
 import AddClientModal from "@/components/ui/AddClientModal"
@@ -85,37 +86,37 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             </Link>
           </div>
           <div id="panel-nav" className="w-full h-full flex flex-col gap-y-[5px] items-center text-[#EDF1F5]">
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 0 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
               <AiOutlineAppstore />
               <span className={`text-xs font-normal ${inter.className}`}>
                 Dashboard
               </span>
             </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 1 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
               <PiUsersThree />
               <span className={`text-xs ${inter.className}`}>
                 Clients
               </span>
             </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center hover:bg-white rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:text-black">
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 2 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
               <BsPeople />
               <span className={`text-xs ${inter.className}`}>
                 Team
               </span>
             </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(3); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer hover:bg-white rounded-xl hover:text-black">
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(3); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 3 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
               <RiMoneyDollarBoxLine />
               <span className={`text-xs ${inter.className}`}>
                 Marketing
               </span>
             </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(5); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer hover:bg-white rounded-xl hover:text-black">
-              <FiUsers />
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(5); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 5 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
+              <HiGlobeAlt />
               <span className={`text-xs ${inter.className}`}>
                 Outreach
               </span>
             </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(6); setShowSettings(false); setIsSidebarOpen(false)}} className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer hover:bg-white rounded-xl hover:text-black">
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(6); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 6 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
               <RiFolder3Line />
               <span className={`text-xs ${inter.className}`}>
                 Project Tasks
