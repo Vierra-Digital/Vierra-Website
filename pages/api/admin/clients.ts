@@ -35,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const brandTone = answers.brandTone ?? "N/A";
       
       // Determine display status based on session state and expiration
-      let displayStatus = latest?.status ?? "pending";
+      let displayStatus: string = latest?.status ?? "pending";
       const isExpired = latest?.expiresAt && now > latest.expiresAt;
       
       // If session is pending/in_progress but expired and not completed, mark as inactive
