@@ -90,7 +90,7 @@ const ClientActionsMenu: React.FC<{
     isActive: boolean
     onDelete: () => void
     onToggleStatus: (isActive: boolean) => void
-}> = ({ clientId, clientName, isActive, onDelete, onToggleStatus }) => {
+}> = ({ clientName, isActive, onDelete, onToggleStatus }) => {
     const [isOpen, setIsOpen] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
 
@@ -164,7 +164,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
     const [currentPage, setCurrentPage] = useState(0)
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
     const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(null)
-    const [deleting, setDeleting] = useState(false)
     const pageSize = 10
 
     const fetchClients = async () => {
@@ -189,7 +188,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
         if (!clientToDelete) return
 
         try {
-            setDeleting(true)
             const r = await fetch(`/api/admin/deleteClient?clientId=${clientToDelete.id}`, {
                 method: "DELETE",
             })
@@ -205,8 +203,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
             setClientToDelete(null)
         } catch (e: any) {
             setError(e?.message ?? "Failed to delete client")
-        } finally {
-            setDeleting(false)
         }
     }
 
