@@ -34,8 +34,14 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
   return {
     props: {
       posts: posts.map((p) => ({
-        ...p,
+        id: p.id,
+        title: p.title,
+        description: p.description,
+        content: p.content,
         published_date: p.published_date.toISOString(),
+        slug: p.slug,
+        is_test: Boolean(p.is_test),
+        tag: p.tag,
         author: { name: p.author.name },
       })),
     },
@@ -127,7 +133,6 @@ export default function TestBlogsPage({ posts }: Props) {
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       setList(prev => prev.filter(x => x.id !== p.id))
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.error('make live failed', e)
     }
   }
