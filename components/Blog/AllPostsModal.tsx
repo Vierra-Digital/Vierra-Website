@@ -114,7 +114,7 @@ export function AllPostsModal({ isOpen, onClose }: ModalProps) {
                   <Link key={blog.slug} href={`/blog/${blog.slug}`} passHref>
                     <div id="editor-blog-container" className="flex flex-row w-full h-24 p-5 gap-3 border-[1px] border-[#646A69] rounded-lg bg-[#F3F3F3] overflow-hidden transition-all duration-300 hover:shadow-lg">
                       <div id="editor-blog-image-container" className="w-20 h-full flex-shrink-0 relative">
-                        <Image src={blog.image_url ?? "/assets/vierra-logo.png"} alt={blog.title} fill className="object-cover" />
+                        <Image src={(blog.image_url && (blog.image_url.startsWith('http://') || blog.image_url.startsWith('https://'))) ? "/assets/meta-banner.png" : (blog.image_url || "/assets/meta-banner.png")} alt={blog.title} fill className="object-cover" />
                       </div>
                       <div id="editor-blog-text-container" className="flex flex-col justify-center">
                         <span className={`text-sm md:text-md font-bold leading-tight text-[#18042A] ${bricolage.className}`}>
