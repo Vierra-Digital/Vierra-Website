@@ -16,8 +16,8 @@ async function main() {
         data: {
             author_id: author.id,
             title: 'Hello World Blog Post',
-            content: '<p>This is the very first blog post content.</p>',
-            image_url: '/assets/paul',
+            description: 'A short summary used to verify blog description rendering in hero and cards.',
+            content: '<p>This is the very first blog post content. It verifies the new editor, description field, and rendering without images.</p>',
             slug: 'hello-world-blog-post',
             is_test: true,
         },
