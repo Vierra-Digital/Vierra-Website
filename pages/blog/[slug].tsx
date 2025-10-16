@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import Footer from "@/components/FooterSection/Footer";
 import { prisma } from '@/lib/prisma';
 import { GetStaticPaths, GetStaticProps } from 'next';
-import Image from 'next/image';
+// Image import removed; no inline images in article layout
 
 
 
@@ -22,8 +22,8 @@ declare global {
 
 type BlogPostProps = {
     title: string;
+    description?: string | null;
     content: string;
-    image_url?: string | null;
     author: { name: string };
     publishedDate: string;
     tag?: string | null;
@@ -34,14 +34,23 @@ const inter = Inter({ subsets: ["latin"] });
 
 const formatDate = (dateString: string): string => {
     const date = new Date(dateString);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    const year = date.getFullYear();
-    return `${month}-${day}-${year}`;
+    return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
+};
+
+const stripHtml = (html?: string | null): string => {
+    if (!html) return "";
+    return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+};
+
+const getExcerpt = (content?: string | null, limit: number = 180): string => {
+    const text = stripHtml(content);
+    if (text.length <= limit) return text;
+    return text.slice(0, limit).trimEnd() + '...';
 };
 
 const BlogViewPage = ({
     title,
+    description,
     content,
     author,
     publishedDate,
@@ -62,7 +71,7 @@ const BlogViewPage = ({
     return (
         <>
             <Head>
-                <title>Vierra | Blogs</title>
+                <title>{`Vierra | ${title}`}</title>
             </Head>
             <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden z-0">
                 {Array.from({ length: 7 }).map((_, index) => (
@@ -132,42 +141,33 @@ const BlogViewPage = ({
 
 
                         <div id="control-section" className="p-8 w-full lg:p-20">
-                            <div id="header-text-holder" className="my-4 max-w-2xl mb-5">
-                                <h1 className={`text-5xl md:text-6xl font-bold leading-tight lg:mb-6 text-[#EFF3FF] ${bricolage.className}`}>
+                            <div id="header-text-holder" className="my-4 max-w-3xl mb-5">
+                                <h1 className={`text-4xl md:text-5xl lg:text-6xl font-bold leading-tight lg:mb-6 text-[#EFF3FF] ${bricolage.className}`}>
                                     {title ? title : "Blog not found."}
                                 </h1>
                             </div>
-                            <div id="blog-description" className="w-[70%]">
-                                <p className={`text-[#9BAFC3] ${inter.className}`}>Scale your practice effortlessly. Fill out your schedules and eliminate no-shows. Scale your practice effortlessly. Fill out your schedules and eliminate no-show</p>
+                            <div id="blog-description" className="max-w-3xl">
+                                <p className={`text-[#C7D2FE] text-base md:text-lg ${inter.className}`}>{description ?? ""}</p>
                             </div>
-                            <div id="metadata-row" className="w-full h-auto mt-5 flex flex-wrap md:flex-row items-center gap-[24px]">
-                                <p className={`text-[#9BAFC3] ${bricolage.className}`}>{`By ${author.name}`}</p>
-                                <div id="tiny-ellipse" className="h-[4px] w-[4px] bg-[#9BAFC3] rounded-full"></div>
-                                <p className={`text-[#9BAFC3] ${bricolage.className}`}>{formatDate(publishedDate)}</p>
-                                <div id="tiny-ellipse" className="h-[4px] w-[4px] bg-[#9BAFC3] rounded-full"></div>
-                                <div id="meta-colorbox">
-                                    <span className="bg-purple-600 text-white px-5 py-2 rounded-lg text-sm font-medium">
-                                        {tag}
-                                    </span>
-                                </div>
+                            <div id="metadata-row" className="w-full h-auto mt-5 flex flex-wrap md:flex-row items-center gap-3 text-sm md:text-base">
+                                <p className={`text-[#E5E7EB] ${bricolage.className}`}>{`By ${author.name}`}</p>
+                                <div className="h-[4px] w-[4px] bg-[#9BAFC3] rounded-full"></div>
+                                <p className={`text-[#E5E7EB] ${bricolage.className}`}>{formatDate(publishedDate)}</p>
+                                {tag && (
+                                    <>
+                                        <div className="h-[4px] w-[4px] bg-[#9BAFC3] rounded-full"></div>
+                                        <span className="bg-purple-600/90 text-white px-3 py-1 rounded-md text-xs md:text-sm font-medium">{tag}</span>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </motion.div>
                 </main>
-                <div id="view-section" className="bg-[#F3F3F3] px-8 lg:px-20">
-                    <div id="heading-image" className="w-full flex flex-col justify-center items-center py-20">
-                        <Image alt={title ?? 'blog image'} src={'/assets/meta-banner.png'} width={1200} height={500} className="min-w-full lg:min-w-[75%] max-h-[500px] aspect-auto object-cover" />
-                    </div>
-                    <div id="blog-text" className="lg:px-32 flex flex-col pb-20">
-                        <div id="blog-text-heading">
-                            <h1 className={`font-semibold text-[#18042A] text-3xl mb-3 ${bricolage.className}`}>
-                                {title}
-                            </h1>
-                        </div>
-                        <div id="blog-text-content">
-                            <p className={`text-[#8A9197]  md:text-lg/[180%] md:w-[50%] ${inter.className}`}>
-                                {content}
-                            </p>
+                <div id="view-section" className="bg-white px-6 md:px-8 lg:px-20">
+                    <div id="blog-text" className="flex flex-col pb-16 md:pb-20 items-center pt-12 md:pt-16 lg:pt-20">
+                        {/* Title removed as requested; hero already shows the title */}
+                        <div id="blog-text-content" className="w-full max-w-3xl">
+                            <div className={`text-[#1F2937] text-base md:text-lg leading-relaxed ${inter.className}`} dangerouslySetInnerHTML={{ __html: content }} />
                         </div>
                     </div>
                 </div>
@@ -225,8 +225,8 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
     return {
         props: {
             title: post.title,
+            description: (post as any).description ?? null,
             content: post.content,
-            image_url: post.image_url,
             author: { name: post.author.name },
             publishedDate: post.published_date.toISOString(),
             tag: post.tag

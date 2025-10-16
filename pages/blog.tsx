@@ -15,6 +15,7 @@ type BlogPostType = {
     id: number;
     author_id?: number | null;
     title: string;
+    description?: string | null;
     content: string;
     image_url?: string | null;
     published_date?: string | null;
@@ -119,9 +120,10 @@ const BlogPage = ({ latestPosts }: Props) => {
         return posts.filter((post) => {
             const title = post.title?.toLowerCase() || "";
             const content = stripHtml(post.content)?.toLowerCase() || "";
+            const description = post.description?.toLowerCase() || "";
             const author = post.author?.name?.toLowerCase() || "";
             const tag = post.tag?.toLowerCase() || "";
-            return title.includes(q) || content.includes(q) || author.includes(q) || tag.includes(q);
+            return title.includes(q) || description.includes(q) || content.includes(q) || author.includes(q) || tag.includes(q);
         });
     };
 
@@ -289,9 +291,9 @@ const BlogPage = ({ latestPosts }: Props) => {
                                     <Link key={blog.id} href={`/blog/${blog.slug}`} passHref>
                                     <div className="rounded-2xl bg-white p-5 md:p-6 shadow-sm hover:shadow-md transition-shadow">
                                         <span className="text-[10px] md:text-xs font-semibold text-purple-600">{blog.tag || 'Blog'}</span>
-                                        <h3 className={`mt-2 text-base md:text-lg font-bold text-[#18042A] ${bricolage.className}`}>{blog.title}</h3>
-                                        <div className="mt-1 text-[11px] md:text-xs text-[#6B7280]">{blog.published_date ? formatDate(blog.published_date) : ''}</div>
-                                        <p className={`mt-3 text-sm md:text-base text-[#6B7280] ${inter.className}`}>{getExcerpt(blog.content)}</p>
+                                        <h3 className={`mt-2 text-base md:text-lg font-bold text-[#0F172A] ${bricolage.className}`}>{blog.title}</h3>
+                                        <div className="mt-1 text-[11px] md:text-xs text-[#334155]">{blog.published_date ? formatDate(blog.published_date) : ''}</div>
+                                        <p className={`mt-3 text-sm md:text-base text-[#475569] ${inter.className}`}>{blog.description || getExcerpt(blog.content)}</p>
                                         <div className="mt-4 flex items-center justify-between">
                                             <span className="text-[#701CC0] font-semibold text-sm md:text-base">Read More</span>
                                                 </div>

@@ -17,6 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ? {
           OR: [
             { title: { contains: search as string, mode: "insensitive" } },
+            { description: { contains: search as string, mode: "insensitive" } },
             { content: { contains: search as string, mode: "insensitive" } },
           ],
         }
