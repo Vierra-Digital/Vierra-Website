@@ -17,7 +17,7 @@ type Post = {
 
 export default function BlogEditorSection() {
   const [posts, setPosts] = useState<Post[]>([])
-  const [loading, setLoading] = useState(false)
+  const [, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState({
     id: 0,
@@ -67,7 +67,6 @@ export default function BlogEditorSection() {
           title: form.title,
           description: form.description || null,
           content: form.content,
-          image_url: form.image_url || null,
           date: form.date || null,
           tag: form.tag || null,
           authorName: form.authorName || undefined,
@@ -151,7 +150,7 @@ export default function BlogEditorSection() {
                 <div className="text-xs text-[#6B7280] mt-1">{new Date(p.published_date).toLocaleDateString()}</div>
                 <div className="text-sm text-[#6B7280] mt-2">{p.description}</div>
                 <div className="mt-3 flex gap-2">
-                  <button onClick={() => setForm({
+                  <button onClick={() => { setForm({
                     id: p.id,
                     title: p.title,
                     description: p.description ?? "",
@@ -159,7 +158,7 @@ export default function BlogEditorSection() {
                     tag: p.tag ?? "",
                     date: p.published_date.slice(0,10),
                     authorName: p.author?.name ?? "",
-                  }) || setMode("edit")} className="px-3 py-1 text-xs rounded-lg bg-white border">Edit</button>
+                  }); setMode("edit"); }} className="px-3 py-1 text-xs rounded-lg bg-white border">Edit</button>
                   <button onClick={() => deletePost(p.id)} className="px-3 py-1 text-xs rounded-lg bg-red-50 text-red-700">Delete</button>
                 </div>
               </div>

@@ -37,11 +37,6 @@ const formatDate = (dateString: string): string => {
     return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
 };
 
-const stripHtml = (html?: string | null): string => {
-    if (!html) return "";
-    return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-};
-
 // removed unused getExcerpt
 
 const BlogViewPage = ({
