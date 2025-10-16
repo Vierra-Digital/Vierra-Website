@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useState } from "react"
 import { Users, Shield, Briefcase, FileText, Edit, Settings, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, Eye } from "lucide-react"
 
 type TabType = "users" | "clients" | "staff" | "sessions" | "blogs" | "system"
@@ -98,11 +98,10 @@ type SessionRow = {
 
 function SystemPanel() {
     const [stats, setStats] = useState<{ users: number; clients: number; sessions: number; blogPosts: number; staff: number } | null>(null)
-    const [loading, setLoading] = useState<boolean>(false)
     const [expiring, setExpiring] = useState<boolean>(false)
     const [message, setMessage] = useState<string>("")
 
-    const loadStats = async () => {
+    const loadStats = useCallback(async () => {
         try {
             const r = await fetch("/api/admin/systemStats", { cache: "no-store" })
             if (!r.ok) throw new Error("Failed to load stats")
@@ -110,27 +109,26 @@ function SystemPanel() {
         } catch {
             // ignore
         }
-    }
-
-    useEffect(() => {
-        setLoading(true)
-        Promise.all([loadStats(), expireNow(true)])
-            .finally(() => setLoading(false))
     }, [])
 
-    const expireNow = async (silent = false) => {
+    const expireNow = useCallback(async (silent = false) => {
         try {
             setExpiring(!silent)
             const r = await fetch("/api/admin/expireSessions", { method: "POST" })
             const j = await r.json()
             if (!silent) setMessage(`Updated ${j.updated ?? 0} sessions`)
             await loadStats()
-        } catch (e) {
+        } catch {
             if (!silent) setMessage("Failed to update sessions")
         } finally {
             setExpiring(false)
         }
-    }
+    }, [loadStats])
+
+    useEffect(() => {
+        Promise.all([loadStats(), expireNow(true)])
+            .catch(() => {})
+    }, [loadStats, expireNow])
 
     return (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -691,7 +689,7 @@ function SessionsPanel() {
         }
         arr.sort(cmp)
         return arr
-    }, [sessions, sortKey, sortDir])
+    }, [sessions, sortKey, sortDir, statusOrder])
 
     const toggleSort = (key: typeof sortKey) => {
         if (key === sortKey) {
@@ -767,7 +765,7 @@ function SessionsPanel() {
             if (!r.ok) throw new Error("Failed to fetch answers")
             const data = await r.json()
             setShowAnswers({ open: true, json: data?.answers ?? {}, client: data?.client })
-        } catch (e) {
+        } catch {
             setShowAnswers({ open: true, json: { error: "Could not load answers" } })
         }
     }
