@@ -656,13 +656,13 @@ function SessionsPanel() {
         load()
     }, [])
 
-    const statusOrder: Record<SessionStatus, number> = {
+    const statusOrder = useMemo<Record<SessionStatus, number>>(() => ({
         pending: 1,
         in_progress: 2,
         completed: 3,
         expired: 4,
         canceled: 5,
-    }
+    }), [])
 
     const sorted = useMemo(() => {
         const arr = [...sessions]
@@ -923,4 +923,3 @@ function SessionsPanel() {
         </div>
     )
 }
-

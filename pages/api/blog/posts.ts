@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next"
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 
 
@@ -12,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const limit = Number(req.query.limit || 20);
     const skip = (page - 1) * limit;
     const includeTests = req.query.includeTests === '1';
-    const where = includeTests ? {} : { is_test: false };
+    const where: Prisma.BlogPostWhereInput = includeTests ? {} : { is_test: false };
     const posts = await prisma.blogPost.findMany({
       where,
       orderBy: { published_date: "desc" },

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Inter } from "next/font/google"
 import { CiSearch } from "react-icons/ci"
-import { FiPlus, FiTrash2, FiFileText, FiFilter, FiBold, FiItalic, FiList, FiLink, FiUnderline, FiImage, FiVideo, FiCornerUpLeft, FiCornerUpRight } from "react-icons/fi"
+import { FiPlus, FiTrash2, FiFileText, FiFilter, FiBold, FiItalic, FiLink, FiUnderline, FiImage, FiVideo, FiCornerUpLeft, FiCornerUpRight } from "react-icons/fi"
 
 const inter = Inter({ subsets: ["latin"] })
 
