@@ -9,7 +9,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const sessions = await prisma.onboardingSession.findMany({
-      include: { client: true },
+      include: { client: true, tokens: { select: { platform: true } } },
       orderBy: { createdAt: "desc" },
     });
 
@@ -22,8 +22,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       businessName: session.client.businessName,
       createdAt: session.createdAt.getTime(),
       submittedAt: session.submittedAt?.getTime() || null,
+      lastUpdatedAt: session.lastUpdatedAt?.getTime() || null,
       status: session.status || "pending",
       hasAnswers: !!session.answers,
+      platforms: (session.tokens || []).map(t => t.platform),
     }));
 
     res.status(200).json(sessionList);
