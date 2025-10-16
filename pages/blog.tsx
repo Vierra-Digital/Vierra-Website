@@ -36,11 +36,13 @@ type Props = {
 export const getStaticProps: GetStaticProps<Props> = async () => {
     const [latestPosts, trendingPosts] = await Promise.all([
         prisma.blogPost.findMany({
+            where: { is_test: false },
             orderBy: { published_date: "desc" },
             take: 10,
             include: { author: { select: { name: true } } },
         }),
         prisma.blogPost.findMany({
+            where: { is_test: false },
             orderBy: { visits: "desc" },
             take: 10,
             include: { author: { select: { name: true } } },
