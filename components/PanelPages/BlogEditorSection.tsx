@@ -356,8 +356,6 @@ const RichTextEditor: React.FC<{
             // Mark this change as local to prevent caret-jumping resets
             isLocalEditRef.current = true
             onChange(toHtml(newDisplay))
-            // Ensure caret remains at end after React re-render
-            if (editableRef.current) setCaretToEnd(editableRef.current)
           }}
           // Initial content is injected by the effect above; no innerHTML binding here to avoid caret resets.
         />
