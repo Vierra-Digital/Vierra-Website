@@ -290,26 +290,54 @@ const BlogPage = ({ latestPosts }: Props) => {
                         <h1 id="part-1-header" className={`text-xl md:text-2xl lg:text-3xl font-bold leading-tight mb-6 text-[#18042A] ${bricolage.className}`}>All Blog Posts</h1>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
                             {paginatedPosts.map((blog) => (
-                                    <Link key={blog.id} href={`/blog/${blog.slug}`} passHref>
-                                    <div className="rounded-2xl bg-white p-5 md:p-6 shadow-sm hover:shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
-                                        <h3 className={`text-base md:text-lg font-bold text-[#0F172A] ${bricolage.className}`}>{blog.title}</h3>
-                                        <div className="mt-1 text-[11px] md:text-xs text-[#334155]">{blog.published_date ? formatDate(blog.published_date) : ''}</div>
-                                        <p className={`mt-3 text-sm md:text-base text-[#475569] ${inter.className}`}>{blog.description || getExcerpt(blog.content)}</p>
-                                        <div className="flex flex-wrap gap-1 mt-3">
-                                            {blog.tag ? blog.tag.split(',').map((tag, index) => (
-                                                <span key={index} className="text-[10px] md:text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
-                                                    {tag.trim()}
-                                                </span>
-                                            )) : (
-                                                <span className="text-[10px] md:text-xs font-semibold text-purple-600">Blog</span>
-                                            )}
-                                        </div>
-                                        <div className="mt-4 flex items-center justify-between">
-                                            <span className="text-[#701CC0] font-semibold text-sm md:text-base">Read More</span>
-                                                </div>
+                                <div key={blog.id}>
+                                    <Link href={`/blog/${blog.slug}`} passHref>
+                                        <div className="rounded-2xl bg-white p-5 md:p-6 shadow-sm hover:shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
+                                            <h3 className={`text-base md:text-lg font-bold text-[#0F172A] ${bricolage.className}`}>{blog.title}</h3>
+                                            <div className="mt-1 text-[11px] md:text-xs text-[#334155]">{blog.published_date ? formatDate(blog.published_date) : ''}</div>
+                                            <p className={`mt-3 text-sm md:text-base text-[#475569] ${inter.className}`}>{blog.description || getExcerpt(blog.content)}</p>
+                                            <div className="flex flex-wrap gap-1 mt-3">
+                                                {blog.tag ? blog.tag.split(',').map((tag, index) => (
+                                                    <span key={index} className="text-[10px] md:text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
+                                                        {tag.trim()}
+                                                    </span>
+                                                )) : (
+                                                    <span className="text-[10px] md:text-xs font-semibold text-purple-600">Blog</span>
+                                                )}
                                             </div>
-                                        </Link>
-                                    ))}
+                                            <div className="mt-4 flex items-center justify-between">
+                                                <span className="text-[#701CC0] font-semibold text-sm md:text-base">Read More</span>
+                                            </div>
+                                        </div>
+                                    </Link>
+                                    <div className="mt-2">
+                                        <button onClick={async () => {
+                                            try {
+                                                const r = await fetch('/api/blog/admin/post', {
+                                                    method: 'PUT',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        id: blog.id,
+                                                        title: blog.title,
+                                                        description: blog.description,
+                                                        content: blog.content,
+                                                        tag: blog.tag,
+                                                        date: blog.published_date?.slice(0,10) || null,
+                                                        authorName: blog.author?.name,
+                                                        isTest: true,
+                                                    })
+                                                })
+                                                if (r.ok) {
+                                                    // Optionally redirect to /blog/test to see it there
+                                                    window.location.href = '/blog/test'
+                                                }
+                                            } catch (e) {
+                                                console.error('make test failed', e)
+                                            }
+                                        }} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-yellow-600 hover:bg-yellow-700">Make Test</button>
+                                    </div>
+                                </div>
+                            ))}
                                 </div>
                         <div className="flex items-center gap-3 mt-10">
                             <button
