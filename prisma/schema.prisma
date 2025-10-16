@@ -101,8 +101,8 @@ model BlogPost {
   id             Int      @id @default(autoincrement())
   author_id      Int
   title          String
+  description    String?
   content        String
-  image_url      String?
   published_date DateTime @default(now()) @db.Timestamp(6)
   slug           String   @unique
   is_test        Boolean? @default(false)
