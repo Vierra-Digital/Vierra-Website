@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
 import { prisma } from "@/lib/prisma"
@@ -6,7 +6,6 @@ import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Search } from "lucide-react";
-import Image from 'next/image';
 import Footer from "@/components/FooterSection/Footer";
 import { GetStaticProps } from "next";
 import Link from "next/link";
@@ -97,7 +96,7 @@ const inter = Inter({ subsets: ["latin"] });
 const tags: string[] = ["All Blog Posts", "Case Studies", "Technology", "AI & Automation", "Finance", "Marketing", "Sales", "Management", "Leadership"]
 
 
-const BlogPage = ({ latestPosts, trendingPosts: _trendingPosts }: Props) => {
+const BlogPage = ({ latestPosts }: Props) => {
 
     const [tagSelected, setTagSelected] = useState(0);
     const [tagSelectedName, setTagSelectedName] = useState("All Blog Posts");
@@ -287,7 +286,7 @@ const BlogPage = ({ latestPosts, trendingPosts: _trendingPosts }: Props) => {
                         <h1 id="part-1-header" className={`text-xl md:text-2xl lg:text-3xl font-bold leading-tight mb-6 text-[#18042A] ${bricolage.className}`}>All Blog Posts</h1>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
                             {paginatedPosts.map((blog) => (
-                                <Link key={blog.id} href={`/blog/${blog.slug}`} passHref>
+                                    <Link key={blog.id} href={`/blog/${blog.slug}`} passHref>
                                     <div className="rounded-2xl bg-white p-5 md:p-6 shadow-sm hover:shadow-md transition-shadow">
                                         <span className="text-[10px] md:text-xs font-semibold text-purple-600">{blog.tag || 'Blog'}</span>
                                         <h3 className={`mt-2 text-base md:text-lg font-bold text-[#18042A] ${bricolage.className}`}>{blog.title}</h3>
@@ -295,11 +294,11 @@ const BlogPage = ({ latestPosts, trendingPosts: _trendingPosts }: Props) => {
                                         <p className={`mt-3 text-sm md:text-base text-[#6B7280] ${inter.className}`}>{getExcerpt(blog.content)}</p>
                                         <div className="mt-4 flex items-center justify-between">
                                             <span className="text-[#701CC0] font-semibold text-sm md:text-base">Read More</span>
-                                        </div>
-                                    </div>
-                                </Link>
-                            ))}
-                        </div>
+                                                </div>
+                                            </div>
+                                        </Link>
+                                    ))}
+                                </div>
                         <div className="flex items-center gap-2 md:gap-3 mt-10">
                             <button onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className="px-3 py-1 md:px-4 md:py-2 rounded-full bg-white text-[#18042A] disabled:opacity-50 text-sm md:text-base">Prev</button>
                             <span className="text-[#6B7280] text-sm md:text-base">{currentPage} / {totalPages}</span>

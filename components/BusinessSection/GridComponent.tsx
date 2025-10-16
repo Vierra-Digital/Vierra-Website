@@ -109,6 +109,7 @@ function GridComponent() {
     })
   }, [socialIcons])
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     let targetTimer: NodeJS.Timeout
     let eraseTimer: NodeJS.Timeout
