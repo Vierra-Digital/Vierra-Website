@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Inter } from "next/font/google"
 import { CiSearch } from "react-icons/ci"
-import { FiPlus, FiTrash2, FiFileText, FiFilter, FiBold, FiItalic, FiList, FiLink, FiCode, FiUnderline, FiImage, FiVideo, FiCornerUpLeft, FiCornerUpRight } from "react-icons/fi"
+import { FiPlus, FiTrash2, FiFileText, FiFilter, FiBold, FiItalic, FiList, FiLink, FiUnderline, FiImage, FiVideo, FiCornerUpLeft, FiCornerUpRight } from "react-icons/fi"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -9,18 +9,135 @@ const RichTextEditor: React.FC<{
   value: string
   onChange: (value: string) => void
 }> = ({ value, onChange }) => {
+  const editableRef = useRef<HTMLDivElement | null>(null)
+  const isLocalEditRef = useRef<boolean>(false)
+  const savedRangeRef = useRef<Range | null>(null)
+  const [linkModalOpen, setLinkModalOpen] = useState(false)
+  const [linkText, setLinkText] = useState("")
+  const [linkUrl, setLinkUrl] = useState("")
+
+  const setCaretToEnd = (el: HTMLElement) => {
+    try {
+      const sel = window.getSelection()
+      if (!sel) return
+      const range = document.createRange()
+      range.selectNodeContents(el)
+      range.collapse(false)
+      sel.removeAllRanges()
+      sel.addRange(range)
+    } catch {}
+  }
+
+  // Track active formatting states to change icon styles
+  const [activeBold, setActiveBold] = useState(false)
+  const [activeItalic, setActiveItalic] = useState(false)
+  const [activeUnderline, setActiveUnderline] = useState(false)
+
+  useEffect(() => {
+    const updateStates = () => {
+      try {
+        setActiveBold(document.queryCommandState('bold'))
+        setActiveItalic(document.queryCommandState('italic'))
+        setActiveUnderline(document.queryCommandState('underline'))
+      } catch {}
+    }
+    document.addEventListener('selectionchange', updateStates)
+    return () => document.removeEventListener('selectionchange', updateStates)
+  }, [])
+
+  // Prevent navigating when clicking links inside the editor
+  useEffect(() => {
+    const el = editableRef.current
+    if (!el) return
+    const onClick = (e: any) => {
+      const t = e.target as HTMLElement
+      if (t && t.tagName === 'A') e.preventDefault()
+    }
+    el.addEventListener('click', onClick)
+    return () => el.removeEventListener('click', onClick)
+  }, [])
   const [history, setHistory] = useState<string[]>([value])
   const [historyIndex, setHistoryIndex] = useState(0)
+  // We avoid storing display HTML in React state to prevent rerenders that reset the caret.
 
-  // Update history when value changes
+  // Transform stored HTML into an editing-friendly display where media become placeholders
+  // and links remain as editable underlined text that doesn't navigate.
+  const toDisplay = useCallback((html: string): string => {
+    if (!html) return ""
+    let out = html
+    // Images -> (IMAGE): URL
+    out = out.replace(/<img[^>]*src="([^"]+)"[^>]*>/gi, (_m, url) => `<span data-type="image" data-url="${url}" class="rte-url" contenteditable="false">(IMAGE): ${url}</span>`)
+    // Video -> (VIDEO): URL (take first source)
+    out = out.replace(/<video[^>]*>[\s\S]*?<source[^>]*src="([^"]+)"[^>]*>[\s\S]*?<\/video>/gi, (_m, url) => `<span data-type="video" data-url="${url}" class="rte-url" contenteditable="false">(VIDEO): ${url}</span>`)
+    // Links -> keep text, but store URL on data-url and disable navigation
+    out = out.replace(/<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, href, text) => `<a href="#" data-url="${href}">${text}</a>`)
+    return out
+  }, [])
+
+  // Transform display (with placeholders) back to real HTML for saving
+  const toHtml = useCallback((display: string): string => {
+    if (!display) return ""
+    const normalizeUrl = (u: string) => {
+      const t = u.trim()
+      if (/^(https?:|data:|blob:)/i.test(t)) return t
+      if (t.startsWith('//')) return `https:${t}`
+      return `https://${t.replace(/^\/+/, '')}`
+    }
+    const toYoutubeEmbed = (u: string): string | null => {
+      const url = normalizeUrl(u)
+      try {
+        const a = new URL(url)
+        if (a.hostname.includes('youtu.be')) {
+          const id = a.pathname.replace(/^\//, '')
+          if (id) return `https://www.youtube.com/embed/${id}`
+        }
+        if (a.hostname.includes('youtube.com')) {
+          if (a.pathname.startsWith('/watch')) {
+            const id = a.searchParams.get('v')
+            if (id) return `https://www.youtube.com/embed/${id}`
+          }
+          if (a.pathname.startsWith('/shorts/')) {
+            const id = a.pathname.split('/')[2]
+            if (id) return `https://www.youtube.com/embed/${id}`
+          }
+        }
+      } catch {}
+      return null
+    }
+    let out = display
+    out = out.replace(/<span[^>]*data-type="image"[^>]*data-url="([^"]+)"[^>]*>.*?<\/span>/gi, (_m, url) => `<img src="${normalizeUrl(url)}" alt="" />`)
+    out = out.replace(/<span[^>]*data-type="video"[^>]*data-url="([^"]+)"[^>]*>.*?<\/span>/gi, (_m, url) => {
+      const yt = toYoutubeEmbed(url)
+      if (yt) return `<iframe width="560" height="315" src="${yt}" title="YouTube video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`
+      return `<video controls><source src="${normalizeUrl(url)}" type="video/mp4">Your browser does not support the video tag.<\/video>`
+    })
+    // Anchors created in the editor
+    out = out.replace(/<a[^>]*data-url="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, url, text) => `<a href="${normalizeUrl(url)}" target="_blank" rel="noopener noreferrer">${text}<\/a>`)
+    // Legacy placeholder links (if any remain)
+    out = out.replace(/<span[^>]*data-type="link"[^>]*data-url="([^"]+)"[^>]*>.*?<\/span>/gi, (_m, url) => `<a href="${normalizeUrl(url)}" target="_blank" rel="noopener noreferrer">${normalizeUrl(url)}<\/a>`)
+    return out
+  }, [])
+
+  // Keep display in sync with incoming value
   useEffect(() => {
+    // When updates come from outside the editor, sync the display.
+    if (!isLocalEditRef.current) {
+      const disp = toDisplay(value || "")
+      if (editableRef.current && editableRef.current.innerHTML !== disp) {
+        editableRef.current.innerHTML = disp
+        setCaretToEnd(editableRef.current)
+      }
+    } else {
+      // Clear the flag after the render triggered by a local edit
+      isLocalEditRef.current = false
+    }
     if (value !== history[historyIndex]) {
       const newHistory = history.slice(0, historyIndex + 1)
       newHistory.push(value)
       setHistory(newHistory)
       setHistoryIndex(newHistory.length - 1)
     }
-  }, [value, history, historyIndex])
+  }, [value, history, historyIndex, toDisplay])
 
   const undo = () => {
     if (historyIndex > 0) {
@@ -39,86 +156,67 @@ const RichTextEditor: React.FC<{
   }
 
   const formatText = (format: string) => {
-    const textarea = document.getElementById('content-editor') as HTMLTextAreaElement
-    if (!textarea) return
-
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    const selectedText = value.substring(start, end)
-    let newText = ''
-
+    const el = editableRef.current
+    if (!el) return
+    el.focus()
+    const sel = window.getSelection()
+    if (!sel) return
+    const insertPlaceholder = (type: 'image' | 'video' | 'link', url: string) => {
+      const span = document.createElement('span')
+      span.setAttribute('data-type', type)
+      span.setAttribute('data-url', url)
+      span.className = 'rte-url'
+      const label = type === 'image' ? '(IMAGE)' : type === 'video' ? '(VIDEO)' : '(LINK)'
+      span.textContent = `${label}: ${url}`
+      const range = sel.getRangeAt(0)
+      range.deleteContents()
+      range.insertNode(span)
+      range.setStartAfter(span)
+      range.collapse(true)
+      sel.removeAllRanges()
+      sel.addRange(range)
+      const newDisplay = el.innerHTML
+      onChange(toHtml(newDisplay))
+    }
     switch (format) {
       case 'bold':
-        newText = `<strong>${selectedText || 'bold text'}</strong>`
+        document.execCommand('bold')
         break
       case 'italic':
-        newText = `<em>${selectedText || 'italic text'}</em>`
-        break
-      case 'code':
-        newText = `<code>${selectedText || 'code'}</code>`
-        break
-      case 'link':
-        newText = `<a href="url">${selectedText || 'link text'}</a>`
-        break
-      case 'list':
-        const lines = value.split('\n')
-        const currentLine = lines.findIndex((_, i) => {
-          const lineStart = lines.slice(0, i).join('\n').length + (i > 0 ? 1 : 0)
-          return start >= lineStart && start <= lineStart + lines[i].length
-        })
-        if (currentLine >= 0) {
-          lines[currentLine] = `<li>${lines[currentLine]}</li>`
-          newText = lines.join('\n')
-        } else {
-          newText = value + '\n<li>List item</li>'
-        }
+        // Ensure italic doesn't inherit bold styles
+        document.execCommand('italic')
         break
       case 'underline':
-        newText = `<u>${selectedText || 'underlined text'}</u>`
+        document.execCommand('underline')
         break
-      case 'image':
-        const imgTextarea = document.getElementById('content-editor') as HTMLTextAreaElement
-        if (!imgTextarea) return
-        const imgStart = imgTextarea.selectionStart
-        const imgEnd = imgTextarea.selectionEnd
-        const imgTag = '<img src="IMAGE_URL_HERE" alt="alt text" />'
-        const imgBefore = value.substring(0, imgStart)
-        const imgAfter = value.substring(imgEnd)
-        onChange(imgBefore + imgTag + imgAfter)
-        setTimeout(() => {
-          imgTextarea.focus()
-          imgTextarea.setSelectionRange(imgStart + imgTag.length, imgStart + imgTag.length)
-        }, 0)
+      case 'list':
+        document.execCommand('insertHTML', false, '<ul><li></li></ul>')
+        // Move caret inside the new li
+        if (editableRef.current) setCaretToEnd(editableRef.current)
+        break
+      case 'link': {
+        const selText = sel.toString() || 'url'
+        savedRangeRef.current = sel.getRangeAt(0).cloneRange()
+        setLinkText(selText)
+        setLinkUrl("")
+        setLinkModalOpen(true)
         return
-      case 'video':
-        const videoTextarea = document.getElementById('content-editor') as HTMLTextAreaElement
-        if (!videoTextarea) return
-        const videoStart = videoTextarea.selectionStart
-        const videoEnd = videoTextarea.selectionEnd
-        const videoTag = '<video controls><source src="VIDEO_URL_HERE" type="video/mp4">Your browser does not support the video tag.</video>'
-        const videoBefore = value.substring(0, videoStart)
-        const videoAfter = value.substring(videoEnd)
-        onChange(videoBefore + videoTag + videoAfter)
-        setTimeout(() => {
-          videoTextarea.focus()
-          videoTextarea.setSelectionRange(videoStart + videoTag.length, videoStart + videoTag.length)
-        }, 0)
+      }
+      case 'image': {
+        const url = prompt('Enter image URL (direct .jpg/.png/.gif preferred)') || ''
+        if (!url) return
+        insertPlaceholder('image', url)
+        return
+      }
+      case 'video': {
+        const url = prompt('Enter video URL (YouTube links supported)') || ''
+        if (!url) return
+        insertPlaceholder('video', url)
         return
     }
-
-    if (format === 'list') {
-      onChange(newText)
-    } else {
-      const before = value.substring(0, start)
-      const after = value.substring(end)
-      onChange(before + newText + after)
     }
-
-    // Focus back to textarea
-    setTimeout(() => {
-      textarea.focus()
-      textarea.setSelectionRange(start + newText.length, start + newText.length)
-    }, 0)
+    const newDisplay = el.innerHTML
+    onChange(toHtml(newDisplay))
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -129,27 +227,37 @@ const RichTextEditor: React.FC<{
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    
     const files = Array.from(e.dataTransfer.files)
-    const textarea = document.getElementById('content-editor') as HTMLTextAreaElement
-    if (!textarea) return
-
-    const start = textarea.selectionStart
-    const end = textarea.selectionEnd
-    
+    const el = editableRef.current
+    if (!el) return
+    el.focus()
     files.forEach(file => {
+      const url = URL.createObjectURL(file)
       if (file.type.startsWith('image/')) {
-        const url = URL.createObjectURL(file)
-        const imgTag = `<img src="${url}" alt="${file.name}" />`
-        const before = value.substring(0, start)
-        const after = value.substring(end)
-        onChange(before + imgTag + after)
+        formatText('image')
+        // Replace the last inserted placeholder with object URL
+        if (editableRef.current) {
+          const spans = editableRef.current.querySelectorAll('span[data-type="image"]')
+          const last = spans[spans.length - 1] as HTMLElement
+          if (last) {
+            last.setAttribute('data-url', url)
+            last.textContent = `(IMAGE): ${url}`
+            const newDisplay = editableRef.current.innerHTML
+            onChange(toHtml(newDisplay))
+          }
+        }
       } else if (file.type.startsWith('video/')) {
-        const url = URL.createObjectURL(file)
-        const videoTag = `<video controls><source src="${url}" type="${file.type}">Your browser does not support the video tag.</video>`
-        const before = value.substring(0, start)
-        const after = value.substring(end)
-        onChange(before + videoTag + after)
+        formatText('video')
+        if (editableRef.current) {
+          const spans = editableRef.current.querySelectorAll('span[data-type="video"]')
+          const last = spans[spans.length - 1] as HTMLElement
+          if (last) {
+            last.setAttribute('data-url', url)
+            last.textContent = `(VIDEO): ${url}`
+            const newDisplay = editableRef.current.innerHTML
+            onChange(toHtml(newDisplay))
+          }
+        }
       }
     })
   }
@@ -180,7 +288,7 @@ const RichTextEditor: React.FC<{
         <button
           type="button"
           onClick={() => formatText('bold')}
-          className="p-1.5 rounded hover:bg-gray-200 text-gray-700"
+          className={`p-1.5 rounded hover:bg-gray-200 ${activeBold ? 'text-gray-400' : 'text-gray-700'}`}
           title="Bold"
         >
           <FiBold className="w-4 h-4" />
@@ -188,19 +296,12 @@ const RichTextEditor: React.FC<{
         <button
           type="button"
           onClick={() => formatText('italic')}
-          className="p-1.5 rounded hover:bg-gray-200 text-gray-700"
+          className={`p-1.5 rounded hover:bg-gray-200 ${activeItalic ? 'text-gray-400' : 'text-gray-700'}`}
           title="Italic"
         >
           <FiItalic className="w-4 h-4" />
         </button>
-        <button
-          type="button"
-          onClick={() => formatText('code')}
-          className="p-1.5 rounded hover:bg-gray-200 text-gray-700"
-          title="Code"
-        >
-          <FiCode className="w-4 h-4" />
-        </button>
+        {/* Code button removed per request */}
         <button
           type="button"
           onClick={() => formatText('link')}
@@ -209,18 +310,11 @@ const RichTextEditor: React.FC<{
         >
           <FiLink className="w-4 h-4" />
         </button>
-        <button
-          type="button"
-          onClick={() => formatText('list')}
-          className="p-1.5 rounded hover:bg-gray-200 text-gray-700"
-          title="List"
-        >
-          <FiList className="w-4 h-4" />
-        </button>
+        {/* List button removed per request */}
         <button
           type="button"
           onClick={() => formatText('underline')}
-          className="p-1.5 rounded hover:bg-gray-200 text-gray-700"
+          className={`p-1.5 rounded hover:bg-gray-200 ${activeUnderline ? 'text-gray-400' : 'text-gray-700'}`}
           title="Underline"
         >
           <FiUnderline className="w-4 h-4" />
@@ -245,18 +339,79 @@ const RichTextEditor: React.FC<{
 
       {/* Content Area */}
       <div 
-        className="min-h-[300px]"
+        className="min-h-[420px] max-h-[60vh] overflow-auto rounded-md"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
+        {/* Visible editor (no raw tags) */}
+        <div
+          id="rte-visible"
+          ref={editableRef}
+          contentEditable
+          suppressContentEditableWarning
+          className="w-full min-h-[420px] p-4 bg-white border-0 outline-none text-sm text-[#111827] prose max-w-none"
+          onInput={() => {
+            if (!editableRef.current) return
+            const newDisplay = editableRef.current.innerHTML
+            // Mark this change as local to prevent caret-jumping resets
+            isLocalEditRef.current = true
+            onChange(toHtml(newDisplay))
+            // Ensure caret remains at end after React re-render
+            if (editableRef.current) setCaretToEnd(editableRef.current)
+          }}
+          // Initial content is injected by the effect above; no innerHTML binding here to avoid caret resets.
+        />
+        {/* Force italic to never appear bold in the visible editor */}
+        <style jsx>{`
+          #rte-visible em, #rte-visible i { font-weight: 400 !important; font-style: italic; }
+          #rte-visible a { color: #2563eb !important; text-decoration: underline !important; }
+        `}</style>
+        {/* Hidden field with actual HTML (posted value) */}
         <textarea
-          id="content-editor"
+          className="absolute -left-[10000px] w-[1px] h-[1px] opacity-0"
+          aria-hidden
+          tabIndex={-1}
           value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full h-[300px] p-4 bg-white border-0 resize-none outline-none font-mono text-sm text-[#111827]"
-          placeholder="Enter your HTML content here... (You can also drag and drop images/videos)"
+          readOnly
         />
       </div>
+      {linkModalOpen && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" role="dialog" aria-modal>
+          <div className="bg-white rounded-lg shadow-xl p-5 w-[90%] max-w-md text-[#111827]" onClick={(e)=>e.stopPropagation()}>
+            <div className="text-lg font-semibold mb-3">Insert Link</div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm mb-1">Text</label>
+                <input value={linkText} onChange={(e)=>setLinkText(e.target.value)} className="w-full border rounded-md px-3 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm mb-1">URL</label>
+                <input value={linkUrl} onChange={(e)=>setLinkUrl(e.target.value)} placeholder="example.com or full URL" className="w-full border rounded-md px-3 py-2" />
+              </div>
+            </div>
+            <div className="mt-4 flex gap-2 justify-end">
+              <button onClick={()=>setLinkModalOpen(false)} className="px-3 py-1.5 rounded-md border">Cancel</button>
+              <button onClick={()=>{
+                if (!editableRef.current || !savedRangeRef.current) { setLinkModalOpen(false); return }
+                const sel = window.getSelection(); if (!sel) { setLinkModalOpen(false); return }
+                sel.removeAllRanges(); sel.addRange(savedRangeRef.current);
+                const a = document.createElement('a')
+                a.setAttribute('href', '#')
+                a.setAttribute('data-url', linkUrl)
+                a.textContent = linkText || 'url'
+                a.style.color = '#1d4ed8'
+                a.style.textDecoration = 'underline'
+                const range = sel.getRangeAt(0)
+                range.deleteContents(); range.insertNode(a); range.setStartAfter(a); range.collapse(true)
+                sel.removeAllRanges(); sel.addRange(range)
+                const newDisplay = editableRef.current.innerHTML
+                onChange(toHtml(newDisplay))
+                setLinkModalOpen(false)
+              }} className="px-3 py-1.5 rounded-md bg-[#701CC0] text-white">Apply</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -331,6 +486,7 @@ export default function BlogEditorSection() {
     tag: "",
     date: "",
     authorName: "",
+    isTest: false,
   })
   const [mode, setMode] = useState<"list" | "edit">("list")
   const [search, setSearch] = useState("")
@@ -361,7 +517,7 @@ export default function BlogEditorSection() {
   }, [search, dateSort, tagFilter, authorFilter])
 
   const resetForm = () =>
-    setForm({ id: 0, title: "", description: "", content: "", tag: "", date: "", authorName: "" })
+    setForm({ id: 0, title: "", description: "", content: "", tag: "", date: "", authorName: "", isTest: false })
 
   const savePost = async () => {
     setLoading(true)
@@ -406,13 +562,21 @@ export default function BlogEditorSection() {
           date: form.date || null,
           tag: form.tag || null,
           authorName: form.authorName || undefined,
+          isTest: form.isTest || false,
         }),
       })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       resetForm()
       // reload
-      const list = await fetch(`/api/blog/posts?page=1&limit=50&sortBy=latest`).then((x) => x.json())
+      const list = await fetch(`/api/blog/posts?page=1&limit=50`).then((x) => x.json())
       setPosts(list.posts)
+      // If this was a test post, surface the link
+      try {
+        const j = await r.json()
+        if (j?.isTest && j?.link) {
+          alert(`Test link (expires in ~24h): ${location.origin}${j.link}`)
+        }
+      } catch {}
       setMode("list")
     } catch (e: any) {
       setError(e?.message ?? "Save failed")
@@ -617,6 +781,7 @@ export default function BlogEditorSection() {
                     tag: p.tag ?? "",
                     date: p.published_date.slice(0,10),
                     authorName: p.author?.name ?? "",
+                    isTest: Boolean((p as any).is_test),
                   }); setMode("edit"); }} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-[#701CC0] hover:bg-[#4C1D95]">Edit</button>
                   <button onClick={() => openDeleteModal({ id: p.id, title: p.title })} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-600 hover:bg-red-700">Delete</button>
                 </div>
@@ -700,6 +865,10 @@ export default function BlogEditorSection() {
           <div className="mt-6 flex gap-3">
             <button onClick={savePost} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#701CC0] text-white hover:bg-[#4C1D95]">{isEditing ? "Update Blog" : "Create Post"}</button>
             <button onClick={() => { resetForm(); setMode("list") }} className="px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700">Cancel</button>
+            <label className="flex items-center gap-2 text-sm text-[#374151] ml-auto">
+              <input type="checkbox" checked={form.isTest} onChange={(e)=>setForm({...form, isTest: e.target.checked})} />
+              Test Post (hidden, 24h link)
+            </label>
           </div>
         </div>
       )}

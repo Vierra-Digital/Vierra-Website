@@ -167,7 +167,12 @@ const BlogViewPage = ({
                     <div id="blog-text" className="flex flex-col pb-16 md:pb-20 items-center pt-12 md:pt-16 lg:pt-20">
                         {/* Title removed as requested; hero already shows the title */}
                         <div id="blog-text-content" className="w-full max-w-3xl">
-                            <div className={`text-[#1F2937] text-base md:text-lg leading-relaxed ${inter.className}`} dangerouslySetInnerHTML={{ __html: content }} />
+                            <div className={`text-[#1F2937] text-base md:text-lg leading-relaxed ${inter.className}`}>
+                                <style jsx>{`
+                                  #blog-text-content a { color: #2563eb; text-decoration: underline; }
+                                `}</style>
+                                <div dangerouslySetInnerHTML={{ __html: content }} />
+                            </div>
                         </div>
                     </div>
                 </div>
