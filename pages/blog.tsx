@@ -301,10 +301,22 @@ const BlogPage = ({ latestPosts }: Props) => {
                                         </Link>
                                     ))}
                                 </div>
-                        <div className="flex items-center gap-2 md:gap-3 mt-10">
-                            <button onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className="px-3 py-1 md:px-4 md:py-2 rounded-full bg-white text-[#18042A] disabled:opacity-50 text-sm md:text-base">Prev</button>
-                            <span className="text-[#6B7280] text-sm md:text-base">{currentPage} / {totalPages}</span>
-                            <button onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className="px-3 py-1 md:px-4 md:py-2 rounded-full bg-white text-[#18042A] disabled:opacity-50 text-sm md:text-base">Next</button>
+                        <div className="flex items-center gap-3 mt-10">
+                            <button
+                                onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                                disabled={currentPage === 1}
+                                className="px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm md:text-base shadow-[0px_4px_15.9px_0px_#701CC061] hover:bg-[#5f17a5] disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#701CC0]/50"
+                            >
+                                Previous
+                            </button>
+                            <span className="text-[#9BAFC3] text-sm md:text-base">{currentPage} / {totalPages}</span>
+                            <button
+                                onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                                disabled={currentPage === totalPages}
+                                className="px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm md:text-base shadow-[0px_4px_15.9px_0px_#701CC061] hover:bg-[#5f17a5] disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#701CC0]/50"
+                            >
+                                Next
+                            </button>
                         </div>
                     </div>
                 </div>

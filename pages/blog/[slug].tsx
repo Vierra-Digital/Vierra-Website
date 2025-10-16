@@ -42,11 +42,7 @@ const stripHtml = (html?: string | null): string => {
     return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
 };
 
-const getExcerpt = (content?: string | null, limit: number = 180): string => {
-    const text = stripHtml(content);
-    if (text.length <= limit) return text;
-    return text.slice(0, limit).trimEnd() + '...';
-};
+// removed unused getExcerpt
 
 const BlogViewPage = ({
     title,

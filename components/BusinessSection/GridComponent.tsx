@@ -109,7 +109,6 @@ function GridComponent() {
     })
   }, [socialIcons])
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     let targetTimer: NodeJS.Timeout
     let eraseTimer: NodeJS.Timeout
@@ -198,7 +197,7 @@ function GridComponent() {
       document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
   // Only depend on stable callbacks; activeSet is advanced internally to avoid effect re-run
-  }, [assignIconToKey, getIconIndexByAlt])
+  }, [assignIconToKey, getIconIndexByAlt, activeSet])
 
   const isNodeActive = (key: string) => {
     return activeNodes.includes(key)

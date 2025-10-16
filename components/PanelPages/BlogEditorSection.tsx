@@ -10,7 +10,6 @@ type Post = {
   title: string
   description?: string | null
   content: string
-  image_url?: string | null
   tag?: string | null
   published_date: string
   author: { name: string }
@@ -25,7 +24,6 @@ export default function BlogEditorSection() {
     title: "",
     description: "",
     content: "",
-    image_url: "",
     tag: "",
     date: "",
     authorName: "",
@@ -55,7 +53,7 @@ export default function BlogEditorSection() {
   }, [])
 
   const resetForm = () =>
-    setForm({ id: 0, title: "", description: "", content: "", image_url: "", tag: "", date: "", authorName: "" })
+    setForm({ id: 0, title: "", description: "", content: "", tag: "", date: "", authorName: "" })
 
   const savePost = async () => {
     setLoading(true)
@@ -158,7 +156,6 @@ export default function BlogEditorSection() {
                     title: p.title,
                     description: p.description ?? "",
                     content: p.content,
-                    image_url: p.image_url ?? "",
                     tag: p.tag ?? "",
                     date: p.published_date.slice(0,10),
                     authorName: p.author?.name ?? "",
