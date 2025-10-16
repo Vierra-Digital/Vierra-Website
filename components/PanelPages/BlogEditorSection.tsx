@@ -627,6 +627,32 @@ export default function BlogEditorSection() {
     }
   }
 
+  const makeTest = async (post: Post) => {
+    setLoading(true)
+    try {
+      const r = await fetch("/api/blog/admin/post", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: post.id,
+          title: post.title,
+          description: post.description,
+          content: post.content,
+          date: post.published_date.slice(0,10),
+          tag: post.tag,
+          authorName: post.author?.name,
+          isTest: true,
+        }),
+      })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, is_test: true } : p)))
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to make test")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const openDeleteModal = (post: { id: number; title: string }) => {
     setPostToDelete(post)
     setDeleteModalOpen(true)
@@ -819,7 +845,7 @@ export default function BlogEditorSection() {
                     <button onClick={() => makeLive(p)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-green-600 hover:bg-green-700">Make Live</button>
                   )}
                   {!p.is_test && (
-                    <button onClick={() => makeLive({ ...p, is_test: true } as any)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-yellow-600 hover:bg-yellow-700">Make Test</button>
+                    <button onClick={() => makeTest(p)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-yellow-600 hover:bg-yellow-700">Make Test</button>
                   )}
                   <button onClick={() => openDeleteModal({ id: p.id, title: p.title })} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-600 hover:bg-red-700">Delete</button>
                 </div>

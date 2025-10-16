@@ -328,8 +328,9 @@ const BlogPage = ({ latestPosts }: Props) => {
                                                     })
                                                 })
                                                 if (r.ok) {
-                                                    // Optionally redirect to /blog/test to see it there
-                                                    window.location.href = '/blog/test'
+                                                    // Update card locally without redirect
+                                                    const btn = (event?.currentTarget as HTMLButtonElement | undefined)
+                                                    if (btn) btn.textContent = 'Moved to Test'
                                                 }
                                             } catch (e) {
                                                 console.error('make test failed', e)
