@@ -75,10 +75,10 @@ declare global {
 
 const formatDate = (dateString?: string | null): string => {
     if (!dateString) return "";
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return "";
-    const formatter = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
-    return formatter.format(date);
+    // Parse date string directly to avoid timezone issues
+    const dateStr = dateString.split('T')[0]; // Get YYYY-MM-DD part
+    const [year, month, day] = dateStr.split('-');
+    return `${month}/${day}/${year}`;
 };
 
 const stripHtml = (html?: string | null): string => {
@@ -111,7 +111,7 @@ const BlogPage = ({ latestPosts }: Props) => {
         if (tagName === "All Blog Posts") {
             return posts;
         }
-        return posts.filter(post => post.tag === tagName);
+        return posts.filter(post => post.tag && post.tag.split(',').map(t => t.trim()).includes(tagName));
     };
 
     const filterPostsByQuery = (query: string, posts: BlogPostType[]) => {
@@ -238,18 +238,18 @@ const BlogPage = ({ latestPosts }: Props) => {
                             </div>
                             <div id="subtext-search-row" className="w-full h-auto flex flex-col sm:flex-col md:flex-col lg:flex-row xl:flex-row justify-between">
                                 <div id="subtext-holder" className={`text-[#9BAFC3] text-base md:text-lg mb-10 max-w-2xl ${inter.className}`}>
-                                    <p>Check out the latest insights, case studies, analytics, and projects from Vierra.</p>
+                                    <p>Check out the latest insights, case studies, analytics,<br />and projects from Vierra.</p>
                                 </div>
 
                                 <div id="search-holder" className="flex w-full lg:w-[556px]">
-                                    <div className="w-full h-11 md:h-14 rounded-full bg-[#F3F3F3] flex items-center px-6 gap-3">
-                                        <Search className="h-4 w-4 md:h-5 md:w-5 text-[#646A69]" />
+                                    <div className="w-full h-12 md:h-14 rounded-lg bg-white border border-gray-200 flex items-center px-4 gap-3 shadow-sm hover:shadow-md transition-shadow">
+                                        <Search className="h-5 w-5 text-gray-400" />
                                         <input
                                             type="text"
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
                                             placeholder="Search articles, topics, authors..."
-                                            className={`w-full bg-transparent outline-none text-[#18042A] placeholder:text-[#646A69] text-sm md:text-base lg:text-lg ${inter.className}`}
+                                            className={`w-full bg-transparent outline-none text-gray-900 placeholder:text-gray-500 text-sm md:text-base ${inter.className}`}
                                             aria-label="Search blog posts"
                                         />
                                     </div>
@@ -289,11 +289,19 @@ const BlogPage = ({ latestPosts }: Props) => {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
                             {paginatedPosts.map((blog) => (
                                     <Link key={blog.id} href={`/blog/${blog.slug}`} passHref>
-                                    <div className="rounded-2xl bg-white p-5 md:p-6 shadow-sm hover:shadow-md transition-shadow">
-                                        <span className="text-[10px] md:text-xs font-semibold text-purple-600">{blog.tag || 'Blog'}</span>
-                                        <h3 className={`mt-2 text-base md:text-lg font-bold text-[#0F172A] ${bricolage.className}`}>{blog.title}</h3>
+                                    <div className="rounded-2xl bg-white p-5 md:p-6 shadow-sm hover:shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
+                                        <h3 className={`text-base md:text-lg font-bold text-[#0F172A] ${bricolage.className}`}>{blog.title}</h3>
                                         <div className="mt-1 text-[11px] md:text-xs text-[#334155]">{blog.published_date ? formatDate(blog.published_date) : ''}</div>
                                         <p className={`mt-3 text-sm md:text-base text-[#475569] ${inter.className}`}>{blog.description || getExcerpt(blog.content)}</p>
+                                        <div className="flex flex-wrap gap-1 mt-3">
+                                            {blog.tag ? blog.tag.split(',').map((tag, index) => (
+                                                <span key={index} className="text-[10px] md:text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
+                                                    {tag.trim()}
+                                                </span>
+                                            )) : (
+                                                <span className="text-[10px] md:text-xs font-semibold text-purple-600">Blog</span>
+                                            )}
+                                        </div>
                                         <div className="mt-4 flex items-center justify-between">
                                             <span className="text-[#701CC0] font-semibold text-sm md:text-base">Read More</span>
                                                 </div>

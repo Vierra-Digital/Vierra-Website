@@ -33,7 +33,10 @@ const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
 const inter = Inter({ subsets: ["latin"] });
 
 const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
+    // Parse date string directly to avoid timezone issues
+    const dateStr = dateString.split('T')[0]; // Get YYYY-MM-DD part
+    const [year, month, day] = dateStr.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
     return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
 };
 
@@ -147,7 +150,13 @@ const BlogViewPage = ({
                                 {tag && (
                                     <>
                                         <div className="h-[4px] w-[4px] bg-[#9BAFC3] rounded-full"></div>
-                                        <span className="bg-purple-600/90 text-white px-3 py-1 rounded-md text-xs md:text-sm font-medium">{tag}</span>
+                                        <div className="flex flex-wrap gap-1">
+                                            {tag.split(',').map((t, index) => (
+                                                <span key={index} className="bg-purple-600/90 text-white px-3 py-1 rounded-md text-xs md:text-sm font-medium">
+                                                    {t.trim()}
+                                                </span>
+                                            ))}
+                                        </div>
                                     </>
                                 )}
                             </div>
