@@ -71,7 +71,7 @@ function GridComponent() {
     "drawing" | "showing" | "erasing" | "idle"
   >("idle")
   const [activeNodes, setActiveNodes] = useState<string[]>([])
-  const [iconCursor, setIconCursor] = useState(0)
+  const iconCursorRef = React.useRef(0)
   const [cellIconMap, setCellIconMap] = useState<Record<string, number>>({})
   const usedIconsRef = React.useRef<Set<number>>(new Set())
 
@@ -97,17 +97,17 @@ function GridComponent() {
   const assignIconToKey = useCallback((key: string) => {
     setCellIconMap((prev) => {
       if (prev[key] !== undefined) return prev
-      let probe = iconCursor
+      let probe = iconCursorRef.current
       const total = socialIcons.length
       while (usedIconsRef.current.has(probe % total) && usedIconsRef.current.size < total) {
         probe++
       }
       const assigned = probe % total
       usedIconsRef.current.add(assigned)
+      iconCursorRef.current = (assigned + 1) % total
       return { ...prev, [key]: assigned }
     })
-    setIconCursor((c) => (c + 1) % socialIcons.length)
-  }, [iconCursor, socialIcons])
+  }, [socialIcons])
 
   useEffect(() => {
     let targetTimer: NodeJS.Timeout
@@ -155,7 +155,7 @@ function GridComponent() {
           if (next === 0) {
             // one full runthrough completed; reset for next pass
             setCellIconMap({})
-            setIconCursor(0)
+            iconCursorRef.current = 0
             usedIconsRef.current.clear()
           }
           return next
@@ -189,14 +189,15 @@ function GridComponent() {
     }
 
     document.addEventListener("visibilitychange", handleVisibilityChange)
-
+    // Start once on mount
     startAnimationLoop()
 
     return () => {
       stopAnimationLoop()
       document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
-  }, [activeSet, assignIconToKey, getIconIndexByAlt])
+  // Only depend on stable callbacks; activeSet is advanced internally to avoid effect re-run
+  }, [assignIconToKey, getIconIndexByAlt])
 
   const isNodeActive = (key: string) => {
     return activeNodes.includes(key)
