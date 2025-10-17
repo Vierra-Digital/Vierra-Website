@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react"
 import Head from "next/head"
 import { Inter } from "next/font/google"
 import Image from "next/image"
+import ProfileImage from "@/components/ProfileImage"
 import SignPdfModal from "@/components/ui/SignPdfModal"
 import Link from "next/link"
 import { FiLogOut, FiShield } from "react-icons/fi"
@@ -47,13 +48,65 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
   const [items, setItems] = useState<SessionItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [currentUserName, setCurrentUserName] = useState<string | null>(null)
+  const [currentUserImage, setCurrentUserImage] = useState<string | null>(null)
 
   // keep prop used to satisfy linting after removing the button usage
   void dashboardHref
 
   useEffect(() => {
     fetchSessions()
+    fetchCurrentUser()
   }, [])
+
+  // Track user activity
+  useEffect(() => {
+    const updateActivity = async () => {
+      try {
+        await fetch("/api/profile/updateActivity", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "online" }),
+        });
+      } catch (error) {
+        console.error("Failed to update activity:", error);
+      }
+    };
+
+    // Update activity on mount
+    updateActivity();
+
+    // Update activity every 2 minutes while user is active
+    const interval = setInterval(updateActivity, 2 * 60 * 1000);
+
+    // Update activity on page visibility change
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        updateActivity();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Cleanup
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
+  async function fetchCurrentUser() {
+    try {
+      const response = await fetch("/api/profile/getUser")
+      if (response.ok) {
+        const userData = await response.json()
+        setCurrentUserName(userData.name)
+        setCurrentUserImage(userData.image)
+      }
+    } catch (error) {
+      console.error("Failed to fetch current user:", error)
+    }
+  }
 
   async function fetchSessions() {
     try {
@@ -104,13 +157,13 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 2 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
               <BsPeople />
               <span className={`text-xs ${inter.className}`}>
-                Team
+                Staff Orbital
               </span>
             </div>
             <div id="panel-nav-item" onClick={() => { setCurrentSection(5); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 5 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
               <HiGlobeAlt />
               <span className={`text-xs ${inter.className}`}>
-                Outreach
+                Marketing Tracker
               </span>
             </div>
             <div id="panel-nav-item" onClick={() => { setCurrentSection(6); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 6 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
@@ -153,7 +206,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             >
               <FiShield />
               <span className={`text-xs ${inter.className}`}>
-                Admin Editor
+                User Management
               </span>
             </div>
             {/* Logout moved to bottom of sidebar */}
@@ -217,22 +270,17 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                   aria-label="Open user settings"
                   onClick={() => setShowSettings((prev) => !prev)}
                 >
-                  <Image
-                    src={
-                      typeof session?.user?.image === "string" &&
-                        session.user.image.length > 0
-                        ? session.user.image
-                        : "/assets/vierra-logo.png"
-                    }
-                    alt="Profile"
-                    width={32}
-                    height={32}
-                    className="object-cover w-8 h-8 rounded-full bg-black"
-                    priority
-                    quality={100}
-                  />
+                <ProfileImage
+                  src={currentUserImage ? `/api/profile/getImage?t=${Date.now()}` : null}
+                  alt="Profile"
+                  name={currentUserName || session?.user?.name || "User"}
+                  size={32}
+                  className="shadow-md"
+                  priority
+                  quality={100}
+                />
                   <div id="name-holder" className="hidden w-auto h-auto text-[#111014] md:flex items-center font-semibold">
-                    <span className="">{session?.user?.name ? session.user.name : "Vierra Admin"}</span>
+                    <span className="">{currentUserName || session?.user?.name || "Vierra Admin"}</span>
                   </div>
                   <div id="dropdowner" className="hidden md:flex">
                     <RiArrowDropDownLine width={32}
@@ -242,7 +290,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               </div>
             </div>
           </div>
-  <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden pl-4 md:pl-8 relative">
+  <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden pb-24 relative">
             {loading && (
               <div className="absolute inset-0 z-30 flex items-center justify-center bg-white/60 backdrop-blur-sm">
                 <div className="h-10 w-10 border-4 border-[#E5E7EB] border-t-[#701CC0] rounded-full animate-spin" aria-label="Loading" />
@@ -255,13 +303,13 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             )}
             {showSettings ? (<>
               <UserSettingsPage
-                user={
-                  session?.user || {
-                    name: "Test User",
-                    email: "test@vierra.com",
-                    image: "/assets/vierra-logo.png",
-                  }
-                }
+                user={{
+                  name: currentUserName,
+                  email: session?.user?.email || "test@vierra.com",
+                  image: currentUserImage ? `/api/profile/getImage?t=${Date.now()}` : null,
+                }}
+                onNameUpdate={setCurrentUserName}
+                onImageUpdate={() => setCurrentUserImage(`updated-${Date.now()}`)}
               />
             </>)
               : (
