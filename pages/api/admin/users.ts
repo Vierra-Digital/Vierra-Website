@@ -14,9 +14,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const users = await prisma.user.findMany({
         select: {
           id: true,
+          name: true,
           email: true,
+          image: true,
           role: true,
           passwordEnc: true,
+          position: true,
+          country: true,
+          company_email: true,
+          mentor: true,
+          strikes: true,
+          time_zone: true,
+          status: true,
+          lastActiveAt: true,
           client: { select: { name: true } },
         },
         orderBy: { id: "asc" },
@@ -24,8 +34,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       const shaped = users.map((u) => ({
         id: u.id,
+        name: u.name,
         email: u.email,
+        image: Boolean(u.image),
         role: u.role ?? "user",
+        position: u.position,
+        country: u.country,
+        company_email: u.company_email,
+        mentor: u.mentor,
+        strikes: u.strikes,
+        time_zone: u.time_zone,
+        status: u.status,
+        lastActiveAt: u.lastActiveAt,
         clientName: u.client?.name ?? null,
         hasPassword: Boolean(u.passwordEnc),
       }));
@@ -37,18 +57,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === "POST") {
-    const { email, password, role: newRole } = req.body ?? {};
+    const { name, email, password, role: newRole } = req.body ?? {};
     if (!email || !password || !newRole) {
       return res.status(400).json({ message: "email, password and role are required" });
     }
     try {
       const created = await prisma.user.create({
         data: {
+          name: name || null,
           email,
           role: String(newRole),
           passwordEnc: encrypt(String(password)),
         },
-        select: { id: true, email: true, role: true },
+        select: { id: true, name: true, email: true, role: true },
       });
       return res.status(201).json(created);
     } catch (e: any) {
@@ -59,13 +80,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === "PUT") {
-    const { id, role: newRole } = req.body ?? {};
-    if (!id || !newRole) return res.status(400).json({ message: "id and role are required" });
+    const { id, name, role: newRole } = req.body ?? {};
+    if (!id) return res.status(400).json({ message: "id is required" });
     try {
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (newRole) updateData.role = String(newRole);
+      
       const updated = await prisma.user.update({
         where: { id: Number(id) },
-        data: { role: String(newRole) },
-        select: { id: true, email: true, role: true },
+        data: updateData,
+        select: { id: true, name: true, email: true, role: true },
       });
       return res.status(200).json(updated);
     } catch (e) {

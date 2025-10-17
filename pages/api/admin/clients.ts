@@ -14,10 +14,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const clients = await prisma.client.findMany({
-      include: {
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        businessName: true,
+        image: true,
+        createdAt: true,
+        isActive: true,
         onboardingSessions: {
           orderBy: { createdAt: "desc" },
           take: 1,
+          select: {
+            answers: true,
+            expiresAt: true,
+            status: true,
+          },
         },
       },
       orderBy: { createdAt: "desc" },
@@ -62,6 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         status: displayStatus,
         isActive: c.isActive,
         isExpired: isExpired || false,
+        image: Boolean(c.image),
       };
     });
 

@@ -1,9 +1,9 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useState } from "react"
-import { Users, Shield, Briefcase, FileText, Edit, Settings, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, Eye } from "lucide-react"
+import { Users, Shield, FileText, Settings, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, Eye } from "lucide-react"
 
-type TabType = "users" | "clients" | "staff" | "sessions" | "blogs" | "system"
+type TabType = "users" | "clients" | "sessions" | "system"
 
 const AdminEditorSection = () => {
     const [activeTab, setActiveTab] = useState<TabType>("sessions")
@@ -11,9 +11,7 @@ const AdminEditorSection = () => {
     const tabs = [
         { id: "users" as TabType, label: "Users", icon: Users },
         { id: "clients" as TabType, label: "Client Management", icon: Shield },
-        { id: "staff" as TabType, label: "Staff", icon: Briefcase },
         { id: "sessions" as TabType, label: "Sessions", icon: FileText },
-        { id: "blogs" as TabType, label: "Blogs", icon: Edit },
         { id: "system" as TabType, label: "System", icon: Settings },
     ]
 
@@ -23,12 +21,8 @@ const AdminEditorSection = () => {
                 return <UsersPanel />
             case "clients":
                 return <AdminClientsPanel />
-            case "staff":
-                return <StaffPanel />
             case "sessions":
                 return <SessionsPanel />
-            case "blogs":
-                return <div className="text-gray-600">Blogs section - Coming soon</div>
             case "system":
                 return <SystemPanel />
             default:
@@ -37,12 +31,15 @@ const AdminEditorSection = () => {
     }
 
     return (
-        <div className="w-full min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-8">
+        <div className="w-full h-full bg-white overflow-y-auto overflow-x-hidden p-4 md:p-8">
             <div className="max-w-7xl mx-auto">
-                <h1 className="text-4xl font-bold text-black mb-8">Admin Control Panel</h1>
+                <div className="mb-6">
+                    <h1 className="text-2xl font-bold text-[#111827] mb-2">Admin Control Panel</h1>
+                    <p className="text-[#6B7280]">Manage users, clients, sessions, and system settings</p>
+                </div>
                 
                 {/* Tabs Navigation */}
-                <div className="flex flex-wrap gap-3 mb-8">
+                <div className="flex flex-wrap gap-2 mb-6">
                     {tabs.map((tab) => {
                         const Icon = tab.icon
                         const isActive = activeTab === tab.id
@@ -51,15 +48,15 @@ const AdminEditorSection = () => {
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
                                 className={`
-                                    flex items-center gap-2 px-6 py-3 rounded-lg font-medium
+                                    flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm
                                     transition-all duration-200 ease-in-out
                                     ${isActive 
-                                        ? "bg-black text-white shadow-lg" 
-                                        : "bg-white text-gray-700 hover:bg-gray-100 shadow-sm"
+                                        ? "bg-[#701CC0] text-white shadow-sm" 
+                                        : "bg-white text-[#6B7280] hover:bg-gray-50 border border-[#E5E7EB]"
                                     }
                                 `}
                             >
-                                <Icon size={20} />
+                                <Icon size={16} />
                                 <span>{tab.label}</span>
                             </button>
                         )
@@ -67,7 +64,7 @@ const AdminEditorSection = () => {
                 </div>
 
                 {/* Tab Content */}
-                <div className="bg-white rounded-lg shadow-lg p-8 min-h-[400px]">
+                <div className="bg-white rounded-lg border border-[#E5E7EB] min-h-[600px] p-6">
                     {renderTabContent()}
                 </div>
             </div>
@@ -97,7 +94,7 @@ type SessionRow = {
 // ----- System Panel -----
 
 function SystemPanel() {
-    const [stats, setStats] = useState<{ users: number; clients: number; sessions: number; blogPosts: number; staff: number } | null>(null)
+    const [stats, setStats] = useState<{ users: number; clients: number; sessions: number; blogPosts: number } | null>(null)
     const [expiring, setExpiring] = useState<boolean>(false)
     const [message, setMessage] = useState<string>("")
 
@@ -143,7 +140,6 @@ function SystemPanel() {
                     <div>Total Clients: <span className="float-right font-medium">{stats?.clients ?? "-"}</span></div>
                     <div>Total Sessions: <span className="float-right font-medium">{stats?.sessions ?? "-"}</span></div>
                     <div>Blog Posts: <span className="float-right font-medium">{stats?.blogPosts ?? "-"}</span></div>
-                    <div>Staff Members: <span className="float-right font-medium">{stats?.staff ?? "-"}</span></div>
                 </div>
             </div>
 
@@ -187,7 +183,9 @@ function ClockIcon() {
 
 type ListedUser = {
     id: number
+    name: string | null
     email: string | null
+    image: boolean
     role: string
     clientName: string | null
     hasPassword: boolean
@@ -199,6 +197,8 @@ function UsersPanel() {
     const [error, setError] = useState<string>("")
     const [showCreate, setShowCreate] = useState<boolean>(false)
     const [revealed, setRevealed] = useState<Record<number, string>>({})
+    const [editingName, setEditingName] = useState<Record<number, string>>({})
+    const [updatingNames, setUpdatingNames] = useState<Set<number>>(new Set())
 
     const load = async () => {
         setLoading(true)
@@ -224,7 +224,11 @@ function UsersPanel() {
             const r = await fetch(`/api/admin/userPassword?id=${userId}`)
             if (!r.ok) return
             const data = await r.json()
-            if (data?.password) setRevealed((prev) => ({ ...prev, [userId]: data.password }))
+            if (data?.password) {
+                setRevealed((prev) => ({ ...prev, [userId]: data.password }))
+            } else if (data?.error) {
+                setRevealed((prev) => ({ ...prev, [userId]: data.error }))
+            }
         } catch {}
     }
 
@@ -245,6 +249,68 @@ function UsersPanel() {
             })
             setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)))
         } catch {}
+    }
+
+    const updateName = async (userId: number, newName: string) => {
+        setUpdatingNames(prev => new Set(prev).add(userId))
+        try {
+            await fetch("/api/admin/users", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: userId, name: newName }),
+            })
+            setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, name: newName } : u)))
+            setEditingName(prev => {
+                const newState = { ...prev }
+                delete newState[userId]
+                return newState
+            })
+        } catch {}
+        finally {
+            setUpdatingNames(prev => {
+                const newSet = new Set(prev)
+                newSet.delete(userId)
+                return newSet
+            })
+        }
+    }
+
+    const uploadUserImage = async (userId: number, file: File) => {
+        try {
+            // Convert file to base64
+            const reader = new FileReader();
+            reader.onload = async () => {
+                try {
+                    const base64Data = reader.result as string;
+                    const base64 = base64Data.split(',')[1]; // Remove data:image/...;base64, prefix
+                    
+                    const response = await fetch("/api/admin/uploadUserImage", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ 
+                            userId,
+                            imageData: base64,
+                            mimeType: file.type
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error("Failed to upload image");
+                    }
+
+                    // Update local state
+                    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, image: true } : u)));
+                } catch (error) {
+                    console.error("Error uploading image:", error);
+                }
+            };
+            
+            reader.readAsDataURL(file);
+        } catch (error) {
+            console.error("Error processing file:", error);
+        }
     }
 
     const deleteUser = async (userId: number) => {
@@ -269,6 +335,7 @@ function UsersPanel() {
                     <thead>
                         <tr className="text-left text-sm text-gray-600">
                             <th className="px-6 py-3">ID</th>
+                            <th className="px-6 py-3">Name</th>
                             <th className="px-6 py-3">Email</th>
                             <th className="px-6 py-3">Password</th>
                             <th className="px-6 py-3">Role</th>
@@ -279,12 +346,12 @@ function UsersPanel() {
                     <tbody>
                         {loading && (
                             <tr>
-                                <td colSpan={6} className="px-6 py-10 text-center text-gray-500">Loading...</td>
+                                <td colSpan={7} className="px-6 py-10 text-center text-gray-500">Loading...</td>
                             </tr>
                         )}
                         {!loading && error && (
                             <tr>
-                                <td colSpan={6} className="px-6 py-10 text-center text-red-600">{error}</td>
+                                <td colSpan={7} className="px-6 py-10 text-center text-red-600">{error}</td>
                             </tr>
                         )}
 
@@ -293,6 +360,48 @@ function UsersPanel() {
                             return (
                                 <tr key={u.id} className="border-t border-gray-100 text-sm">
                                     <td className="px-6 py-4 text-gray-700">{u.id}</td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-2">
+                                            {editingName[u.id] !== undefined ? (
+                                                <div className="flex items-center gap-1">
+                                                    <input
+                                                        type="text"
+                                                        value={editingName[u.id]}
+                                                        onChange={(e) => setEditingName(prev => ({ ...prev, [u.id]: e.target.value }))}
+                                                        className="border rounded px-2 py-1 text-sm w-32"
+                                                        autoFocus
+                                                    />
+                                                    <button
+                                                        onClick={() => updateName(u.id, editingName[u.id])}
+                                                        disabled={updatingNames.has(u.id)}
+                                                        className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50"
+                                                    >
+                                                        {updatingNames.has(u.id) ? "..." : "✓"}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setEditingName(prev => {
+                                                            const newState = { ...prev }
+                                                            delete newState[u.id]
+                                                            return newState
+                                                        })}
+                                                        className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-gray-900">{u.name ?? "-"}</span>
+                                                    <button
+                                                        onClick={() => setEditingName(prev => ({ ...prev, [u.id]: u.name || "" }))}
+                                                        className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </td>
                                     <td className="px-6 py-4">
                                         <div className="text-gray-900">{u.email ?? "-"}</div>
                                     </td>
@@ -316,7 +425,27 @@ function UsersPanel() {
                                     </td>
                                     <td className="px-6 py-4 text-gray-700">{u.clientName ?? "N/A"}</td>
                                     <td className="px-6 py-4">
-                                        <button onClick={() => deleteUser(u.id)} className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs bg-red-50 text-red-700 border border-red-200">Delete</button>
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={() => deleteUser(u.id)} className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs bg-red-50 text-red-700 border border-red-200">Delete</button>
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) {
+                                                        uploadUserImage(u.id, file);
+                                                    }
+                                                }}
+                                                className="hidden"
+                                                id={`image-upload-${u.id}`}
+                                            />
+                                            <label
+                                                htmlFor={`image-upload-${u.id}`}
+                                                className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs bg-blue-50 text-blue-700 border border-blue-200 cursor-pointer hover:bg-blue-100"
+                                            >
+                                                {u.image ? "Update Image" : "Upload Image"}
+                                            </label>
+                                        </div>
                                     </td>
                                 </tr>
                             )
@@ -331,6 +460,7 @@ function UsersPanel() {
 }
 
 function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+    const [name, setName] = useState<string>("")
     const [email, setEmail] = useState<string>("")
     const [password, setPassword] = useState<string>("")
     const [role, setRole] = useState<string>("user")
@@ -344,7 +474,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
             const r = await fetch("/api/admin/users", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, password, role }),
+                body: JSON.stringify({ name, email, password, role }),
             })
             if (!r.ok) throw new Error((await r.json())?.message || "Failed to create user")
             onCreated()
@@ -362,7 +492,8 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                     <div className="text-xl font-semibold">Create New User</div>
                     <button onClick={onClose} className="text-gray-600 hover:text-black">Close</button>
                 </div>
-                <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (optional)" className="w-full border rounded-md px-3 py-2" />
                     <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="w-full border rounded-md px-3 py-2" />
                     <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full border rounded-md px-3 py-2" />
                     <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full border rounded-md px-3 py-2">
@@ -569,62 +700,6 @@ function AddClientModal({ onClose, onCreated }: { onClose: () => void; onCreated
                         {submitting ? "Adding..." : "Add Client"}
                     </button>
                 </div>
-            </div>
-        </div>
-    )
-}
-
-function StaffPanel() {
-    const [staff, setStaff] = useState<Array<{ id: number; email: string | null }>>([])
-    const [loading, setLoading] = useState<boolean>(false)
-    const [error, setError] = useState<string>("")
-
-    useEffect(() => {
-        const load = async () => {
-            setLoading(true)
-            setError("")
-            try {
-                const r = await fetch("/api/admin/staff")
-                if (!r.ok) throw new Error("Failed to load staff")
-                setStaff(await r.json())
-            } catch (e: any) {
-                setError(e?.message || "Failed to load staff")
-            } finally {
-                setLoading(false)
-            }
-        }
-        load()
-    }, [])
-
-    return (
-        <div className="space-y-6">
-            <h2 className="text-3xl font-semibold text-black">Staff</h2>
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <table className="min-w-full bg-white">
-                    <thead>
-                        <tr className="text-left text-sm text-gray-600">
-                            <th className="px-6 py-3">ID</th>
-                            <th className="px-6 py-3">Email</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loading && (
-                            <tr><td colSpan={2} className="px-6 py-10 text-center text-gray-500">Loading...</td></tr>
-                        )}
-                        {!loading && error && (
-                            <tr><td colSpan={2} className="px-6 py-10 text-center text-red-600">{error}</td></tr>
-                        )}
-                        {!loading && staff.length === 0 && (
-                            <tr><td colSpan={2} className="px-6 py-10 text-center text-gray-500">No staff</td></tr>
-                        )}
-                        {staff.map((s) => (
-                            <tr key={s.id} className="border-t border-gray-100 text-sm">
-                                <td className="px-6 py-4 text-gray-700">{s.id}</td>
-                                <td className="px-6 py-4 text-gray-900">{s.email ?? "-"}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
             </div>
         </div>
     )
@@ -849,17 +924,17 @@ function SessionsPanel() {
                     <tbody>
                         {loading && (
                             <tr>
-                                <td colSpan={6} className="px-6 py-10 text-center text-gray-500">Loading...</td>
+                                <td colSpan={7} className="px-6 py-10 text-center text-gray-500">Loading...</td>
                             </tr>
                         )}
                         {!loading && error && (
                             <tr>
-                                <td colSpan={6} className="px-6 py-10 text-center text-red-600">{error}</td>
+                                <td colSpan={7} className="px-6 py-10 text-center text-red-600">{error}</td>
                             </tr>
                         )}
                         {!loading && !error && sessions.length === 0 && (
                             <tr>
-                                <td colSpan={6} className="px-6 py-10 text-center text-gray-500">No sessions found</td>
+                                <td colSpan={7} className="px-6 py-10 text-center text-gray-500">No sessions found</td>
                             </tr>
                         )}
 
