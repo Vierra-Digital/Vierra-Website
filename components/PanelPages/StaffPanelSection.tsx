@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { FiPlus, FiSearch, FiFilter } from 'react-icons/fi'
 
-type TeamRow = {
+type StaffRow = {
     id: string
     name: string
     position: string
@@ -23,53 +23,43 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     )
 }
 
-const TeamPanelSection: React.FC = () => {
-    const [rows, setRows] = useState<TeamRow[]>([])
+const StaffPanelSection: React.FC = () => {
+    const [rows, setRows] = useState<StaffRow[]>([])
     const [loading, setLoading] = useState(true)
     const [error] = useState<string | null>(null)
     const [currentPage, setCurrentPage] = useState(0)
     const pageSize = 10
 
     useEffect(() => {
-        // Sample data for demonstration
-        const sampleData: TeamRow[] = [
-            {
-                id: "1",
-                name: "John Smith",
-                position: "Senior Developer",
-                country: "United States",
-                timeZone: "EST",
-                phone: "+1 (555) 123-4567",
-                email: "john.smith@vierra.com",
-                companyEmail: "john.smith@vierra.com",
-                status: "active"
-            },
-            {
-                id: "2",
-                name: "Sarah Johnson",
-                position: "Marketing Manager",
-                country: "Canada",
-                timeZone: "PST",
-                phone: "+1 (555) 987-6543",
-                email: "sarah.johnson@vierra.com",
-                companyEmail: "sarah.johnson@vierra.com",
-                status: "online"
-            },
-            {
-                id: "3",
-                name: "Mike Chen",
-                position: "Designer",
-                country: "Australia",
-                timeZone: "AEST",
-                phone: "+61 2 1234 5678",
-                email: "mike.chen@vierra.com",
-                companyEmail: "mike.chen@vierra.com",
-                status: "offline"
+        const fetchStaff = async () => {
+            try {
+                setLoading(true)
+                const response = await fetch('/api/admin/users')
+                if (!response.ok) throw new Error('Failed to fetch staff')
+                const staffData = await response.json()
+                
+                const mappedData: StaffRow[] = staffData.map((staff: any) => ({
+                    id: staff.id.toString(),
+                    name: staff.name || "Unknown",
+                    position: staff.position || "Not Set",
+                    country: staff.country || "Not Set",
+                    timeZone: staff.timeZone || "Not Set",
+                    phone: staff.phone || "Not Set",
+                    email: staff.email || "No Email",
+                    companyEmail: staff.companyEmail || "No Company Email",
+                    status: staff.role === "admin" ? "active" : "online"
+                }))
+                
+                setRows(mappedData)
+            } catch (err) {
+                console.error('Failed to fetch staff:', err)
+                setRows([])
+            } finally {
+                setLoading(false)
             }
-        ]
+        }
         
-        setRows(sampleData)
-        setLoading(false)
+        fetchStaff()
     }, [])
 
     const columns = useMemo(
@@ -91,14 +81,14 @@ const TeamPanelSection: React.FC = () => {
         <div className="w-full h-full bg-white text-[#111014] flex flex-col p-4">
             <div className="w-full flex justify-between items-center mb-2">
                 <div>
-                    <h2 className="text-2xl font-semibold text-[#111827]">Team</h2>
-                    <p className="text-sm text-[#6B7280] mt-0">All Team Members</p>
+                    <h2 className="text-2xl font-semibold text-[#111827]">Staff</h2>
+                    <p className="text-sm text-[#6B7280] mt-0">All Staff Members</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
                         <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
-                        <label htmlFor="team-search" className="sr-only">Search Team</label>
-                        <input id="team-search" type="search" placeholder="Search Team" className="w-64 md:w-80 text-sm placeholder:text-[#9CA3AF] bg-transparent outline-none" />
+                        <label htmlFor="staff-search" className="sr-only">Search Staff</label>
+                        <input id="staff-search" type="search" placeholder="Search Staff" className="w-64 md:w-80 text-sm placeholder:text-[#9CA3AF] bg-transparent outline-none" />
                     </div>
                     <button className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50">
                         <FiFilter className="w-4 h-4" />
@@ -106,7 +96,7 @@ const TeamPanelSection: React.FC = () => {
                     </button>
                     <button className="inline-flex items-center px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]">
                         <FiPlus className="w-4 h-4 mr-2" />
-                        Add Team Member
+                        Add Staff Member
                     </button>
                 </div>
             </div>
@@ -128,7 +118,7 @@ const TeamPanelSection: React.FC = () => {
                             )}
                             {!loading && rows.length === 0 && (
                                 <tr>
-                                    <td className="px-4 py-6 text-sm text-gray-500" colSpan={columns.length}>No team members found</td>
+                                    <td className="px-4 py-6 text-sm text-gray-500" colSpan={columns.length}>No staff members found</td>
                                 </tr>
                             )}
                             {rows.slice(currentPage * pageSize, (currentPage + 1) * pageSize).map((r) => (
@@ -193,4 +183,4 @@ const TeamPanelSection: React.FC = () => {
     )
 }
 
-export default TeamPanelSection;
+export default StaffPanelSection;

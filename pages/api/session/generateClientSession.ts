@@ -16,18 +16,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const token = crypto.randomUUID();
     const client = await prisma.client.upsert({
       where: { email },
-      create: { name: clientName, email, businessName },
-      update: { name: clientName, businessName },
-      select: { id: true, name: true, email: true, businessName: true, createdAt: true },
+      create: { name: clientName, email, businessName, industry },
+      update: { name: clientName, businessName, industry },
+      select: { id: true, name: true, email: true, businessName: true, industry: true, createdAt: true },
     });
-    // Persist industry in latest onboarding session answers scaffold
+    // Create onboarding session without storing industry in answers
     const session = await prisma.onboardingSession.create({
       data: {
         id: token,
         clientId: client.id,
         status: "pending",
         expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
-        answers: { industry },
+        answers: {},
       },
       select: { id: true, createdAt: true, submittedAt: true, status: true, answers: true },
     });
