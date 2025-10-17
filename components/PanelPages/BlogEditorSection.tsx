@@ -462,6 +462,7 @@ type Post = {
   tag?: string | null
   published_date: string
   author: { name: string }
+  is_test?: boolean
 }
 
 export default function BlogEditorSection() {
@@ -484,6 +485,7 @@ export default function BlogEditorSection() {
     tag: "",
     date: "",
     authorName: "",
+    isTest: false,
   })
   const [mode, setMode] = useState<"list" | "edit">("list")
   const [search, setSearch] = useState("")
@@ -493,13 +495,15 @@ export default function BlogEditorSection() {
     ;(async () => {
       try {
         setLoading(true)
-        const r = await fetch(`/api/blog/posts?page=1&limit=50`)
+        const r = await fetch(`/api/blog/posts?page=1&limit=50&includeTests=1`)
         const data = await r.json()
-        const mapped: Post[] = (data.posts || [])
+        const cutoff = Date.now() - 24 * 60 * 60 * 1000
+        const mapped: Post[] = data.posts
           .map((p: any) => ({
             ...p,
             published_date: new Date(p.published_date).toISOString(),
           }))
+          .filter((p: Post) => !p.is_test || (new Date(p.published_date).getTime() >= cutoff))
         setPosts(mapped)
       } catch (e: any) {
         setError(e?.message ?? "Failed to load posts")
@@ -514,7 +518,7 @@ export default function BlogEditorSection() {
   }, [search, dateSort, tagFilter, authorFilter])
 
   const resetForm = () =>
-    setForm({ id: 0, title: "", description: "", content: "", tag: "", date: "", authorName: "" })
+    setForm({ id: 0, title: "", description: "", content: "", tag: "", date: "", authorName: "", isTest: false })
 
   const savePost = async () => {
     setLoading(true)
@@ -559,13 +563,21 @@ export default function BlogEditorSection() {
           date: form.date || null,
           tag: form.tag || null,
           authorName: form.authorName || undefined,
+          isTest: form.isTest || false,
         }),
       })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       resetForm()
       // reload
       const list = await fetch(`/api/blog/posts?page=1&limit=50`).then((x) => x.json())
-      setPosts(list.posts || [])
+      setPosts(list.posts)
+      // If this was a test post, surface the link
+      try {
+        const j = await r.json()
+        if (j?.isTest && j?.link) {
+          alert(`Test link (expires in ~24h): ${location.origin}${j.link}`)
+        }
+      } catch {}
       setMode("list")
     } catch (e: any) {
       setError(e?.message ?? "Save failed")
@@ -589,6 +601,57 @@ export default function BlogEditorSection() {
     }
   }
 
+  const makeLive = async (post: Post) => {
+    setLoading(true)
+    try {
+      const r = await fetch("/api/blog/admin/post", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: post.id,
+          title: post.title,
+          description: post.description,
+          content: post.content,
+          date: post.published_date.slice(0,10),
+          tag: post.tag,
+          authorName: post.author?.name,
+          isTest: false,
+        }),
+      })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, is_test: false } : p)))
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to make live")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const makeTest = async (post: Post) => {
+    setLoading(true)
+    try {
+      const r = await fetch("/api/blog/admin/post", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: post.id,
+          title: post.title,
+          description: post.description,
+          content: post.content,
+          date: post.published_date.slice(0,10),
+          tag: post.tag,
+          authorName: post.author?.name,
+          isTest: true,
+        }),
+      })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, is_test: true } : p)))
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to make test")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const openDeleteModal = (post: { id: number; title: string }) => {
     setPostToDelete(post)
@@ -751,6 +814,11 @@ export default function BlogEditorSection() {
                     const [year, month, day] = dateStr.split('-');
                     return `${month}/${day}/${year}`;
                   })()}</span>
+                  {p.is_test ? (
+                    <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800">Test</span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-800">Live</span>
+                  )}
                 </div>
                 <div className="text-sm text-[#6B7280] mt-2">{p.description}</div>
                 {p.tag && (
@@ -771,7 +839,14 @@ export default function BlogEditorSection() {
                     tag: p.tag ?? "",
                     date: p.published_date.slice(0,10),
                     authorName: p.author?.name ?? "",
+                    isTest: Boolean((p as any).is_test),
                   }); setMode("edit"); }} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-[#701CC0] hover:bg-[#4C1D95]">Edit</button>
+                  {p.is_test && (
+                    <button onClick={() => makeLive(p)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-green-600 hover:bg-green-700">Make Live</button>
+                  )}
+                  {!p.is_test && (
+                    <button onClick={() => makeTest(p)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-yellow-600 hover:bg-yellow-700">Make Test</button>
+                  )}
                   <button onClick={() => openDeleteModal({ id: p.id, title: p.title })} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-600 hover:bg-red-700">Delete</button>
                 </div>
               </div>
@@ -854,6 +929,10 @@ export default function BlogEditorSection() {
           <div className="mt-6 flex gap-3">
             <button onClick={savePost} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#701CC0] text-white hover:bg-[#4C1D95]">{isEditing ? "Update Blog" : "Create Post"}</button>
             <button onClick={() => { resetForm(); setMode("list") }} className="px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700">Cancel</button>
+            <label className="flex items-center gap-2 text-sm text-[#374151] ml-auto">
+              <input type="checkbox" checked={form.isTest} onChange={(e)=>setForm({...form, isTest: e.target.checked})} />
+              Test Post (hidden, 24h link)
+            </label>
           </div>
         </div>
       )}

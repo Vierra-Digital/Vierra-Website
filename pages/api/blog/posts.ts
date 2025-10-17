@@ -11,7 +11,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const page = Number(req.query.page || 1);
     const limit = Number(req.query.limit || 20);
     const skip = (page - 1) * limit;
-    const where: Prisma.BlogPostWhereInput = {};
+    const includeTests = req.query.includeTests === '1';
+    const where: Prisma.BlogPostWhereInput = includeTests ? {} : { is_test: false };
     const posts = await prisma.blogPost.findMany({
       where,
       orderBy: { published_date: "desc" },

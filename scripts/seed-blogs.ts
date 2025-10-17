@@ -1,14 +1,13 @@
 import { prisma } from '../lib/prisma';
 
 async function main() {
-    // Create or find an author
-    const author = await prisma.author.upsert({
-        where: { email: 'thomas@example.com' },
-        update: {},
-        create: {
+    // Create an author
+    const author = await prisma.author.create({
+        data: {
             name: 'Thomas Walsh',
             email: 'thomas@example.com',
-            bio: 'Writer, developer, and coffee enthusiast.'
+            bio: 'Writer, developer, and coffee enthusiast.',
+            is_test: true
         },
     });
 
@@ -20,6 +19,7 @@ async function main() {
             description: 'A short summary used to verify blog description rendering in hero and cards.',
             content: '<p>This is the very first blog post content. It verifies the new editor, description field, and rendering without images.</p>',
             slug: 'hello-world-blog-post',
+            is_test: true,
         },
     });
 
