@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from "react"
 import Image from "next/image"
-import { FiPlus, FiSearch, FiFilter, FiTrash2, FiMoreVertical, FiCheckCircle, FiXCircle } from 'react-icons/fi'
+import { FiPlus, FiSearch, FiFilter, FiTrash2, FiMoreVertical, FiCheckCircle, FiXCircle, FiShield } from 'react-icons/fi'
 
 type ClientRow = {
     id: string
@@ -17,6 +17,7 @@ type ClientRow = {
     status: string
     isActive: boolean
     isExpired: boolean
+    image: boolean
 }
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
@@ -89,9 +90,11 @@ const ClientActionsMenu: React.FC<{
     clientId: string
     clientName: string
     isActive: boolean
+    hasImage: boolean
     onDelete: () => void
     onToggleStatus: (isActive: boolean) => void
-}> = ({ clientName, isActive, onDelete, onToggleStatus }) => {
+    onUploadImage: (clientId: string, file: File) => void
+}> = ({ clientName, isActive, hasImage, onDelete, onToggleStatus, onUploadImage, clientId }) => {
     const [isOpen, setIsOpen] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
 
@@ -140,6 +143,28 @@ const ClientActionsMenu: React.FC<{
                             </>
                         )}
                     </button>
+                    <div className="relative">
+                        <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                    setIsOpen(false);
+                                    onUploadImage(clientId, file);
+                                }
+                            }}
+                            className="hidden"
+                            id={`client-image-upload-${clientId}`}
+                        />
+                        <label
+                            htmlFor={`client-image-upload-${clientId}`}
+                            className="w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2 cursor-pointer"
+                        >
+                            <FiShield className="w-4 h-4" />
+                            {hasImage ? "Update Image" : "Upload Image"}
+                        </label>
+                    </div>
                     <button
                         onClick={() => {
                             setIsOpen(false)
@@ -170,6 +195,8 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
     const [retainerSort, setRetainerSort] = useState<'none' | 'asc' | 'desc'>("none")
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
     const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(null)
+    const [editingName, setEditingName] = useState<Record<string, string>>({})
+    const [updatingNames, setUpdatingNames] = useState<Set<string>>(new Set())
     const pageSize = 10
 
     const fetchClients = async () => {
@@ -235,6 +262,89 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
             await fetchClients()
         } catch (e: any) {
             setError(e?.message ?? "Failed to update client status")
+        }
+    }
+
+    const updateClientName = async (clientId: string, newName: string) => {
+        setUpdatingNames(prev => new Set(prev).add(clientId))
+        try {
+            const response = await fetch('/api/admin/updateClientName', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    id: clientId,
+                    name: newName
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to update client name');
+            }
+
+            // Update the local state
+            setRows(prevRows => 
+                prevRows.map(row => 
+                    row.id === clientId 
+                        ? { ...row, name: newName }
+                        : row
+                )
+            );
+
+            // Clear editing state
+            setEditingName(prev => {
+                const newState = { ...prev }
+                delete newState[clientId]
+                return newState
+            });
+        } catch (error) {
+            console.error('Error updating client name:', error);
+            setError('Failed to update client name');
+        } finally {
+            setUpdatingNames(prev => {
+                const newSet = new Set(prev)
+                newSet.delete(clientId)
+                return newSet
+            });
+        }
+    }
+
+    const uploadClientImage = async (clientId: string, file: File) => {
+        try {
+            // Convert file to base64
+            const reader = new FileReader();
+            reader.onload = async () => {
+                try {
+                    const base64Data = reader.result as string;
+                    const base64 = base64Data.split(',')[1]; // Remove data:image/...;base64, prefix
+                    
+                    const response = await fetch("/api/admin/uploadClientImage", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ 
+                            clientId,
+                            imageData: base64,
+                            mimeType: file.type
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error("Failed to upload image");
+                    }
+
+                    // Update local state
+                    setRows((prev) => prev.map((r) => (r.id === clientId ? { ...r, image: true } : r)));
+                } catch (error) {
+                    console.error("Error uploading image:", error);
+                }
+            };
+            
+            reader.readAsDataURL(file);
+        } catch (error) {
+            console.error("Error processing file:", error);
         }
     }
 
@@ -417,7 +527,46 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
                                             {r.name?.charAt(0)?.toUpperCase() || "?"}
                                         </div>
                                         <div className="flex flex-col">
-                                            <span className="text-sm font-semibold">{r.name || "—"}</span>
+                                            <div className="flex items-center gap-2">
+                                                {editingName[r.id] !== undefined ? (
+                                                    <div className="flex items-center gap-1">
+                                                        <input
+                                                            type="text"
+                                                            value={editingName[r.id]}
+                                                            onChange={(e) => setEditingName(prev => ({ ...prev, [r.id]: e.target.value }))}
+                                                            className="border rounded px-2 py-1 text-sm w-32"
+                                                            autoFocus
+                                                        />
+                                                        <button
+                                                            onClick={() => updateClientName(r.id, editingName[r.id])}
+                                                            disabled={updatingNames.has(r.id)}
+                                                            className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50"
+                                                        >
+                                                            {updatingNames.has(r.id) ? "..." : "✓"}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setEditingName(prev => {
+                                                                const newState = { ...prev }
+                                                                delete newState[r.id]
+                                                                return newState
+                                                            })}
+                                                            className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-1">
+                                                        <span className="text-sm font-semibold">{r.name || "—"}</span>
+                                                        <button
+                                                            onClick={() => setEditingName(prev => ({ ...prev, [r.id]: r.name || "" }))}
+                                                            className="px-1 py-1 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
                                             <span className="text-xs text-[#677489]">{r.email || ""}</span>
                                         </div>
                                     </div>
@@ -432,8 +581,10 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
                                         clientId={r.id}
                                         clientName={r.name}
                                         isActive={r.isActive}
+                                        hasImage={r.image}
                                         onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
                                         onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
+                                        onUploadImage={uploadClientImage}
                                     />
                                 </td>
                             </tr>
