@@ -20,7 +20,6 @@ type BlogPostType = {
     image_url?: string | null;
     published_date?: string | null;
     slug: string;
-    is_test?: boolean | null;
     visits?: number | null;
     tag?: string | null;
     author: {
@@ -36,13 +35,11 @@ type Props = {
 export const getStaticProps: GetStaticProps<Props> = async () => {
     const [latestPosts, trendingPosts] = await Promise.all([
         prisma.blogPost.findMany({
-            where: { is_test: false },
             orderBy: { published_date: "desc" },
             take: 10,
             include: { author: { select: { name: true } } },
         }),
         prisma.blogPost.findMany({
-            where: { is_test: false },
             orderBy: { visits: "desc" },
             take: 10,
             include: { author: { select: { name: true } } },
@@ -294,7 +291,11 @@ const BlogPage = ({ latestPosts }: Props) => {
                                     <Link href={`/blog/${blog.slug}`} passHref>
                                         <div className="rounded-2xl bg-white p-5 md:p-6 shadow-sm hover:shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
                                             <h3 className={`text-base md:text-lg font-bold text-[#0F172A] ${bricolage.className}`}>{blog.title}</h3>
-                                            <div className="mt-1 text-[11px] md:text-xs text-[#334155]">{blog.published_date ? formatDate(blog.published_date) : ''}</div>
+                                            <div className="mt-1 text-[11px] md:text-xs text-[#334155] flex items-center gap-2">
+                                                <span>By {blog.author?.name ?? "Unknown"}</span>
+                                                <div className="h-1 w-1 bg-gray-400 rounded-full"></div>
+                                                <span>{blog.published_date ? formatDate(blog.published_date) : ''}</span>
+                                            </div>
                                             <p className={`mt-3 text-sm md:text-base text-[#475569] ${inter.className}`}>{blog.description || getExcerpt(blog.content)}</p>
                                             <div className="flex flex-wrap gap-1 mt-3">
                                                 {blog.tag ? blog.tag.split(',').map((tag, index) => (
@@ -310,33 +311,6 @@ const BlogPage = ({ latestPosts }: Props) => {
                                             </div>
                                         </div>
                                     </Link>
-                                    <div className="mt-2">
-                                        <button onClick={async () => {
-                                            try {
-                                                const r = await fetch('/api/blog/admin/post', {
-                                                    method: 'PUT',
-                                                    headers: { 'Content-Type': 'application/json' },
-                                                    body: JSON.stringify({
-                                                        id: blog.id,
-                                                        title: blog.title,
-                                                        description: blog.description,
-                                                        content: blog.content,
-                                                        tag: blog.tag,
-                                                        date: blog.published_date?.slice(0,10) || null,
-                                                        authorName: blog.author?.name,
-                                                        isTest: true,
-                                                    })
-                                                })
-                                                if (r.ok) {
-                                                    // Update card locally without redirect
-                                                    const btn = (event?.currentTarget as HTMLButtonElement | undefined)
-                                                    if (btn) btn.textContent = 'Moved to Test'
-                                                }
-                                            } catch (e) {
-                                                console.error('make test failed', e)
-                                            }
-                                        }} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-yellow-600 hover:bg-yellow-700">Make Test</button>
-                                    </div>
                                 </div>
                             ))}
                                 </div>

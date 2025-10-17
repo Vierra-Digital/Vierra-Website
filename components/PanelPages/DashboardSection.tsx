@@ -208,7 +208,7 @@ const DashboardSection = () => {
                                 </option>
                             ))}
                         </select>
-                        <RiArrowDropDownLine className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
+                        <RiArrowDropDownLine className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
                     </div>
                     <div className="relative">
                         <select 
@@ -222,7 +222,7 @@ const DashboardSection = () => {
                                 </option>
                             ))}
                         </select>
-                        <RiArrowDropDownLine className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
+                        <RiArrowDropDownLine className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
                     </div>
                 </div>
             </div>
@@ -406,7 +406,7 @@ const DashboardSection = () => {
                                             </option>
                                         ))}
                                     </select>
-                                    <RiArrowDropDownLine className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
+                                    <RiArrowDropDownLine className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
                                 </div>
                                 <div className="relative">
                                     <select 
@@ -420,7 +420,7 @@ const DashboardSection = () => {
                                             </option>
                                         ))}
                                     </select>
-                                    <RiArrowDropDownLine className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
+                                    <RiArrowDropDownLine className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
                                 </div>
                             </div>
                         </div>

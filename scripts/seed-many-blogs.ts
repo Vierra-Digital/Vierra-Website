@@ -33,7 +33,6 @@ Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapi
             `,
             slug: 'innovation-driven-technology-in-the-workplace-a-guide-2',
             tag: "Insights",
-            is_test: true
         },
     });
 

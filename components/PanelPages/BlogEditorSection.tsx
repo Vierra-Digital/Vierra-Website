@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Inter } from "next/font/google"
 import { CiSearch } from "react-icons/ci"
-import { FiPlus, FiTrash2, FiFileText, FiFilter, FiBold, FiItalic, FiLink, FiUnderline, FiImage, FiVideo, FiCornerUpLeft, FiCornerUpRight } from "react-icons/fi"
+import { FiPlus, FiTrash2, FiFileText, FiFilter, FiBold, FiItalic, FiLink, FiUnderline, FiImage, FiVideo, FiCornerUpLeft, FiCornerUpRight, FiList } from "react-icons/fi"
+import { RiArrowDropDownLine } from "react-icons/ri"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -15,6 +16,10 @@ const RichTextEditor: React.FC<{
   const [linkModalOpen, setLinkModalOpen] = useState(false)
   const [linkText, setLinkText] = useState("")
   const [linkUrl, setLinkUrl] = useState("")
+  const [imageModalOpen, setImageModalOpen] = useState(false)
+  const [imageUrl, setImageUrl] = useState("")
+  const [videoModalOpen, setVideoModalOpen] = useState(false)
+  const [videoUrl, setVideoUrl] = useState("")
 
   const setCaretToEnd = (el: HTMLElement) => {
     try {
@@ -155,29 +160,34 @@ const RichTextEditor: React.FC<{
     }
   }
 
+  const insertPlaceholder = (type: 'image' | 'video' | 'link', url: string) => {
+    const el = editableRef.current
+    if (!el) return
+    const sel = window.getSelection()
+    if (!sel) return
+    const span = document.createElement('span')
+    span.setAttribute('data-type', type)
+    span.setAttribute('data-url', url)
+    span.className = 'rte-url'
+    const label = type === 'image' ? '(IMAGE)' : type === 'video' ? '(VIDEO)' : '(LINK)'
+    span.textContent = `${label}: ${url}`
+    const range = sel.getRangeAt(0)
+    range.deleteContents()
+    range.insertNode(span)
+    range.setStartAfter(span)
+    range.collapse(true)
+    sel.removeAllRanges()
+    sel.addRange(range)
+    const newDisplay = el.innerHTML
+    onChange(toHtml(newDisplay))
+  }
+
   const formatText = (format: string) => {
     const el = editableRef.current
     if (!el) return
     el.focus()
     const sel = window.getSelection()
     if (!sel) return
-    const insertPlaceholder = (type: 'image' | 'video' | 'link', url: string) => {
-      const span = document.createElement('span')
-      span.setAttribute('data-type', type)
-      span.setAttribute('data-url', url)
-      span.className = 'rte-url'
-      const label = type === 'image' ? '(IMAGE)' : type === 'video' ? '(VIDEO)' : '(LINK)'
-      span.textContent = `${label}: ${url}`
-      const range = sel.getRangeAt(0)
-      range.deleteContents()
-      range.insertNode(span)
-      range.setStartAfter(span)
-      range.collapse(true)
-      sel.removeAllRanges()
-      sel.addRange(range)
-      const newDisplay = el.innerHTML
-      onChange(toHtml(newDisplay))
-    }
     switch (format) {
       case 'bold':
         document.execCommand('bold')
@@ -190,28 +200,103 @@ const RichTextEditor: React.FC<{
         document.execCommand('underline')
         break
       case 'list':
-        document.execCommand('insertHTML', false, '<ul><li></li></ul>')
-        // Move caret inside the new li
-        if (editableRef.current) setCaretToEnd(editableRef.current)
+        const selectedText = sel.toString().trim()
+        
+        if (selectedText) {
+          // If text is selected, convert it to a bullet list
+          const lines = selectedText.split('\n').filter(line => line.trim())
+          const ul = document.createElement('ul')
+          
+          lines.forEach(line => {
+            const li = document.createElement('li')
+            li.textContent = line.trim()
+            ul.appendChild(li)
+          })
+          
+          // Replace selected text with the list
+          const range = sel.getRangeAt(0)
+          range.deleteContents()
+          range.insertNode(ul)
+          
+          // Move caret after the list
+          const newRange = document.createRange()
+          newRange.setStartAfter(ul)
+          newRange.collapse(true)
+          sel.removeAllRanges()
+          sel.addRange(newRange)
+        } else {
+          // No text selected - check if we're already in a list
+          const currentList = sel.anchorNode?.parentElement?.closest('ul, ol')
+          if (currentList) {
+            // If already in a list, add a new list item
+            const newLi = document.createElement('li')
+            newLi.innerHTML = '<br>'
+            currentList.appendChild(newLi)
+            
+            // Move caret to the new list item
+            const range = document.createRange()
+            range.selectNodeContents(newLi)
+            range.collapse(false)
+            sel.removeAllRanges()
+            sel.addRange(range)
+          } else {
+            // Create a new bullet list at current cursor position
+            const ul = document.createElement('ul')
+            const li = document.createElement('li')
+            li.innerHTML = '<br>'
+            ul.appendChild(li)
+            
+            // Insert the list at cursor position
+            const range = sel.getRangeAt(0)
+            
+            // Check if we're at the end of a line or in the middle of text
+            const currentNode = sel.anchorNode
+            if (currentNode && currentNode.nodeType === Node.TEXT_NODE && sel.anchorOffset > 0) {
+              // We're in the middle of text, split it
+              const textNode = currentNode as Text
+              const beforeText = textNode.data.substring(0, sel.anchorOffset)
+              const afterText = textNode.data.substring(sel.anchorOffset)
+              
+              // Create text nodes for before and after
+              const beforeNode = document.createTextNode(beforeText)
+              const afterNode = document.createTextNode(afterText)
+              
+              // Insert before text, list, then after text
+              textNode.parentNode?.insertBefore(beforeNode, textNode)
+              textNode.parentNode?.insertBefore(ul, textNode)
+              textNode.parentNode?.insertBefore(afterNode, textNode)
+              textNode.remove()
+            } else {
+              // Insert at cursor position
+              range.deleteContents()
+              range.insertNode(ul)
+            }
+            
+            // Move caret inside the new list item
+            const newRange = document.createRange()
+            newRange.selectNodeContents(li)
+            newRange.collapse(false)
+            sel.removeAllRanges()
+            sel.addRange(newRange)
+          }
+        }
         break
       case 'link': {
-        const selText = sel.toString() || 'url'
+        const selText = sel.toString()
         savedRangeRef.current = sel.getRangeAt(0).cloneRange()
-        setLinkText(selText)
+        setLinkText(selText || "")
         setLinkUrl("")
         setLinkModalOpen(true)
         return
       }
       case 'image': {
-        const url = prompt('Enter image URL (direct .jpg/.png/.gif preferred)') || ''
-        if (!url) return
-        insertPlaceholder('image', url)
+        setImageUrl("")
+        setImageModalOpen(true)
         return
       }
       case 'video': {
-        const url = prompt('Enter video URL (YouTube links supported)') || ''
-        if (!url) return
-        insertPlaceholder('video', url)
+        setVideoUrl("")
+        setVideoModalOpen(true)
         return
     }
     }
@@ -304,20 +389,27 @@ const RichTextEditor: React.FC<{
         {/* Code button removed per request */}
         <button
           type="button"
+          onClick={() => formatText('underline')}
+          className={`p-1.5 rounded hover:bg-gray-200 ${activeUnderline ? 'text-gray-400' : 'text-gray-700'}`}
+          title="Underline"
+        >
+          <FiUnderline className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
           onClick={() => formatText('link')}
           className="p-1.5 rounded hover:bg-gray-200 text-gray-700"
           title="Link"
         >
           <FiLink className="w-4 h-4" />
         </button>
-        {/* List button removed per request */}
         <button
           type="button"
-          onClick={() => formatText('underline')}
-          className={`p-1.5 rounded hover:bg-gray-200 ${activeUnderline ? 'text-gray-400' : 'text-gray-700'}`}
-          title="Underline"
+          onClick={() => formatText('list')}
+          className="p-1.5 rounded hover:bg-gray-200 text-gray-700"
+          title="Bullet List"
         >
-          <FiUnderline className="w-4 h-4" />
+          <FiList className="w-4 h-4" />
         </button>
         <button
           type="button"
@@ -362,7 +454,19 @@ const RichTextEditor: React.FC<{
         {/* Force italic to never appear bold in the visible editor */}
         <style jsx>{`
           #rte-visible em, #rte-visible i { font-weight: 400 !important; font-style: italic; }
-          #rte-visible a { color: #2563eb !important; text-decoration: underline !important; }
+          #rte-visible a { 
+            color: #2563eb !important; 
+            text-decoration: underline !important; 
+            font-style: normal !important;
+            font-weight: normal !important;
+          }
+          #rte-visible a:hover { 
+            color: #1d4ed8 !important; 
+            text-decoration: underline !important; 
+          }
+          #rte-visible ul { list-style-type: disc; margin-left: 20px; margin-top: 8px; margin-bottom: 8px; }
+          #rte-visible ol { list-style-type: decimal; margin-left: 20px; margin-top: 8px; margin-bottom: 8px; }
+          #rte-visible li { margin-bottom: 4px; line-height: 1.5; }
         `}</style>
         {/* Hidden field with actual HTML (posted value) */}
         <textarea
@@ -373,43 +477,55 @@ const RichTextEditor: React.FC<{
           readOnly
         />
       </div>
-      {linkModalOpen && (
-        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" role="dialog" aria-modal>
-          <div className="bg-white rounded-lg shadow-xl p-5 w-[90%] max-w-md text-[#111827]" onClick={(e)=>e.stopPropagation()}>
-            <div className="text-lg font-semibold mb-3">Insert Link</div>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm mb-1">Text</label>
-                <input value={linkText} onChange={(e)=>setLinkText(e.target.value)} className="w-full border rounded-md px-3 py-2" />
-              </div>
-              <div>
-                <label className="block text-sm mb-1">URL</label>
-                <input value={linkUrl} onChange={(e)=>setLinkUrl(e.target.value)} placeholder="example.com or full URL" className="w-full border rounded-md px-3 py-2" />
-              </div>
-            </div>
-            <div className="mt-4 flex gap-2 justify-end">
-              <button onClick={()=>setLinkModalOpen(false)} className="px-3 py-1.5 rounded-md border">Cancel</button>
-              <button onClick={()=>{
-                if (!editableRef.current || !savedRangeRef.current) { setLinkModalOpen(false); return }
-                const sel = window.getSelection(); if (!sel) { setLinkModalOpen(false); return }
-                sel.removeAllRanges(); sel.addRange(savedRangeRef.current);
-                const a = document.createElement('a')
-                a.setAttribute('href', '#')
-                a.setAttribute('data-url', linkUrl)
-                a.textContent = linkText || 'url'
-                a.style.color = '#1d4ed8'
-                a.style.textDecoration = 'underline'
-                const range = sel.getRangeAt(0)
-                range.deleteContents(); range.insertNode(a); range.setStartAfter(a); range.collapse(true)
-                sel.removeAllRanges(); sel.addRange(range)
-                const newDisplay = editableRef.current.innerHTML
-                onChange(toHtml(newDisplay))
-                setLinkModalOpen(false)
-              }} className="px-3 py-1.5 rounded-md bg-[#701CC0] text-white">Apply</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <InsertLinkModal
+        isOpen={linkModalOpen}
+        linkText={linkText}
+        linkUrl={linkUrl}
+        onTextChange={setLinkText}
+        onUrlChange={setLinkUrl}
+        onConfirm={() => {
+          if (!editableRef.current || !savedRangeRef.current) { setLinkModalOpen(false); return }
+          const sel = window.getSelection(); if (!sel) { setLinkModalOpen(false); return }
+          sel.removeAllRanges(); sel.addRange(savedRangeRef.current);
+          const a = document.createElement('a')
+          a.setAttribute('href', '#')
+          a.setAttribute('data-url', linkUrl)
+          a.textContent = linkText || linkUrl || 'Link'
+          a.style.color = '#2563eb'
+          a.style.textDecoration = 'underline'
+          a.style.fontStyle = 'normal'
+          a.style.fontWeight = 'normal'
+          const range = sel.getRangeAt(0)
+          range.deleteContents(); range.insertNode(a); range.setStartAfter(a); range.collapse(true)
+          sel.removeAllRanges(); sel.addRange(range)
+          const newDisplay = editableRef.current.innerHTML
+          onChange(toHtml(newDisplay))
+          setLinkModalOpen(false)
+        }}
+        onCancel={() => setLinkModalOpen(false)}
+      />
+      
+      <InsertImageModal
+        isOpen={imageModalOpen}
+        imageUrl={imageUrl}
+        onUrlChange={setImageUrl}
+        onConfirm={() => {
+          insertPlaceholder('image', imageUrl)
+          setImageModalOpen(false)
+        }}
+        onCancel={() => setImageModalOpen(false)}
+      />
+      
+      <InsertVideoModal
+        isOpen={videoModalOpen}
+        videoUrl={videoUrl}
+        onUrlChange={setVideoUrl}
+        onConfirm={() => {
+          insertPlaceholder('video', videoUrl)
+          setVideoModalOpen(false)
+        }}
+        onCancel={() => setVideoModalOpen(false)}
+      />
     </div>
   )
 }
@@ -454,6 +570,173 @@ const ConfirmDeleteModal: React.FC<{
     )
 }
 
+// Insert Link Modal
+const InsertLinkModal: React.FC<{
+  isOpen: boolean
+  linkText: string
+  linkUrl: string
+  onTextChange: (text: string) => void
+  onUrlChange: (url: string) => void
+  onConfirm: () => void
+  onCancel: () => void
+}> = ({ isOpen, linkText, linkUrl, onTextChange, onUrlChange, onConfirm, onCancel }) => {
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onCancel}>
+      <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+            <FiLink className="w-6 h-6 text-blue-600" />
+          </div>
+          <h3 className="text-xl font-semibold text-[#111827]">Insert Link</h3>
+        </div>
+        <div className="space-y-4 mb-6">
+          <div>
+            <label className="block text-sm font-medium text-[#374151] mb-2">Link Text</label>
+            <input
+              type="text"
+              value={linkText}
+              onChange={(e) => onTextChange(e.target.value)}
+              placeholder="Enter link text"
+              className="w-full px-3 py-2 border border-[#D1D5DB] rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-[#111827]"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[#374151] mb-2">URL</label>
+            <input
+              type="url"
+              value={linkUrl}
+              onChange={(e) => onUrlChange(e.target.value)}
+              placeholder="https://example.com"
+              className="w-full px-3 py-2 border border-[#D1D5DB] rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-[#111827]"
+            />
+          </div>
+        </div>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={!linkText.trim() || !linkUrl.trim()}
+            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            Insert Link
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Insert Image Modal
+const InsertImageModal: React.FC<{
+  isOpen: boolean
+  imageUrl: string
+  onUrlChange: (url: string) => void
+  onConfirm: () => void
+  onCancel: () => void
+}> = ({ isOpen, imageUrl, onUrlChange, onConfirm, onCancel }) => {
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onCancel}>
+      <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+            <FiImage className="w-6 h-6 text-green-600" />
+          </div>
+          <h3 className="text-xl font-semibold text-[#111827]">Insert Image</h3>
+        </div>
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-[#374151] mb-2">Image URL</label>
+          <input
+            type="url"
+            value={imageUrl}
+            onChange={(e) => onUrlChange(e.target.value)}
+            placeholder="https://example.com/image.jpg"
+            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-[#111827]"
+          />
+          <p className="text-xs text-[#6B7280] mt-2">
+            Direct links to .jpg, .png, .gif, or .webp files work best. You can also drag and drop image files directly into the editor.
+          </p>
+        </div>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={!imageUrl.trim()}
+            className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            Insert Image
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Insert Video Modal
+const InsertVideoModal: React.FC<{
+  isOpen: boolean
+  videoUrl: string
+  onUrlChange: (url: string) => void
+  onConfirm: () => void
+  onCancel: () => void
+}> = ({ isOpen, videoUrl, onUrlChange, onConfirm, onCancel }) => {
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onCancel}>
+      <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
+            <FiVideo className="w-6 h-6 text-purple-600" />
+          </div>
+          <h3 className="text-xl font-semibold text-[#111827]">Insert Video</h3>
+        </div>
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-[#374151] mb-2">Video URL</label>
+          <input
+            type="url"
+            value={videoUrl}
+            onChange={(e) => onUrlChange(e.target.value)}
+            placeholder="https://www.youtube.com/watch?v=..."
+            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none text-[#111827]"
+          />
+          <p className="text-xs text-[#6B7280] mt-2">
+            YouTube links are supported. You can also drag and drop video files directly into the editor.
+          </p>
+        </div>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={!videoUrl.trim()}
+            className="px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+          >
+            Insert Video
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 type Post = {
   id: number
   title: string
@@ -462,7 +745,6 @@ type Post = {
   tag?: string | null
   published_date: string
   author: { name: string }
-  is_test?: boolean
 }
 
 export default function BlogEditorSection() {
@@ -485,7 +767,6 @@ export default function BlogEditorSection() {
     tag: "",
     date: "",
     authorName: "",
-    isTest: false,
   })
   const [mode, setMode] = useState<"list" | "edit">("list")
   const [search, setSearch] = useState("")
@@ -495,15 +776,13 @@ export default function BlogEditorSection() {
     ;(async () => {
       try {
         setLoading(true)
-        const r = await fetch(`/api/blog/posts?page=1&limit=50&includeTests=1`)
+        const r = await fetch(`/api/blog/posts?page=1&limit=50`)
         const data = await r.json()
-        const cutoff = Date.now() - 24 * 60 * 60 * 1000
         const mapped: Post[] = data.posts
           .map((p: any) => ({
             ...p,
             published_date: new Date(p.published_date).toISOString(),
           }))
-          .filter((p: Post) => !p.is_test || (new Date(p.published_date).getTime() >= cutoff))
         setPosts(mapped)
       } catch (e: any) {
         setError(e?.message ?? "Failed to load posts")
@@ -518,7 +797,7 @@ export default function BlogEditorSection() {
   }, [search, dateSort, tagFilter, authorFilter])
 
   const resetForm = () =>
-    setForm({ id: 0, title: "", description: "", content: "", tag: "", date: "", authorName: "", isTest: false })
+    setForm({ id: 0, title: "", description: "", content: "", tag: "", date: "", authorName: "" })
 
   const savePost = async () => {
     setLoading(true)
@@ -563,7 +842,6 @@ export default function BlogEditorSection() {
           date: form.date || null,
           tag: form.tag || null,
           authorName: form.authorName || undefined,
-          isTest: form.isTest || false,
         }),
       })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
@@ -571,13 +849,6 @@ export default function BlogEditorSection() {
       // reload
       const list = await fetch(`/api/blog/posts?page=1&limit=50`).then((x) => x.json())
       setPosts(list.posts)
-      // If this was a test post, surface the link
-      try {
-        const j = await r.json()
-        if (j?.isTest && j?.link) {
-          alert(`Test link (expires in ~24h): ${location.origin}${j.link}`)
-        }
-      } catch {}
       setMode("list")
     } catch (e: any) {
       setError(e?.message ?? "Save failed")
@@ -601,57 +872,6 @@ export default function BlogEditorSection() {
     }
   }
 
-  const makeLive = async (post: Post) => {
-    setLoading(true)
-    try {
-      const r = await fetch("/api/blog/admin/post", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: post.id,
-          title: post.title,
-          description: post.description,
-          content: post.content,
-          date: post.published_date.slice(0,10),
-          tag: post.tag,
-          authorName: post.author?.name,
-          isTest: false,
-        }),
-      })
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, is_test: false } : p)))
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to make live")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const makeTest = async (post: Post) => {
-    setLoading(true)
-    try {
-      const r = await fetch("/api/blog/admin/post", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: post.id,
-          title: post.title,
-          description: post.description,
-          content: post.content,
-          date: post.published_date.slice(0,10),
-          tag: post.tag,
-          authorName: post.author?.name,
-          isTest: true,
-        }),
-      })
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, is_test: true } : p)))
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to make test")
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const openDeleteModal = (post: { id: number; title: string }) => {
     setPostToDelete(post)
@@ -755,41 +975,50 @@ export default function BlogEditorSection() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-2">Date Sort</label>
-              <select
-                value={dateSort}
-                onChange={(e) => setDateSort(e.target.value as 'none' | 'asc' | 'desc')}
-                className="w-full bg-white border border-[#D1D5DB] rounded-lg px-3 py-2 text-sm text-[#111827] focus:ring-2 focus:ring-[#701CC0] focus:border-[#701CC0] outline-none"
-              >
-                <option value="none">No Sort</option>
-                <option value="asc">Oldest First</option>
-                <option value="desc">Newest First</option>
-              </select>
+              <div className="relative">
+                <select
+                  value={dateSort}
+                  onChange={(e) => setDateSort(e.target.value as 'none' | 'asc' | 'desc')}
+                  className="w-full appearance-none bg-white border border-[#D1D5DB] rounded-lg px-3 py-2 pr-8 text-sm text-[#111827] focus:ring-2 focus:ring-[#701CC0] focus:border-[#701CC0] outline-none cursor-pointer"
+                >
+                  <option value="none">No Sort</option>
+                  <option value="asc">Oldest First</option>
+                  <option value="desc">Newest First</option>
+                </select>
+                <RiArrowDropDownLine className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-2">Tags</label>
-              <select
-                value={tagFilter}
-                onChange={(e) => setTagFilter(e.target.value)}
-                className="w-full bg-white border border-[#D1D5DB] rounded-lg px-3 py-2 text-sm text-[#111827] focus:ring-2 focus:ring-[#701CC0] focus:border-[#701CC0] outline-none"
-              >
-                <option value="all">All Tags</option>
-                {Array.from(new Set(posts.flatMap(p => p.tag ? p.tag.split(',').map(t => t.trim()) : []).filter(Boolean))).map(tag => (
-                  <option key={tag} value={tag}>{tag}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={tagFilter}
+                  onChange={(e) => setTagFilter(e.target.value)}
+                  className="w-full appearance-none bg-white border border-[#D1D5DB] rounded-lg px-3 py-2 pr-8 text-sm text-[#111827] focus:ring-2 focus:ring-[#701CC0] focus:border-[#701CC0] outline-none cursor-pointer"
+                >
+                  <option value="all">All Tags</option>
+                  {Array.from(new Set(posts.flatMap(p => p.tag ? p.tag.split(',').map(t => t.trim()) : []).filter(Boolean))).map(tag => (
+                    <option key={tag} value={tag}>{tag}</option>
+                  ))}
+                </select>
+                <RiArrowDropDownLine className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-[#374151] mb-2">Author</label>
-              <select
-                value={authorFilter}
-                onChange={(e) => setAuthorFilter(e.target.value)}
-                className="w-full bg-white border border-[#D1D5DB] rounded-lg px-3 py-2 text-sm text-[#111827] focus:ring-2 focus:ring-[#701CC0] focus:border-[#701CC0] outline-none"
-              >
-                <option value="all">All Authors</option>
-                {Array.from(new Set(posts.map(p => p.author?.name).filter(Boolean))).map(author => (
-                  <option key={author} value={author || ''}>{author}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={authorFilter}
+                  onChange={(e) => setAuthorFilter(e.target.value)}
+                  className="w-full appearance-none bg-white border border-[#D1D5DB] rounded-lg px-3 py-2 pr-8 text-sm text-[#111827] focus:ring-2 focus:ring-[#701CC0] focus:border-[#701CC0] outline-none cursor-pointer"
+                >
+                  <option value="all">All Authors</option>
+                  {Array.from(new Set(posts.map(p => p.author?.name).filter(Boolean))).map(author => (
+                    <option key={author} value={author || ''}>{author}</option>
+                  ))}
+                </select>
+                <RiArrowDropDownLine className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
+              </div>
             </div>
           </div>
         </div>
@@ -814,11 +1043,6 @@ export default function BlogEditorSection() {
                     const [year, month, day] = dateStr.split('-');
                     return `${month}/${day}/${year}`;
                   })()}</span>
-                  {p.is_test ? (
-                    <span className="px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800">Test</span>
-                  ) : (
-                    <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-800">Live</span>
-                  )}
                 </div>
                 <div className="text-sm text-[#6B7280] mt-2">{p.description}</div>
                 {p.tag && (
@@ -839,14 +1063,7 @@ export default function BlogEditorSection() {
                     tag: p.tag ?? "",
                     date: p.published_date.slice(0,10),
                     authorName: p.author?.name ?? "",
-                    isTest: Boolean((p as any).is_test),
                   }); setMode("edit"); }} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-[#701CC0] hover:bg-[#4C1D95]">Edit</button>
-                  {p.is_test && (
-                    <button onClick={() => makeLive(p)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-green-600 hover:bg-green-700">Make Live</button>
-                  )}
-                  {!p.is_test && (
-                    <button onClick={() => makeTest(p)} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-yellow-600 hover:bg-yellow-700">Make Test</button>
-                  )}
                   <button onClick={() => openDeleteModal({ id: p.id, title: p.title })} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-red-600 hover:bg-red-700">Delete</button>
                 </div>
               </div>
@@ -929,10 +1146,6 @@ export default function BlogEditorSection() {
           <div className="mt-6 flex gap-3">
             <button onClick={savePost} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#701CC0] text-white hover:bg-[#4C1D95]">{isEditing ? "Update Blog" : "Create Post"}</button>
             <button onClick={() => { resetForm(); setMode("list") }} className="px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700">Cancel</button>
-            <label className="flex items-center gap-2 text-sm text-[#374151] ml-auto">
-              <input type="checkbox" checked={form.isTest} onChange={(e)=>setForm({...form, isTest: e.target.checked})} />
-              Test Post (hidden, 24h link)
-            </label>
           </div>
         </div>
       )}

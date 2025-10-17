@@ -15,7 +15,6 @@ type BlogPostType = {
   image_url?: string | null;
   published_date: string;
   slug: string;
-  is_test?: boolean | null;
   visits: number;
   tag?: string;
   author: {
