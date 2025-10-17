@@ -4,6 +4,7 @@ import Head from 'next/head';
 import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
 import Footer from "@/components/FooterSection/Footer";
+import SocialShareBar from "@/components/Blog/SocialShareBar";
 import { prisma } from '@/lib/prisma';
 import { GetStaticPaths, GetStaticProps } from 'next';
 // Image import removed; no inline images in article layout
@@ -27,6 +28,7 @@ type BlogPostProps = {
     author: { name: string };
     publishedDate: string;
     tag?: string | null;
+    slug: string;
 };
 
 const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
@@ -48,7 +50,8 @@ const BlogViewPage = ({
     content,
     author,
     publishedDate,
-    tag
+    tag,
+    slug
 }: BlogPostProps) => {
     const initParticles = () => {
         if (typeof window !== 'undefined' && window.particlesJS) {
@@ -182,7 +185,7 @@ const BlogViewPage = ({
                     </div>
                     <div id="blog-text" className="lg:px-32 flex flex-col pb-20">
                         <div id="blog-text-heading">
-                            <h1 className={`font-semibold text-[#18042A] text-3xl mb-3 ${bricolage.className}`}>We Are Not Your Average “Consultants”</h1>
+                            <h1 className={`font-semibold text-[#18042A] text-3xl mb-3 ${bricolage.className}`}>We Are Not Your Average "Consultants"</h1>
                         </div>
                         <div id="blog-text-content">
                             <p className={`text-[#8A9197]  md:text-lg/[180%] md:w-[50%] ${inter.className}`}>
@@ -191,6 +194,13 @@ const BlogViewPage = ({
                         </div>
                     </div>
                 </div> */}
+                
+                {/* Social Share Bar */}
+                <SocialShareBar 
+                  url={`${process.env.NODE_ENV === 'production' ? 'https://vierra.com' : 'http://localhost:3000'}/blog/${slug}`}
+                  title={title}
+                  description={description || undefined}
+                />
             </div>
             <Footer />
         </>
@@ -234,7 +244,8 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
             content: post.content,
             author: { name: post.author.name },
             publishedDate: post.published_date.toISOString(),
-            tag: post.tag
+            tag: post.tag,
+            slug: post.slug
         },
         revalidate: 60,
     };
