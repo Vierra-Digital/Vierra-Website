@@ -18,7 +18,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { passwordEnc: true } });
     if (!user) return res.status(404).json({ message: "User not found" });
-    const password = user.passwordEnc ? decrypt(user.passwordEnc) : null;
+    
+    if (!user.passwordEnc) {
+      return res.status(200).json({ id: userId, password: null });
+    }
+    
+    // Try to decrypt the password
+    let password: string | null = null;
+    try {
+      password = decrypt(user.passwordEnc);
+    } catch (decryptError) {
+      // If decryption fails, it might be a bcrypt hash or other format
+      console.log(`Password for user ${userId} cannot be decrypted - might be bcrypt hash or other format`);
+      return res.status(200).json({ 
+        id: userId, 
+        password: null,
+        error: "Password is encrypted/hashed and cannot be revealed"
+      });
+    }
+    
     return res.status(200).json({ id: userId, password });
   } catch (e) {
     console.error("admin/userPassword", e);
