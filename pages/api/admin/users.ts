@@ -11,35 +11,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === "GET") {
     try {
-      const staff = await prisma.staff.findMany({
+      const users = await prisma.user.findMany({
         select: {
           id: true,
           email: true,
           role: true,
           passwordEnc: true,
-          name: true,
-          position: true,
-          country: true,
-          timeZone: true,
-          phone: true,
-          companyEmail: true,
           client: { select: { name: true } },
         },
         orderBy: { id: "asc" },
       });
 
-      const shaped = staff.map((s) => ({
-        id: s.id,
-        email: s.email,
-        role: s.role ?? "staff",
-        name: s.name,
-        position: s.position,
-        country: s.country,
-        timeZone: s.timeZone,
-        phone: s.phone,
-        companyEmail: s.companyEmail,
-        clientName: s.client?.name ?? null,
-        hasPassword: Boolean(s.passwordEnc),
+      const shaped = users.map((u) => ({
+        id: u.id,
+        email: u.email,
+        role: u.role ?? "user",
+        clientName: u.client?.name ?? null,
+        hasPassword: Boolean(u.passwordEnc),
       }));
       return res.status(200).json(shaped);
     } catch (e) {
@@ -54,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ message: "email, password and role are required" });
     }
     try {
-      const created = await prisma.staff.create({
+      const created = await prisma.user.create({
         data: {
           email,
           role: String(newRole),
@@ -74,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { id, role: newRole } = req.body ?? {};
     if (!id || !newRole) return res.status(400).json({ message: "id and role are required" });
     try {
-      const updated = await prisma.staff.update({
+      const updated = await prisma.user.update({
         where: { id: Number(id) },
         data: { role: String(newRole) },
         select: { id: true, email: true, role: true },
@@ -92,8 +80,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!userId) return res.status(400).json({ message: "id is required" });
     try {
       // Detach any client relation first to avoid FK issues
-      await prisma.client.updateMany({ where: { staffId: userId }, data: { staffId: null } });
-      await prisma.staff.delete({ where: { id: userId } });
+      await prisma.client.updateMany({ where: { userId: userId }, data: { userId: null } });
+      await prisma.user.delete({ where: { id: userId } });
       return res.status(200).json({ deleted: userId });
     } catch (e) {
       console.error("admin/users DELETE", e);

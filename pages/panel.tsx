@@ -23,7 +23,7 @@ import { authOptions } from "@/pages/api/auth/[...nextauth]"
 import type { GetServerSideProps } from "next"
 import DashboardSection from "@/components/PanelPages/DashboardSection"
 import ClientsSection from "@/components/PanelPages/ClientsSection"
-import StaffPanelSection from "@/components/PanelPages/StaffPanelSection"
+import TeamPanelSection from "@/components/PanelPages/TeamPanelSection"
 import LtvCalculatorSection from "@/components/PanelPages/LTVCalculatorSection"
 import OutreachSection from "@/components/PanelPages/OutreachSection"
 import ProjectManagement from "../components/PanelPages/ProjectManagement"
@@ -104,7 +104,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 2 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
               <BsPeople />
               <span className={`text-xs ${inter.className}`}>
-                Staff
+                Team
               </span>
             </div>
             <div id="panel-nav-item" onClick={() => { setCurrentSection(5); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 5 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
@@ -268,7 +268,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                 <>
                   {currentSection === 0 && <DashboardSection />}
                   {currentSection === 1 && <ClientsSection onAddClient={() => setIsAddClientOpen(true)} />}
-                  {currentSection === 2 && <StaffPanelSection />}
+                  {currentSection === 2 && <TeamPanelSection />}
                   {currentSection === 4 && <LtvCalculatorSection />}
                   {currentSection === 5 && <OutreachSection />}
                   {currentSection === 6 && <ProjectManagement />}

@@ -12,12 +12,11 @@ model Client {
   name               String
   email              String              @unique
   businessName       String
-  industry           String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   isActive           Boolean             @default(true)
-  staffId             Int?                @unique
-  staff               Staff?               @relation("StaffClient", fields: [staffId], references: [id])
+  userId             Int?                @unique
+  user               User?               @relation("UserClient", fields: [userId], references: [id])
   onboardingSessions OnboardingSession[]
 
   @@map("clients")
@@ -42,24 +41,18 @@ model OnboardingSession {
   @@map("onboarding_sessions")
 }
 
-model Staff {
-  id            Int         @id @default(autoincrement())
-  name          String?
-  email         String?     @unique
-  role          String      @default("staff")
-  passwordEnc   String?
-  position      String?
-  country       String?
-  timeZone      String?
-  phone         String?
-  companyEmail  String?
-  client        Client?     @relation("StaffClient")
-  tokens        StaffToken[]
+model User {
+  id          Int         @id @default(autoincrement())
+  email       String?     @unique
+  role        String      @default("user")
+  passwordEnc String?
+  client      Client?     @relation("UserClient")
+  tokens      UserToken[]
   marketingTrackers         MarketingTracker[]
   marketingYearlySummaries  MarketingYearlySummary[]
   signedDocuments           SignedDocuments[]
 
-  @@map("staff")
+  @@map("users")
 }
 
 model OnboardingPlatformToken {
@@ -78,19 +71,19 @@ model OnboardingPlatformToken {
   @@map("onboarding_platform_tokens")
 }
 
-model StaffToken {
+model UserToken {
   id           Int       @id @default(autoincrement())
   platform     String
   accessToken  String
   createdAt    DateTime  @default(now())
-  staffId      Int
+  userId       Int
   refreshToken String?
   expiresAt    DateTime?
-  staff        Staff     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([staffId, platform], name: "staffId_platform")
-  @@index([staffId, platform])
-  @@map("staff_tokens")
+  @@unique([userId, platform], name: "userId_platform")
+  @@index([userId, platform])
+  @@map("user_tokens")
 }
 
 model Author {
@@ -112,6 +105,7 @@ model BlogPost {
   content        String
   published_date DateTime @default(now()) @db.Timestamp(6)
   slug           String   @unique
+  is_test        Boolean? @default(false)
   visits         Int?     @default(0)
   tag            String?
   author         Author   @relation(fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_author")
@@ -121,7 +115,7 @@ model BlogPost {
 
 model MarketingTracker {
   id                    String   @id
-  staffId               Int
+  userId                Int
   year                  Int
   month                 Int
   outreach              Outreach
@@ -133,15 +127,15 @@ model MarketingTracker {
   meetingsToClientsPct  Float    @default(0)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @default(now())
-  staff                 Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  @@unique([staffId, year, month, outreach])
-  @@index([staffId, year])
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, year, month, outreach])
+  @@index([userId, year])
   @@map("marketing_tracker")
 }
 
 model MarketingYearlySummary {
   id                    String   @id
-  staffId               Int
+  userId                Int
   year                  Int
   totalAttempt          Int      @default(0)
   totalMeetingsSet      Int      @default(0)
@@ -151,15 +145,15 @@ model MarketingYearlySummary {
   meetingsToClientsPct  Float    @default(0)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @default(now())
-  staff                 Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  @@unique([staffId, year])
-  @@index([staffId, year])
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([userId, year])
+  @@index([userId, year])
   @@map("marketing_yearly_summary")
 }
 
 model SignedDocuments {
   id               String   @id
-  staffId          Int
+  userId           Int
   originalFilename String
   signedPdfData    Bytes
   fileSize         Int
@@ -168,12 +162,24 @@ model SignedDocuments {
   sessionToken     String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime
-  staff            Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([sessionToken])
-  @@index([staffId])
+  @@index([userId])
   @@map("signed_documents")
 }
 
+model Staff {
+  id            Int     @id @default(autoincrement())
+  name          String
+  position      String
+  country       String
+  time_zone     String
+  mentor        String?
+  email         String
+  company_email String
+  strikes       String
+  @@map("staff")
+}
 
 enum OnboardingStatus {
   pending
