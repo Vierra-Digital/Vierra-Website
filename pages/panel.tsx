@@ -45,8 +45,8 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
 
   const { data: session } = useSession()
   const [isAddClientOpen, setIsAddClientOpen] = useState(false)
+  const [clientRefreshTrigger, setClientRefreshTrigger] = useState(0)
   const [items, setItems] = useState<SessionItem[]>([])
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentUserName, setCurrentUserName] = useState<string | null>(null)
   const [currentUserImage, setCurrentUserImage] = useState<string | null>(null)
@@ -110,15 +110,12 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
 
   async function fetchSessions() {
     try {
-      setLoading(true)
       const r = await fetch("/api/session/listClientSessions")
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const data: SessionItem[] = await r.json()
       setItems(data)
     } catch (e: any) {
       setError(e?.message ?? "Failed to load sessions")
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -263,7 +260,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                     placeholder="Search"
                     className={`flex-1 text-sm placeholder:text-[#9CA3AF] bg-transparent outline-none ${inter.className}`}
                   />
-                  {loading && <span className={`ml-3 text-xs text-[#6B7280] ${inter.className}`}>Loading...</span>}
                 </div>
               </div>
             </div>
@@ -299,11 +295,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             </div>
           </div>
           <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden relative">
-            {loading && (
-              <div className="absolute inset-0 z-30 flex items-center justify-center bg-white/60 backdrop-blur-sm">
-                <div className="h-10 w-10 border-4 border-[#E5E7EB] border-t-[#701CC0] rounded-full animate-spin" aria-label="Loading" />
-              </div>
-            )}
             {error && (
               <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-red-100 text-red-700 px-4 py-2 rounded-md">
                 {error}
@@ -323,7 +314,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               : (
                 <>
                   {currentSection === 0 && <DashboardSection />}
-                  {currentSection === 1 && session?.user?.role !== "staff" && <ClientsSection onAddClient={() => setIsAddClientOpen(true)} />}
+                  {currentSection === 1 && session?.user?.role !== "staff" && <ClientsSection onAddClient={() => setIsAddClientOpen(true)} refreshTrigger={clientRefreshTrigger} />}
                   {currentSection === 2 && <TeamPanelSection userRole={session?.user?.role} />}
                   {currentSection === 4 && session?.user?.role !== "staff" && <LtvCalculatorSection />}
                   {currentSection === 5 && <OutreachSection />}
@@ -351,6 +342,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
           }}
           onCreated={(row) => {
             setItems((prev) => [row, ...prev])
+            setClientRefreshTrigger(prev => prev + 1)
           }}
         />
       )}

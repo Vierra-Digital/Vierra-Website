@@ -426,11 +426,11 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
                         <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
-                        <label htmlFor="team-search" className="sr-only">Search Team</label>
+                        <label htmlFor="staff-search" className="sr-only">Search Staff</label>
                                 <input 
-                                    id="team-search" 
+                                    id="staff-search" 
                                     type="search" 
-                                    placeholder="Search Team" 
+                                    placeholder="Search Staff" 
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className="w-64 md:w-80 text-sm placeholder:text-[#9CA3AF] bg-transparent outline-none" 
@@ -441,7 +441,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                     onClick={() => setIsFilterOpen(!isFilterOpen)}
                                     className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
                                 >
-                                    <FiFilter className="w-4 h-4" />
+                        <FiFilter className="w-4 h-4" />
                                     <span className="text-sm font-medium">Filter</span>
                                     <svg 
                                         className={`w-4 h-4 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`}
@@ -492,7 +492,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                                         }`}
                                                     >
                                                         Ascending
-                                                    </button>
+                    </button>
                                                     <button
                                                         onClick={() => setSortOrder("desc")}
                                                         className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
@@ -502,9 +502,9 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                                         }`}
                                                     >
                                                         Descending
-                                                    </button>
-                                                </div>
-                                            </div>
+                    </button>
+                </div>
+            </div>
 
                                             {/* Status Filter */}
                                             <div className="mb-4">
@@ -610,7 +610,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                                 <td className="px-4 py-4 text-sm">{r.strikes || "0/3"}</td>
                                                 <td className="px-4 py-4 text-sm">
                                                     <StatusBadge lastActiveAt={r.lastActiveAt} />
-                                                </td>
+                                    </td>
                                                 {userRole === "admin" && (
                                                     <td className="px-4 py-4 text-sm text-[#6B7280] relative">
                                                         <StaffActionsMenu
@@ -619,7 +619,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                                             onEdit={() => handleManageStaff(r)}
                                                             onDelete={() => handleDeleteStaff(r.id, r.name)}
                                                         />
-                                                    </td>
+                                    </td>
                                                 )}
                                 </tr>
                             ))}
