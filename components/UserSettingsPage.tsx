@@ -1,11 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { signOut } from "next-auth/react";
-import Image from "next/image";
 import ProfileImage from "./ProfileImage";
 import { FiEdit3, FiUpload, FiRotateCcw, FiLock, FiLogOut, FiUser, FiMail, FiShield, FiSettings } from "react-icons/fi";
-import { Bricolage_Grotesque } from "next/font/google";
-
-const bricolageGrotesque = Bricolage_Grotesque({ subsets: ["latin"] });
 
 interface UserSettingsPageProps {
   user: {
