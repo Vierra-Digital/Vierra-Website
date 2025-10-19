@@ -129,7 +129,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
         <meta name="robots" content="noindex,nofollow" />
       </Head>
       <div id="main-panel" className="w-full h-screen bg-white flex flex-row overflow-hidden">
-  <div id="left-side" className={`relative flex flex-col  h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden pb-8 md:pb-12`}>
+        <div id="left-side" className={`relative flex flex-col  h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
           <div id="vierra-nameplate-body" className="w-full h-20 flex items-center justify-center mb-4">
             <Link href="/">
               <Image
@@ -148,12 +148,14 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                 Dashboard
               </span>
             </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 1 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-              <PiUsersThree />
-              <span className={`text-xs ${inter.className}`}>
-                Clients
-              </span>
-            </div>
+            {session?.user?.role !== "staff" && (
+              <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 1 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
+                <PiUsersThree />
+                <span className={`text-xs ${inter.className}`}>
+                  Clients
+                </span>
+              </div>
+            )}
             <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 2 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
               <BsPeople />
               <span className={`text-xs ${inter.className}`}>
@@ -173,22 +175,26 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               </span>
             </div>
             
-            <div id="panel-nav-item" onClick={() => setIsSignModalOpen(true)} className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer hover:bg-white rounded-xl hover:text-black">
-              <FaRegFilePdf />
-              <span className={`text-xs ${inter.className}`}>
-                PDF Signer
-              </span>
-            </div>
-            <div
-              id="panel-nav-item"
-              onClick={() => { setCurrentSection(4); setShowSettings(false); setIsSidebarOpen(false)}}
-              className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 4 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
-            >
-              <PiCalculator />
-              <span className={`text-xs ${inter.className}`}>
-                LTV Calculator
-              </span>
-            </div>
+            {session?.user?.role !== "staff" && (
+              <div id="panel-nav-item" onClick={() => setIsSignModalOpen(true)} className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer hover:bg-white rounded-xl hover:text-black">
+                <FaRegFilePdf />
+                <span className={`text-xs ${inter.className}`}>
+                  PDF Signer
+                </span>
+              </div>
+            )}
+            {session?.user?.role !== "staff" && (
+              <div
+                id="panel-nav-item"
+                onClick={() => { setCurrentSection(4); setShowSettings(false); setIsSidebarOpen(false)}}
+                className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 4 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+              >
+                <PiCalculator />
+                <span className={`text-xs ${inter.className}`}>
+                  LTV Calculator
+                </span>
+              </div>
+            )}
             <div
               id="panel-nav-item"
               onClick={() => { setCurrentSection(7); setShowSettings(false); setIsSidebarOpen(false)}}
@@ -199,16 +205,18 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                 Blog Editor
               </span>
             </div>
-            <div
-              id="panel-nav-item"
-              onClick={() => { setCurrentSection(8); setShowSettings(false); setIsSidebarOpen(false)}}
-              className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 8 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
-            >
-              <FiShield />
-              <span className={`text-xs ${inter.className}`}>
-                User Management
-              </span>
-            </div>
+            {session?.user?.role !== "staff" && (
+              <div
+                id="panel-nav-item"
+                onClick={() => { setCurrentSection(8); setShowSettings(false); setIsSidebarOpen(false)}}
+                className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 8 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+              >
+                <FiShield />
+                <span className={`text-xs ${inter.className}`}>
+                  User Management
+                </span>
+              </div>
+            )}
             {/* Logout moved to bottom of sidebar */}
           </div>
 
@@ -290,7 +298,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               </div>
             </div>
           </div>
-  <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden pb-24 relative">
+          <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden relative">
             {loading && (
               <div className="absolute inset-0 z-30 flex items-center justify-center bg-white/60 backdrop-blur-sm">
                 <div className="h-10 w-10 border-4 border-[#E5E7EB] border-t-[#701CC0] rounded-full animate-spin" aria-label="Loading" />
@@ -315,13 +323,13 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               : (
                 <>
                   {currentSection === 0 && <DashboardSection />}
-                  {currentSection === 1 && <ClientsSection onAddClient={() => setIsAddClientOpen(true)} />}
-                  {currentSection === 2 && <TeamPanelSection />}
-                  {currentSection === 4 && <LtvCalculatorSection />}
+                  {currentSection === 1 && session?.user?.role !== "staff" && <ClientsSection onAddClient={() => setIsAddClientOpen(true)} />}
+                  {currentSection === 2 && <TeamPanelSection userRole={session?.user?.role} />}
+                  {currentSection === 4 && session?.user?.role !== "staff" && <LtvCalculatorSection />}
                   {currentSection === 5 && <OutreachSection />}
                   {currentSection === 6 && <ProjectManagement />}
                   {currentSection === 7 && <BlogEditorSection />}
-                  {currentSection === 8 && <AdminEditorSection />}
+                  {currentSection === 8 && session?.user?.role !== "staff" && <AdminEditorSection />}
                 </>
               )}
 
@@ -357,7 +365,8 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     return { redirect: { destination: "/login", permanent: false } }
   }
   const role = (session.user as any).role
-  if ((session.user as any).role === "user") {
+  // Only allow staff and admin roles to access panel
+  if ((session.user as any).role !== "staff" && (session.user as any).role !== "admin") {
     return { redirect: { destination: "/client", permanent: false } }
   }
   return { props: { dashboardHref: role === "user" ? "/client" : "/panel" } }

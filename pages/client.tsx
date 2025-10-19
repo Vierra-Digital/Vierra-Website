@@ -150,7 +150,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     return { redirect: { destination: "/login", permanent: false } }
   }
 
-  // If not a "user", send to admin panel
+  // If not a "user" (client), send to admin panel
   if ((session.user as any).role !== "user") {
     return { redirect: { destination: "/panel", permanent: false } }
   }

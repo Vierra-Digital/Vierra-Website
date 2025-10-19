@@ -62,10 +62,11 @@ const LoginPage = () => {
         const session = await getSession();
         const role = (session?.user as any)?.role;
 
-        if (role === "user") {
-          router.push("/client");
-        } else {
+        // Staff members (User table) go to panel, Clients go to client page
+        if (role === "staff" || role === "admin") {
           router.push("/panel");
+        } else {
+          router.push("/client");
         }
       } else {
         setError(response?.error ?? "Invalid credentials");

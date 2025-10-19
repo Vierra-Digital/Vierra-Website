@@ -7,7 +7,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireSession(req, res);
   if (!session) return res.status(401).json({ message: "Not authenticated" });
   const role = (session.user as any)?.role;
-  if (role !== "admin") return res.status(403).json({ message: "Forbidden" });
+  // Allow staff and admin to read data, but only admin to modify data
+  if (req.method === "GET") {
+    if (role !== "admin" && role !== "staff") return res.status(403).json({ message: "Forbidden" });
+  } else {
+    if (role !== "admin") return res.status(403).json({ message: "Forbidden" });
+  }
 
   if (req.method === "GET") {
     try {

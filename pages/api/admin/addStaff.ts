@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-import bcrypt from "bcryptjs";
+import { encrypt } from "@/lib/crypto";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     const session = await requireSession(req, res);
@@ -28,16 +28,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(400).json({ message: "Email already exists" });
         }
 
-        // Hash the password
-        const hashedPassword = await bcrypt.hash(password || "Password", 12);
+        // Encrypt the password (default to "Password" if not provided)
+        const passwordToUse = password || "Password";
+        const encryptedPassword = encrypt(passwordToUse);
 
         // Create the new staff member
         const newUser = await prisma.user.create({
             data: {
                 name: name.trim(),
                 email: email.trim(),
-                passwordEnc: hashedPassword,
-                role: "user", // Default role
+                passwordEnc: encryptedPassword,
+                role: "staff", // Staff role for panel access
                 position: position.trim(),
                 country: country.trim(),
                 company_email: company_email?.trim() || null,
