@@ -85,22 +85,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === "PUT") {
-    const { id, name, role: newRole } = req.body ?? {};
+    const { 
+      id, 
+      name, 
+      email,
+      role: newRole, 
+      position, 
+      country, 
+      company_email, 
+      mentor, 
+      time_zone, 
+      strikes 
+    } = req.body ?? {};
     if (!id) return res.status(400).json({ message: "id is required" });
     try {
       const updateData: any = {};
       if (name !== undefined) updateData.name = name;
+      if (email !== undefined) updateData.email = email;
       if (newRole) updateData.role = String(newRole);
+      if (position !== undefined) updateData.position = position;
+      if (country !== undefined) updateData.country = country;
+      if (company_email !== undefined) updateData.company_email = company_email;
+      if (mentor !== undefined) updateData.mentor = mentor;
+      if (time_zone !== undefined) updateData.time_zone = time_zone;
+      if (strikes !== undefined) updateData.strikes = strikes;
       
       const updated = await prisma.user.update({
         where: { id: Number(id) },
         data: updateData,
-        select: { id: true, name: true, email: true, role: true },
+        select: { 
+          id: true, 
+          name: true, 
+          email: true, 
+          role: true,
+          position: true,
+          country: true,
+          company_email: true,
+          mentor: true,
+          time_zone: true,
+          strikes: true,
+          status: true,
+          lastActiveAt: true
+        },
       });
       return res.status(200).json(updated);
     } catch (e) {
       console.error("admin/users PUT", e);
-      return res.status(400).json({ message: "Failed to update role" });
+      return res.status(400).json({ message: "Failed to update user" });
     }
   }
 

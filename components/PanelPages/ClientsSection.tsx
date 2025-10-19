@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react"
 import Image from "next/image"
-import { FiPlus, FiSearch, FiFilter, FiTrash2, FiMoreVertical, FiCheckCircle, FiXCircle, FiShield } from 'react-icons/fi'
+import ProfileImage from "../ProfileImage"
+import { FiPlus, FiSearch, FiFilter, FiTrash2, FiMoreVertical, FiCheckCircle, FiXCircle } from 'react-icons/fi'
 
 type ClientRow = {
     id: string
@@ -93,8 +94,7 @@ const ClientActionsMenu: React.FC<{
     hasImage: boolean
     onDelete: () => void
     onToggleStatus: (isActive: boolean) => void
-    onUploadImage: (clientId: string, file: File) => void
-}> = ({ clientName, isActive, hasImage, onDelete, onToggleStatus, onUploadImage, clientId }) => {
+}> = ({ clientName, isActive, onDelete, onToggleStatus }) => {
     const [isOpen, setIsOpen] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
 
@@ -143,28 +143,6 @@ const ClientActionsMenu: React.FC<{
                             </>
                         )}
                     </button>
-                    <div className="relative">
-                        <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) {
-                                    setIsOpen(false);
-                                    onUploadImage(clientId, file);
-                                }
-                            }}
-                            className="hidden"
-                            id={`client-image-upload-${clientId}`}
-                        />
-                        <label
-                            htmlFor={`client-image-upload-${clientId}`}
-                            className="w-full px-4 py-2 text-left text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2 cursor-pointer"
-                        >
-                            <FiShield className="w-4 h-4" />
-                            {hasImage ? "Update Image" : "Upload Image"}
-                        </label>
-                    </div>
                     <button
                         onClick={() => {
                             setIsOpen(false)
@@ -181,9 +159,12 @@ const ClientActionsMenu: React.FC<{
     )
 }
 
-interface ClientsSectionProps { onAddClient?: () => void }
+interface ClientsSectionProps { 
+    onAddClient?: () => void
+    refreshTrigger?: number
+}
 
-const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
+const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTrigger }) => {
     const [rows, setRows] = useState<ClientRow[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -195,8 +176,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
     const [retainerSort, setRetainerSort] = useState<'none' | 'asc' | 'desc'>("none")
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
     const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(null)
-    const [editingName, setEditingName] = useState<Record<string, string>>({})
-    const [updatingNames, setUpdatingNames] = useState<Set<string>>(new Set())
     const pageSize = 10
 
     const fetchClients = async () => {
@@ -216,6 +195,12 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
     useEffect(() => {
         fetchClients()
     }, [])
+
+    useEffect(() => {
+        if (refreshTrigger && refreshTrigger > 0) {
+            fetchClients()
+        }
+    }, [refreshTrigger])
 
     const handleDeleteClient = async () => {
         if (!clientToDelete) return
@@ -262,89 +247,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
             await fetchClients()
         } catch (e: any) {
             setError(e?.message ?? "Failed to update client status")
-        }
-    }
-
-    const updateClientName = async (clientId: string, newName: string) => {
-        setUpdatingNames(prev => new Set(prev).add(clientId))
-        try {
-            const response = await fetch('/api/admin/updateClientName', {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    id: clientId,
-                    name: newName
-                }),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to update client name');
-            }
-
-            // Update the local state
-            setRows(prevRows => 
-                prevRows.map(row => 
-                    row.id === clientId 
-                        ? { ...row, name: newName }
-                        : row
-                )
-            );
-
-            // Clear editing state
-            setEditingName(prev => {
-                const newState = { ...prev }
-                delete newState[clientId]
-                return newState
-            });
-        } catch (error) {
-            console.error('Error updating client name:', error);
-            setError('Failed to update client name');
-        } finally {
-            setUpdatingNames(prev => {
-                const newSet = new Set(prev)
-                newSet.delete(clientId)
-                return newSet
-            });
-        }
-    }
-
-    const uploadClientImage = async (clientId: string, file: File) => {
-        try {
-            // Convert file to base64
-            const reader = new FileReader();
-            reader.onload = async () => {
-                try {
-                    const base64Data = reader.result as string;
-                    const base64 = base64Data.split(',')[1]; // Remove data:image/...;base64, prefix
-                    
-                    const response = await fetch("/api/admin/uploadClientImage", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({ 
-                            clientId,
-                            imageData: base64,
-                            mimeType: file.type
-                        }),
-                    });
-
-                    if (!response.ok) {
-                        throw new Error("Failed to upload image");
-                    }
-
-                    // Update local state
-                    setRows((prev) => prev.map((r) => (r.id === clientId ? { ...r, image: true } : r)));
-                } catch (error) {
-                    console.error("Error uploading image:", error);
-                }
-            };
-            
-            reader.readAsDataURL(file);
-        } catch (error) {
-            console.error("Error processing file:", error);
         }
     }
 
@@ -413,106 +315,183 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
     }, [searchQuery])
 
     return (
-        <div className="w-full h-full bg-white text-[#111014] flex flex-col p-4">
-                                    <div className="w-full flex justify-between items-center mb-2">
-                                            <div>
-                                                <h2 className="text-2xl font-semibold text-[#111827]">Clients</h2>
-                                                <p className="text-sm text-[#6B7280] mt-0">All Clients</p>
-                                            </div>
-                                <div className="flex items-center gap-3">
-                    <form
-                        className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition"
-                        onSubmit={(e) => e.preventDefault()}
-                    >
-                        <button type="submit" aria-label="Search" className="flex items-center">
-                            <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
-                        </button>
-                        <label htmlFor="clients-search" className="sr-only">Search Clients</label>
-                        <input
-                            id="clients-search"
-                            type="search"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            placeholder="Search Clients"
-                            className="w-64 md:w-80 text-sm placeholder:text-[#9CA3AF] bg-transparent outline-none"
-                        />
-                    </form>
-                    <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsFilterOpen(false) }} tabIndex={-1}>
-                        <button
-                            type="button"
-                            onClick={() => setIsFilterOpen((v) => !v)}
-                            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50"
-                        >
-                            <FiFilter className="w-4 h-4" />
-                            <span className="text-sm">Filter</span>
-                        </button>
-                        {isFilterOpen && (
-                            <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl border border-[#E5E7EB] shadow-lg z-20 p-5 text-sm space-y-4">
-                                <div className="mb-4">
-                                    <div className="text-xs font-semibold text-[#6B7280] mb-1 uppercase tracking-wide">Name</div>
-                                    <div className="flex gap-3">
-                                        <button onClick={() => { setNameSort('asc'); setRetainerSort('none'); }} className={`px-3 py-1.5 rounded-lg border ${nameSort==='asc' ? 'bg-[#701CC0] text-white border-[#701CC0]' : 'border-[#E5E7EB] hover:bg-gray-50'}`}>A–Z</button>
-                                        <button onClick={() => { setNameSort('desc'); setRetainerSort('none'); }} className={`px-3 py-1.5 rounded-lg border ${nameSort==='desc' ? 'bg-[#701CC0] text-white border-[#701CC0]' : 'border-[#E5E7EB] hover:bg-gray-50'}`}>Z–A</button>
-                                    </div>
-                                </div>
-                                <div className="mb-4">
-                                    <div className="text-xs font-semibold text-[#6B7280] mb-1 uppercase tracking-wide">Status</div>
-                                    <div className="flex flex-wrap gap-3">
-                                        {(['all','active','inactive','pending'] as const).map(s => (
-                                            <button key={s} onClick={() => setStatusFilter(s)} className={`px-3 py-1.5 rounded-lg border capitalize ${statusFilter===s ? 'bg-[#701CC0] text-white border-[#701CC0]' : 'border-[#E5E7EB] hover:bg-gray-50'}`}>{s}</button>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="mb-4">
-                                    <div className="text-xs font-semibold text-[#6B7280] mb-1 uppercase tracking-wide">Monthly Retainer</div>
-                                    <div className="flex gap-3">
-                                        <button onClick={() => { setRetainerSort('asc'); setNameSort('none'); }} className={`px-3 py-1.5 rounded-lg border ${retainerSort==='asc' ? 'bg-[#701CC0] text-white border-[#701CC0]' : 'border-[#E5E7EB] hover:bg-gray-50'}`}>Low → High</button>
-                                        <button onClick={() => { setRetainerSort('desc'); setNameSort('none'); }} className={`px-3 py-1.5 rounded-lg border ${retainerSort==='desc' ? 'bg-[#701CC0] text-white border-[#701CC0]' : 'border-[#E5E7EB] hover:bg-gray-50'}`}>High → Low</button>
-                                    </div>
-                                </div>
-                                <div className="flex justify-between mt-2 text-xs">
-                                    <button onClick={() => { setNameSort('none'); setRetainerSort('none'); setStatusFilter('all'); }} className="text-[#6B7280] hover:underline">Clear</button>
-                                    <button onClick={() => setIsFilterOpen(false)} className="text-[#701CC0] font-medium">Close</button>
-                                </div>
-                            </div>
-                        )}
+        <>
+        <div className="flex-1 flex justify-center px-6 pt-2">
+            <div className="w-full max-w-6xl flex flex-col h-full">
+                <div className="w-full flex justify-between items-center mb-2">
+                    <div>
+                        <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Clients</h1>
                     </div>
-                    <button
-                        onClick={onAddClient}
-                        className="inline-flex items-center px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
-                    >
-                        <FiPlus className="w-4 h-4 mr-2" />
-                        Add Client
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
+                            <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
+                            <label htmlFor="clients-search" className="sr-only">Search Clients</label>
+                            <input
+                                id="clients-search"
+                                type="search"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="Search Clients"
+                                className="w-64 md:w-80 text-sm placeholder:text-[#9CA3AF] bg-transparent outline-none"
+                            />
+                        </div>
+                        <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsFilterOpen(false) }} tabIndex={-1}>
+                            <button
+                                type="button"
+                                onClick={() => setIsFilterOpen((v) => !v)}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
+                            >
+                                <FiFilter className="w-4 h-4" />
+                                <span className="text-sm font-medium">Filter</span>
+                                <svg 
+                                    className={`w-4 h-4 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`}
+                                    fill="none" 
+                                    stroke="currentColor" 
+                                    viewBox="0 0 24 24"
+                                >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            {isFilterOpen && (
+                                <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#E5E7EB] py-4 z-50">
+                                    <div className="px-5">
+                                        <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
+                                        
+                                        {/* Sort By */}
+                                        <div className="mb-5">
+                                            <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By</label>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => { setNameSort('asc'); setRetainerSort('none'); }}
+                                                    className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
+                                                        nameSort === 'asc' 
+                                                            ? 'bg-[#701CC0] text-white shadow-sm' 
+                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                    }`}
+                                                >
+                                                    Name A-Z
+                                                </button>
+                                                <button
+                                                    onClick={() => { setNameSort('desc'); setRetainerSort('none'); }}
+                                                    className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
+                                                        nameSort === 'desc' 
+                                                            ? 'bg-[#701CC0] text-white shadow-sm' 
+                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                    }`}
+                                                >
+                                                    Name Z-A
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Retainer Sort */}
+                                        <div className="mb-5">
+                                            <label className="block text-xs font-medium text-[#6B7280] mb-2">Monthly Retainer</label>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => { setRetainerSort('asc'); setNameSort('none'); }}
+                                                    className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
+                                                        retainerSort === 'asc' 
+                                                            ? 'bg-[#701CC0] text-white shadow-sm' 
+                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                    }`}
+                                                >
+                                                    Low → High
+                                                </button>
+                                                <button
+                                                    onClick={() => { setRetainerSort('desc'); setNameSort('none'); }}
+                                                    className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
+                                                        retainerSort === 'desc' 
+                                                            ? 'bg-[#701CC0] text-white shadow-sm' 
+                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                                    }`}
+                                                >
+                                                    High → Low
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Status Filter */}
+                                        <div className="mb-4">
+                                            <label className="block text-xs font-medium text-[#6B7280] mb-2">Status</label>
+                                            <div className="relative">
+                                                <select
+                                                    value={statusFilter}
+                                                    onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive' | 'pending')}
+                                                    className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
+                                                >
+                                                    <option value="all">All Status</option>
+                                                    <option value="active">Active</option>
+                                                    <option value="inactive">Inactive</option>
+                                                    <option value="pending">Pending</option>
+                                                </select>
+                                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                                    <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                    </svg>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        {/* Clear Button */}
+                                        <div className="pt-3 border-t border-[#E5E7EB]">
+                                            <button
+                                                onClick={() => {
+                                                    setNameSort('none')
+                                                    setRetainerSort('none')
+                                                    setStatusFilter('all')
+                                                    setIsFilterOpen(false)
+                                                }}
+                                                className="w-full text-xs py-2 px-3 rounded-lg font-medium text-[#6B7280] bg-gray-50 hover:bg-gray-100 hover:text-[#374151] transition-colors duration-200"
+                                            >
+                                                Clear All Filters
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                    </div>
+                        <button
+                            onClick={onAddClient}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium"
+                        >
+                            <FiPlus className="w-4 h-4" />
+                            Add Client
+                        </button>
                 </div>
             </div>
-            <div className="overflow-x-hidden w-full">
-                            <div className="overflow-x-auto pr-6">
-                                <table className="min-w-full text-left border-separate border-spacing-y-3">
-                    <thead>
-                        <tr className="bg-[#F8F0FF] text-black text-sm">
-                            {columns.map((c) => (
-                                <th key={c.key} className="px-6 py-3 font-normal text-sm">{c.header}</th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loading && (
-                            <tr>
-                                <td className="px-4 py-6 text-sm text-gray-500" colSpan={columns.length}>Loading...</td>
-                            </tr>
-                        )}
+                {loading ? (
+                    <div className="flex items-center justify-center py-12">
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto"></div>
+                            <p className="mt-2 text-sm text-[#6B7280]">Loading Client Data...</p>
+                        </div>
+                    </div>
+                ) : (
+                <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                                <tr>
+                                    {columns.map((c) => (
+                                        <th key={c.key} className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
+                                            {c.header}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-[#E5E7EB]">
                         {!loading && filteredRows.length === 0 && (
                             <tr>
                                 <td className="px-4 py-12" colSpan={columns.length}>
                                     <div className="w-full h-full flex flex-col items-center justify-center text-center">
                                         <Image src="/assets/no-client.png" alt="No clients" width={224} height={224} className="w-56 h-auto mb-3" />
-                                        <p className="text-sm text-gray-500 mb-3">You have no clients added.</p>
+                                        <p className="text-sm text-gray-500 mb-3">No clients found.</p>
                                         <button
                                             onClick={onAddClient}
-                                            className="inline-flex items-center px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
+                                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
                                         >
-                                            <FiPlus className="w-4 h-4 mr-2" />
+                                            <FiPlus className="w-4 h-4" />
                                             Add Client
                                         </button>
                                     </div>
@@ -520,61 +499,25 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
                             </tr>
                         )}
                         {filteredRows.slice(currentPage * pageSize, (currentPage + 1) * pageSize).map((r) => (
-                            <tr key={r.id} className="bg-white hover:bg-[#F8F0FF] rounded-xl transition-colors">
+                            <tr key={r.id} className="hover:bg-purple-50">
                                 <td className="px-4 py-4">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-9 h-9 rounded-full bg-[#E2E8F0] flex items-center justify-center text-sm font-medium">
-                                            {r.name?.charAt(0)?.toUpperCase() || "?"}
-                                        </div>
+                                        <ProfileImage
+                                            src={r.image ? `/api/admin/getClientImage?clientId=${r.id}&t=${Date.now()}` : null}
+                                            name={r.name}
+                                            size={32}
+                                            alt={`${r.name}'s profile`}
+                                        />
                                         <div className="flex flex-col">
-                                            <div className="flex items-center gap-2">
-                                                {editingName[r.id] !== undefined ? (
-                                                    <div className="flex items-center gap-1">
-                                                        <input
-                                                            type="text"
-                                                            value={editingName[r.id]}
-                                                            onChange={(e) => setEditingName(prev => ({ ...prev, [r.id]: e.target.value }))}
-                                                            className="border rounded px-2 py-1 text-sm w-32"
-                                                            autoFocus
-                                                        />
-                                                        <button
-                                                            onClick={() => updateClientName(r.id, editingName[r.id])}
-                                                            disabled={updatingNames.has(r.id)}
-                                                            className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50"
-                                                        >
-                                                            {updatingNames.has(r.id) ? "..." : "✓"}
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setEditingName(prev => {
-                                                                const newState = { ...prev }
-                                                                delete newState[r.id]
-                                                                return newState
-                                                            })}
-                                                            className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
-                                                        >
-                                                            ✕
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center gap-1">
-                                                        <span className="text-sm font-semibold">{r.name || "—"}</span>
-                                                        <button
-                                                            onClick={() => setEditingName(prev => ({ ...prev, [r.id]: r.name || "" }))}
-                                                            className="px-1 py-1 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
-                                                        >
-                                                            Edit
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <span className="text-xs text-[#677489]">{r.email || ""}</span>
+                                            <div className="text-sm font-medium text-[#111827]">{r.name || "—"}</div>
+                                            <div className="text-sm text-[#6B7280]">{r.email || ""}</div>
                                         </div>
                                     </div>
                                 </td>
-                                <td className="px-4 py-4 text-sm">{r.businessName || "—"}</td>
-                                <td className="px-4 py-4 text-sm">{r.industry || r.targetAudience || "—"}</td>
-                                <td className="px-4 py-4 text-sm">{typeof r.monthlyRetainer === 'number' ? `$${r.monthlyRetainer.toLocaleString()}` : "—"}</td>
-                                <td className="px-4 py-4 text-sm">{r.clientGoal || r.adGoal || "—"}</td>
+                                <td className="px-4 py-4 text-sm text-[#111827]">{r.businessName || "—"}</td>
+                                <td className="px-4 py-4 text-sm text-[#111827]">{r.industry || r.targetAudience || "—"}</td>
+                                <td className="px-4 py-4 text-sm text-[#111827]">{typeof r.monthlyRetainer === 'number' ? `$${r.monthlyRetainer.toLocaleString()}` : "—"}</td>
+                                <td className="px-4 py-4 text-sm text-[#111827]">{r.clientGoal || r.adGoal || "—"}</td>
                                 <td className="px-4 py-4 text-sm"><StatusBadge status={r.status} /></td>
                                 <td className="px-4 py-4 text-sm text-[#6B7280]">
                                     <ClientActionsMenu
@@ -584,47 +527,46 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
                                         hasImage={r.image}
                                         onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
                                         onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
-                                        onUploadImage={uploadClientImage}
                                     />
                                 </td>
                             </tr>
                         ))}
-                    </tbody>
-                            </table>
-                        </div>
-            </div>
-
-            {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
-            {!loading && filteredRows.length > 0 && (
-                <div className="mt-4 text-xs text-[#677489]">
-                    <div className="w-full flex items-center justify-between">
-                        <div className="text-xs text-[#677489]">
-                            Showing {Math.min(filteredRows.length, currentPage * pageSize + 1)}–{Math.min(filteredRows.length, (currentPage + 1) * pageSize)} of {filteredRows.length} Entries
-                        </div>
-                        <div className="text-xs text-[#677489] text-center">
-                            Page {Math.min(currentPage + 1, Math.max(1, Math.ceil(filteredRows.length / pageSize)))} of {Math.max(1, Math.ceil(filteredRows.length / pageSize))}
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-                                disabled={currentPage === 0}
-                                className={`px-3 py-1 rounded-md border ${currentPage === 0 ? 'text-gray-400 border-gray-200' : 'text-[#111827] border-[#D1D5DB] hover:bg-gray-50'}`}
-                            >
-                                Previous
-                            </button>
-                            <button
-                                onClick={() => setCurrentPage(p => Math.min(p + 1, Math.max(0, Math.ceil(filteredRows.length / pageSize) - 1)))}
-                                disabled={currentPage >= Math.ceil(filteredRows.length / pageSize) - 1}
-                                className={`px-3 py-1 rounded-md border ${currentPage >= Math.ceil(rows.length / pageSize) - 1 ? 'text-gray-400 border-gray-200' : 'text-[#111827] border-[#D1D5DB] hover:bg-gray-50'}`}
-                            >
-                                Next
-                            </button>
-                        </div>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-            )}
+                )}
 
-            <ConfirmDeleteModal
+            {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
+                {!loading && filteredRows.length > 0 && (
+                    <div className="mt-4 pt-4 text-xs text-[#677489]">
+                        <div className="w-full flex items-center justify-center">
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
+                                    disabled={currentPage === 0}
+                                    className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Previous
+                                </button>
+                                <span className="text-xs text-[#6B7280]">
+                                    Page {currentPage + 1} of {Math.max(1, Math.ceil(filteredRows.length / pageSize))}
+                                </span>
+                                <button
+                                    onClick={() => setCurrentPage(Math.min(Math.ceil(filteredRows.length / pageSize) - 1, currentPage + 1))}
+                                    disabled={currentPage >= Math.ceil(filteredRows.length / pageSize) - 1}
+                                    className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+
+        <ConfirmDeleteModal
                 isOpen={deleteModalOpen}
                 clientName={clientToDelete?.name || ""}
                 onConfirm={handleDeleteClient}
@@ -633,7 +575,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient }) => {
                     setClientToDelete(null)
                 }}
             />
-        </div>
+        </>
     )
 }
 
