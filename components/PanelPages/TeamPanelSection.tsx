@@ -95,7 +95,7 @@ const DeleteStaffModal: React.FC<{
                     <h3 className="text-xl font-semibold text-[#111827]">Remove Staff Member</h3>
                 </div>
                 <p className="text-sm text-[#6B7280] mb-6">
-                    Are you sure you want to delete <span className="font-semibold text-[#111827]">{staffName}</span>? 
+                    Are you sure you want to remove <span className="font-semibold text-[#111827]">{staffName}</span>? 
                     This action is permanent and cannot be undone. All associated data will be removed.
                 </p>
                 <div className="flex gap-3 justify-end">
@@ -567,7 +567,27 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                             </div>
                         </div>
                     ) : (
-                        <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
+                        <>
+                            {!loading && filteredRows.length === 0 && (
+                                <div className="text-center py-12">
+                                    <div className="w-full h-full flex flex-col items-center justify-center text-center">
+                                        <Image src="/assets/no-client.png" alt="No staff" width={224} height={224} className="w-56 h-auto mb-3" />
+                                        <p className="text-sm text-gray-500 mb-3">You have no staff added.</p>
+                                        {userRole === "admin" && (
+                                            <button
+                                                onClick={() => setShowAddStaff(true)}
+                                                className="inline-flex items-center px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
+                                            >
+                                                <FiPlus className="w-4 h-4 mr-2" />
+                                                Add Staff
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {!loading && filteredRows.length > 0 && (
+                                <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
                             <div className="overflow-x-auto">
                                 <table className="w-full">
                                     <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
@@ -626,7 +646,9 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                         </tbody>
                             </table>
                         </div>
-            </div>
+                                </div>
+                            )}
+                        </>
                     )}
 
                     {!loading && filteredRows.length > 0 && (
@@ -651,24 +673,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                         Next
                                     </button>
                                 </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {!loading && filteredRows.length === 0 && (
-                        <div className="text-center py-12">
-                            <div className="w-full h-full flex flex-col items-center justify-center text-center">
-                                <Image src="/assets/no-client.png" alt="No staff" width={224} height={224} className="w-56 h-auto mb-3" />
-                                <p className="text-sm text-gray-500 mb-3">You have no staff added.</p>
-                                {userRole === "admin" && (
-                                    <button
-                                        onClick={() => setShowAddStaff(true)}
-                                        className="inline-flex items-center px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
-                                    >
-                                        <FiPlus className="w-4 h-4 mr-2" />
-                                        Add Staff
-                                    </button>
-                                )}
                             </div>
                         </div>
                     )}

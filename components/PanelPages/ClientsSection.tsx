@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useRef } from "react"
 import Image from "next/image"
 import ProfileImage from "../ProfileImage"
-import { FiPlus, FiSearch, FiFilter, FiTrash2, FiMoreVertical, FiCheckCircle, FiXCircle } from 'react-icons/fi'
+import { FiPlus, FiSearch, FiFilter, FiTrash2, FiCheckCircle, FiXCircle } from 'react-icons/fi'
 
 type ClientRow = {
     id: string
@@ -62,10 +62,10 @@ const ConfirmDeleteModal: React.FC<{
                     <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
                         <FiTrash2 className="w-6 h-6 text-red-600" />
                     </div>
-                    <h3 className="text-xl font-semibold text-[#111827]">Delete Client</h3>
+                    <h3 className="text-xl font-semibold text-[#111827]">Remove Client</h3>
                 </div>
                 <p className="text-sm text-[#6B7280] mb-6">
-                    Are you sure you want to delete <span className="font-semibold text-[#111827]">{clientName}</span>? 
+                    Are you sure you want to remove <span className="font-semibold text-[#111827]">{clientName}</span>? 
                     This action is permanent and cannot be undone. All associated data will be removed.
                 </p>
                 <div className="flex gap-3 justify-end">
@@ -79,7 +79,7 @@ const ConfirmDeleteModal: React.FC<{
                         onClick={onConfirm}
                         className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm font-medium"
                     >
-                        Delete Client
+                        Remove Client
                     </button>
                 </div>
             </div>
@@ -116,12 +116,12 @@ const ClientActionsMenu: React.FC<{
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 aria-label={`Manage ${clientName}`}
-                className="p-2 rounded hover:bg-gray-100 transition-colors"
+                className="px-2 py-1 rounded hover:bg-gray-100 transition-colors"
             >
-                <FiMoreVertical className="w-5 h-5 text-[#6B7280]" />
+                ⋯
             </button>
             {isOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-[#E5E7EB] py-1 z-10">
+                <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-[#E5E7EB] py-1 z-50">
                     <button
                         onClick={() => {
                             setIsOpen(false)
@@ -134,12 +134,12 @@ const ClientActionsMenu: React.FC<{
                         {isActive ? (
                             <>
                                 <FiXCircle className="w-4 h-4" />
-                                Mark Inactive
+                                Mark As Inactive
                             </>
                         ) : (
                             <>
                                 <FiCheckCircle className="w-4 h-4" />
-                                Mark Active
+                                Mark As Active
                             </>
                         )}
                     </button>
@@ -332,7 +332,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 placeholder="Search Clients"
-                                className="w-64 md:w-80 text-sm placeholder:text-[#9CA3AF] bg-transparent outline-none"
+                                className="w-64 md:w-80 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none"
                             />
                         </div>
                         <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsFilterOpen(false) }} tabIndex={-1}>
@@ -418,7 +418,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                                 <select
                                                     value={statusFilter}
                                                     onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive' | 'pending')}
-                                                    className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
+                                                    className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
                                                 >
                                                     <option value="all">All Status</option>
                                                     <option value="active">Active</option>
@@ -468,73 +468,76 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                         </div>
                     </div>
                 ) : (
-                <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                                <tr>
-                                    {columns.map((c) => (
-                                        <th key={c.key} className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                                            {c.header}
-                                        </th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-[#E5E7EB]">
+                    <>
                         {!loading && filteredRows.length === 0 && (
-                            <tr>
-                                <td className="px-4 py-12" colSpan={columns.length}>
-                                    <div className="w-full h-full flex flex-col items-center justify-center text-center">
-                                        <Image src="/assets/no-client.png" alt="No clients" width={224} height={224} className="w-56 h-auto mb-3" />
-                                        <p className="text-sm text-gray-500 mb-3">No clients found.</p>
-                                        <button
-                                            onClick={onAddClient}
-                                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
-                                        >
-                                            <FiPlus className="w-4 h-4" />
-                                            Add Client
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
+                            <div className="text-center py-12">
+                                <div className="w-full h-full flex flex-col items-center justify-center text-center">
+                                    <Image src="/assets/no-client.png" alt="No clients" width={224} height={224} className="w-56 h-auto mb-3" />
+                                    <p className="text-sm text-gray-500 mb-3">You have no clients added.</p>
+                                    <button
+                                        onClick={onAddClient}
+                                        className="inline-flex items-center px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
+                                    >
+                                        <FiPlus className="w-4 h-4 mr-2" />
+                                        Add Client
+                                    </button>
+                                </div>
+                            </div>
                         )}
-                        {filteredRows.slice(currentPage * pageSize, (currentPage + 1) * pageSize).map((r) => (
-                            <tr key={r.id} className="hover:bg-purple-50">
-                                <td className="px-4 py-4">
-                                    <div className="flex items-center gap-3">
-                                        <ProfileImage
-                                            src={r.image ? `/api/admin/getClientImage?clientId=${r.id}&t=${Date.now()}` : null}
-                                            name={r.name}
-                                            size={32}
-                                            alt={`${r.name}'s profile`}
-                                        />
-                                        <div className="flex flex-col">
-                                            <div className="text-sm font-medium text-[#111827]">{r.name || "—"}</div>
-                                            <div className="text-sm text-[#6B7280]">{r.email || ""}</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td className="px-4 py-4 text-sm text-[#111827]">{r.businessName || "—"}</td>
-                                <td className="px-4 py-4 text-sm text-[#111827]">{r.industry || r.targetAudience || "—"}</td>
-                                <td className="px-4 py-4 text-sm text-[#111827]">{typeof r.monthlyRetainer === 'number' ? `$${r.monthlyRetainer.toLocaleString()}` : "—"}</td>
-                                <td className="px-4 py-4 text-sm text-[#111827]">{r.clientGoal || r.adGoal || "—"}</td>
-                                <td className="px-4 py-4 text-sm"><StatusBadge status={r.status} /></td>
-                                <td className="px-4 py-4 text-sm text-[#6B7280]">
-                                    <ClientActionsMenu
-                                        clientId={r.id}
-                                        clientName={r.name}
-                                        isActive={r.isActive}
-                                        hasImage={r.image}
-                                        onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
-                                        onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
-                                    />
-                                </td>
-                            </tr>
-                        ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+
+                        {!loading && filteredRows.length > 0 && (
+                            <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                                            <tr>
+                                                {columns.map((c) => (
+                                                    <th key={c.key} className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
+                                                        {c.header}
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-[#E5E7EB]">
+                                            {filteredRows.slice(currentPage * pageSize, (currentPage + 1) * pageSize).map((r) => (
+                                                <tr key={r.id} className="hover:bg-purple-50">
+                                                    <td className="px-4 py-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <ProfileImage
+                                                                src={r.image ? `/api/admin/getClientImage?clientId=${r.id}&t=${Date.now()}` : null}
+                                                                name={r.name}
+                                                                size={32}
+                                                                alt={`${r.name}'s profile`}
+                                                            />
+                                                            <div className="flex flex-col">
+                                                                <div className="text-sm font-medium text-[#111827]">{r.name || "—"}</div>
+                                                                <div className="text-sm text-[#6B7280]">{r.email || ""}</div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4 text-sm text-[#111827]">{r.businessName || "—"}</td>
+                                                    <td className="px-4 py-4 text-sm text-[#111827]">{r.industry || r.targetAudience || "—"}</td>
+                                                    <td className="px-4 py-4 text-sm text-[#111827]">{typeof r.monthlyRetainer === 'number' ? `$${r.monthlyRetainer.toLocaleString()}` : "—"}</td>
+                                                    <td className="px-4 py-4 text-sm text-[#111827]">{r.clientGoal || r.adGoal || "—"}</td>
+                                                    <td className="px-4 py-4 text-sm"><StatusBadge status={r.status} /></td>
+                                                    <td className="px-4 py-4 text-sm text-[#6B7280]">
+                                                        <ClientActionsMenu
+                                                            clientId={r.id}
+                                                            clientName={r.name}
+                                                            isActive={r.isActive}
+                                                            hasImage={r.image}
+                                                            onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
+                                                            onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+                    </>
                 )}
 
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
