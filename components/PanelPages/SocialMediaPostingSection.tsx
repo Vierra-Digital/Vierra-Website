@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { Inter } from "next/font/google";
-import { prisma } from "@/lib/prisma";
-import { decrypt } from "@/lib/crypto";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -19,9 +17,7 @@ interface Client {
   }[];
 }
 
-interface SocialMediaPostingSectionProps {}
-
-const SocialMediaPostingSection: React.FC<SocialMediaPostingSectionProps> = () => {
+const SocialMediaPostingSection: React.FC = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
