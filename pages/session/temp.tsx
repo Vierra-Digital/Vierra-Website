@@ -65,7 +65,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
   function startOauth(provider: "facebook" | "linkedin" | "googleads") {
     if (!sessionIdForOauth) return;
     // onboarding flow uses the onboarding session id in `state`
-    window.location.href = `/api/${provider}/initiate?session=${encodeURIComponent(sessionIdForOauth)}`;
+    window.open(`/api/${provider}/initiate?session=${encodeURIComponent(sessionIdForOauth)}`, '_blank');
   }
 
   const refreshSocial = useCallback(async () => {

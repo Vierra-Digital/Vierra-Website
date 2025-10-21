@@ -90,5 +90,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     maxAge: 60 * 60 * 24,
   }));
 
-  res.redirect("/onboarding?linked=googleads");
+  res.redirect(`/session/onboarding/${state}?linked=googleads`);
 }
