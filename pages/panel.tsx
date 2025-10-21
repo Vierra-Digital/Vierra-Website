@@ -15,7 +15,6 @@ import { RiArrowDropDownLine, RiFolder3Line } from "react-icons/ri";
 import { FaRegFilePdf } from "react-icons/fa6";
 import { HiOutlineDocumentText } from "react-icons/hi";
 import { HiGlobeAlt } from "react-icons/hi2";
-import { FaShareAlt } from "react-icons/fa";
 import { useSession, signOut } from "next-auth/react"
 import UserSettingsPage from "@/components/UserSettingsPage"
 import AddClientModal from "@/components/ui/AddClientModal"
@@ -31,7 +30,6 @@ import OutreachSection from "@/components/PanelPages/OutreachSection"
 import ProjectManagement from "../components/PanelPages/ProjectManagement"
 import BlogEditorSection from "@/components/PanelPages/BlogEditorSection"
 import AdminEditorSection from "@/components/PanelPages/AdminEditorSection"
-import SocialMediaPostingSection from "@/components/PanelPages/SocialMediaPostingSection"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -165,12 +163,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               <HiGlobeAlt />
               <span className={`text-xs ${inter.className}`}>
                 Marketing Tracker
-              </span>
-            </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(9); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 9 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-              <FaShareAlt />
-              <span className={`text-xs ${inter.className}`}>
-                Social Media Posting
               </span>
             </div>
             <div id="panel-nav-item" onClick={() => { setCurrentSection(6); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 6 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
@@ -329,7 +321,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                   {currentSection === 6 && <ProjectManagement />}
                   {currentSection === 7 && <BlogEditorSection />}
                   {currentSection === 8 && session?.user?.role !== "staff" && <AdminEditorSection />}
-                  {currentSection === 9 && <SocialMediaPostingSection />}
                 </>
               )}
 
