@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const clientId = process.env.FACEBOOK_CLIENT_ID!;
   const redirectUri = process.env.FACEBOOK_REDIRECT_URI!;
-  const scope = "public_profile";
+  const scope = "public_profile,pages_manage_posts";
 
   // If ?session=<OnboardingSession.id> is present, run the ONBOARDING flow (no login required)
   const onboardingSessionId = asStr(req.query.session);
