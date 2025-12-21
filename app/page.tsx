@@ -1,6 +1,7 @@
 "use client"
 import React, { useState } from "react"
 import Head from "next/head"
+import Script from "next/script"
 import { Bricolage_Grotesque, Inter } from "next/font/google"
 import Image from "next/image"
 import { motion } from "framer-motion"
@@ -23,8 +24,54 @@ export default function Page() {
   return (
     <>
       <Head>
-        <title>Vierra | Home</title>
+        <title>Vierra | Risk-Averse Guaranteed Leads For Your Business</title>
+        <meta
+          name="description"
+          content="Scale your business effortlessly with guaranteed leads. Fill in your sales calendar and eliminate risky marketing investments. Professional digital marketing and lead generation services."
+        />
+        <meta
+          name="keywords"
+          content="guaranteed leads, risk-averse marketing, lead generation, business growth, digital marketing, B2B leads, sales pipeline, marketing automation"
+        />
+        <link rel="canonical" href="https://vierradev.com" />
+        <meta property="og:title" content="Vierra | Risk-Averse Guaranteed Leads For Your Business" />
+        <meta
+          property="og:description"
+          content="Scale your business effortlessly with guaranteed leads. Fill in your sales calendar and eliminate risky marketing investments."
+        />
+        <meta property="og:url" content="https://vierradev.com" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:title" content="Vierra | Risk-Averse Guaranteed Leads For Your Business" />
+        <meta
+          name="twitter:description"
+          content="Scale your business effortlessly with guaranteed leads. Fill in your sales calendar and eliminate risky marketing investments."
+        />
       </Head>
+      <Script
+        id="schema-org-service"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Service",
+            serviceType: "Digital Marketing & Lead Generation",
+            provider: {
+              "@type": "Organization",
+              name: "Vierra Digital",
+              url: "https://vierradev.com",
+            },
+            areaServed: {
+              "@type": "Country",
+              name: "United States",
+            },
+            description: "Risk-averse guaranteed leads for your business. Scale your business effortlessly with professional digital marketing and lead generation services.",
+            offers: {
+              "@type": "Offer",
+              description: "Guaranteed lead generation and digital marketing services",
+            },
+          }),
+        }}
+      />
       <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden z-0">
         {Array.from({ length: 7 }).map((_, index) => (
           <motion.div

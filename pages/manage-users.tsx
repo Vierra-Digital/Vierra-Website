@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import Head from "next/head"
 import { FiUsers, FiLogOut, FiFileText } from "react-icons/fi"
 import Image from "next/image"
 import Link from "next/link"
@@ -33,7 +34,12 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
   }, [])
 
   return (
-    <div className="relative min-h-screen bg-[#18042A] text-white flex">
+    <>
+      <Head>
+        <title>Vierra | Manage Users</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Head>
+      <div className="relative min-h-screen bg-[#18042A] text-white flex">
       {/* Sidebar */}
       <div className="absolute top-4 left-4 z-20">
         <Link
@@ -105,6 +111,7 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
         )}
       </div>
     </div>
+    </>
   )
 }
 

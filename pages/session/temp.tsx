@@ -218,6 +218,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
     <>
       <Head>
         <title>Vierra | Welcome To Vierra</title>
+        <meta name="robots" content="noindex, nofollow" />
       </Head>
       <div className="min-h-screen bg-white">
         {/* Header */}

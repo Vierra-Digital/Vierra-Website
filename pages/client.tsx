@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import Head from "next/head"
 import { FiLogOut, FiFileText, FiLink } from "react-icons/fi"
 import { Inter } from "next/font/google"
 import type { GetServerSideProps } from "next"
@@ -34,6 +35,10 @@ export default function ClientsPage({ dashboardHref }: PageProps) {
 
   return (
     <>
+      <Head>
+        <title>Vierra | Client Dashboard</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Head>
       <div className="relative min-h-screen bg-[#18042A] text-white flex">
         {/* Logo top-left */}
         <div className="absolute top-4 left-4 z-20">

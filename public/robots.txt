@@ -1,4 +1,22 @@
 User-agent: *
 Allow: /
+Disallow: /api/
+Disallow: /panel
+Disallow: /admin
+Disallow: /login
+Disallow: /connect
+Disallow: /client
+Disallow: /manage-users
+Disallow: /session/
+Disallow: /sign/
+Disallow: /onboarding
 
+# Allow blog and public pages
+Allow: /blog
+Allow: /blog/
+
+# Crawl-delay for respectful crawling
+Crawl-delay: 1
+
+# Sitemap location
 Sitemap: https://vierradev.com/sitemap.xml

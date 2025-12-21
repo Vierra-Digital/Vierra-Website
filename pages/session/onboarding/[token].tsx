@@ -361,6 +361,7 @@ export default function OnboardingQuestionnaire({ initialSession }: { initialSes
     <>
       <Head>
         <title>Vierra | Onboarding</title>
+        <meta name="robots" content="noindex, nofollow" />
       </Head>
       <div className="min-h-screen bg-white flex flex-col lg:flex-row">
         {/* Sidebar */}

@@ -1,5 +1,6 @@
 import Image from "next/image"
 import Link from "next/link"
+import Head from "next/head"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useSession, signOut } from "next-auth/react"
@@ -67,6 +68,10 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
   // Layout (same as /client)
   return (
     <>
+      <Head>
+        <title>Vierra | Connect</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Head>
       <div className="relative min-h-screen bg-[#18042A] text-white flex">
         {/* Logo */}
         <div className="absolute top-4 left-4 z-20">

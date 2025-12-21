@@ -92,6 +92,7 @@ const LoginPage = () => {
     <>
       <Head>
         <title>Vierra | Login</title>
+        <meta name="robots" content="noindex, nofollow" />
       </Head>
 
       <Script

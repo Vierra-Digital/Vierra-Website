@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
+import Script from 'next/script';
 import { prisma } from "@/lib/prisma"
 import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
@@ -160,9 +161,49 @@ const BlogPage = ({ latestPosts }: Props) => {
         <>
             <Head>
                 <title>Vierra | Blog</title>
-                <meta name="description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients." />
+                <meta name="description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients. Learn about marketing, lead generation, business growth, and digital optimization." />
+                <meta name="keywords" content="marketing blog, business growth strategies, lead generation tips, digital marketing insights, case studies, business scaling, marketing automation" />
                 <link rel="canonical" href="https://vierradev.com/blog" />
+                <meta property="og:title" content="Vierra | Blog" />
+                <meta property="og:description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients." />
+                <meta property="og:url" content="https://vierradev.com/blog" />
+                <meta property="og:type" content="website" />
+                <meta name="twitter:card" content="summary_large_image" />
+                <meta name="twitter:title" content="Vierra | Blog" />
+                <meta name="twitter:description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients." />
             </Head>
+            <Script
+                id="schema-org-blog"
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{
+                    __html: JSON.stringify({
+                        "@context": "https://schema.org",
+                        "@type": "Blog",
+                        name: "Vierra Blog",
+                        description: "Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients.",
+                        url: "https://vierradev.com/blog",
+                        publisher: {
+                            "@type": "Organization",
+                            name: "Vierra Digital",
+                            logo: {
+                                "@type": "ImageObject",
+                                url: "https://vierradev.com/assets/meta-banner.png",
+                            },
+                        },
+                        blogPost: latestPosts.slice(0, 10).map(post => ({
+                            "@type": "BlogPosting",
+                            headline: post.title,
+                            description: post.description || stripHtml(post.content).substring(0, 200),
+                            url: `https://vierradev.com/blog/${post.slug}`,
+                            datePublished: post.published_date,
+                            author: {
+                                "@type": "Person",
+                                name: post.author.name,
+                            },
+                        })),
+                    }),
+                }}
+            />
             <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden z-0">
                 {Array.from({ length: 7 }).map((_, index) => (
                     <motion.div

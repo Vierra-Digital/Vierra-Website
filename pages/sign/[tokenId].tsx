@@ -233,6 +233,7 @@ const SignDocumentPage: React.FC = () => {
     <>
       <Head>
         <title>Vierra | Sign {sessionDetails?.originalFilename || 'Document'}</title>
+        <meta name="robots" content="noindex, nofollow" />
       </Head>
       <Script
         src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"

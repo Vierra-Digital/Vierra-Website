@@ -29,6 +29,16 @@ const WorkPolicyPage: React.FC = () => {
     <>
       <Head>
         <title>Vierra | Work Policy</title>
+        <meta name="description" content="Vierra Digital Work Policy. Learn about our work standards, processes, and policies for delivering exceptional digital marketing services." />
+        <meta name="robots" content="index, follow" />
+        <link rel="canonical" href="https://vierradev.com/work-policy" />
+        <meta property="og:title" content="Vierra | Work Policy" />
+        <meta property="og:description" content="Vierra Digital Work Policy. Learn about our work standards and processes." />
+        <meta property="og:url" content="https://vierradev.com/work-policy" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="Vierra | Work Policy" />
+        <meta name="twitter:description" content="Vierra Digital Work Policy. Learn about our work standards and processes." />
       </Head>
       <Script
         src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"

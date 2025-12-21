@@ -29,6 +29,16 @@ const TermsOfServicePage: React.FC = () => {
     <>
       <Head>
         <title>Vierra | Terms of Service</title>
+        <meta name="description" content="Vierra Digital Terms of Service. Read our terms and conditions for using our digital marketing and lead generation services." />
+        <meta name="robots" content="index, follow" />
+        <link rel="canonical" href="https://vierradev.com/terms-of-service" />
+        <meta property="og:title" content="Vierra | Terms of Service" />
+        <meta property="og:description" content="Vierra Digital Terms of Service. Read our terms and conditions for using our services." />
+        <meta property="og:url" content="https://vierradev.com/terms-of-service" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="Vierra | Terms of Service" />
+        <meta name="twitter:description" content="Vierra Digital Terms of Service. Read our terms and conditions for using our services." />
       </Head>
       <Script
         src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"

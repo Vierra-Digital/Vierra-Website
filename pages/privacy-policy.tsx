@@ -29,6 +29,16 @@ const PrivacyPolicyPage: React.FC = () => {
     <>
       <Head>
         <title>Vierra | Privacy Policy</title>
+        <meta name="description" content="Vierra Digital Privacy Policy. Learn how we collect, use, and protect your personal information when using our services." />
+        <meta name="robots" content="index, follow" />
+        <link rel="canonical" href="https://vierradev.com/privacy-policy" />
+        <meta property="og:title" content="Vierra | Privacy Policy" />
+        <meta property="og:description" content="Vierra Digital Privacy Policy. Learn how we collect, use, and protect your personal information." />
+        <meta property="og:url" content="https://vierradev.com/privacy-policy" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="Vierra | Privacy Policy" />
+        <meta name="twitter:description" content="Vierra Digital Privacy Policy. Learn how we collect, use, and protect your personal information." />
       </Head>
       <Script
         src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"

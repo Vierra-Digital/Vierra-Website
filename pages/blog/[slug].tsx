@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
+import Script from 'next/script';
 import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
 import Footer from "@/components/FooterSection/Footer";
@@ -65,11 +66,69 @@ const BlogViewPage = ({
         initParticles();
     }, []);
 
+    const blogUrl = `https://vierradev.com/blog/${slug}`;
+    const publishedDateISO = new Date(publishedDate).toISOString();
+    const modifiedDateISO = new Date(publishedDate).toISOString();
+
     return (
         <>
             <Head>
                 <title>{`Vierra | ${title}`}</title>
+                <meta name="description" content={description || `${title} - Insights and strategies from Vierra to scale revenue and acquire more clients.`} />
+                <meta name="keywords" content={tag ? tag.split(',').map(t => t.trim()).join(', ') : 'marketing, lead generation, business growth, digital marketing'} />
+                <link rel="canonical" href={blogUrl} />
+                
+                {/* Open Graph */}
+                <meta property="og:type" content="article" />
+                <meta property="og:title" content={title} />
+                <meta property="og:description" content={description || `${title} - Insights and strategies from Vierra.`} />
+                <meta property="og:url" content={blogUrl} />
+                <meta property="og:site_name" content="Vierra" />
+                <meta property="article:published_time" content={publishedDateISO} />
+                <meta property="article:modified_time" content={modifiedDateISO} />
+                <meta property="article:author" content={author.name} />
+                {tag && tag.split(',').map((t, index) => (
+                    <meta key={index} property="article:tag" content={t.trim()} />
+                ))}
+                
+                {/* Twitter */}
+                <meta name="twitter:card" content="summary_large_image" />
+                <meta name="twitter:title" content={title} />
+                <meta name="twitter:description" content={description || `${title} - Insights and strategies from Vierra.`} />
+                <meta name="twitter:creator" content="@vierradev" />
             </Head>
+            <Script
+                id="schema-org-article"
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{
+                    __html: JSON.stringify({
+                        "@context": "https://schema.org",
+                        "@type": "BlogPosting",
+                        headline: title,
+                        description: description || `${title} - Insights and strategies from Vierra.`,
+                        image: "https://vierradev.com/assets/meta-banner.png",
+                        datePublished: publishedDateISO,
+                        dateModified: modifiedDateISO,
+                        author: {
+                            "@type": "Person",
+                            name: author.name,
+                        },
+                        publisher: {
+                            "@type": "Organization",
+                            name: "Vierra Digital",
+                            logo: {
+                                "@type": "ImageObject",
+                                url: "https://vierradev.com/assets/meta-banner.png",
+                            },
+                        },
+                        mainEntityOfPage: {
+                            "@type": "WebPage",
+                            "@id": blogUrl,
+                        },
+                        keywords: tag || "marketing, lead generation, business growth",
+                    }),
+                }}
+            />
             <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden z-0">
                 {Array.from({ length: 7 }).map((_, index) => (
                     <motion.div
