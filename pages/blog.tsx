@@ -34,34 +34,47 @@ type Props = {
 };
 
 export const getStaticProps: GetStaticProps<Props> = async () => {
-    const [latestPosts, trendingPosts] = await Promise.all([
-        prisma.blogPost.findMany({
-            orderBy: { published_date: "desc" },
-            take: 10,
-            include: { author: { select: { name: true } } },
-        }),
-        prisma.blogPost.findMany({
-            orderBy: { visits: "desc" },
-            take: 10,
-            include: { author: { select: { name: true } } },
-        }),
-    ]);
+    try {
+        const [latestPosts, trendingPosts] = await Promise.all([
+            prisma.blogPost.findMany({
+                orderBy: { published_date: "desc" },
+                take: 10,
+                include: { author: { select: { name: true } } },
+            }),
+            prisma.blogPost.findMany({
+                orderBy: { visits: "desc" },
+                take: 10,
+                include: { author: { select: { name: true } } },
+            }),
+        ]);
 
-    return {
-        props: {
-            latestPosts: latestPosts.map(post => ({
-                ...post,
-                published_date: post.published_date.toISOString(),
-                author: { name: post.author.name },
-            })),
-            trendingPosts: trendingPosts.map(post => ({
-                ...post,
-                published_date: post.published_date.toISOString(),
-                author: { name: post.author.name },
-            })),
-        },
-        revalidate: 60,
-    };
+        return {
+            props: {
+                latestPosts: latestPosts.map(post => ({
+                    ...post,
+                    published_date: post.published_date.toISOString(),
+                    author: { name: post.author.name },
+                })),
+                trendingPosts: trendingPosts.map(post => ({
+                    ...post,
+                    published_date: post.published_date.toISOString(),
+                    author: { name: post.author.name },
+                })),
+            },
+            revalidate: 60,
+        };
+    } catch (error) {
+        // If database is unavailable during build, return empty arrays
+        // The page will be regenerated at runtime when database is available
+        console.warn('Database unavailable during static props generation, using empty data:', error);
+        return {
+            props: {
+                latestPosts: [],
+                trendingPosts: [],
+            },
+            revalidate: 60,
+        };
+    }
 };
 
 declare global {
