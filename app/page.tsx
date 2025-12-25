@@ -138,32 +138,12 @@ export default function Page() {
             className="max-w-2xl"
           >
             <motion.h1
-              variants={{
-                hidden: { opacity: 0, y: 20 },
-                visible: {
-                  opacity: 1,
-                  y: 0,
-                  transition: {
-                    staggerChildren: 0.05,
-                    ease: "easeOut",
-                  },
-                },
-              }}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
               className={`text-5xl md:text-6xl font-bold leading-tight mb-6 text-[#EFF3FF] ${bricolage.className}`}
             >
-              {Array.from("Risk-Averse Guaranteed Leads For Your Business").map(
-                (letter, index) => (
-                  <motion.span
-                    key={index}
-                    variants={{
-                      hidden: { opacity: 0, y: 20 },
-                      visible: { opacity: 1, y: 0 },
-                    }}
-                  >
-                    {letter}
-                  </motion.span>
-                )
-              )}
+              Risk-Averse Guaranteed Leads For Your Business
             </motion.h1>
 
             <motion.p

@@ -268,21 +268,21 @@ const BlogViewPage = ({
 
 export const getStaticPaths: GetStaticPaths = async () => {
     try {
-        const posts = await prisma.blogPost.findMany({
-            select: { slug: true },
-        });
+    const posts = await prisma.blogPost.findMany({
+        select: { slug: true },
+    });
 
-        interface BlogPostPath {
-            params: {
-                slug: string;
-            };
-        }
+    interface BlogPostPath {
+        params: {
+            slug: string;
+        };
+    }
 
-        const paths: BlogPostPath[] = posts.map((post: { slug: string }) => ({
-            params: { slug: post.slug },
-        }));
+    const paths: BlogPostPath[] = posts.map((post: { slug: string }) => ({
+        params: { slug: post.slug },
+    }));
 
-        return { paths, fallback: 'blocking' };
+    return { paths, fallback: 'blocking' };
     } catch (error) {
         // If database is unavailable during build, return empty paths
         // Next.js will use fallback mode and generate pages at runtime
@@ -295,27 +295,27 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
     const slug = params?.slug as string;
 
     try {
-        const post = await prisma.blogPost.findUnique({
-            where: { slug },
-            include: { author: true },
-        });
+    const post = await prisma.blogPost.findUnique({
+        where: { slug },
+        include: { author: true },
+    });
 
-        if (!post) {
-            return { notFound: true };
-        }
+    if (!post) {
+        return { notFound: true };
+    }
 
-        return {
-            props: {
-                title: post.title,
-                description: (post as any).description ?? null,
-                content: post.content,
-                author: { name: post.author.name },
-                publishedDate: post.published_date.toISOString(),
-                tag: post.tag,
-                slug: post.slug
-            },
-            revalidate: 60,
-        };
+    return {
+        props: {
+            title: post.title,
+            description: (post as any).description ?? null,
+            content: post.content,
+            author: { name: post.author.name },
+            publishedDate: post.published_date.toISOString(),
+            tag: post.tag,
+            slug: post.slug
+        },
+        revalidate: 60,
+    };
     } catch (error) {
         // If database is unavailable, return 404
         // This allows the build to complete, and the page will be generated at runtime

@@ -39,7 +39,7 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
         <title>Vierra | Manage Users</title>
         <meta name="robots" content="noindex, nofollow" />
       </Head>
-      <div className="relative min-h-screen bg-[#18042A] text-white flex">
+    <div className="relative min-h-screen bg-[#18042A] text-white flex">
       {/* Sidebar */}
       <div className="absolute top-4 left-4 z-20">
         <Link

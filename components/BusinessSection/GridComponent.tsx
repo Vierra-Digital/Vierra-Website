@@ -16,14 +16,13 @@ const gridLayout = [
 const animationSets = [
   {
     source: "2-2", // Instagram
-    targets: ["0-2", "3-3"], // Placeholder
+    targets: ["0-2", "3-3"],
     paths: [
       "M250,200 L250,60",
       "M250,290 L250,335 C250,343 258,350 266,350 L310,350",
     ],
     colors: ["#9966ff", "#ff5996"],
   },
-
   {
     source: "2-2", // Instagram
     targets: ["3-0", "4-2"], // Facebook, LinkedIn
@@ -33,10 +32,9 @@ const animationSets = [
     ],
     colors: ["#F50478", "#1877F2"],
   },
-
   {
-    source: "1-0", // Placeholder
-    targets: ["2-1", "1-3"], // Placeholder
+    source: "1-0", // Snapchat
+    targets: ["2-1", "1-3"],
     paths: [
       "M93,150 L138,150 C144,150 150,156 150,165 L150,210",
       "M93,135 L310,135",
@@ -52,10 +50,9 @@ const animationSets = [
     ],
     colors: ["#E93948", "#FFC600"],
   },
-
   {
     source: "4-4", // Email
-    targets: ["2-3", "5-1"], // Placeholder
+    targets: ["2-3", "5-1"],
     paths: [
       "M455,426 L455,275 C455,255 450,250 440,250 L395,250",
       "M455,500 L455,555 C455,560 450,565 440,565 L190,565",
@@ -77,31 +74,43 @@ function GridComponent() {
 
   type IconEntry = { src: string; alt: string; gradient: string }
   const socialIcons = useMemo<IconEntry[]>(() => [
+    { src: "/assets/Socials/Discord.png", alt: "Discord", gradient: "linear-gradient(135deg,#EEF0FF,#F2EFFF)" },
+    { src: "/assets/Socials/Email.png", alt: "Email", gradient: "linear-gradient(135deg,#EAFBF1,#F0FFFB)" },
     { src: "/assets/Socials/Facebook.png", alt: "Facebook", gradient: "linear-gradient(135deg,#EAF2FF,#F5E9FF)" },
-    { src: "/assets/Socials/Instagram.png", alt: "Instagram", gradient: "linear-gradient(135deg,#FFE6F2,#FFF0E6)" },
-    { src: "/assets/Socials/LinkedIn.png", alt: "LinkedIn", gradient: "linear-gradient(135deg,#E6F0FF,#EAF7FF)" },
+    { src: "/assets/Socials/GoHighLevel.png", alt: "GoHighLevel", gradient: "linear-gradient(135deg,#EAF8FF,#EFFFF7)" },
     { src: "/assets/Socials/GoogleAnalytics.png", alt: "Google Analytics", gradient: "linear-gradient(135deg,#FFF4E6,#FFF9E6)" },
     { src: "/assets/Socials/GoogleBusiness.png", alt: "Google Business", gradient: "linear-gradient(135deg,#E6F3FF,#EAF0FF)" },
-    { src: "/assets/Socials/Email.png", alt: "Email", gradient: "linear-gradient(135deg,#EAFBF1,#F0FFFB)" },
+    { src: "/assets/Socials/Instagram.png", alt: "Instagram", gradient: "linear-gradient(135deg,#FFE6F2,#FFF0E6)" },
+    { src: "/assets/Socials/LinkedIn.png", alt: "LinkedIn", gradient: "linear-gradient(135deg,#E6F0FF,#EAF7FF)" },
     { src: "/assets/Socials/SEO.png", alt: "SEO", gradient: "linear-gradient(135deg,#F2F6FF,#F6F2FF)" },
+    { src: "/assets/Socials/SnapChat.png", alt: "Snapchat", gradient: "linear-gradient(135deg,#FFFDE6,#FFFCEB)" },
     { src: "/assets/Socials/TikTok.png", alt: "TikTok", gradient: "linear-gradient(135deg,#FDECF0,#EAFBFB)" },
     { src: "/assets/Socials/Twitter.png", alt: "Twitter", gradient: "linear-gradient(135deg,#E7F6FF,#F0FBFF)" },
     { src: "/assets/Socials/YouTube.png", alt: "YouTube", gradient: "linear-gradient(135deg,#FFECEC,#FFF6F6)" },
-    { src: "/assets/Socials/SnapChat.png", alt: "SnapChat", gradient: "linear-gradient(135deg,#FFFDE6,#FFFCEB)" },
-    { src: "/assets/Socials/Discord.png", alt: "Discord", gradient: "linear-gradient(135deg,#EEF0FF,#F2EFFF)" },
-    { src: "/assets/Socials/GoHighLevel.png", alt: "GoHighLevel", gradient: "linear-gradient(135deg,#EAF8FF,#EFFFF7)" },
   ], [])
 
   const getIconIndexByAlt = useCallback((alt: string) => socialIcons.findIndex((i) => i.alt === alt), [socialIcons])
 
   const assignIconToKey = useCallback((key: string) => {
     setCellIconMap((prev) => {
+      // If icon already assigned to this cell in current cycle, don't change it
       if (prev[key] !== undefined) return prev
-      let probe = iconCursorRef.current
+      
       const total = socialIcons.length
-      while (usedIconsRef.current.has(probe % total) && usedIconsRef.current.size < total) {
-        probe++
+      // If all icons are used, reset and start over for next cycle
+      if (usedIconsRef.current.size >= total) {
+        usedIconsRef.current.clear()
+        iconCursorRef.current = 0
       }
+      
+      // Find next unused icon, cycling through all icons
+      let probe = iconCursorRef.current
+      let attempts = 0
+      while (usedIconsRef.current.has(probe % total) && attempts < total) {
+        probe++
+        attempts++
+      }
+      
       const assigned = probe % total
       usedIconsRef.current.add(assigned)
       iconCursorRef.current = (assigned + 1) % total
@@ -125,26 +134,14 @@ function GridComponent() {
 
       targetTimer = setTimeout(() => {
         setActiveNodes([currentSet.source, ...currentSet.targets])
-        if (currentSet.source === "2-2" && currentSet.targets.length >= 2) {
-          const discordIdx = getIconIndexByAlt("Discord")
-          const ghlIdx = getIconIndexByAlt("GoHighLevel")
-          setCellIconMap((prev) => {
-            const next = { ...prev }
-            if (discordIdx >= 0) next[currentSet.targets[0]] = discordIdx
-            if (ghlIdx >= 0) next[currentSet.targets[1]] = ghlIdx
-            return next
-          })
-          if (discordIdx >= 0) usedIconsRef.current.add(discordIdx)
-          if (ghlIdx >= 0) usedIconsRef.current.add(ghlIdx)
-        } else {
-          currentSet.targets.forEach(assignIconToKey)
-        }
+        // Assign icons to all target cells, ensuring no duplicates
+        currentSet.targets.forEach(assignIconToKey)
         setAnimationPhase("showing")
       }, 500)
 
       eraseTimer = setTimeout(() => {
         setAnimationPhase("erasing")
-      }, 3500)
+      }, 4000)
 
       resetTimer = setTimeout(() => {
         setIsAnimating(false)
@@ -160,12 +157,12 @@ function GridComponent() {
           }
           return next
         })
-      }, 4000)
+      }, 5000)
     }
 
     const startAnimationLoop = () => {
       runAnimation()
-      intervalTimer = setInterval(runAnimation, 4500)
+      intervalTimer = setInterval(runAnimation, 5500)
     }
 
     const stopAnimationLoop = () => {
@@ -262,7 +259,7 @@ function GridComponent() {
       },
     },
   }
-  const renderSVG = (key: string, isActive: boolean) => {
+  const renderSVG = (key: string, isActive: boolean, cellIconMap: Record<string, number>) => {
     switch (key) {
       case "3-0":
         return (
@@ -270,13 +267,18 @@ function GridComponent() {
             className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}
           >
             {isActive && (
-              <Image
-                src="/assets/Socials/Facebook.png"
-                alt="Facebook"
-                width={56}
-                height={56}
-                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-              />
+              <motion.div
+                whileHover={{ scale: 1.15, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <Image
+                  src="/assets/Socials/Facebook.png"
+                  alt="Facebook"
+                  width={56}
+                  height={56}
+                  className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
+                />
+              </motion.div>
             )}
           </div>
         )
@@ -286,13 +288,18 @@ function GridComponent() {
             className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}
           >
             {isActive && (
-              <Image
-                src="/assets/Socials/GoogleAnalytics.png"
-                alt="GoogleAnalytics"
-                width={56}
-                height={56}
-                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-              />
+              <motion.div
+                whileHover={{ scale: 1.15, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <Image
+                  src="/assets/Socials/GoogleAnalytics.png"
+                  alt="GoogleAnalytics"
+                  width={56}
+                  height={56}
+                  className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
+                />
+              </motion.div>
             )}
           </div>
         )
@@ -302,13 +309,18 @@ function GridComponent() {
             className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}
           >
             {isActive && (
-              <Image
-                src="/assets/Socials/Instagram.png"
-                alt="Instagram"
-                width={56}
-                height={56}
-                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-              />
+              <motion.div
+                whileHover={{ scale: 1.15, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <Image
+                  src="/assets/Socials/Instagram.png"
+                  alt="Instagram"
+                  width={56}
+                  height={56}
+                  className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
+                />
+              </motion.div>
             )}
           </div>
         )
@@ -319,13 +331,18 @@ function GridComponent() {
             className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}
           >
             {isActive && (
-              <Image
-                src="/assets/Socials/SEO.png"
-                alt="SEO"
-                width={56}
-                height={56}
-                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-              />
+              <motion.div
+                whileHover={{ scale: 1.15, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <Image
+                  src="/assets/Socials/SEO.png"
+                  alt="SEO"
+                  width={56}
+                  height={56}
+                  className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
+                />
+              </motion.div>
             )}
           </div>
         )
@@ -333,7 +350,12 @@ function GridComponent() {
         return (
           <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
             {isActive && (
-              <Image src="/assets/Socials/TikTok.png" alt="TikTok" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              <motion.div
+                whileHover={{ scale: 1.15, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <Image src="/assets/Socials/TikTok.png" alt="TikTok" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              </motion.div>
             )}
           </div>
         )
@@ -341,7 +363,12 @@ function GridComponent() {
         return (
           <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
             {isActive && (
-              <Image src="/assets/Socials/Twitter.png" alt="Twitter" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              <motion.div
+                whileHover={{ scale: 1.15, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <Image src="/assets/Socials/Twitter.png" alt="Twitter" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              </motion.div>
             )}
           </div>
         )
@@ -349,7 +376,12 @@ function GridComponent() {
         return (
           <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
             {isActive && (
-              <Image src="/assets/Socials/YouTube.png" alt="YouTube" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              <motion.div
+                whileHover={{ scale: 1.15, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <Image src="/assets/Socials/YouTube.png" alt="YouTube" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              </motion.div>
             )}
           </div>
         )
@@ -357,7 +389,12 @@ function GridComponent() {
         return (
           <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
             {isActive && (
-              <Image src="/assets/Socials/SnapChat.png" alt="SnapChat" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              <motion.div
+                whileHover={{ scale: 1.15, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <Image src="/assets/Socials/SnapChat.png" alt="SnapChat" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              </motion.div>
             )}
           </div>
         )
@@ -365,7 +402,12 @@ function GridComponent() {
         return (
           <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
             {isActive && (
-              <Image src="/assets/Socials/Discord.png" alt="Discord" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              <motion.div
+                whileHover={{ scale: 1.15, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <Image src="/assets/Socials/Discord.png" alt="Discord" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              </motion.div>
             )}
           </div>
         )
@@ -373,7 +415,12 @@ function GridComponent() {
         return (
           <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
             {isActive && (
-              <Image src="/assets/Socials/GoogleBusiness.png" alt="Google Business" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              <motion.div
+                whileHover={{ scale: 1.15, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <Image src="/assets/Socials/GoogleBusiness.png" alt="Google Business" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              </motion.div>
             )}
           </div>
         )
@@ -385,13 +432,18 @@ function GridComponent() {
             } border flex items-center justify-center`}
           >
             {isActive && (
-              <Image
-                src="/assets/Socials/LinkedIn.png"
-                alt="LinkedIn"
-                width={56}
-                height={56}
-                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-              />
+              <motion.div
+                whileHover={{ scale: 1.15, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <Image
+                  src="/assets/Socials/LinkedIn.png"
+                  alt="LinkedIn"
+                  width={56}
+                  height={56}
+                  className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
+                />
+              </motion.div>
             )}
           </div>
         )
@@ -403,17 +455,40 @@ function GridComponent() {
             } border flex items-center justify-center`}
           >
             {isActive && (
-              <Image
-                src="/assets/Socials/Email.png"
-                alt="Email"
-                width={56}
-                height={56}
-                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-              />
+              <motion.div
+                whileHover={{ scale: 1.15, rotate: 5 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              >
+                <Image
+                  src="/assets/Socials/Email.png"
+                  alt="Email"
+                  width={56}
+                  height={56}
+                  className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
+                />
+              </motion.div>
             )}
           </div>
         )
       default:
+        // If cell has an assigned icon, show it with hover animation
+        if (isActive && cellIconMap[key] !== undefined) {
+          return (
+            <motion.div
+              whileHover={{ scale: 1.15, rotate: 5 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20 }}
+            >
+              <Image
+                src={socialIcons[cellIconMap[key]].src}
+                alt={socialIcons[cellIconMap[key]].alt}
+                width={56}
+                height={56}
+                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
+              />
+            </motion.div>
+          )
+        }
+        // Otherwise show empty bordered box
         return (
           <div className="w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full border border-[#D9DEDD]" />
         )
@@ -425,12 +500,44 @@ function GridComponent() {
     cellKey,
     isFilled,
     isActive,
+    cellIconMap,
+    socialIcons,
   }: {
     cellKey: string
     isFilled: boolean
     isActive: boolean
+    cellIconMap: Record<string, number>
+    socialIcons: IconEntry[]
   }) => {
     if (!isFilled) return null
+
+    // Get background gradient - check hardcoded cells first, then use icon gradient from cellIconMap
+    const getBackground = () => {
+      if (!isActive) return "#F7F7F8"
+      
+      // Hardcoded cell backgrounds
+      if (cellKey === "3-0") return "linear-gradient(135deg,#EAF2FF,#F5E9FF)"
+      if (cellKey === "2-2") return "linear-gradient(135deg,#FFE6F2,#FFF0E6)"
+      if (cellKey === "4-2") return "linear-gradient(135deg,#E6F0FF,#EAF7FF)"
+      if (cellKey === "1-4") return "linear-gradient(135deg,#FFF4E6,#FFF9E6)"
+      if (cellKey === "5-5") return "linear-gradient(135deg,#E6F3FF,#EAF0FF)"
+      if (cellKey === "4-4") return "linear-gradient(135deg,#EAFBF1,#F0FFFB)"
+      if (cellKey === "2-5") return "linear-gradient(135deg,#F2F6FF,#F6F2FF)"
+      if (cellKey === "0-0") return "linear-gradient(135deg,#FDECF0,#EAFBFB)"
+      if (cellKey === "0-5") return "linear-gradient(135deg,#E7F6FF,#F0FBFF)"
+      if (cellKey === "5-0") return "linear-gradient(135deg,#FFECEC,#FFF6F6)"
+      if (cellKey === "1-0") return "linear-gradient(135deg,#FFFDE6,#FFFCEB)"
+      if (cellKey === "1-5") return "linear-gradient(135deg,#EEF0FF,#F2EFFF)"
+      if (cellKey === "3-5") return "linear-gradient(135deg,#EAF8FF,#EFFFF7)"
+      
+      // For dynamically assigned icons, use the gradient from socialIcons
+      if (cellIconMap[cellKey] !== undefined) {
+        const iconIndex = cellIconMap[cellKey]
+        return socialIcons[iconIndex]?.gradient || "#F7F7F8"
+      }
+      
+      return "#F7F7F8"
+    }
 
     return (
       <motion.div
@@ -438,48 +545,13 @@ function GridComponent() {
         aria-label={`Grid cell ${cellKey}`}
         className={`w-full h-full flex flex-col items-center justify-center rounded-lg ${isActive ? "shadow-md" : ""}`}
         style={{
-          background:
-            isActive && cellKey === "3-0"
-              ? "linear-gradient(135deg,#EAF2FF,#F5E9FF)"
-              : isActive && cellKey === "2-2"
-              ? "linear-gradient(135deg,#FFE6F2,#FFF0E6)"
-              : isActive && cellKey === "4-2"
-              ? "linear-gradient(135deg,#E6F0FF,#EAF7FF)"
-              : isActive && cellKey === "1-4"
-              ? "linear-gradient(135deg,#FFF4E6,#FFF9E6)"
-              : isActive && cellKey === "5-5"
-              ? "linear-gradient(135deg,#E6F3FF,#EAF0FF)"
-              : isActive && cellKey === "4-4"
-              ? "linear-gradient(135deg,#EAFBF1,#F0FFFB)"
-              : isActive && cellKey === "2-5"
-              ? "linear-gradient(135deg,#F2F6FF,#F6F2FF)"
-              : isActive && cellKey === "0-0"
-              ? "linear-gradient(135deg,#FDECF0,#EAFBFB)"
-              : isActive && cellKey === "0-5"
-              ? "linear-gradient(135deg,#E7F6FF,#F0FBFF)"
-              : isActive && cellKey === "5-0"
-              ? "linear-gradient(135deg,#FFECEC,#FFF6F6)"
-              : isActive && cellKey === "1-0"
-              ? "linear-gradient(135deg,#FFFDE6,#FFFCEB)"
-              : isActive && cellKey === "1-5"
-              ? "linear-gradient(135deg,#EEF0FF,#F2EFFF)"
-              : isActive && cellKey === "3-5"
-              ? "linear-gradient(135deg,#EAF8FF,#EFFFF7)"
-              : "#F7F7F8",
+          background: getBackground(),
         }}
         variants={iconVariants}
         initial={false} // Prevent re-initialization
         animate={isActive ? "active" : "inactive"} // Only change when `isActive` changes
       >
-        {renderSVG(cellKey, isActive) || (isActive && cellIconMap[cellKey] !== undefined ? (
-          <Image
-            src={socialIcons[cellIconMap[cellKey]].src}
-            alt={socialIcons[cellIconMap[cellKey]].alt}
-            width={56}
-            height={56}
-            className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-          />
-        ) : null)}
+        {renderSVG(cellKey, isActive, cellIconMap)}
         {/*
         {isActive && (
           <p
@@ -628,6 +700,8 @@ function GridComponent() {
                   cellKey={key}
                   isFilled={isFilled}
                   isActive={isActive}
+                  cellIconMap={cellIconMap}
+                  socialIcons={socialIcons}
                 />
               </div>
             )

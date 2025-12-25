@@ -19,9 +19,9 @@ export default function SessionIndex() {
         <title>Vierra | Session</title>
         <meta name="robots" content="noindex, nofollow" />
       </Head>
-      <div className="min-h-screen bg-gradient-to-br from-[#4F1488] via-[#2E0A4F] to-[#18042A] flex items-center justify-center">
-        <div className="text-white text-xl">Redirecting...</div>
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-[#4F1488] via-[#2E0A4F] to-[#18042A] flex items-center justify-center">
+      <div className="text-white text-xl">Redirecting...</div>
+    </div>
     </>
   );
 }
