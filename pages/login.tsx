@@ -116,7 +116,7 @@ const LoginPage = () => {
           <h2
             className={`text-2xl font-bold text-white text-center mb-4 ${bricolage.className}`}
           >
-            Admin Login
+            Login
           </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>

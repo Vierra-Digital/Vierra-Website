@@ -37,12 +37,14 @@ export function CaseStudies() {
                   <ArrowUpRight className="w-4 h-4 ml-2" />
                 </Button>
               </Link>
-              <Button
-                className={`${inter.className} border-2 border-[#7A13D0] bg-transparent text-white md:px-8 py-4 md:py-6 rounded-full hover:bg-transparent transform transition-transform duration-300 hover:scale-105 will-change-transform w-full sm:w-auto shadow-[0px_4px_15.9px_0px_#701CC061]`}
-              >
-                <span>Exclusive Study</span>
-                <ArrowUpRight className="w-4 h-4 ml-2" />
-              </Button>
+              <Link href="/blog" className="w-full sm:w-auto">
+                <Button
+                  className={`${inter.className} border-2 border-[#7A13D0] bg-transparent text-white md:px-8 py-4 md:py-6 rounded-full hover:bg-transparent transform transition-transform duration-300 hover:scale-105 will-change-transform w-full sm:w-auto shadow-[0px_4px_15.9px_0px_#701CC061]`}
+                >
+                  <span>Exclusive Study</span>
+                  <ArrowUpRight className="w-4 h-4 ml-2" />
+                </Button>
+              </Link>
             </div>
           </div>
         </div>

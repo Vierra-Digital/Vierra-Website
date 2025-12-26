@@ -339,52 +339,108 @@ const BlogPage = ({ latestPosts }: Props) => {
                 <div id="view-section" className="bg-[#F3F3F3] px-8 lg:px-20">
                     <div className="max-w-7xl mx-auto py-20">
                         <h1 id="part-1-header" className={`text-xl md:text-2xl lg:text-3xl font-bold leading-tight mb-6 text-[#18042A] ${bricolage.className}`}>All Blog Posts</h1>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
-                            {paginatedPosts.map((blog) => (
-                                <div key={blog.id}>
-                                    <Link href={`/blog/${blog.slug}`} passHref>
-                                        <div className="rounded-2xl bg-white p-5 md:p-6 shadow-sm hover:shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
-                                            <h3 className={`text-base md:text-lg font-bold text-[#0F172A] ${bricolage.className}`}>{blog.title}</h3>
-                                            <div className="mt-1 text-[11px] md:text-xs text-[#334155] flex items-center gap-2">
-                                                <span>By {blog.author?.name ?? "Unknown"}</span>
-                                                <div className="h-1 w-1 bg-gray-400 rounded-full"></div>
-                                                <span>{blog.published_date ? formatDate(blog.published_date) : ''}</span>
-                                            </div>
-                                            <p className={`mt-3 text-sm md:text-base text-[#475569] ${inter.className}`}>{blog.description || getExcerpt(blog.content)}</p>
-                                            <div className="flex flex-wrap gap-1 mt-3">
-                                                {blog.tag ? blog.tag.split(',').map((tag, index) => (
-                                                    <span key={index} className="text-[10px] md:text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
-                                                        {tag.trim()}
-                                                    </span>
-                                                )) : (
-                                                    <span className="text-[10px] md:text-xs font-semibold text-purple-600">Blog</span>
-                                                )}
-                                            </div>
-                                            <div className="mt-4 flex items-center justify-between">
-                                                <span className="text-[#701CC0] font-semibold text-sm md:text-base">Read More</span>
-                                            </div>
+                        {paginatedPosts.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 px-4">
+                                <motion.div 
+                                    className="w-24 h-24 md:w-32 md:h-32 mb-6 rounded-full bg-gradient-to-br from-[#701CC0] to-[#8F42FF] flex items-center justify-center"
+                                    animate={{ 
+                                        rotate: [0, 10, -10, 0],
+                                        scale: [1, 1.05, 1]
+                                    }}
+                                    transition={{ 
+                                        duration: 2,
+                                        repeat: Infinity,
+                                        ease: "easeInOut"
+                                    }}
+                                >
+                                    <motion.div
+                                        animate={{ 
+                                            rotate: [0, 360]
+                                        }}
+                                        transition={{ 
+                                            duration: 3,
+                                            repeat: Infinity,
+                                            ease: "linear"
+                                        }}
+                                    >
+                                        <Search className="w-12 h-12 md:w-16 md:h-16 text-white opacity-80" />
+                                    </motion.div>
+                                </motion.div>
+                                <h2 className={`text-2xl md:text-3xl font-bold text-[#18042A] mb-4 text-center ${bricolage.className}`}>
+                                    No Blog Posts Found
+                                </h2>
+                                <p className={`text-[#475569] text-base md:text-lg text-center max-w-md mb-8 ${inter.className}`}>
+                                    {latestPosts.length === 0 
+                                        ? "We're working on creating amazing content for you. Check back soon!"
+                                        : searchQuery || tagSelectedName !== "All Blog Posts"
+                                        ? `No posts match your ${searchQuery ? 'search' : 'filter'} criteria. Try adjusting your search or selecting a different tag.`
+                                        : "We're working on creating amazing content for you. Check back soon!"}
+                                </p>
+                                {(searchQuery || tagSelectedName !== "All Blog Posts") && (
+                                    <Button
+                                        onClick={() => {
+                                            setSearchQuery("");
+                                            setTagSelected(0);
+                                            setTagSelectedName("All Blog Posts");
+                                        }}
+                                        className={`bg-[#701CC0] hover:bg-[#8F42FF] text-white rounded-full px-8 py-6 shadow-[0px_4px_15.9px_0px_#701CC0B8] transform transition-transform duration-300 hover:scale-105 ${inter.className}`}
+                                    >
+                                        Clear Filters
+                                    </Button>
+                                )}
+                            </div>
+                        ) : (
+                            <>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
+                                    {paginatedPosts.map((blog) => (
+                                        <div key={blog.id}>
+                                            <Link href={`/blog/${blog.slug}`} passHref>
+                                                <div className="rounded-2xl bg-white p-5 md:p-6 shadow-sm hover:shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
+                                                    <h3 className={`text-base md:text-lg font-bold text-[#0F172A] ${bricolage.className}`}>{blog.title}</h3>
+                                                    <div className="mt-1 text-[11px] md:text-xs text-[#334155] flex items-center gap-2">
+                                                        <span>By {blog.author?.name ?? "Unknown"}</span>
+                                                        <div className="h-1 w-1 bg-gray-400 rounded-full"></div>
+                                                        <span>{blog.published_date ? formatDate(blog.published_date) : ''}</span>
+                                                    </div>
+                                                    <p className={`mt-3 text-sm md:text-base text-[#475569] ${inter.className}`}>{blog.description || getExcerpt(blog.content)}</p>
+                                                    <div className="flex flex-wrap gap-1 mt-3">
+                                                        {blog.tag ? blog.tag.split(',').map((tag, index) => (
+                                                            <span key={index} className="text-[10px] md:text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
+                                                                {tag.trim()}
+                                                            </span>
+                                                        )) : (
+                                                            <span className="text-[10px] md:text-xs font-semibold text-purple-600">Blog</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="mt-4 flex items-center justify-between">
+                                                        <span className="text-[#701CC0] font-semibold text-sm md:text-base">Read More</span>
+                                                    </div>
+                                                </div>
+                                            </Link>
                                         </div>
-                                    </Link>
+                                    ))}
                                 </div>
-                            ))}
-                                </div>
-                        <div className="flex items-center gap-3 mt-10">
-                            <button
-                                onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-                                disabled={currentPage === 1}
-                                className="px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm md:text-base shadow-[0px_4px_15.9px_0px_#701CC061] hover:bg-[#5f17a5] disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#701CC0]/50"
-                            >
-                                Previous
-                            </button>
-                            <span className="text-[#9BAFC3] text-sm md:text-base">{currentPage} / {totalPages}</span>
-                            <button
-                                onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-                                disabled={currentPage === totalPages}
-                                className="px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm md:text-base shadow-[0px_4px_15.9px_0px_#701CC061] hover:bg-[#5f17a5] disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#701CC0]/50"
-                            >
-                                Next
-                            </button>
-                        </div>
+                                {totalPages > 1 && (
+                                    <div className="flex items-center justify-center gap-3 mt-10">
+                                        <button
+                                            onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                                            disabled={currentPage === 1}
+                                            className="px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm md:text-base shadow-[0px_4px_15.9px_0px_#701CC061] hover:bg-[#5f17a5] disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#701CC0]/50"
+                                        >
+                                            Previous
+                                        </button>
+                                        <span className="text-[#9BAFC3] text-sm md:text-base">{currentPage} / {totalPages}</span>
+                                        <button
+                                            onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                                            disabled={currentPage === totalPages}
+                                            className="px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm md:text-base shadow-[0px_4px_15.9px_0px_#701CC061] hover:bg-[#5f17a5] disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#701CC0]/50"
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </div>
                 </div>
                 {/* inline search only; modals removed */}

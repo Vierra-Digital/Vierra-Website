@@ -55,13 +55,23 @@ const Footer = () => {
           <div>
             <h3 className={`text-lg font-medium mb-4 md:mb-6 ${figtree.className}`}>Company</h3>
             <ul className={`space-y-3 md:space-y-4 text-white/80 ${inter.className}`}>
-              <li><a href="#about" className="hover:text-white transition-colors">About</a></li>
+              <li>
+                <a 
+                  href="#" 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="hover:text-white transition-colors"
+                >
+                  About
+                </a>
+              </li>
               <li>
                 <a href="#" className="hover:text-white transition-colors flex items-center justify-center md:justify-start gap-2">
                   Careers <span className="bg-[#701CC0] text-xs px-2 py-0.5 rounded-[12px] text-white">HIRING</span>
                 </a>
               </li>
-              <li><a href="#" className="hover:text-white transition-colors">Referral Program</a></li>
             </ul>
           </div>
           <div>
@@ -72,7 +82,6 @@ const Footer = () => {
                   <button onClick={() => openDoc(doc.url, doc.title)} className="hover:text-white transition-colors cursor-pointer">{doc.title}</button>
                 </li>
               ))}
-              <li><a href="#" className="hover:text-white transition-colors">Inquiries</a></li>
             </ul>
           </div>
         </div>

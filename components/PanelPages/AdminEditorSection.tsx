@@ -1,71 +1,23 @@
 "use client"
 
-import React, { useCallback, useEffect, useMemo, useState } from "react"
-import { Users, Shield, FileText, Settings, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, Eye } from "lucide-react"
+import React, { useCallback, useEffect, useMemo, useState, useRef } from "react"
+import { Users, FileText, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, Eye, X } from "lucide-react"
+import { FiSearch, FiFilter, FiPlus, FiBarChart2, FiTrash2 } from "react-icons/fi"
 
-type TabType = "users" | "clients" | "sessions" | "system"
+type ViewType = "users" | "sessions"
 
 const AdminEditorSection = () => {
-    const [activeTab, setActiveTab] = useState<TabType>("sessions")
-
-    const tabs = [
-        { id: "users" as TabType, label: "Users", icon: Users },
-        { id: "clients" as TabType, label: "Client Management", icon: Shield },
-        { id: "sessions" as TabType, label: "Sessions", icon: FileText },
-        { id: "system" as TabType, label: "System", icon: Settings },
-    ]
-
-    const renderTabContent = () => {
-        switch (activeTab) {
-            case "users":
-                return <UsersPanel />
-            case "clients":
-                return <AdminClientsPanel />
-            case "sessions":
-                return <SessionsPanel />
-            case "system":
-                return <SystemPanel />
-            default:
-                return null
-        }
-    }
+    const [currentView, setCurrentView] = useState<ViewType>("users")
 
     return (
-        <div className="w-full h-full bg-white overflow-y-auto overflow-x-hidden p-4 md:p-8">
-            <div className="max-w-7xl mx-auto">
-                <div className="mb-6">
-                    <h1 className="text-2xl font-bold text-[#111827] mb-2">Admin Control Panel</h1>
-                    <p className="text-[#6B7280]">Manage users, clients, sessions, and system settings</p>
-                </div>
-                
-                {/* Tabs Navigation */}
-                <div className="flex flex-wrap gap-2 mb-6">
-                    {tabs.map((tab) => {
-                        const Icon = tab.icon
-                        const isActive = activeTab === tab.id
-                        return (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
-                                className={`
-                                    flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm
-                                    transition-all duration-200 ease-in-out
-                                    ${isActive 
-                                        ? "bg-[#701CC0] text-white shadow-sm" 
-                                        : "bg-white text-[#6B7280] hover:bg-gray-50 border border-[#E5E7EB]"
-                                    }
-                                `}
-                            >
-                                <Icon size={16} />
-                                <span>{tab.label}</span>
-                            </button>
-                        )
-                    })}
-                </div>
-
-                {/* Tab Content */}
-                <div className="bg-white rounded-lg border border-[#E5E7EB] min-h-[600px] p-6">
-                    {renderTabContent()}
+        <div className="w-full h-full bg-white text-[#111014] flex flex-col">
+            <div className="flex-1 flex justify-center px-6 pt-2">
+                <div className="w-full max-w-6xl flex flex-col h-full">
+                    {currentView === "users" ? (
+                        <UsersPanel onManageSessions={() => setCurrentView("sessions")} />
+                    ) : (
+                        <SessionsPanel onBackToUsers={() => setCurrentView("users")} />
+                    )}
                 </div>
             </div>
         </div>
@@ -74,112 +26,47 @@ const AdminEditorSection = () => {
 
 export default AdminEditorSection
 
-// ----- Sessions Panel -----
+// ----- Users Panel -----
 
-type SessionStatus = "pending" | "in_progress" | "completed" | "expired" | "canceled"
-
-type SessionRow = {
-    token: string
-    clientName: string
-    clientEmail: string
-    businessName: string
-    createdAt: number
-    submittedAt: number | null
-    lastUpdatedAt: number | null
-    status: SessionStatus
-    hasAnswers: boolean
-    platforms?: string[]
-}
-
-// ----- System Panel -----
-
-function SystemPanel() {
-    const [stats, setStats] = useState<{ users: number; clients: number; sessions: number; blogPosts: number } | null>(null)
-    const [expiring, setExpiring] = useState<boolean>(false)
-    const [message, setMessage] = useState<string>("")
-
-    const loadStats = useCallback(async () => {
-        try {
-            const r = await fetch("/api/admin/systemStats", { cache: "no-store" })
-            if (!r.ok) throw new Error("Failed to load stats")
-            setStats(await r.json())
-        } catch {
-            // ignore
-        }
-    }, [])
-
-    const expireNow = useCallback(async (silent = false) => {
-        try {
-            setExpiring(!silent)
-            const r = await fetch("/api/admin/expireSessions", { method: "POST" })
-            const j = await r.json()
-            if (!silent) setMessage(`Updated ${j.updated ?? 0} sessions`)
-            await loadStats()
-        } catch {
-            if (!silent) setMessage("Failed to update sessions")
-        } finally {
-            setExpiring(false)
-        }
-    }, [loadStats])
-
-    useEffect(() => {
-        Promise.all([loadStats(), expireNow(true)])
-            .catch(() => {})
-    }, [loadStats, expireNow])
+const ConfirmRemoveUserModal: React.FC<{
+    isOpen: boolean
+    userName: string
+    onConfirm: () => void
+    onCancel: () => void
+}> = ({ isOpen, userName, onConfirm, onCancel }) => {
+    if (!isOpen) return null
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Database Card */}
-            <div className="rounded-2xl border border-gray-200 bg-white p-6">
-                <div className="flex items-center justify-between">
-                    <div className="text-xl font-semibold text-black flex items-center gap-2"><DatabaseIcon /> Database</div>
-                    <button className="px-4 py-2 rounded-md bg-gray-100 text-gray-700">View Stats</button>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onCancel}>
+            <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                        <FiTrash2 className="w-6 h-6 text-red-600" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-[#111827]">Remove User</h3>
                 </div>
-                <div className="mt-6 space-y-2 text-sm text-gray-700">
-                    <div>Total Users: <span className="float-right font-medium">{stats?.users ?? "-"}</span></div>
-                    <div>Total Clients: <span className="float-right font-medium">{stats?.clients ?? "-"}</span></div>
-                    <div>Total Sessions: <span className="float-right font-medium">{stats?.sessions ?? "-"}</span></div>
-                    <div>Blog Posts: <span className="float-right font-medium">{stats?.blogPosts ?? "-"}</span></div>
-                </div>
-            </div>
-
-            {/* Session Expiry Card */}
-            <div className="rounded-2xl border border-gray-200 bg-white p-6">
-                <div className="text-xl font-semibold text-black flex items-center gap-2"><ClockIcon /> Session Expiry</div>
-                <p className="text-gray-600 mt-2">Update expired sessions automatically</p>
-                <div className="mt-4">
-                    <button onClick={() => expireNow()} disabled={expiring}
-                        className="px-4 py-2 rounded-md bg-gray-800 text-white hover:bg-black disabled:opacity-60">
-                        {expiring ? "Updating..." : "Update Expired Sessions"}
+                <p className="text-sm text-[#6B7280] mb-6">
+                    Are you sure you want to remove <span className="font-semibold text-[#111827]">{userName}</span>? 
+                    This action is permanent and cannot be undone. All associated data will be removed.
+                </p>
+                <div className="flex gap-3 justify-end">
+                    <button
+                        onClick={onCancel}
+                        className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium"
+                    >
+                        Cancel
                     </button>
-                    {!!message && <div className="mt-3 text-sm text-gray-600">{message}</div>}
-                    <div className="mt-2 text-xs text-gray-500">Sessions are auto-checked on page load</div>
+                    <button
+                        onClick={onConfirm}
+                        className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm font-medium"
+                    >
+                        Remove User
+                    </button>
                 </div>
             </div>
         </div>
     )
 }
-
-function DatabaseIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
-            <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
-            <path d="M3 5v6c0 1.7 4 3 9 3s9-1.3 9-3V5"></path>
-            <path d="M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6"></path>
-        </svg>
-    )
-}
-
-function ClockIcon() {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
-            <circle cx="12" cy="12" r="10"></circle>
-            <path d="M12 6v6l4 2"></path>
-        </svg>
-    )
-}
-
-// ----- Users Panel -----
 
 type ListedUser = {
     id: number
@@ -191,7 +78,7 @@ type ListedUser = {
     hasPassword: boolean
 }
 
-function UsersPanel() {
+function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     const [users, setUsers] = useState<ListedUser[]>([])
     const [loading, setLoading] = useState<boolean>(false)
     const [error, setError] = useState<string>("")
@@ -199,6 +86,19 @@ function UsersPanel() {
     const [revealed, setRevealed] = useState<Record<number, string>>({})
     const [editingName, setEditingName] = useState<Record<number, string>>({})
     const [updatingNames, setUpdatingNames] = useState<Set<number>>(new Set())
+    const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
+    const [userToDelete, setUserToDelete] = useState<{ id: number; name: string | null; email: string | null } | null>(null)
+    const [searchQuery, setSearchQuery] = useState<string>("")
+    const [currentPage, setCurrentPage] = useState<number>(0)
+    const [showStats, setShowStats] = useState<boolean>(false)
+    const [stats, setStats] = useState<{ users: number; clients: number; sessions: number; blogPosts: number } | null>(null)
+    const [expiring, setExpiring] = useState<boolean>(false)
+    const [expireMessage, setExpireMessage] = useState<string>("")
+    const [sessionLinks, setSessionLinks] = useState<Record<string, { link: string; loading: boolean }>>({})
+    const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'staff' | 'client'>('all')
+    const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
+    const pageSize = 10
+    const filterRef = useRef<HTMLDivElement>(null)
 
     const load = async () => {
         setLoading(true)
@@ -214,9 +114,35 @@ function UsersPanel() {
         }
     }
 
+    const loadStats = useCallback(async () => {
+        try {
+            const r = await fetch("/api/admin/systemStats", { cache: "no-store" })
+            if (!r.ok) throw new Error("Failed to load stats")
+            setStats(await r.json())
+        } catch {
+            // ignore
+        }
+    }, [])
+
+    const expireSessions = useCallback(async () => {
+        try {
+            setExpiring(true)
+            setExpireMessage("")
+            const r = await fetch("/api/admin/expireSessions", { method: "POST" })
+            const j = await r.json()
+            setExpireMessage(`Updated ${j.updated ?? 0} sessions`)
+            await loadStats()
+        } catch {
+            setExpireMessage("Failed to update sessions")
+        } finally {
+            setExpiring(false)
+        }
+    }, [loadStats])
+
     useEffect(() => {
         load()
-    }, [])
+        loadStats()
+    }, [loadStats])
 
     const revealPassword = async (userId: number) => {
         if (revealed[userId]) return
@@ -275,187 +201,390 @@ function UsersPanel() {
         }
     }
 
-    const uploadUserImage = async (userId: number, file: File) => {
-        try {
-            // Convert file to base64
-            const reader = new FileReader();
-            reader.onload = async () => {
-                try {
-                    const base64Data = reader.result as string;
-                    const base64 = base64Data.split(',')[1]; // Remove data:image/...;base64, prefix
-                    
-                    const response = await fetch("/api/admin/uploadUserImage", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify({ 
-                            userId,
-                            imageData: base64,
-                            mimeType: file.type
-                        }),
-                    });
-
-                    if (!response.ok) {
-                        throw new Error("Failed to upload image");
-                    }
-
-                    // Update local state
-                    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, image: true } : u)));
-                } catch (error) {
-                    console.error("Error uploading image:", error);
-                }
-            };
-            
-            reader.readAsDataURL(file);
-        } catch (error) {
-            console.error("Error processing file:", error);
-        }
-    }
 
     const deleteUser = async (userId: number) => {
-        if (!confirm("Delete this user?")) return
+        const user = users.find(u => u.id === userId)
+        if (!user) return
+        
+        // Check if it's the protected email
+        if (user.email?.toLowerCase() === "business@alexshick.com") {
+            alert("This user cannot be removed.")
+            return
+        }
+        
+        setUserToDelete({ id: userId, name: user.name, email: user.email })
+        setDeleteModalOpen(true)
+    }
+
+    const confirmDeleteUser = async () => {
+        if (!userToDelete) return
+        
         try {
-            await fetch(`/api/admin/users?id=${userId}`, { method: "DELETE" })
-            setUsers((prev) => prev.filter((u) => u.id !== userId))
+            await fetch(`/api/admin/users?id=${userToDelete.id}`, { method: "DELETE" })
+            setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id))
+            setDeleteModalOpen(false)
+            setUserToDelete(null)
         } catch {}
     }
 
+    const getSessionLink = async (clientEmail: string): Promise<string | null> => {
+        if (!clientEmail) return null
+        setSessionLinks(prev => ({ ...prev, [clientEmail]: { link: "", loading: true } }))
+        try {
+            const r = await fetch(`/api/admin/getClientSessionLink?clientEmail=${encodeURIComponent(clientEmail)}`)
+            if (!r.ok) throw new Error("Failed to get session link")
+            const data = await r.json()
+            const fullLink = data.link.startsWith('http') ? data.link : `${window.location.origin}${data.link}`
+            setSessionLinks(prev => ({ ...prev, [clientEmail]: { link: fullLink, loading: false } }))
+            return fullLink
+        } catch (e: any) {
+            setSessionLinks(prev => ({ ...prev, [clientEmail]: { link: "", loading: false } }))
+            alert("Failed to get session link: " + (e?.message || "Unknown error"))
+            return null
+        }
+    }
+
+    const filteredUsers = useMemo(() => {
+        let filtered = users
+        
+        // Filter by role
+        if (roleFilter !== 'all') {
+            filtered = filtered.filter(u => u.role === roleFilter)
+        }
+        
+        // Filter by search query
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase()
+            filtered = filtered.filter(u => 
+                (u.name?.toLowerCase().includes(q)) ||
+                (u.email?.toLowerCase().includes(q)) ||
+                (u.clientName?.toLowerCase().includes(q)) ||
+                (u.role?.toLowerCase().includes(q))
+            )
+        }
+        
+        return filtered
+    }, [users, searchQuery, roleFilter])
+
+    const paginatedUsers = filteredUsers.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+    const totalPages = Math.ceil(filteredUsers.length / pageSize)
+
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <h2 className="text-3xl font-semibold text-black">User Management</h2>
-                <button onClick={() => setShowCreate(true)} className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg shadow">
-                    <span>➕ Create New User</span>
-                </button>
-            </div>
-
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <table className="min-w-full bg-white">
-                    <thead>
-                        <tr className="text-left text-sm text-gray-600">
-                            <th className="px-6 py-3">ID</th>
-                            <th className="px-6 py-3">Name</th>
-                            <th className="px-6 py-3">Email</th>
-                            <th className="px-6 py-3">Password</th>
-                            <th className="px-6 py-3">Role</th>
-                            <th className="px-6 py-3">Client</th>
-                            <th className="px-6 py-3">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loading && (
-                            <tr>
-                                <td colSpan={7} className="px-6 py-10 text-center text-gray-500">Loading...</td>
-                            </tr>
-                        )}
-                        {!loading && error && (
-                            <tr>
-                                <td colSpan={7} className="px-6 py-10 text-center text-red-600">{error}</td>
-                            </tr>
-                        )}
-
-                        {users.map((u) => {
-                            const masked = revealed[u.id] ? revealed[u.id] : (u.hasPassword ? "••••••••" : "N/A")
-                            return (
-                                <tr key={u.id} className="border-t border-gray-100 text-sm">
-                                    <td className="px-6 py-4 text-gray-700">{u.id}</td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-2">
-                                            {editingName[u.id] !== undefined ? (
-                                                <div className="flex items-center gap-1">
-                                                    <input
-                                                        type="text"
-                                                        value={editingName[u.id]}
-                                                        onChange={(e) => setEditingName(prev => ({ ...prev, [u.id]: e.target.value }))}
-                                                        className="border rounded px-2 py-1 text-sm w-32"
-                                                        autoFocus
-                                                    />
-                                                    <button
-                                                        onClick={() => updateName(u.id, editingName[u.id])}
-                                                        disabled={updatingNames.has(u.id)}
-                                                        className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50"
-                                                    >
-                                                        {updatingNames.has(u.id) ? "..." : "✓"}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setEditingName(prev => {
-                                                            const newState = { ...prev }
-                                                            delete newState[u.id]
-                                                            return newState
-                                                        })}
-                                                        className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
-                                                    >
-                                                        ✕
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center gap-1">
-                                                    <span className="text-gray-900">{u.name ?? "-"}</span>
-                                                    <button
-                                                        onClick={() => setEditingName(prev => ({ ...prev, [u.id]: u.name || "" }))}
-                                                        className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="text-gray-900">{u.email ?? "-"}</div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-gray-700 font-mono">{masked}</span>
-                                            {u.hasPassword && !revealed[u.id] && (
-                                                <button onClick={() => revealPassword(u.id)} className="px-2 py-1 rounded-md text-xs bg-gray-100 hover:bg-gray-200">Reveal</button>
-                                            )}
-                                            {revealed[u.id] && (
-                                                <button onClick={() => hidePassword(u.id)} className="px-2 py-1 rounded-md text-xs bg-gray-100 hover:bg-gray-200">Hide</button>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <select value={u.role || "user"} onChange={(e) => updateRole(u.id, e.target.value)} className="border rounded-md px-2 py-1 text-sm bg-white text-gray-800">
-                                            <option value="user">user</option>
-                                            <option value="admin">admin</option>
-                                            <option value="client">client</option>
-                                        </select>
-                                    </td>
-                                    <td className="px-6 py-4 text-gray-700">{u.clientName ?? "N/A"}</td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-2">
-                                            <button onClick={() => deleteUser(u.id)} className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs bg-red-50 text-red-700 border border-red-200">Delete</button>
-                                            <input
-                                                type="file"
-                                                accept="image/*"
+        <>
+            <div className="w-full flex justify-between items-center mb-2">
+                <div>
+                    <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">User Management</h1>
+                </div>
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
+                        <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
+                        <label htmlFor="users-search" className="sr-only">Search Users</label>
+                        <input
+                            id="users-search"
+                            type="search"
+                            value={searchQuery}
+                            onChange={(e) => {
+                                setSearchQuery(e.target.value)
+                                setCurrentPage(0)
+                            }}
+                            placeholder="Search Users"
+                            className="w-64 md:w-80 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none"
+                        />
+                    </div>
+                    <div className="relative" ref={filterRef} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsFilterOpen(false) }} tabIndex={-1}>
+                        <button
+                            type="button"
+                            onClick={() => setIsFilterOpen((v) => !v)}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
+                        >
+                            <FiFilter className="w-4 h-4" />
+                            <span className="text-sm font-medium">Filter</span>
+                            <svg 
+                                className={`w-4 h-4 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`}
+                                fill="none" 
+                                stroke="currentColor" 
+                                viewBox="0 0 24 24"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+                        {isFilterOpen && (
+                            <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#E5E7EB] py-4 z-50">
+                                <div className="px-5">
+                                    <h3 className="text-sm font-semibold text-[#111827] mb-4">Filter by Role</h3>
+                                    
+                                    {/* Role Filter */}
+                                    <div className="mb-4">
+                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Role</label>
+                                        <div className="relative">
+                                            <select
+                                                value={roleFilter}
                                                 onChange={(e) => {
-                                                    const file = e.target.files?.[0];
-                                                    if (file) {
-                                                        uploadUserImage(u.id, file);
-                                                    }
+                                                    setRoleFilter(e.target.value as 'all' | 'admin' | 'staff' | 'client')
+                                                    setCurrentPage(0)
                                                 }}
-                                                className="hidden"
-                                                id={`image-upload-${u.id}`}
-                                            />
-                                            <label
-                                                htmlFor={`image-upload-${u.id}`}
-                                                className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs bg-blue-50 text-blue-700 border border-blue-200 cursor-pointer hover:bg-blue-100"
+                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
                                             >
-                                                {u.image ? "Update Image" : "Upload Image"}
-                                            </label>
+                                                <option value="all">All Roles</option>
+                                                <option value="admin">Admin</option>
+                                                <option value="staff">Staff</option>
+                                                <option value="client">Client</option>
+                                            </select>
+                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </div>
                                         </div>
-                                    </td>
-                                </tr>
-                            )
-                        })}
-                    </tbody>
-                </table>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <button
+                        onClick={() => setShowStats(true)}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
+                    >
+                        <FiBarChart2 className="w-4 h-4" />
+                        <span>Statistics</span>
+                    </button>
+                    <button
+                        onClick={onManageSessions}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
+                    >
+                        <FileText size={16} />
+                        Manage Sessions
+                    </button>
+                    <button
+                        onClick={() => setShowCreate(true)}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium"
+                    >
+                        <FiPlus className="w-4 h-4" />
+                        Create User
+                    </button>
+                </div>
             </div>
+
+            {expireMessage && (
+                <div className={`px-4 py-2 rounded-lg text-sm ${expireMessage.includes("Failed") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+                    {expireMessage}
+                </div>
+            )}
+
+            {loading ? (
+                <div className="flex items-center justify-center py-12">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto"></div>
+                        <p className="mt-2 text-sm text-[#6B7280]">Loading Users...</p>
+                    </div>
+                </div>
+            ) : (
+                <>
+                    {!loading && filteredUsers.length === 0 && (
+                        <div className="text-center py-12">
+                            <p className="text-sm text-gray-500 mb-3">
+                                {searchQuery ? "No users match your search." : "No users found."}
+                            </p>
+                            {!searchQuery && (
+                                <button
+                                    onClick={() => setShowCreate(true)}
+                                    className="inline-flex items-center px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
+                                >
+                                    <FiPlus className="w-4 h-4 mr-2" />
+                                    Create User
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {!loading && filteredUsers.length > 0 && (
+                        <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">ID</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Name</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Email</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Password</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Role</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-[#E5E7EB]">
+                                        {paginatedUsers.map((u) => {
+                                            const masked = revealed[u.id] ? revealed[u.id] : (u.hasPassword ? "••••••••" : "N/A")
+                                            const sessionLink = u.clientName && u.email ? sessionLinks[u.email] : null
+                                            return (
+                                                <tr key={u.id} className="hover:bg-purple-50">
+                                                    <td className="px-4 py-4 text-sm text-[#111827]">{u.id}</td>
+                                                    <td className="px-4 py-4">
+                                                        <div className="flex items-center gap-2">
+                                                            {editingName[u.id] !== undefined ? (
+                                                                <div className="flex items-center gap-1">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={editingName[u.id]}
+                                                                        onChange={(e) => setEditingName(prev => ({ ...prev, [u.id]: e.target.value }))}
+                                                                        className="border rounded px-2 py-1 text-sm w-32"
+                                                                        autoFocus
+                                                                    />
+                                                                    <button
+                                                                        onClick={() => updateName(u.id, editingName[u.id])}
+                                                                        disabled={updatingNames.has(u.id)}
+                                                                        className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 disabled:opacity-50"
+                                                                    >
+                                                                        {updatingNames.has(u.id) ? "..." : "✓"}
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => setEditingName(prev => {
+                                                                            const newState = { ...prev }
+                                                                            delete newState[u.id]
+                                                                            return newState
+                                                                        })}
+                                                                        className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
+                                                                    >
+                                                                        ✕
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className="text-sm font-medium text-[#111827]">{u.name ?? "-"}</span>
+                                                                    <button
+                                                                        onClick={() => setEditingName(prev => ({ ...prev, [u.id]: u.name || "" }))}
+                                                                        className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200"
+                                                                    >
+                                                                        Edit
+                                                                    </button>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4 text-sm text-[#111827]">{u.email ?? "-"}</td>
+                                                    <td className="px-4 py-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="text-sm text-[#6B7280] font-mono">{masked}</span>
+                                                            {u.hasPassword && !revealed[u.id] && (
+                                                                <button onClick={() => revealPassword(u.id)} className="px-2 py-1 rounded-md text-xs bg-gray-100 hover:bg-gray-200 text-[#374151]">Reveal</button>
+                                                            )}
+                                                            {revealed[u.id] && (
+                                                                <button onClick={() => hidePassword(u.id)} className="px-2 py-1 rounded-md text-xs bg-gray-100 hover:bg-gray-200 text-[#374151]">Hide</button>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <select 
+                                                            value={u.role === "user" ? "admin" : (u.role || "admin")} 
+                                                            onChange={(e) => updateRole(u.id, e.target.value)} 
+                                                            className="text-sm border border-[#E5E7EB] rounded-md pl-2 pr-[5px] mr-10 py-0.5 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                                                        >
+                                                            <option value="admin">Admin</option>
+                                                            <option value="staff">Staff</option>
+                                                            <option value="client">Client</option>
+                                                        </select>
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <div className="flex items-center gap-2">
+                                                            <button 
+                                                                onClick={() => deleteUser(u.id)} 
+                                                                disabled={u.email?.toLowerCase() === "business@alexshick.com"}
+                                                                className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {!loading && filteredUsers.length > 0 && totalPages > 1 && (
+                        <div className="mt-4 pt-4 text-xs text-[#677489]">
+                            <div className="w-full flex items-center justify-center">
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
+                                        disabled={currentPage === 0}
+                                        className="px-3 py-1 rounded-md border border-[#E5E7EB] bg-white text-[#374151] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        Previous
+                                    </button>
+                                    <span className="px-3 py-1 text-[#6B7280]">
+                                        Page {currentPage + 1} of {totalPages}
+                                    </span>
+                                    <button
+                                        onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
+                                        disabled={currentPage >= totalPages - 1}
+                                        className="px-3 py-1 rounded-md border border-[#E5E7EB] bg-white text-[#374151] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
+
+            {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
 
             {showCreate && <CreateUserModal onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); load(); }} />}
-        </div>
+
+            <ConfirmRemoveUserModal
+                isOpen={deleteModalOpen}
+                userName={userToDelete?.name || userToDelete?.email || ""}
+                onConfirm={confirmDeleteUser}
+                onCancel={() => {
+                    setDeleteModalOpen(false)
+                    setUserToDelete(null)
+                }}
+            />
+
+            {showStats && (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[200] p-4" role="dialog" aria-modal="true" onClick={(e) => { if (e.target === e.currentTarget) setShowStats(false) }}>
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md border border-[#E5E7EB] relative" onClick={(e) => e.stopPropagation()}>
+                        <button 
+                            onClick={() => setShowStats(false)} 
+                            className="absolute top-4 right-4 text-[#6B7280] hover:text-red-500 transition-colors z-10"
+                            aria-label="Close modal"
+                        >
+                            <X size={24} />
+                        </button>
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-[#E5E7EB]">
+                            <div className="text-xl font-semibold text-[#111827]">System Statistics</div>
+                        </div>
+                        <div className="p-6 space-y-3">
+                            <div className="flex justify-between items-center py-2 border-b border-[#F3F4F6]">
+                                <span className="text-sm text-[#6B7280]">Total Users</span>
+                                <span className="text-sm font-semibold text-[#111827]">{stats?.users ?? "-"}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-2 border-b border-[#F3F4F6]">
+                                <span className="text-sm text-[#6B7280]">Total Clients</span>
+                                <span className="text-sm font-semibold text-[#111827]">{stats?.clients ?? "-"}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-2 border-b border-[#F3F4F6]">
+                                <span className="text-sm text-[#6B7280]">Total Sessions</span>
+                                <span className="text-sm font-semibold text-[#111827]">{stats?.sessions ?? "-"}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-2">
+                                <span className="text-sm text-[#6B7280]">Blog Posts</span>
+                                <span className="text-sm font-semibold text-[#111827]">{stats?.blogPosts ?? "-"}</span>
+                            </div>
+                        </div>
+                        <div className="px-6 pb-6 pt-2">
+                            <button onClick={() => setShowStats(false)} className="w-full px-4 py-2 rounded-lg bg-[#701CC0] text-white hover:bg-[#5f17a5] transition-colors text-sm font-medium">
+                                Done
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
     )
 }
 
@@ -463,7 +592,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
     const [name, setName] = useState<string>("")
     const [email, setEmail] = useState<string>("")
     const [password, setPassword] = useState<string>("")
-    const [role, setRole] = useState<string>("user")
+    const [role, setRole] = useState<string>("admin")
     const [submitting, setSubmitting] = useState<boolean>(false)
     const [error, setError] = useState<string>("")
 
@@ -497,8 +626,8 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                     <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="w-full border rounded-md px-3 py-2" />
                     <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="w-full border rounded-md px-3 py-2" />
                     <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full border rounded-md px-3 py-2">
-                        <option value="user">User</option>
                         <option value="admin">Admin</option>
+                        <option value="staff">Staff</option>
                         <option value="client">Client</option>
                     </select>
                 </div>
@@ -513,202 +642,35 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
     )
 }
 
-// ----- Admin Clients Panel (simplified columns, session + delete, create client modal reuse) -----
+// ----- Sessions Panel -----
 
-type AdminClientRow = { id: string; name: string; email: string; status: string }
+type SessionStatus = "pending" | "in_progress" | "completed" | "expired" | "canceled"
 
-function AdminClientsPanel() {
-    const [rows, setRows] = useState<AdminClientRow[]>([])
-    const [loading, setLoading] = useState<boolean>(false)
-    const [error, setError] = useState<string>("")
-    const [success, setSuccess] = useState<{ open: boolean; link?: string } | null>(null)
-    const [showAdd, setShowAdd] = useState<boolean>(false)
-
-    const load = async () => {
-        setLoading(true)
-        setError("")
-        try {
-            const r = await fetch("/api/admin/clients")
-            if (!r.ok) throw new Error("Failed to load clients")
-            const data = await r.json()
-            const mapped: AdminClientRow[] = data.map((d: any) => ({ id: d.id, name: d.name, email: d.email, status: d.status }))
-            setRows(mapped)
-        } catch (e: any) {
-            setError(e?.message || "Failed to load clients")
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    useEffect(() => { load() }, [])
-
-    const regenerateSession = async (client: AdminClientRow) => {
-        try {
-            // Use existing logic: generate session and email link
-            const r = await fetch("/api/session/generateClientSession", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ clientName: client.name, clientEmail: client.email, businessName: client.name, industry: undefined }),
-            })
-            if (!r.ok) throw new Error("Failed to create session")
-            const { link } = await r.json()
-            const fullLink = (() => {
-                try { return new URL(link, window.location.origin).toString() } catch { return link }
-            })()
-            // Send email with existing endpoint
-            await fetch("/api/sendSessionLinkEmail", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: client.email, clientName: client.name, link: fullLink }),
-            })
-            setSuccess({ open: true, link: fullLink })
-        } catch (e: any) {
-            setError(e?.message || "Failed to regenerate session")
-        }
-    }
-
-    const deleteClient = async (clientId: string) => {
-        if (!confirm("Delete this client?")) return
-        try {
-            const r = await fetch(`/api/admin/deleteClient?clientId=${clientId}`, { method: "DELETE" })
-            if (!r.ok) throw new Error("Failed to delete client")
-            setRows((prev) => prev.filter((c) => c.id !== clientId))
-        } catch (e: any) {
-            setError(e?.message || "Delete failed")
-        }
-    }
-
-    return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <h2 className="text-3xl font-semibold text-black">Client Management</h2>
-                <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg shadow">
-                    <span>➕ Create Client</span>
-                </button>
-            </div>
-
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <table className="min-w-full bg-white">
-                    <thead>
-                        <tr className="text-left text-sm text-gray-600">
-                            <th className="px-6 py-3">Name</th>
-                            <th className="px-6 py-3">Email</th>
-                            <th className="px-6 py-3">Status</th>
-                            <th className="px-6 py-3">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loading && (
-                            <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-500">Loading...</td></tr>
-                        )}
-                        {!loading && error && (
-                            <tr><td colSpan={4} className="px-6 py-10 text-center text-red-600">{error}</td></tr>
-                        )}
-                        {!loading && rows.length === 0 && (
-                            <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-500">No clients</td></tr>
-                        )}
-
-                        {rows.map((c) => (
-                            <tr key={c.id} className="border-t border-gray-100 text-sm">
-                                <td className="px-6 py-4 text-gray-900">{c.name}</td>
-                                <td className="px-6 py-4 text-gray-700">{c.email}</td>
-                                <td className="px-6 py-4">
-                                    {c.status === "completed" ? (
-                                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-green-50 text-green-700 border border-green-200">completed</span>
-                                    ) : c.status === "pending" || c.status === "in_progress" ? (
-                                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-yellow-50 text-yellow-700 border border-yellow-200">pending</span>
-                                    ) : (
-                                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs bg-red-50 text-red-700 border border-red-200">expired</span>
-                                    )}
-                                </td>
-                                <td className="px-6 py-4">
-                                    <div className="flex items-center gap-2">
-                                        <button onClick={() => regenerateSession(c)} className="px-3 py-1 rounded-md text-xs bg-blue-600 text-white hover:bg-blue-700">Session</button>
-                                        <button onClick={() => deleteClient(c.id)} className="px-3 py-1 rounded-md text-xs bg-red-50 text-red-700 border border-red-200">Delete</button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-
-            {showAdd && <AddClientModal onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); load(); }} />}
-
-            {success?.open && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-lg text-gray-900">
-                        <div className="flex items-center justify-between px-6 py-4 border-b">
-                            <div className="text-xl font-semibold">Client Profile Created Successfully</div>
-                            <button onClick={() => setSuccess(null)} className="text-gray-600 hover:text-black">×</button>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            <button onClick={() => { if (success?.link) navigator.clipboard.writeText(success.link.startsWith('http') ? success.link : `${window.location.origin}${success.link}`) }} className="w-full px-4 py-2 rounded-md bg-white border text-gray-800">Copy Session Link</button>
-                            <button onClick={() => setSuccess(null)} className="w-full px-4 py-2 rounded-md bg-purple-600 text-white">Done</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    )
+type SessionRow = {
+    token: string
+    clientName: string
+    clientEmail: string
+    businessName: string
+    createdAt: number
+    submittedAt: number | null
+    lastUpdatedAt: number | null
+    status: SessionStatus
+    hasAnswers: boolean
+    platforms?: string[]
 }
 
-function AddClientModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-    const [name, setName] = useState("")
-    const [email, setEmail] = useState("")
-    const [business, setBusiness] = useState("")
-    const [industry, setIndustry] = useState("")
-    const [submitting, setSubmitting] = useState(false)
-    const [error, setError] = useState("")
+// ----- Sessions Panel -----
 
-    const submit = async () => {
-        setSubmitting(true)
-        setError("")
-        try {
-            const r = await fetch("/api/session/generateClientSession", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ clientName: name, clientEmail: email, businessName: business || name, industry }),
-            })
-            if (!r.ok) throw new Error("Failed to create client session")
-            const { link } = await r.json()
-            await fetch("/api/sendSessionLinkEmail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, clientName: name, link }) })
-            onCreated()
-        } catch (e: any) {
-            setError(e?.message || "Failed to create client")
-        } finally {
-            setSubmitting(false)
-        }
-    }
-
-    return (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md text-gray-900">
-                <div className="flex items-center justify-between px-6 py-4 border-b">
-                    <div className="text-xl font-semibold">Add Client</div>
-                    <button onClick={onClose} className="text-gray-600 hover:text-black">×</button>
-                </div>
-                <div className="p-6 space-y-4">
-                    <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Client Name" className="w-full border rounded-md px-3 py-2" />
-                    <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Client Email" className="w-full border rounded-md px-3 py-2" />
-                    <input value={business} onChange={(e) => setBusiness(e.target.value)} placeholder="Business Name" className="w-full border rounded-md px-3 py-2" />
-                    <input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="Industry" className="w-full border rounded-md px-3 py-2" />
-                    {error && <div className="text-sm text-red-600">{error}</div>}
-                </div>
-                <div className="px-6 pb-6">
-                    <button disabled={submitting} onClick={submit} className="w-full inline-flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg disabled:opacity-60">
-                        {submitting ? "Adding..." : "Add Client"}
-                    </button>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-function SessionsPanel() {
+function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
     const [sessions, setSessions] = useState<SessionRow[]>([])
     const [loading, setLoading] = useState<boolean>(false)
     const [error, setError] = useState<string>("")
+    const [searchQuery, setSearchQuery] = useState<string>("")
+    const [currentPage, setCurrentPage] = useState<number>(0)
+    const [expiring, setExpiring] = useState<boolean>(false)
+    const [expireMessage, setExpireMessage] = useState<string>("")
+    const [sessionLinks, setSessionLinks] = useState<Record<string, { link: string; loading: boolean }>>({})
+    const pageSize = 10
     const [sortKey, setSortKey] = useState<"client" | "business" | "status" | "created" | "updated" | "platforms">("created")
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
 
@@ -780,19 +742,6 @@ function SessionsPanel() {
         return dir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />
     }
 
-    const counts = useMemo(() => {
-        const by: Record<SessionStatus, number> = {
-            pending: 0,
-            in_progress: 0,
-            completed: 0,
-            expired: 0,
-            canceled: 0,
-        }
-        for (const s of sessions) {
-            by[s.status] = (by[s.status] ?? 0) + 1
-        }
-        return by
-    }, [sessions])
 
     const formatDate = (ts?: number | null) => {
         if (!ts) return "N/A"
@@ -834,6 +783,39 @@ function SessionsPanel() {
 
     const [showAnswers, setShowAnswers] = useState<{ open: boolean; json: any; client?: { name: string; email: string; businessName: string } } | null>(null)
 
+    const expireSessions = useCallback(async () => {
+        try {
+            setExpiring(true)
+            setExpireMessage("")
+            const r = await fetch("/api/admin/expireSessions", { method: "POST" })
+            const j = await r.json()
+            setExpireMessage(`Updated ${j.updated ?? 0} sessions`)
+            await load()
+        } catch {
+            setExpireMessage("Failed to update sessions")
+        } finally {
+            setExpiring(false)
+        }
+    }, [])
+
+    const getSessionLink = async (token: string, clientEmail: string): Promise<string | null> => {
+        if (!token || !clientEmail) return null
+        const key = `${token}-${clientEmail}`
+        setSessionLinks(prev => ({ ...prev, [key]: { link: "", loading: true } }))
+        try {
+            const r = await fetch(`/api/admin/getClientSessionLink?clientEmail=${encodeURIComponent(clientEmail)}`)
+            if (!r.ok) throw new Error("Failed to get session link")
+            const data = await r.json()
+            const fullLink = data.link.startsWith('http') ? data.link : `${window.location.origin}${data.link}`
+            setSessionLinks(prev => ({ ...prev, [key]: { link: fullLink, loading: false } }))
+            return fullLink
+        } catch (e: any) {
+            setSessionLinks(prev => ({ ...prev, [key]: { link: "", loading: false } }))
+            alert("Failed to get session link: " + (e?.message || "Unknown error"))
+            return null
+        }
+    }
+
     const openAnswers = async (token: string) => {
         try {
             const r = await fetch(`/api/admin/sessionAnswers?token=${encodeURIComponent(token)}`)
@@ -845,137 +827,219 @@ function SessionsPanel() {
         }
     }
 
+    const filteredSessions = useMemo(() => {
+        if (!searchQuery.trim()) return sorted
+        const q = searchQuery.toLowerCase()
+        return sorted.filter(s => 
+            s.clientName.toLowerCase().includes(q) ||
+            s.clientEmail.toLowerCase().includes(q) ||
+            s.businessName.toLowerCase().includes(q) ||
+            s.status.toLowerCase().includes(q)
+        )
+    }, [sorted, searchQuery])
+
+    const paginatedSessions = filteredSessions.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+    const totalPages = Math.ceil(filteredSessions.length / pageSize)
+
     return (
-        <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <h2 className="text-3xl font-semibold text-black">Onboarding Sessions</h2>
-                <button
-                    onClick={load}
-                    disabled={loading}
-                    className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg shadow disabled:opacity-60"
-                >
-                    <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
-                    <span>Refresh</span>
-                </button>
+        <>
+            <div className="w-full flex justify-between items-center mb-2">
+                <div>
+                    <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Sessions</h1>
+                </div>
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
+                        <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
+                        <label htmlFor="sessions-search" className="sr-only">Search Sessions</label>
+                        <input
+                            id="sessions-search"
+                            type="search"
+                            value={searchQuery}
+                            onChange={(e) => {
+                                setSearchQuery(e.target.value)
+                                setCurrentPage(0)
+                            }}
+                            placeholder="Search Sessions"
+                            className="w-64 md:w-80 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none"
+                        />
+                    </div>
+                    <button
+                        onClick={expireSessions}
+                        disabled={expiring}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm disabled:opacity-60"
+                    >
+                        <RefreshCw size={16} className={expiring ? "animate-spin" : ""} />
+                        <span>Update Expired Sessions</span>
+                    </button>
+                    <button
+                        onClick={onBackToUsers}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
+                    >
+                        <Users size={16} />
+                        <span>Back to Users</span>
+                    </button>
+                </div>
             </div>
 
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-5">
-                    <div className="flex items-center gap-2 text-yellow-800 font-medium"><AlertCircle size={18} /> Pending</div>
-                    <div className="mt-3 text-3xl font-bold text-yellow-900">{counts.pending}</div>
+            {expireMessage && (
+                <div className={`px-4 py-2 rounded-lg text-sm ${expireMessage.includes("Failed") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+                    {expireMessage}
                 </div>
-                <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
-                    <div className="flex items-center gap-2 text-blue-800 font-medium"><Timer size={18} /> In Progress</div>
-                    <div className="mt-3 text-3xl font-bold text-blue-900">{counts.in_progress}</div>
-                </div>
-                <div className="rounded-xl border border-green-200 bg-green-50 p-5">
-                    <div className="flex items-center gap-2 text-green-800 font-medium"><CheckCircle2 size={18} /> Completed</div>
-                    <div className="mt-3 text-3xl font-bold text-green-900">{counts.completed}</div>
-                </div>
-                <div className="rounded-xl border border-red-200 bg-red-50 p-5">
-                    <div className="flex items-center gap-2 text-red-800 font-medium"><XCircle size={18} /> Expired</div>
-                    <div className="mt-3 text-3xl font-bold text-red-900">{counts.expired}</div>
-                </div>
-            </div>
+            )}
 
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
-                <table className="min-w-full bg-white">
-                    <thead>
-                        <tr className="text-left text-sm text-gray-600">
-                            <th className="px-6 py-3">
-                                <button onClick={() => toggleSort("client")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Client</span>
-                                    <SortIcon active={sortKey === "client"} dir={sortDir} />
-                                </button>
-                            </th>
-                            <th className="px-6 py-3">
-                                <button onClick={() => toggleSort("business")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Business</span>
-                                    <SortIcon active={sortKey === "business"} dir={sortDir} />
-                                </button>
-                            </th>
-                            <th className="px-6 py-3">
-                                <button onClick={() => toggleSort("status")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Status</span>
-                                    <SortIcon active={sortKey === "status"} dir={sortDir} />
-                                </button>
-                            </th>
-                            <th className="px-6 py-3">
-                                <button onClick={() => toggleSort("created")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Created</span>
-                                    <SortIcon active={sortKey === "created"} dir={sortDir} />
-                                </button>
-                            </th>
-                            <th className="px-6 py-3">
-                                <button onClick={() => toggleSort("updated")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Last Updated</span>
-                                    <SortIcon active={sortKey === "updated"} dir={sortDir} />
-                                </button>
-                            </th>
-                            <th className="px-6 py-3">
-                                <button onClick={() => toggleSort("platforms")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Platforms</span>
-                                    <SortIcon active={sortKey === "platforms"} dir={sortDir} />
-                                </button>
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loading && (
-                            <tr>
-                                <td colSpan={7} className="px-6 py-10 text-center text-gray-500">Loading...</td>
-                            </tr>
-                        )}
-                        {!loading && error && (
-                            <tr>
-                                <td colSpan={7} className="px-6 py-10 text-center text-red-600">{error}</td>
-                            </tr>
-                        )}
-                        {!loading && !error && sessions.length === 0 && (
-                            <tr>
-                                <td colSpan={7} className="px-6 py-10 text-center text-gray-500">No sessions found</td>
-                            </tr>
-                        )}
+            {loading ? (
+                <div className="flex items-center justify-center py-12">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto"></div>
+                        <p className="mt-2 text-sm text-[#6B7280]">Loading Sessions...</p>
+                    </div>
+                </div>
+            ) : (
+                <>
+                    {!loading && filteredSessions.length === 0 && (
+                        <div className="text-center py-12">
+                            <p className="text-sm text-gray-500 mb-3">
+                                {searchQuery ? "No sessions match your search." : "No sessions found."}
+                            </p>
+                        </div>
+                    )}
 
-                        {sorted.map((s) => (
-                            <tr key={s.token} className="border-t border-gray-100 text-sm">
-                                <td className="px-6 py-4">
-                                    <div className="font-medium text-gray-900">{s.clientName}</div>
-                                    <div className="text-gray-500">{s.clientEmail}</div>
-                                </td>
-                                <td className="px-6 py-4 text-gray-700">{s.businessName}</td>
-                                <td className="px-6 py-4">
-                                    <div className="flex items-center gap-2">
-                                        {s.status === "completed" && (
-                                            <button
-                                                onClick={() => openAnswers(s.token)}
-                                                className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs bg-purple-600 text-white hover:bg-purple-700"
-                                            >
-                                                <Eye size={14} /> View Response
-                                            </button>
-                                        )}
-                                        {statusBadge(s.status)}
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 text-gray-700">{formatDate(s.createdAt)}</td>
-                                <td className="px-6 py-4 text-gray-700">{formatDate(s.lastUpdatedAt)}</td>
-                                <td className="px-6 py-4 text-gray-700">
-                                    {(!s.platforms || s.platforms.length === 0) ? (
-                                        <span className="text-gray-400">None</span>
-                                    ) : (
-                                        <div className="flex flex-wrap gap-2">
-                                            {s.platforms.map((p, idx) => (
-                                                <span key={`${p}-${idx}`} className="px-2 py-1 rounded-md text-xs bg-gray-100 text-gray-700 border border-gray-200 uppercase">{p}</span>
-                                            ))}
-                                        </div>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+                    {!loading && filteredSessions.length > 0 && (
+                        <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
+                                                <button onClick={() => toggleSort("client")} className="inline-flex items-center gap-1 hover:text-black">
+                                                    <span>Client</span>
+                                                    <SortIcon active={sortKey === "client"} dir={sortDir} />
+                                                </button>
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
+                                                <button onClick={() => toggleSort("business")} className="inline-flex items-center gap-1 hover:text-black">
+                                                    <span>Business</span>
+                                                    <SortIcon active={sortKey === "business"} dir={sortDir} />
+                                                </button>
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
+                                                <button onClick={() => toggleSort("status")} className="inline-flex items-center gap-1 hover:text-black">
+                                                    <span>Status</span>
+                                                    <SortIcon active={sortKey === "status"} dir={sortDir} />
+                                                </button>
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
+                                                <button onClick={() => toggleSort("created")} className="inline-flex items-center gap-1 hover:text-black">
+                                                    <span>Created</span>
+                                                    <SortIcon active={sortKey === "created"} dir={sortDir} />
+                                                </button>
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
+                                                <button onClick={() => toggleSort("updated")} className="inline-flex items-center gap-1 hover:text-black">
+                                                    <span>Last Updated</span>
+                                                    <SortIcon active={sortKey === "updated"} dir={sortDir} />
+                                                </button>
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-[#E5E7EB]">
+                                        {paginatedSessions.map((s) => {
+                                            const linkKey = `${s.token}-${s.clientEmail}`
+                                            const sessionLink = sessionLinks[linkKey]
+                                            const isPending = s.status === "pending" || s.status === "in_progress"
+                                            return (
+                                                <tr key={s.token} className="hover:bg-purple-50">
+                                                    <td className="px-4 py-4">
+                                                        <div className="flex flex-col">
+                                                            <div className="text-sm font-medium text-[#111827]">{s.clientName}</div>
+                                                            <div className="text-sm text-[#6B7280]">{s.clientEmail}</div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4 text-sm text-[#111827]">{s.businessName}</td>
+                                                    <td className="px-4 py-4">
+                                                        {statusBadge(s.status)}
+                                                    </td>
+                                                    <td className="px-4 py-4 text-sm text-[#111827]">{formatDate(s.createdAt)}</td>
+                                                    <td className="px-4 py-4 text-sm text-[#111827]">{formatDate(s.lastUpdatedAt)}</td>
+                                                    <td className="px-4 py-4">
+                                                        <div className="flex items-center gap-2">
+                                                            {isPending && (
+                                                                <button
+                                                                    onClick={async () => {
+                                                                        if (sessionLink?.link) {
+                                                                            try {
+                                                                                await navigator.clipboard.writeText(sessionLink.link)
+                                                                                alert("Session link copied to clipboard!")
+                                                                            } catch {
+                                                                                alert("Failed to copy link")
+                                                                            }
+                                                                        } else {
+                                                                            const link = await getSessionLink(s.token, s.clientEmail)
+                                                                            if (link) {
+                                                                                try {
+                                                                                    await navigator.clipboard.writeText(link)
+                                                                                    alert("Session link copied to clipboard!")
+                                                                                } catch {
+                                                                                    alert("Link retrieved but failed to copy")
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                    disabled={sessionLink?.loading}
+                                                                    className="text-xs text-[#701CC0] hover:text-[#5a1799] underline disabled:opacity-50"
+                                                                >
+                                                                    {sessionLink?.loading ? "Loading..." : sessionLink?.link ? "Copy Link" : "Get Link"}
+                                                                </button>
+                                                            )}
+                                                            {s.status === "completed" && (
+                                                                <button
+                                                                    onClick={() => openAnswers(s.token)}
+                                                                    className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs bg-[#701CC0] text-white hover:bg-[#5a1799]"
+                                                                >
+                                                                    <Eye size={14} /> View
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {!loading && filteredSessions.length > 0 && totalPages > 1 && (
+                        <div className="mt-4 pt-4 text-xs text-[#677489]">
+                            <div className="w-full flex items-center justify-center">
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
+                                        disabled={currentPage === 0}
+                                        className="px-3 py-1 rounded-md border border-[#E5E7EB] bg-white text-[#374151] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        Previous
+                                    </button>
+                                    <span className="px-3 py-1 text-[#6B7280]">
+                                        Page {currentPage + 1} of {totalPages}
+                                    </span>
+                                    <button
+                                        onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
+                                        disabled={currentPage >= totalPages - 1}
+                                        className="px-3 py-1 rounded-md border border-[#E5E7EB] bg-white text-[#374151] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
+
+            {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
 
             {showAnswers?.open && (
                 <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
@@ -995,6 +1059,6 @@ function SessionsPanel() {
                     </div>
                 </div>
             )}
-        </div>
+        </>
     )
 }

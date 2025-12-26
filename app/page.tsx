@@ -143,7 +143,19 @@ export default function Page() {
               transition={{ duration: 0.6, ease: "easeOut" }}
               className={`text-5xl md:text-6xl font-bold leading-tight mb-6 text-[#EFF3FF] ${bricolage.className}`}
             >
-              Risk-Averse Guaranteed Leads For Your Business
+              <span
+                className="inline-block bg-gradient-to-r from-[#8F42FF] via-[#B366FF] via-[#D4A5FF] via-[#B366FF] to-[#8F42FF] bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient"
+                style={{
+                  backgroundSize: "200% auto",
+                  animation: "gradient-horizontal 3s ease infinite",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  filter: "brightness(1.2)",
+                }}
+              >
+                Risk-Averse
+              </span>{" "}
+              Guaranteed Leads For Your Business
             </motion.h1>
 
             <motion.p

@@ -8,24 +8,19 @@ export default function TeamSection() {
   const team = [
     { name: "Alex Shick", role: "Founder", image: "/assets/Team/Alex.png" },
     {
-      name: "Paul Wahba",
-      role: "Outreach Lead",
-      image: "/assets/Team/Paul.png",
-    },
-    {
       name: "Vilhjalmur Johnsson",
       role: "Development Lead",
       image: "/assets/Team/Vilhjalmur.png",
     },
     {
+      name: "Stefan Jian",
+      role: "Business Advisor",
+      image: "/assets/Team/Stefan.jpeg",
+    },
+    {
       name: "Sienna Coffey",
       role: "Law Lead",
       image: "/assets/Team/Sienna.png",
-    },
-    {
-      name: "Sean Penix",
-      role: "Sales Advisor",
-      image: "/assets/Team/Sean.png",
     },
     {
       name: "Justin Waller",
@@ -45,7 +40,7 @@ export default function TeamSection() {
         >
           Our Leadership Team<span className="text-[#7A13D0]">.</span>
         </h1>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-x-4 gap-y-8 md:gap-4 lg:gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-4 gap-y-8 md:gap-4 lg:gap-6 justify-items-center max-w-5xl mx-auto">
           {team.map(({ name, role, image }) => (
             <div key={name} className="flex flex-col items-center">
               <div className="relative w-[140px] h-[140px] sm:w-[150px] sm:h-[150px] md:w-[170px] md:h-[170px] group">

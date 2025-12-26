@@ -11,6 +11,8 @@ const StaffActionsMenu: React.FC<{
 }> = ({ staffName, onEdit, onDelete }) => {
     const [isOpen, setIsOpen] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
+    const buttonRef = useRef<HTMLButtonElement>(null)
+    const dropdownRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -35,7 +37,7 @@ const StaffActionsMenu: React.FC<{
                 ⋯
             </button>
             {isOpen && (
-                <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-[#E5E7EB] py-1 z-50">
+                <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-[#E5E7EB] py-1 z-[100]">
                     <button
                         onClick={() => {
                             setIsOpen(false)
@@ -587,7 +589,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                             )}
 
                             {!loading && filteredRows.length > 0 && (
-                                <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
+                                <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB]">
                             <div className="overflow-x-auto">
                                 <table className="w-full">
                                     <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">

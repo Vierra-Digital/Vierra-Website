@@ -42,6 +42,10 @@ export function Header() {
               Case Studies
               <span className="absolute left-0 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-full" />
             </Link>
+            <Link href="/blog" className="hover:text-[#8F42FF] transition-colors relative group">
+              Blog
+              <span className="absolute left-0 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-full" />
+            </Link>
           </nav>
         </div>
         <Button
@@ -71,6 +75,7 @@ export function Header() {
                   <Link href="/#services" className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Services</Link>
                   <Link href="/#solutions" className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Solutions</Link>
                   <Link href="/#cases" className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Cases</Link>
+                  <Link href="/blog" className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Blog</Link>
                 </nav>
                 <div className="mt-auto p-4 border-t border-white/10">
                   <Button
