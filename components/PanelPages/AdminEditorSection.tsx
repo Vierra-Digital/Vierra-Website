@@ -92,7 +92,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     const [currentPage, setCurrentPage] = useState<number>(0)
     const [showStats, setShowStats] = useState<boolean>(false)
     const [stats, setStats] = useState<{ users: number; clients: number; sessions: number; blogPosts: number } | null>(null)
-    const [sessionLinks, setSessionLinks] = useState<Record<string, { link: string; loading: boolean }>>({})
     const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'staff' | 'client'>('all')
     const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
     const pageSize = 10

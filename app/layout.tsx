@@ -136,6 +136,7 @@ export default function RootLayout({
         />
         <meta name="twitter:image" content={META_IMAGE_URL} />
         <link rel="canonical" href={SITE_URL} />
+        <link rel="manifest" href="/manifest.json" />
 
         <Script
           id="schema-org-organization"
@@ -206,6 +207,13 @@ export default function RootLayout({
         />
       </head>
       <body>
+        <a
+          href="#main-content"
+          className="sr-only focus:static focus:w-auto focus:h-auto focus:px-4 focus:py-2 focus:bg-[#701CC0] focus:text-white focus:rounded-md focus:font-medium focus:outline-none focus:ring-2 focus:ring-white focus:z-[9999] focus:absolute focus:top-4 focus:left-4"
+          aria-label="Skip to main content"
+        >
+          Skip to main content
+        </a>
         <RootLayoutClient
           geistSansVariable={geistSans.variable}
           geistMonoVariable={geistMono.variable}

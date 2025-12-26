@@ -127,6 +127,7 @@ export function StatsGrid() {
                 onClick={() =>
                   setContentIndex((prev) => (prev + 1) % card4Content.length)
                 }
+                aria-label="Next testimonial"
               >
                 <ArrowRight className="w-6 h-6 max-md:w-5 max-md:h-5 max-sm:w-4 max-sm:h-4 text-white" />
               </button>
