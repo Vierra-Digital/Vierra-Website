@@ -331,12 +331,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                 </div>
             </div>
 
-            {expireMessage && (
-                <div className={`px-4 py-2 rounded-lg text-sm ${expireMessage.includes("Failed") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
-                    {expireMessage}
-                </div>
-            )}
-
             {loading ? (
                 <div className="flex items-center justify-center py-12">
                     <div className="text-center">
