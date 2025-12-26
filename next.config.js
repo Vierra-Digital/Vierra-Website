@@ -1,5 +1,7 @@
 const nextConfig = {
   reactStrictMode: true,
+  compress: true,
+  poweredByHeader: false,
   async headers() {
     return [
       {

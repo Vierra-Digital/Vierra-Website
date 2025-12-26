@@ -137,6 +137,15 @@ export default function RootLayout({
         <meta name="twitter:image" content={META_IMAGE_URL} />
         <link rel="canonical" href={SITE_URL} />
         <link rel="manifest" href="/manifest.json" />
+        
+        {/* Preconnect to external origins for performance */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+        <link rel="preconnect" href="https://vierra-server.vercel.app" />
+        <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+        <link rel="dns-prefetch" href="https://www.youtube.com" />
+        <link rel="dns-prefetch" href="https://www.youtube-nocookie.com" />
 
         <Script
           id="schema-org-organization"
