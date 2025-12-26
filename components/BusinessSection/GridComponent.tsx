@@ -542,6 +542,7 @@ function GridComponent() {
     return (
       <motion.div
         key={cellKey}
+        role="gridcell"
         aria-label={`Grid cell ${cellKey}`}
         className={`w-full h-full flex flex-col items-center justify-center rounded-lg ${isActive ? "shadow-md" : ""}`}
         style={{
@@ -683,6 +684,7 @@ function GridComponent() {
       </svg>
 
       <div
+        role="grid"
         className="grid grid-cols-6 gap-x-2 gap-y-3 mx-auto"
         style={{ width: "fit-content" }}
       >
