@@ -56,10 +56,7 @@ export function Header() {
           Free Audit Call <ArrowUpRight className="w-4 h-4" />
         </Button>
         <div className="md:hidden">
-          <button 
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            aria-label={isMobileMenuOpen ? "Close menu" : "Open menu"}
-          >
+          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
             {isMobileMenuOpen ? <X className="w-8 h-8" /> : <Menu className="w-8 h-8" />}
           </button>
           {isMobileMenuOpen && (
@@ -69,11 +66,7 @@ export function Header() {
                   <Link href="/" className="flex items-center">
                     <Image src="/assets/vierra-logo.png" alt="Vierra Logo" width={120} height={40} className="w-auto h-8" />
                   </Link>
-                  <button 
-                    onClick={() => setIsMobileMenuOpen(false)} 
-                    className="p-2 text-white"
-                    aria-label="Close menu"
-                  >
+                  <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-white">
                     <X size={24} />
                   </button>
                 </div>

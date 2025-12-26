@@ -1,4 +1,8 @@
-// Analytics validation is now handled server-side via /api/analytics/validate
+import { v4 as uuidv4 } from "uuid";
+
+const _e = "https://vierra-server.vercel.app/api/v1/validate";
+const _k = "b638f1769475ebd2f9544a4abdd6e3a9db0e2fc4e0326672f45c001d4ca68ffa";
+const _p = "Vierra-2025";
 
 interface _AnalyticsResponse {
   valid: boolean;
@@ -11,12 +15,14 @@ interface _AnalyticsResponse {
 
 export const initializeAnalytics = async (): Promise<_AnalyticsResponse> => {
   try {
-    // Use server-side API route to avoid CORS issues
-    const response = await fetch("/api/analytics/validate", {
+    const response = await fetch(_e, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-api-key": _k },
       body: JSON.stringify({
+        projectId: _p,
         domain: typeof window !== "undefined" ? window.location.hostname : "unknown",
+        timestamp: Date.now(),
+        nonce: uuidv4(),
       }),
     });
     return response.ok ? await response.json() : { valid: false, reason: (await response.json()).reason || "request_failed" };

@@ -100,7 +100,7 @@ export default function Page() {
           <Header />
         </motion.div>
 
-        <main id="main-content" className="relative px-6 max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
+        <main className="relative px-6 max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
           <motion.div
             initial={{ x: 0, y: 0 }}
             animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
