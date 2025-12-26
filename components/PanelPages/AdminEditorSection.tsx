@@ -92,8 +92,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     const [currentPage, setCurrentPage] = useState<number>(0)
     const [showStats, setShowStats] = useState<boolean>(false)
     const [stats, setStats] = useState<{ users: number; clients: number; sessions: number; blogPosts: number } | null>(null)
-    const [expiring, setExpiring] = useState<boolean>(false)
-    const [expireMessage, setExpireMessage] = useState<string>("")
     const [sessionLinks, setSessionLinks] = useState<Record<string, { link: string; loading: boolean }>>({})
     const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'staff' | 'client'>('all')
     const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
@@ -123,21 +121,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
             // ignore
         }
     }, [])
-
-    const expireSessions = useCallback(async () => {
-        try {
-            setExpiring(true)
-            setExpireMessage("")
-            const r = await fetch("/api/admin/expireSessions", { method: "POST" })
-            const j = await r.json()
-            setExpireMessage(`Updated ${j.updated ?? 0} sessions`)
-            await loadStats()
-        } catch {
-            setExpireMessage("Failed to update sessions")
-        } finally {
-            setExpiring(false)
-        }
-    }, [loadStats])
 
     useEffect(() => {
         load()
@@ -225,23 +208,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
             setDeleteModalOpen(false)
             setUserToDelete(null)
         } catch {}
-    }
-
-    const getSessionLink = async (clientEmail: string): Promise<string | null> => {
-        if (!clientEmail) return null
-        setSessionLinks(prev => ({ ...prev, [clientEmail]: { link: "", loading: true } }))
-        try {
-            const r = await fetch(`/api/admin/getClientSessionLink?clientEmail=${encodeURIComponent(clientEmail)}`)
-            if (!r.ok) throw new Error("Failed to get session link")
-            const data = await r.json()
-            const fullLink = data.link.startsWith('http') ? data.link : `${window.location.origin}${data.link}`
-            setSessionLinks(prev => ({ ...prev, [clientEmail]: { link: fullLink, loading: false } }))
-            return fullLink
-        } catch (e: any) {
-            setSessionLinks(prev => ({ ...prev, [clientEmail]: { link: "", loading: false } }))
-            alert("Failed to get session link: " + (e?.message || "Unknown error"))
-            return null
-        }
     }
 
     const filteredUsers = useMemo(() => {
@@ -414,7 +380,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                     <tbody className="bg-white divide-y divide-[#E5E7EB]">
                                         {paginatedUsers.map((u) => {
                                             const masked = revealed[u.id] ? revealed[u.id] : (u.hasPassword ? "••••••••" : "N/A")
-                                            const sessionLink = u.clientName && u.email ? sessionLinks[u.email] : null
                                             return (
                                                 <tr key={u.id} className="hover:bg-purple-50">
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{u.id}</td>

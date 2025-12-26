@@ -11,8 +11,6 @@ const StaffActionsMenu: React.FC<{
 }> = ({ staffName, onEdit, onDelete }) => {
     const [isOpen, setIsOpen] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
-    const buttonRef = useRef<HTMLButtonElement>(null)
-    const dropdownRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {

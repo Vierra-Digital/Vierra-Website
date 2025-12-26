@@ -55,7 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // If no valid session exists, generate a new one
     const token = crypto.randomUUID();
-    const newSession = await prisma.onboardingSession.create({
+    await prisma.onboardingSession.create({
       data: {
         id: token,
         clientId: client.id,
