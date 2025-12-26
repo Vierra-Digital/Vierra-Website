@@ -136,6 +136,7 @@ export default function RootLayout({
         />
         <meta name="twitter:image" content={META_IMAGE_URL} />
         <link rel="canonical" href={SITE_URL} />
+        <link rel="manifest" href="/manifest.json" />
 
         <Script
           id="schema-org-organization"

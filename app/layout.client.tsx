@@ -37,6 +37,25 @@ export default function RootLayoutClient({
     return () => clearInterval(intervalId);
   }, []);
 
+  // Register service worker for PWA
+  useEffect(() => {
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .register("/sw.js", { scope: "/" })
+        .then((registration) => {
+          console.log("Service Worker registered:", registration.scope);
+          
+          // Check if service worker is controlling the page
+          if (navigator.serviceWorker.controller) {
+            console.log("Service Worker is controlling the page");
+          }
+        })
+        .catch((error) => {
+          console.error("Service Worker registration failed:", error);
+        });
+    }
+  }, []);
+
   // const organizationSchema = {
   //   "@context": "https://schema.org",
   //   "@type": "Organization",

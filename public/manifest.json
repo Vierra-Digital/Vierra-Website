@@ -1,0 +1,32 @@
+{
+  "name": "Vierra | Risk-Averse Guaranteed Leads For Your Business",
+  "short_name": "Vierra",
+  "description": "Scale your business effortlessly with guaranteed leads. Fill in your sales calendar and eliminate risky marketing investments.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#18042A",
+  "theme_color": "#8F42FF",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "marketing", "productivity"],
+  "screenshots": [],
+  "shortcuts": [],
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "enctype": "application/x-www-form-urlencoded",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
+}
+
