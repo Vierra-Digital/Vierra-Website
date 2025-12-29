@@ -135,7 +135,7 @@ function GridComponent() {
       targetTimer = setTimeout(() => {
         setActiveNodes([currentSet.source, ...currentSet.targets])
         // Assign icons to all target cells, ensuring no duplicates
-        currentSet.targets.forEach(assignIconToKey)
+          currentSet.targets.forEach(assignIconToKey)
         setAnimationPhase("showing")
       }, 500)
 
@@ -271,13 +271,13 @@ function GridComponent() {
                 whileHover={{ scale: 1.15, rotate: 5 }}
                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
               >
-                <Image
-                  src="/assets/Socials/Facebook.png"
-                  alt="Facebook"
-                  width={56}
-                  height={56}
-                  className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-                />
+              <Image
+                src="/assets/Socials/Facebook.png"
+                alt="Facebook"
+                width={56}
+                height={56}
+                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
+              />
               </motion.div>
             )}
           </div>
@@ -292,13 +292,13 @@ function GridComponent() {
                 whileHover={{ scale: 1.15, rotate: 5 }}
                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
               >
-                <Image
-                  src="/assets/Socials/GoogleAnalytics.png"
-                  alt="GoogleAnalytics"
-                  width={56}
-                  height={56}
-                  className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-                />
+              <Image
+                src="/assets/Socials/GoogleAnalytics.png"
+                alt="GoogleAnalytics"
+                width={56}
+                height={56}
+                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
+              />
               </motion.div>
             )}
           </div>
@@ -313,13 +313,13 @@ function GridComponent() {
                 whileHover={{ scale: 1.15, rotate: 5 }}
                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
               >
-                <Image
-                  src="/assets/Socials/Instagram.png"
-                  alt="Instagram"
-                  width={56}
-                  height={56}
-                  className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-                />
+              <Image
+                src="/assets/Socials/Instagram.png"
+                alt="Instagram"
+                width={56}
+                height={56}
+                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
+              />
               </motion.div>
             )}
           </div>
@@ -335,13 +335,13 @@ function GridComponent() {
                 whileHover={{ scale: 1.15, rotate: 5 }}
                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
               >
-                <Image
-                  src="/assets/Socials/SEO.png"
-                  alt="SEO"
-                  width={56}
-                  height={56}
-                  className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-                />
+              <Image
+                src="/assets/Socials/SEO.png"
+                alt="SEO"
+                width={56}
+                height={56}
+                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
+              />
               </motion.div>
             )}
           </div>
@@ -354,7 +354,7 @@ function GridComponent() {
                 whileHover={{ scale: 1.15, rotate: 5 }}
                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
               >
-                <Image src="/assets/Socials/TikTok.png" alt="TikTok" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              <Image src="/assets/Socials/TikTok.png" alt="TikTok" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
               </motion.div>
             )}
           </div>
@@ -367,7 +367,7 @@ function GridComponent() {
                 whileHover={{ scale: 1.15, rotate: 5 }}
                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
               >
-                <Image src="/assets/Socials/Twitter.png" alt="Twitter" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              <Image src="/assets/Socials/Twitter.png" alt="Twitter" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
               </motion.div>
             )}
           </div>
@@ -380,7 +380,7 @@ function GridComponent() {
                 whileHover={{ scale: 1.15, rotate: 5 }}
                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
               >
-                <Image src="/assets/Socials/YouTube.png" alt="YouTube" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              <Image src="/assets/Socials/YouTube.png" alt="YouTube" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
               </motion.div>
             )}
           </div>
@@ -393,7 +393,7 @@ function GridComponent() {
                 whileHover={{ scale: 1.15, rotate: 5 }}
                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
               >
-                <Image src="/assets/Socials/SnapChat.png" alt="SnapChat" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              <Image src="/assets/Socials/SnapChat.png" alt="SnapChat" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
               </motion.div>
             )}
           </div>
@@ -406,7 +406,7 @@ function GridComponent() {
                 whileHover={{ scale: 1.15, rotate: 5 }}
                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
               >
-                <Image src="/assets/Socials/Discord.png" alt="Discord" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              <Image src="/assets/Socials/Discord.png" alt="Discord" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
               </motion.div>
             )}
           </div>
@@ -419,7 +419,7 @@ function GridComponent() {
                 whileHover={{ scale: 1.15, rotate: 5 }}
                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
               >
-                <Image src="/assets/Socials/GoogleBusiness.png" alt="Google Business" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
+              <Image src="/assets/Socials/GoogleBusiness.png" alt="Google Business" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
               </motion.div>
             )}
           </div>
@@ -436,13 +436,13 @@ function GridComponent() {
                 whileHover={{ scale: 1.15, rotate: 5 }}
                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
               >
-                <Image
-                  src="/assets/Socials/LinkedIn.png"
-                  alt="LinkedIn"
-                  width={56}
-                  height={56}
-                  className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-                />
+              <Image
+                src="/assets/Socials/LinkedIn.png"
+                alt="LinkedIn"
+                width={56}
+                height={56}
+                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
+              />
               </motion.div>
             )}
           </div>
@@ -459,13 +459,13 @@ function GridComponent() {
                 whileHover={{ scale: 1.15, rotate: 5 }}
                 transition={{ type: "spring", stiffness: 300, damping: 20 }}
               >
-                <Image
-                  src="/assets/Socials/Email.png"
-                  alt="Email"
-                  width={56}
-                  height={56}
-                  className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-                />
+              <Image
+                src="/assets/Socials/Email.png"
+                alt="Email"
+                width={56}
+                height={56}
+                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
+              />
               </motion.div>
             )}
           </div>
