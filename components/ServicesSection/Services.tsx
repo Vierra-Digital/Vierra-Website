@@ -195,7 +195,7 @@ const Model = React.memo(function Model({
                       !imageSrc.startsWith("blob:") &&
                       material.map.image.complete &&
                       !material.map.image.error
-                  } catch (e) {
+                  } catch {
                     hasValidTexture = false
                   }
                 }
@@ -205,7 +205,7 @@ const Model = React.memo(function Model({
                   if (material.map) {
                     try {
                       material.map.dispose()
-                    } catch (e) {
+                    } catch {
                       // Ignore disposal errors
                     }
                   }

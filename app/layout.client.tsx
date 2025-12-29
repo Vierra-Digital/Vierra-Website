@@ -35,7 +35,7 @@ if (typeof window !== "undefined") {
     // For all other errors, call the original
     try {
       originalError.apply(console, args)
-    } catch (e) {
+    } catch {
       // Fallback if apply fails
       originalError(...args)
     }
@@ -50,14 +50,14 @@ if (typeof window !== "undefined") {
       configurable: true,
       enumerable: false,
     })
-  } catch (e) {
+  } catch {
     try {
       // Method 2: Direct assignment
       console.error = errorInterceptor
-    } catch (e2) {
-      // Method 3: Use Proxy as last resort
+    } catch {
+      // Method 3: Use Proxy as last resort (not used but attempted)
       try {
-        const consoleProxy = new Proxy(console, {
+        new Proxy(console, {
           get(target, prop) {
             if (prop === "error") {
               return errorInterceptor
@@ -66,7 +66,7 @@ if (typeof window !== "undefined") {
           }
         })
         // Note: This won't work if console is frozen, but worth trying
-      } catch (e3) {
+      } catch {
         // If all methods fail, at least we tried
       }
     }
