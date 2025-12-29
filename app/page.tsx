@@ -163,11 +163,25 @@ export default function Page() {
                 hidden: { opacity: 0, y: 20 },
                 visible: { opacity: 1, y: 0 },
               }}
-              className={`text-[#9BAFC3] text-lg mb-10 ${inter.className}`}
+              className={`text-[#9BAFC3] text-lg mb-6 ${inter.className}`}
             >
               Scale your business effortlessly. Fill in your sales calendar and
               eliminate risky marketing investments.
             </motion.p>
+
+            {/* Hidden from view but visible to crawlers in raw HTML */}
+            <div className="sr-only">
+              <h2>About Vierra</h2>
+              <p>
+                Vierra is a digital marketing and lead generation platform that helps businesses 
+                increase ROI, leads, and conversions through guaranteed lead generation services. 
+                Our application provides case-study-proven, results-based marketing solutions to 
+                help businesses scale efficiently, optimize ad spending, and fill their sales 
+                calendars with qualified leads. We work closely with each client to deliver 
+                professional digital marketing services that eliminate risky marketing investments 
+                and maximize return on advertising spend.
+              </p>
+            </div>
 
             <motion.div
               variants={{
