@@ -51,13 +51,13 @@ const Footer = () => {
             <h3 className={`text-lg font-medium mb-4 md:mb-6 ${figtree.className}`}>Legal</h3>
             <ul className={`space-y-3 md:space-y-4 text-white/80 ${inter.className}`}>
               <li>
-                <a href="/terms-of-service" className="hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">Terms of Service</a>
+                <a href="https://vierradev.com/terms-of-service" className="hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">Terms of Service</a>
               </li>
               <li>
-                <a href="/privacy-policy" className="hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+                <a href="https://vierradev.com/privacy-policy" className="hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
               </li>
               <li>
-                <a href="/work-policy" className="hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">Work Policy</a>
+                <a href="https://vierradev.com/work-policy" className="hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">Work Policy</a>
               </li>
             </ul>
           </div>
@@ -71,7 +71,8 @@ const Footer = () => {
           ))}
         </div>
       </div>
-      <div className="flex justify-center md:justify-end mt-14 px-5 md:px-20">
+      <div className="flex flex-col md:flex-row justify-center md:justify-end items-center gap-4 mt-14 px-5 md:px-20">
+        <a href="https://vierradev.com/privacy-policy" className={`text-[#FFFFFFCC] text-sm hover:text-white transition-colors ${inter.className}`}>Privacy Policy</a>
         <p className={`text-[#FFFFFFCC] text-sm ${inter.className}`}>© 2025 Vierra Digital Inc, All rights reserved</p>
       </div>
     </footer>

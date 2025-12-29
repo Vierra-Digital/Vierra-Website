@@ -138,6 +138,30 @@ export default function RootLayout({
         <link rel="canonical" href={SITE_URL} />
         <link rel="manifest" href="/manifest.json" />
         
+        {/* Suppress GLTFLoader blob URL texture errors - must run before Next.js devtools */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                if (typeof window !== 'undefined' && window.console) {
+                  const originalError = console.error.bind(console);
+                  console.error = function(...args) {
+                    const errorText = args.map(arg => String(arg || '')).join(' ');
+                    if (
+                      errorText.includes('GLTFLoader') &&
+                      errorText.includes("Couldn't load texture") &&
+                      (errorText.includes('blob:') || errorText.includes('blob:http'))
+                    ) {
+                      return; // Suppress blob URL texture errors
+                    }
+                    originalError.apply(console, args);
+                  };
+                }
+              })();
+            `,
+          }}
+        />
+        
         {/* Preconnect to external origins for performance */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

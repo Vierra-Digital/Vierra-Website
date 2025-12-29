@@ -70,14 +70,12 @@ const descriptionVariants = {
 
 const Lighting = () => (
   <>
-    <ambientLight intensity={1.5} />
-    <directionalLight position={[2, 2, 2]} intensity={6} />
-    <directionalLight position={[-10, -6, -2]} intensity={6} />
-    <directionalLight position={[0, -5, 0]} intensity={6} />
-    <directionalLight position={[5, 5, 5]} intensity={6} />
-    <directionalLight position={[-5, 5, 5]} intensity={6} />
-    <directionalLight position={[5, -5, 5]} intensity={6} />
-    <directionalLight position={[-5, -5, 5]} intensity={6} />
+    <ambientLight intensity={2.5} />
+    <directionalLight position={[5, 8, 5]} intensity={4} color="#ffffff" />
+    <directionalLight position={[-5, 8, -5]} intensity={3} color="#B0E0E6" />
+    <directionalLight position={[0, -8, 0]} intensity={2} color="#5B9BD5" />
+    <pointLight position={[10, 10, 10]} intensity={2} color="#87CEEB" />
+    <pointLight position={[-10, -10, -10]} intensity={1.5} color="#4169E1" />
   </>
 )
 
@@ -134,6 +132,126 @@ const Model = React.memo(function Model({
       return () => clearTimeout(timeout)
     }
   }, [selectedId])
+
+  // Fix materials and handle texture errors
+  useEffect(() => {
+    if (!gltf.scene) return
+
+    // Create uniform Vierra purple texture
+    const createGradientTexture = () => {
+      const size = 512
+      const canvas = document.createElement("canvas")
+      canvas.width = size
+      canvas.height = size
+      const context = canvas.getContext("2d")
+      
+      if (!context) return null
+      
+      // Solid Vierra purple color
+      context.fillStyle = "#701CC0" // Vierra purple
+      context.fillRect(0, 0, size, size)
+      
+      const texture = new THREE.CanvasTexture(canvas)
+      texture.wrapS = THREE.RepeatWrapping
+      texture.wrapT = THREE.RepeatWrapping
+      texture.minFilter = THREE.LinearFilter
+      texture.magFilter = THREE.LinearFilter
+      texture.needsUpdate = true
+      return texture
+    }
+
+    // Traverse the scene and fix materials
+    const fixMaterials = () => {
+      const gradientTexture = createGradientTexture()
+      
+      gltf.scene.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          // Ensure smooth geometry on ALL sides
+          if (child.geometry) {
+            // Force smooth normals for all faces
+            child.geometry.computeVertexNormals()
+            child.geometry.normalizeNormals()
+            
+            // Ensure all faces use smooth shading
+            if (child.geometry.attributes.normal) {
+              child.geometry.attributes.normal.needsUpdate = true
+            }
+          }
+          
+          if (child.material) {
+            // If material is an array, process each material
+            const materials = Array.isArray(child.material)
+              ? child.material
+              : [child.material]
+
+            materials.forEach((material) => {
+              if (material instanceof THREE.MeshStandardMaterial) {
+                // Check if texture is a blob URL or failed to load
+                let hasValidTexture = false
+                if (material.map) {
+                  try {
+                    const imageSrc = material.map.image?.src || ""
+                    hasValidTexture = imageSrc && 
+                      !imageSrc.startsWith("blob:") &&
+                      material.map.image.complete &&
+                      !material.map.image.error
+                  } catch (e) {
+                    hasValidTexture = false
+                  }
+                }
+
+                if (!hasValidTexture && gradientTexture) {
+                  // Remove invalid texture
+                  if (material.map) {
+                    try {
+                      material.map.dispose()
+                    } catch (e) {
+                      // Ignore disposal errors
+                    }
+                  }
+                  
+                  // Apply uniform Vierra purple texture
+                  material.map = gradientTexture
+                  material.color = new THREE.Color(0x701CC0) // Vierra purple
+                  
+                  // Smooth, glossy appearance - uniform Vierra purple
+                  material.emissive = new THREE.Color(0x701CC0) // Vierra purple glow
+                  material.emissiveIntensity = 0.05
+                  material.metalness = 0.15
+                  material.roughness = 0.1 // Very smooth, highly reflective surface
+                  material.side = THREE.DoubleSide // Render both sides for smooth appearance
+                  material.flatShading = false // Always use smooth shading
+                  
+                  // Ensure texture is properly applied
+                  material.map.needsUpdate = true
+                } else if (hasValidTexture) {
+                  // Enhance existing textures with smooth properties
+                  material.metalness = 0.1
+                  material.roughness = 0.25
+                  material.flatShading = false
+                  material.side = THREE.DoubleSide
+                }
+                
+                // Always ensure smooth shading
+                material.flatShading = false
+                material.needsUpdate = true
+              }
+            })
+          }
+        }
+      })
+    }
+
+    // Fix materials immediately and after a short delay to catch async texture loads
+    fixMaterials()
+    const timeout = setTimeout(fixMaterials, 100)
+    const timeout2 = setTimeout(fixMaterials, 500)
+
+    return () => {
+      clearTimeout(timeout)
+      clearTimeout(timeout2)
+    }
+  }, [gltf.scene])
 
   useFrame((state, delta) => {
     if (!gltf.scene) return
