@@ -1,0 +1,80 @@
+# LLMS.txt - Structured Information for AI Crawlers
+# This file provides metadata about vierradev.com for Large Language Models and AI systems
+
+# Basic Information
+Site-Name: Vierra
+Site-Description: Risk-Averse Guaranteed Leads For Your Business. A digital marketing and lead generation platform that helps businesses increase ROI, leads, and conversions through guaranteed lead generation services.
+Site-URL: https://vierradev.com
+Language: en-US
+Region: US
+
+# Business Information
+Organization: Vierra Digital LLC
+Legal-Name: Vierra Digital LLC
+Business-Type: Digital Marketing Agency, Lead Generation Service
+Location: Cambridge, MA 02138, United States
+Founded: 2024
+
+# Contact Information
+Contact-Email: business@vierradev.com
+Contact-Phone: +1-339-333-0929
+Sales-Email: business@vierradev.com
+Support-Email: business@vierradev.com
+
+# Sitemap and Discovery
+Sitemap: https://vierradev.com/sitemap.xml
+Robots-TXT: https://vierradev.com/robots.txt
+
+# Purpose and Services
+Purpose: Vierra is a digital marketing and lead generation platform that provides businesses with guaranteed leads, risk-averse marketing solutions, and professional digital marketing services. We help businesses scale efficiently, optimize ad spending, and fill their sales calendars with qualified leads.
+
+Services:
+- Guaranteed lead generation
+- Digital marketing services
+- Risk-averse marketing solutions
+- B2B lead generation
+- Marketing automation
+- Sales pipeline optimization
+- Case-study-proven results-based services
+- Ad campaign optimization
+- Business scaling solutions
+
+# Key Pages
+Homepage: https://vierradev.com
+Blog: https://vierradev.com/blog
+Privacy-Policy: https://vierradev.com/privacy-policy
+Terms-Of-Service: https://vierradev.com/terms-of-service
+Work-Policy: https://vierradev.com/work-policy
+
+# Content Types
+Content-Types:
+- Blog posts (digital marketing, lead generation, business growth)
+- Case studies
+- Service information
+- Testimonials
+- Team information
+
+# Social Media
+LinkedIn: https://www.linkedin.com/company/vierra/
+Instagram: https://www.instagram.com/vierra.dev
+Facebook: https://www.facebook.com/share/1GXE6s4NSX/
+
+# Technical Information
+Platform: Next.js
+Framework: React
+API-Base: https://vierradev.com/api
+
+# Crawling Guidelines
+Crawl-Frequency: Respectful crawling requested (see robots.txt)
+Exclude-Paths: /api/, /panel, /admin, /login, /connect, /client, /manage-users, /session/, /sign/, /onboarding
+Include-Paths: /, /blog, /blog/*, /privacy-policy, /terms-of-service, /work-policy
+
+# Content Guidelines
+Content-Language: English
+Content-Region: United States
+Content-Focus: Business-to-Business (B2B) digital marketing, lead generation, guaranteed leads, marketing automation, business growth
+
+# Last Updated
+Last-Modified: 2025-01-15
+Version: 1.0
+
