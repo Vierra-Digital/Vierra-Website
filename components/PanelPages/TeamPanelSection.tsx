@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { FiSearch, FiFilter, FiPlus, FiEdit3, FiTrash2 } from "react-icons/fi";
+import { FiSearch, FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck } from "react-icons/fi";
+import { MoreVertical } from "lucide-react";
 import Image from "next/image";
 import ProfileImage from "../ProfileImage";
+import { Inter } from "next/font/google";
+
+const inter = Inter({ subsets: ["latin"] });
 
 const StaffActionsMenu: React.FC<{
     staffId: number
@@ -10,12 +14,16 @@ const StaffActionsMenu: React.FC<{
     onDelete: () => void
 }> = ({ staffName, onEdit, onDelete }) => {
     const [isOpen, setIsOpen] = useState(false)
+    const [position, setPosition] = useState<{ top: number; right: number } | null>(null)
+    const buttonRef = useRef<HTMLButtonElement>(null)
     const menuRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node) && 
+                buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
                 setIsOpen(false)
+                setPosition(null)
             }
         }
 
@@ -25,20 +33,48 @@ const StaffActionsMenu: React.FC<{
         }
     }, [isOpen])
 
+    useEffect(() => {
+        if (isOpen && buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect()
+            const dropdownHeight = 150 // Approximate height
+            const viewportHeight = window.innerHeight
+            const viewportMiddle = viewportHeight / 2
+            
+            // Show below if in first half of page, above if in bottom half
+            const showAbove = rect.top > viewportMiddle
+            
+            setPosition({
+                top: showAbove ? rect.top - dropdownHeight - 2 : rect.bottom + 2,
+                right: window.innerWidth - rect.right,
+            })
+        } else {
+            setPosition(null)
+        }
+    }, [isOpen])
+
     return (
-        <div className="relative" ref={menuRef}>
+        <div className="relative">
             <button
+                ref={buttonRef}
                 onClick={() => setIsOpen(!isOpen)}
                 aria-label={`Manage ${staffName}`}
-                className="px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
             >
-                ⋯
+                <MoreVertical className="w-4 h-4 text-[#6B7280]" />
             </button>
-            {isOpen && (
-                <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-[#E5E7EB] py-1 z-[100]">
+            {isOpen && position && (
+                <div 
+                    ref={menuRef}
+                    className="fixed w-48 bg-white rounded-lg shadow-xl border border-[#E5E7EB] py-1 z-[100]"
+                    style={{
+                        top: `${position.top}px`,
+                        right: `${position.right}px`
+                    }}
+                >
                     <button
                         onClick={() => {
                             setIsOpen(false)
+                            setPosition(null)
                             onEdit()
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-blue-600"
@@ -49,6 +85,7 @@ const StaffActionsMenu: React.FC<{
                     <button
                         onClick={() => {
                             setIsOpen(false)
+                            setPosition(null)
                             onDelete()
                         }}
                         className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
@@ -729,6 +766,7 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
     })
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState("")
+    const [showSuccess, setShowSuccess] = useState(false)
 
     const steps = [
         { number: 1, title: "Basic Information", fields: ["name", "email"] },
@@ -768,12 +806,59 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
                 const errorData = await response.json()
                 throw new Error(errorData.message || "Failed to create staff member")
             }
-            onCreated()
+            setShowSuccess(true)
         } catch (e: any) {
             setError(e?.message || "Failed to create staff member")
         } finally {
             setSubmitting(false)
         }
+    }
+
+    if (showSuccess) {
+        return (
+            <div 
+                className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4" 
+                role="dialog" 
+                aria-modal="true"
+                onClick={(e) => {
+                    if (e.target === e.currentTarget) {
+                        setShowSuccess(false)
+                        onCreated()
+                        onClose()
+                    }
+                }}
+            >
+                <div 
+                    className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" 
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex flex-col items-center text-center">
+                        <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
+                            <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
+                                    <FiCheck className="h-6 w-6" />
+                                </span>
+                            </span>
+                        </div>
+                        <h3 className="text-xl font-semibold text-[#111827] mb-2">Staff Member Added Successfully!</h3>
+                        <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
+                            The staff member has been added successfully and can now access the system.
+                        </p>
+                        <button
+                            className="w-full rounded-lg px-4 py-2 bg-[#701CC0] text-white hover:bg-[#5f17a5] text-sm font-medium transition-colors"
+                            onClick={() => {
+                                setShowSuccess(false)
+                                onCreated()
+                                onClose()
+                            }}
+                        >
+                            Done
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
     }
 
     const isStepValid = () => {
