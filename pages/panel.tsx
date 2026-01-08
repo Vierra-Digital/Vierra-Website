@@ -6,7 +6,6 @@ import ProfileImage from "@/components/ProfileImage"
 import SignPdfModal from "@/components/ui/SignPdfModal"
 import Link from "next/link"
 import { FiLogOut, FiShield } from "react-icons/fi"
-import { IoIosNotificationsOutline } from "react-icons/io";
 import { AiOutlineAppstore } from "react-icons/ai";
 import { PiUsersThree, PiCalculator } from "react-icons/pi";
 import { BsPeople } from "react-icons/bs";
@@ -18,7 +17,6 @@ import { HiGlobeAlt } from "react-icons/hi2";
 import { useSession, signOut } from "next-auth/react"
 import UserSettingsPage from "@/components/UserSettingsPage"
 import AddClientModal from "@/components/ui/AddClientModal"
-import type { SessionItem } from "@/types/session"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/pages/api/auth/[...nextauth]"
 import type { GetServerSideProps } from "next"
@@ -46,7 +44,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
   const { data: session } = useSession()
   const [isAddClientOpen, setIsAddClientOpen] = useState(false)
   const [clientRefreshTrigger, setClientRefreshTrigger] = useState(0)
-  const [items, setItems] = useState<SessionItem[]>([])
   const [error, setError] = useState<string | null>(null)
   const [currentUserName, setCurrentUserName] = useState<string | null>(null)
   const [currentUserImage, setCurrentUserImage] = useState<string | null>(null)
@@ -55,7 +52,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
   void dashboardHref
 
   useEffect(() => {
-    fetchSessions()
     fetchCurrentUser()
   }, [])
 
@@ -108,16 +104,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
     }
   }
 
-  async function fetchSessions() {
-    try {
-      const r = await fetch("/api/session/listClientSessions")
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      const data: SessionItem[] = await r.json()
-      setItems(data)
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to load sessions")
-    }
-  }
 
   return (
     <>
@@ -264,10 +250,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               </div>
             </div>
             <div id="right-side-info-holder" className="flex w-1/2 h-full items-center justify-end p-2 gap-x-4 md:gap-x-8 text-[#A6A9AC]">
-              <div className="relative">
-                <IoIosNotificationsOutline height={10} width={10} className="w-8 h-8" />
-                <span className="absolute -top-1 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{items.length}</span>
-              </div>
               <div id="user-holder" className="flex items-center w-auto h-auto">
                 <button
                   className="flex items-center gap-x-2"
@@ -338,10 +320,8 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
           isOpen={isAddClientOpen}
           onClose={() => {
             setIsAddClientOpen(false)
-            fetchSessions()
           }}
-          onCreated={(row) => {
-            setItems((prev) => [row, ...prev])
+          onCreated={() => {
             setClientRefreshTrigger(prev => prev + 1)
           }}
         />
