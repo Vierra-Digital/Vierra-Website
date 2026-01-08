@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useRef } from "react"
 import Image from "next/image"
 import ProfileImage from "../ProfileImage"
 import { FiPlus, FiSearch, FiFilter, FiTrash2, FiCheckCircle, FiXCircle } from 'react-icons/fi'
+import { MoreVertical } from "lucide-react"
 
 type ClientRow = {
     id: string
@@ -94,14 +95,18 @@ const ClientActionsMenu: React.FC<{
     hasImage: boolean
     onDelete: () => void
     onToggleStatus: (isActive: boolean) => void
-}> = ({ clientName, isActive, onDelete, onToggleStatus }) => {
+}> = ({ clientId, clientName, isActive, onDelete, onToggleStatus }) => {
     const [isOpen, setIsOpen] = useState(false)
+    const [position, setPosition] = useState<{ top: number; right: number } | null>(null)
+    const buttonRef = useRef<HTMLButtonElement>(null)
     const menuRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node) && 
+                buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
                 setIsOpen(false)
+                setPosition(null)
             }
         }
 
@@ -111,20 +116,48 @@ const ClientActionsMenu: React.FC<{
         }
     }, [isOpen])
 
+    useEffect(() => {
+        if (isOpen && buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect()
+            const dropdownHeight = 150 // Approximate height
+            const viewportHeight = window.innerHeight
+            const viewportMiddle = viewportHeight / 2
+            
+            // Show below if in first half of page, above if in bottom half
+            const showAbove = rect.top > viewportMiddle
+            
+            setPosition({
+                top: showAbove ? rect.top - dropdownHeight - 2 : rect.bottom + 2,
+                right: window.innerWidth - rect.right,
+            })
+        } else {
+            setPosition(null)
+        }
+    }, [isOpen])
+
     return (
-        <div className="relative" ref={menuRef}>
+        <div className="relative">
             <button
+                ref={buttonRef}
                 onClick={() => setIsOpen(!isOpen)}
                 aria-label={`Manage ${clientName}`}
-                className="px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
             >
-                ⋯
+                <MoreVertical className="w-4 h-4 text-[#6B7280]" />
             </button>
-            {isOpen && (
-                <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-lg shadow-lg border border-[#E5E7EB] py-1 z-50">
+            {isOpen && position && (
+                <div 
+                    ref={menuRef}
+                    className="fixed w-48 bg-white rounded-lg shadow-xl border border-[#E5E7EB] py-1 z-[100]"
+                    style={{
+                        top: `${position.top}px`,
+                        right: `${position.right}px`
+                    }}
+                >
                     <button
                         onClick={() => {
                             setIsOpen(false)
+                            setPosition(null)
                             onToggleStatus(!isActive)
                         }}
                         className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
@@ -146,6 +179,7 @@ const ClientActionsMenu: React.FC<{
                     <button
                         onClick={() => {
                             setIsOpen(false)
+                            setPosition(null)
                             onDelete()
                         }}
                         className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
