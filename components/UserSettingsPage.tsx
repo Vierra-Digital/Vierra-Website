@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { signOut } from "next-auth/react";
 import ProfileImage from "./ProfileImage";
-import { FiEdit3, FiUpload, FiRotateCcw, FiLock, FiLogOut, FiUser, FiMail, FiShield, FiSettings } from "react-icons/fi";
+import { FiEdit3, FiUpload, FiRotateCcw, FiLock, FiLogOut, FiUser, FiMail, FiShield, FiSettings, FiCheck } from "react-icons/fi";
+import { X } from "lucide-react";
 
 interface UserSettingsPageProps {
   user: {
@@ -29,11 +30,14 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
     newPassword: "",
     confirmPassword: ""
   });
+  const [passwordFieldErrors, setPasswordFieldErrors] = useState<Record<string, string>>({});
+  const [isPasswordChangeSuccess, setIsPasswordChangeSuccess] = useState(false);
 
   const avatarMenuRef = useRef<HTMLDivElement>(null);
   const displayName = name && name.trim().length > 0 ? name : (user.email ? user.email.split("@")[0] : "User");
@@ -126,7 +130,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         console.error("Failed to fetch updated user data:", fetchError);
       }
       
-      setUpdateMessage({ type: "success", text: "Name updated successfully!" });
+      setShowSuccessModal(true);
+      setUpdateMessage(null);
       setIsEditingName(false);
     } catch {
       setUpdateMessage({ type: "error", text: "Failed to update name. Please try again." });
@@ -154,7 +159,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
 
       const result = await response.json();
       setSettings(result);
-      setUpdateMessage({ type: "success", text: "Settings updated successfully!" });
+      setShowSuccessModal(true);
+      setUpdateMessage(null);
     } catch (error) {
       console.error("Failed to update settings:", error);
       setUpdateMessage({ type: "error", text: "Failed to update settings. Please try again." });
@@ -201,7 +207,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             console.error("Failed to fetch updated user data:", fetchError);
           }
           
-          setUpdateMessage({ type: "success", text: "Image updated successfully!" });
+          setShowSuccessModal(true);
+          setUpdateMessage(null);
         } catch (error) {
           console.error("Error uploading image:", error);
           setUpdateMessage({ 
@@ -255,7 +262,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         console.error("Failed to fetch updated user data:", fetchError);
       }
       
-      setUpdateMessage({ type: "success", text: "Image reset to default successfully!" });
+      setShowSuccessModal(true);
+      setUpdateMessage(null);
       setShowAvatarMenu(false);
     } catch (error) {
       console.error("Error resetting image:", error);
@@ -269,18 +277,31 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   };
 
   const handlePasswordChange = async () => {
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setUpdateMessage({ type: "error", text: "New passwords do not match" });
-      return;
+    const errors: Record<string, string> = {};
+
+    if (!passwordData.currentPassword.trim()) {
+      errors.currentPassword = "Current password is required.";
     }
 
-    if (passwordData.newPassword.length < 6) {
-      setUpdateMessage({ type: "error", text: "Password must be at least 6 characters long" });
+    if (!passwordData.newPassword.trim()) {
+      errors.newPassword = "New password is required.";
+    } else if (passwordData.newPassword.length < 6) {
+      errors.newPassword = "Password must be at least 6 characters long.";
+    }
+
+    if (!passwordData.confirmPassword.trim()) {
+      errors.confirmPassword = "Please confirm your new password.";
+    } else if (passwordData.newPassword !== passwordData.confirmPassword) {
+      errors.confirmPassword = "New passwords do not match.";
+    }
+
+    setPasswordFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
       return;
     }
 
     setIsUpdating(true);
-    setUpdateMessage(null);
+    setPasswordFieldErrors({});
     
     try {
       const response = await fetch("/api/profile/changePassword", {
@@ -299,35 +320,30 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         
         // Handle specific error cases
         if (response.status === 400 && errorData.message === "Current password is incorrect") {
-          setUpdateMessage({ 
-            type: "error", 
-            text: "The current password you entered is incorrect. Please try again." 
-          });
+          setPasswordFieldErrors({ currentPassword: "The current password you entered is incorrect. Please try again." });
           return;
         }
         
         if (response.status === 400 && errorData.message === "New password must be at least 6 characters long") {
-          setUpdateMessage({ 
-            type: "error", 
-            text: "The new password must be at least 6 characters long." 
-          });
+          setPasswordFieldErrors({ newPassword: "The new password must be at least 6 characters long." });
           return;
         }
         
         if (response.status === 400 && errorData.message === "User does not have a password set") {
-          setUpdateMessage({ 
-            type: "error", 
-            text: "No password is currently set for this account. Please contact an administrator." 
-          });
+          setPasswordFieldErrors({ currentPassword: "No password is currently set for this account. Please contact an administrator." });
           return;
         }
         
         throw new Error(errorData.message || "Failed to change password");
       }
 
-      setUpdateMessage({ type: "success", text: "Password changed successfully! You will be logged out." });
+      // Show success message before logout
+      setShowSuccessModal(true);
+      setIsPasswordChangeSuccess(true);
       setShowPasswordModal(false);
       setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+      setPasswordFieldErrors({});
+      setShowSuccessModal(true);
       
       // Logout after successful password change
       setTimeout(() => {
@@ -335,20 +351,29 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       }, 2000);
     } catch (error) {
       console.error("Error changing password:", error);
-      setUpdateMessage({ 
-        type: "error", 
-        text: error instanceof Error ? error.message : "Failed to change password" 
+      setPasswordFieldErrors({ 
+        general: error instanceof Error ? (error.message.endsWith('.') ? error.message : error.message + '.') : "Failed to change password." 
       });
     } finally {
       setIsUpdating(false);
     }
   };
 
+  const handlePasswordFieldChange = (field: string, value: string) => {
+    setPasswordFieldErrors((prev) => {
+      const newErrors = { ...prev };
+      delete newErrors[field];
+      delete newErrors.general;
+      return newErrors;
+    });
+    setPasswordData(prev => ({ ...prev, [field]: value }));
+  };
+
   return (
-    <div className="w-full h-full bg-white text-[#111014] flex flex-col pb-8">
+    <div className="w-full h-full bg-white text-[#111014] flex flex-col">
       {/* Content Container - Centered */}
       <div className="flex-1 flex justify-center px-6 pt-2">
-        <div className="w-full max-w-6xl">
+        <div className="w-full max-w-6xl pb-6">
           {/* Header */}
           <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">
             Account Settings
@@ -410,7 +435,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                     }`}
                   >
                     <FiRotateCcw className="w-4 h-4" />
-                    {isUpdating ? "Resetting..." : "Reset to Default"}
+                    {isUpdating ? "Resetting..." : "Reset To Default"}
                   </button>
                 )}
               </div>
@@ -478,12 +503,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               </div>
             </div>
 
-            {updateMessage && (
-              <div className={`text-sm p-3 rounded-lg ${
-                updateMessage.type === "success" 
-                  ? "bg-green-50 text-green-700 border border-green-200" 
-                  : "bg-red-50 text-red-700 border border-red-200"
-              }`}>
+            {updateMessage && updateMessage.type === "error" && (
+              <div className="text-sm p-3 rounded-lg bg-red-50 text-red-700 border border-red-200">
                 {updateMessage.text}
               </div>
             )}
@@ -618,67 +639,170 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                   </div>
                 </div>
 
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div 
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4" 
+          role="dialog" 
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowSuccessModal(false);
+            }
+          }}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center text-center">
+              <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
+                <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
+                    <FiCheck className="h-6 w-6" />
+                  </span>
+                </span>
+              </div>
+              <h3 className="text-xl font-semibold text-[#111827] mb-2">
+                {isPasswordChangeSuccess ? "Password Changed Successfully!" : "Settings Updated Successfully!"}
+              </h3>
+              <p className="text-sm text-[#6B7280] mb-6">
+                {isPasswordChangeSuccess 
+                  ? "Your password has been changed successfully. You will be logged out shortly."
+                  : "Your changes have been saved successfully."
+                }
+              </p>
+              <button
+                className="w-full rounded-lg px-4 py-2 bg-[#701CC0] text-white hover:bg-[#5f17a5] text-sm font-medium transition-colors"
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setIsPasswordChangeSuccess(false);
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Password Change Modal */}
       {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowPasswordModal(false)}>
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-full bg-[#701CC0]/10 flex items-center justify-center">
-                <FiLock className="w-6 h-6 text-[#701CC0]" />
-              </div>
-              <h3 className="text-xl font-semibold text-[#111827]">Change Password</h3>
-            </div>
-            
-            <div className="space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => {
+          setShowPasswordModal(false);
+          setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+          setPasswordFieldErrors({});
+        }}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md border border-[#E5E7EB]" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-5 border-b border-[#E5E7EB]">
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-2">Current Password</label>
+                <h2 className="text-xl font-semibold text-[#111827]">Change Password</h2>
+                <p className="text-sm text-[#6B7280] mt-1">Update your account password.</p>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+                  setPasswordFieldErrors({});
+                }}
+                className="text-red-400 hover:text-red-600 transition-colors duration-200 p-1 rounded-md hover:bg-red-50"
+                aria-label="Close modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Form */}
+            <div className="p-6 space-y-5">
+              {passwordFieldErrors.general && (
+                <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-start gap-2">
+                  <p className="text-sm text-red-700">{passwordFieldErrors.general}</p>
+                </div>
+              )}
+
+              <div>
+                <label htmlFor="current-password" className="block text-sm font-medium text-[#374151] mb-1.5">
+                  Current Password
+                </label>
                 <input
+                  id="current-password"
                   type="password"
                   value={passwordData.currentPassword}
-                  onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
-                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
+                  onChange={(e) => handlePasswordFieldChange("currentPassword", e.target.value)}
+                  className={`w-full border rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors ${
+                    passwordFieldErrors.currentPassword 
+                      ? "border-red-500 bg-red-50" 
+                      : "border-[#E5E7EB]"
+                  }`}
                   placeholder="Enter current password"
                 />
+                {passwordFieldErrors.currentPassword && (
+                  <p className="mt-1 text-sm text-red-600">{passwordFieldErrors.currentPassword}</p>
+                )}
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-2">New Password</label>
+                <label htmlFor="new-password" className="block text-sm font-medium text-[#374151] mb-1.5">
+                  New Password
+                </label>
                 <input
+                  id="new-password"
                   type="password"
                   value={passwordData.newPassword}
-                  onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
-                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
+                  onChange={(e) => handlePasswordFieldChange("newPassword", e.target.value)}
+                  className={`w-full border rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors ${
+                    passwordFieldErrors.newPassword 
+                      ? "border-red-500 bg-red-50" 
+                      : "border-[#E5E7EB]"
+                  }`}
                   placeholder="Enter new password"
                 />
+                {passwordFieldErrors.newPassword && (
+                  <p className="mt-1 text-sm text-red-600">{passwordFieldErrors.newPassword}</p>
+                )}
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-2">Confirm New Password</label>
+                <label htmlFor="confirm-password" className="block text-sm font-medium text-[#374151] mb-1.5">
+                  Confirm New Password
+                </label>
                 <input
+                  id="confirm-password"
                   type="password"
                   value={passwordData.confirmPassword}
-                  onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
+                  onChange={(e) => handlePasswordFieldChange("confirmPassword", e.target.value)}
+                  className={`w-full border rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors ${
+                    passwordFieldErrors.confirmPassword 
+                      ? "border-red-500 bg-red-50" 
+                      : "border-[#E5E7EB]"
+                  }`}
                   placeholder="Confirm new password"
                 />
+                {passwordFieldErrors.confirmPassword && (
+                  <p className="mt-1 text-sm text-red-600">{passwordFieldErrors.confirmPassword}</p>
+                )}
               </div>
             </div>
 
-            <div className="flex gap-3 justify-end mt-6">
+            {/* Footer */}
+            <div className="px-6 py-4 bg-gray-50 border-t border-[#E5E7EB] rounded-b-xl flex items-center justify-between gap-3">
               <button
-                onClick={() => setShowPasswordModal(false)}
-                className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium"
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+                  setPasswordFieldErrors({});
+                }}
+                disabled={isUpdating}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 onClick={handlePasswordChange}
-                disabled={isUpdating || !passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword}
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                  isUpdating || !passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-[#701CC0] text-white hover:bg-[#5f17a5]'
-                }`}
+                disabled={isUpdating}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
                 {isUpdating ? "Changing..." : "Change Password"}
               </button>
