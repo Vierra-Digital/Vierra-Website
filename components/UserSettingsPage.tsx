@@ -19,8 +19,6 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const [isEditingName, setIsEditingName] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  
-  // Settings state
   const [settings, setSettings] = useState({
     emailNotifications: true,
     twoFactorEnabled: false,
@@ -42,12 +40,10 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const avatarMenuRef = useRef<HTMLDivElement>(null);
   const displayName = name && name.trim().length > 0 ? name : (user.email ? user.email.split("@")[0] : "User");
 
-  // Update local name state when user prop changes
   useEffect(() => {
     setName(user.name || "");
   }, [user.name]);
 
-  // Load settings on component mount
   useEffect(() => {
     const loadSettings = async () => {
       try {
@@ -65,7 +61,6 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     loadSettings();
   }, []);
 
-  // Handle click outside avatar menu
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (avatarMenuRef.current && !avatarMenuRef.current.contains(event.target as Node)) {
@@ -75,23 +70,29 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
 
     if (showAvatarMenu) {
       document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
   }, [showAvatarMenu]);
 
-  // Auto-dismiss success messages after 3 seconds
   useEffect(() => {
     if (updateMessage && updateMessage.type === "success") {
-      const timer = setTimeout(() => {
-        setUpdateMessage(null);
-      }, 3000);
-
+      const timer = setTimeout(() => setUpdateMessage(null), 3000);
       return () => clearTimeout(timer);
     }
   }, [updateMessage]);
+
+  const fetchUserData = async () => {
+    try {
+      const userResponse = await fetch("/api/profile/getUser");
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        return userData;
+      }
+    } catch (error) {
+      console.error("Failed to fetch updated user data:", error);
+    }
+    return null;
+  };
 
   const handleNameUpdate = async () => {
     setIsUpdating(true);
@@ -100,9 +101,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     try {
       const response = await fetch("/api/profile/updateName", {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
       });
 
@@ -110,24 +109,10 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         throw new Error("Failed to update name");
       }
 
-      const result = await response.json();
-      
-      // Update the local name state with the response
-      setName(result.name || "");
-      
-      // Fetch the latest user data to ensure we have the most up-to-date info
-      try {
-        const userResponse = await fetch("/api/profile/getUser");
-        if (userResponse.ok) {
-          const userData = await userResponse.json();
-          setName(userData.name || "");
-          // Notify parent component of the name update
-          if (onNameUpdate) {
-            onNameUpdate(userData.name);
-          }
-        }
-      } catch (fetchError) {
-        console.error("Failed to fetch updated user data:", fetchError);
+      const userData = await fetchUserData();
+      if (userData) {
+        setName(userData.name || "");
+        onNameUpdate?.(userData.name);
       }
       
       setShowSuccessModal(true);
@@ -147,9 +132,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     try {
       const response = await fetch("/api/profile/updateSettings", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newSettings),
       });
 
@@ -174,18 +157,15 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     setUpdateMessage(null);
     
     try {
-      // Convert file to base64
       const reader = new FileReader();
       reader.onload = async () => {
         try {
           const base64Data = reader.result as string;
-          const base64 = base64Data.split(',')[1]; // Remove data:image/...;base64, prefix
+          const base64 = base64Data.split(',')[1];
           
           const response = await fetch("/api/profile/uploadImage", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ 
               imageData: base64,
               mimeType: file.type
@@ -196,15 +176,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             throw new Error("Failed to upload image");
           }
 
-          // Fetch fresh user data to ensure we have the latest
-          try {
-            const userResponse = await fetch("/api/profile/getUser");
-            if (userResponse.ok) {
-              const userData = await userResponse.json();
-              onImageUpdate?.(userData.image);
-            }
-          } catch (fetchError) {
-            console.error("Failed to fetch updated user data:", fetchError);
+          const userData = await fetchUserData();
+          if (userData) {
+            onImageUpdate?.(userData.image);
           }
           
           setShowSuccessModal(true);
@@ -238,9 +212,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     try {
       const response = await fetch("/api/profile/uploadImage", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           imageData: null,
           mimeType: null
@@ -251,15 +223,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         throw new Error("Failed to reset image");
       }
 
-      // Fetch fresh user data to ensure we have the latest
-      try {
-        const userResponse = await fetch("/api/profile/getUser");
-        if (userResponse.ok) {
-          const userData = await userResponse.json();
-          onImageUpdate?.(userData.image);
-        }
-      } catch (fetchError) {
-        console.error("Failed to fetch updated user data:", fetchError);
+      const userData = await fetchUserData();
+      if (userData) {
+        onImageUpdate?.(userData.image);
       }
       
       setShowSuccessModal(true);
@@ -306,9 +272,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     try {
       const response = await fetch("/api/profile/changePassword", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           currentPassword: passwordData.currentPassword,
           newPassword: passwordData.newPassword
@@ -318,7 +282,6 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       if (!response.ok) {
         const errorData = await response.json();
         
-        // Handle specific error cases
         if (response.status === 400 && errorData.message === "Current password is incorrect") {
           setPasswordFieldErrors({ currentPassword: "The current password you entered is incorrect. Please try again." });
           return;
@@ -337,15 +300,12 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         throw new Error(errorData.message || "Failed to change password");
       }
 
-      // Show success message before logout
       setShowSuccessModal(true);
       setIsPasswordChangeSuccess(true);
       setShowPasswordModal(false);
       setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
       setPasswordFieldErrors({});
-      setShowSuccessModal(true);
       
-      // Logout after successful password change
       setTimeout(() => {
         signOut({ callbackUrl: "/login" });
       }, 2000);
@@ -369,447 +329,426 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     setPasswordData(prev => ({ ...prev, [field]: value }));
   };
 
+  const closePasswordModal = () => {
+    setShowPasswordModal(false);
+    setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    setPasswordFieldErrors({});
+  };
+
   return (
     <div className="w-full h-full bg-white text-[#111014] flex flex-col">
-      {/* Content Container - Centered */}
       <div className="flex-1 flex justify-center px-6 pt-2">
         <div className="w-full max-w-6xl pb-6">
-          {/* Header */}
           <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">
             Account Settings
           </h1>
 
-      {/* Profile Section */}
-      <div className="bg-[#F8F0FF] rounded-lg shadow-sm border border-[#E5E7EB] p-6 mb-6">
-          <div className="flex items-start gap-6">
-          {/* Avatar Section */}
-          <div className="relative" ref={avatarMenuRef}>
-            <ProfileImage
-              src={user.image}
-                alt={displayName}
-              name={displayName}
-              size={120}
-              className="shadow-lg"
-                priority
-                quality={100}
-            />
-            <button
-              onClick={() => setShowAvatarMenu(!showAvatarMenu)}
-              className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 bg-[#701CC0] text-white rounded-full p-2 hover:bg-[#5f17a5] transition-colors shadow-lg"
-            >
-              <FiEdit3 className="w-4 h-4" />
-            </button>
-            
-            {/* Avatar Menu */}
-            {showAvatarMenu && (
-              <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-[#E5E7EB] py-2 z-10">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      handleImageUpload(file);
-                      setShowAvatarMenu(false);
-                    }
-                  }}
-                  className="hidden"
-                  id="image-upload"
-                  disabled={isUpdating}
+          <div className="bg-[#F8F0FF] rounded-lg shadow-sm border border-[#E5E7EB] p-6 mb-6">
+            <div className="flex items-start gap-6">
+              <div className="relative" ref={avatarMenuRef}>
+                <ProfileImage
+                  src={user.image}
+                  alt={displayName}
+                  name={displayName}
+                  size={120}
+                  className="shadow-lg"
+                  priority
+                  quality={100}
                 />
-                <label
-                  htmlFor="image-upload"
-                  className={`flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 cursor-pointer ${
-                    isUpdating ? 'text-gray-400 cursor-not-allowed' : 'text-[#111827]'
-                  }`}
+                <button
+                  onClick={() => setShowAvatarMenu(!showAvatarMenu)}
+                  className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 bg-[#701CC0] text-white rounded-full p-2 hover:bg-[#5f17a5] transition-colors shadow-lg"
                 >
-                  <FiUpload className="w-4 h-4" />
-                  {isUpdating ? "Uploading..." : "Upload Image"}
-                </label>
-                {user.image && (
-                  <button
-                    onClick={handleImageReset}
-                    disabled={isUpdating}
-                    className={`flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 w-full text-left ${
-                      isUpdating ? 'text-gray-400 cursor-not-allowed' : 'text-[#111827]'
-                    }`}
-                  >
-                    <FiRotateCcw className="w-4 h-4" />
-                    {isUpdating ? "Resetting..." : "Reset To Default"}
-                  </button>
+                  <FiEdit3 className="w-4 h-4" />
+                </button>
+                
+                {showAvatarMenu && (
+                  <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-[#E5E7EB] py-2 z-10">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          handleImageUpload(file);
+                          setShowAvatarMenu(false);
+                        }
+                      }}
+                      className="hidden"
+                      id="image-upload"
+                      disabled={isUpdating}
+                    />
+                    <label
+                      htmlFor="image-upload"
+                      className={`flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 cursor-pointer ${
+                        isUpdating ? 'text-gray-400 cursor-not-allowed' : 'text-[#111827]'
+                      }`}
+                    >
+                      <FiUpload className="w-4 h-4" />
+                      {isUpdating ? "Uploading..." : "Upload Image"}
+                    </label>
+                    {user.image && (
+                      <button
+                        onClick={handleImageReset}
+                        disabled={isUpdating}
+                        className={`flex items-center gap-2 px-4 py-2 text-sm hover:bg-gray-50 w-full text-left ${
+                          isUpdating ? 'text-gray-400 cursor-not-allowed' : 'text-[#111827]'
+                        }`}
+                      >
+                        <FiRotateCcw className="w-4 h-4" />
+                        {isUpdating ? "Resetting..." : "Reset To Default"}
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-            </div>
 
-          {/* Profile Info */}
-            <div className="flex-1">
-            <div className="mb-4">
+              <div className="flex-1">
+                <div className="mb-4">
+                  <div className="flex items-center gap-3 mb-4">
+                    <FiUser className="w-5 h-5 text-[#701CC0]" />
+                    <h3 className="text-lg font-semibold text-[#111827]">Profile Information</h3>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1">Full Name</label>
+                      {isEditingName ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            className="flex-1 border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
+                            placeholder="Enter your name"
+                            autoFocus
+                          />
+                          <button
+                            onClick={handleNameUpdate}
+                            disabled={isUpdating}
+                            className="px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] disabled:opacity-50 text-sm font-medium"
+                          >
+                            {isUpdating ? "Saving..." : "Save"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsEditingName(false);
+                              setUpdateMessage(null);
+                            }}
+                            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[#111827]">{displayName}</span>
+                          <button
+                            onClick={() => setIsEditingName(true)}
+                            className="text-[#701CC0] hover:text-[#5f17a5] text-sm underline"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-[#374151] mb-1">Email Address</label>
+                      <div className="flex items-center gap-2">
+                        <FiMail className="w-4 h-4 text-[#6B7280]" />
+                        <span className="text-[#6B7280]">{user.email || "No email"}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {updateMessage && updateMessage.type === "error" && (
+                  <div className="text-sm p-3 rounded-lg bg-red-50 text-red-700 border border-red-200">
+                    {updateMessage.text}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-[#F8F0FF] rounded-lg shadow-sm border border-[#E5E7EB] p-6">
               <div className="flex items-center gap-3 mb-4">
-                <FiUser className="w-5 h-5 text-[#701CC0]" />
-                <h3 className="text-lg font-semibold text-[#111827]">Profile Information</h3>
+                <FiShield className="w-5 h-5 text-[#701CC0]" />
+                <h3 className="text-lg font-semibold text-[#111827]">Security</h3>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1">Email Notifications</label>
+                    <p className="text-xs text-[#6B7280]">Receive updates and alerts.</p>
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    className="accent-[#701CC0]" 
+                    checked={settings.emailNotifications}
+                    onChange={(e) => handleSettingsUpdate({ emailNotifications: e.target.checked })}
+                    disabled={isUpdating || isLoadingSettings}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-sm font-medium text-[#374151] mb-1">Two-Factor Authentication</label>
+                    <p className="text-xs text-[#6B7280]">Enable 2FA for extra security.</p>
+                  </div>
+                  <input 
+                    type="checkbox" 
+                    className="accent-[#701CC0]" 
+                    checked={settings.twoFactorEnabled}
+                    onChange={(e) => handleSettingsUpdate({ twoFactorEnabled: e.target.checked })}
+                    disabled={isUpdating || isLoadingSettings}
+                  />
+                </div>
+
+                <div className="pt-4 border-t border-[#E5E7EB]">
+                  <button
+                    onClick={() => setShowPasswordModal(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium"
+                  >
+                    <FiLock className="w-4 h-4" />
+                    Change Password
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[#F8F0FF] rounded-lg shadow-sm border border-[#E5E7EB] p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <FiSettings className="w-5 h-5 text-[#701CC0]" />
+                <h3 className="text-lg font-semibold text-[#111827]">Preferences</h3>
+              </div>
+
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1">Full Name</label>
-                  {isEditingName ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="flex-1 border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                        placeholder="Enter your name"
-                        autoFocus
-                      />
-                      <button
-                        onClick={handleNameUpdate}
-                        disabled={isUpdating}
-                        className="px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] disabled:opacity-50 text-sm font-medium"
-                      >
-                        {isUpdating ? "Saving..." : "Save"}
-                      </button>
-                      <button
-                        onClick={() => {
-                          setIsEditingName(false);
-                          setUpdateMessage(null);
-                        }}
-                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
-                      >
-                        Cancel
-                      </button>
+                  <label className="block text-sm font-medium text-[#374151] mb-2">Theme</label>
+                  <div className="relative">
+                    <select
+                      className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none bg-white"
+                      value={settings.theme}
+                      onChange={(e) => handleSettingsUpdate({ theme: e.target.value })}
+                      disabled={isUpdating || isLoadingSettings}
+                    >
+                      <option value="light">Light</option>
+                      <option value="dark">Dark</option>
+                      <option value="auto">System</option>
+                    </select>
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                      <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[#111827]">{displayName}</span>
-                      <button
-                        onClick={() => setIsEditingName(true)}
-                        className="text-[#701CC0] hover:text-[#5f17a5] text-sm underline"
-                      >
-                        Edit
-                      </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[#374151] mb-2">Language</label>
+                  <div className="relative">
+                    <select
+                      className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none bg-white"
+                      value={settings.language}
+                      onChange={(e) => handleSettingsUpdate({ language: e.target.value })}
+                      disabled={isUpdating || isLoadingSettings}
+                    >
+                      <option value="en">English</option>
+                      <option value="es">Spanish</option>
+                      <option value="fr">French</option>
+                      <option value="de">German</option>
+                      <option value="it">Italian</option>
+                      <option value="pt">Portuguese</option>
+                      <option value="ru">Russian</option>
+                      <option value="zh">Chinese</option>
+                      <option value="ja">Japanese</option>
+                      <option value="ko">Korean</option>
+                    </select>
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                      <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 bg-[#F8F0FF] rounded-lg shadow-sm border border-[#E5E7EB] p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-[#111827] mb-1">Account Actions</h3>
+                <p className="text-sm text-[#6B7280]">Sign out of your account.</p>
+              </div>
+              <button
+                onClick={() => signOut({ callbackUrl: "/login" })}
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+              >
+                <FiLogOut className="w-4 h-4" />
+                Logout
+              </button>
+            </div>
+          </div>
+
+          {showSuccessModal && (
+            <div 
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4" 
+              role="dialog" 
+              aria-modal="true"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setShowSuccessModal(false);
+                }
+              }}
+            >
+              <div 
+                className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" 
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex flex-col items-center text-center">
+                  <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
+                    <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
+                        <FiCheck className="h-6 w-6" />
+                      </span>
+                    </span>
+                  </div>
+                  <h3 className="text-xl font-semibold text-[#111827] mb-2">
+                    {isPasswordChangeSuccess ? "Password Changed Successfully!" : "Settings Updated Successfully!"}
+                  </h3>
+                  <p className="text-sm text-[#6B7280] mb-6">
+                    {isPasswordChangeSuccess 
+                      ? "Your password has been changed successfully. You will be logged out shortly."
+                      : "Your changes have been saved successfully."
+                    }
+                  </p>
+                  <button
+                    className="w-full rounded-lg px-4 py-2 bg-[#701CC0] text-white hover:bg-[#5f17a5] text-sm font-medium transition-colors"
+                    onClick={() => {
+                      setShowSuccessModal(false);
+                      setIsPasswordChangeSuccess(false);
+                    }}
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showPasswordModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={closePasswordModal}>
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-md border border-[#E5E7EB]" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between px-6 py-5 border-b border-[#E5E7EB]">
+                  <div>
+                    <h2 className="text-xl font-semibold text-[#111827]">Change Password</h2>
+                    <p className="text-sm text-[#6B7280] mt-1">Update your account password.</p>
+                  </div>
+                  <button 
+                    onClick={closePasswordModal}
+                    className="text-red-400 hover:text-red-600 transition-colors duration-200 p-1 rounded-md hover:bg-red-50"
+                    aria-label="Close modal"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="p-6 space-y-5">
+                  {passwordFieldErrors.general && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-start gap-2">
+                      <p className="text-sm text-red-700">{passwordFieldErrors.general}</p>
                     </div>
                   )}
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-[#374151] mb-1">Email Address</label>
-                  <div className="flex items-center gap-2">
-                    <FiMail className="w-4 h-4 text-[#6B7280]" />
-                    <span className="text-[#6B7280]">{user.email || "No email"}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {updateMessage && updateMessage.type === "error" && (
-              <div className="text-sm p-3 rounded-lg bg-red-50 text-red-700 border border-red-200">
-                {updateMessage.text}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Settings Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Security Settings */}
-        <div className="bg-[#F8F0FF] rounded-lg shadow-sm border border-[#E5E7EB] p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <FiShield className="w-5 h-5 text-[#701CC0]" />
-            <h3 className="text-lg font-semibold text-[#111827]">Security</h3>
-                  </div>
-
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1">Email Notifications</label>
-                <p className="text-xs text-[#6B7280]">Receive updates and alerts.</p>
-              </div>
-              <input 
-                type="checkbox" 
-                className="accent-[#701CC0]" 
-                checked={settings.emailNotifications}
-                onChange={(e) => handleSettingsUpdate({ emailNotifications: e.target.checked })}
-                disabled={isUpdating || isLoadingSettings}
-              />
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1">Two-Factor Authentication</label>
-                <p className="text-xs text-[#6B7280]">Enable 2FA for extra security.</p>
-              </div>
-              <input 
-                type="checkbox" 
-                className="accent-[#701CC0]" 
-                checked={settings.twoFactorEnabled}
-                onChange={(e) => handleSettingsUpdate({ twoFactorEnabled: e.target.checked })}
-                disabled={isUpdating || isLoadingSettings}
-              />
-            </div>
-
-            <div className="pt-4 border-t border-[#E5E7EB]">
-              <button
-                onClick={() => setShowPasswordModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium"
-              >
-                <FiLock className="w-4 h-4" />
-                Change Password
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Preferences */}
-        <div className="bg-[#F8F0FF] rounded-lg shadow-sm border border-[#E5E7EB] p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <FiSettings className="w-5 h-5 text-[#701CC0]" />
-            <h3 className="text-lg font-semibold text-[#111827]">Preferences</h3>
-                    </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-[#374151] mb-2">Theme</label>
-              <div className="relative">
-                      <select
-                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none bg-white"
-                  value={settings.theme}
-                  onChange={(e) => handleSettingsUpdate({ theme: e.target.value })}
-                  disabled={isUpdating || isLoadingSettings}
-                >
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
-                  <option value="auto">System</option>
-                      </select>
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                  <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-                    </div>
-                  </div>
 
                   <div>
-              <label className="block text-sm font-medium text-[#374151] mb-2">Language</label>
-              <div className="relative">
-                <select
-                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none bg-white"
-                  value={settings.language}
-                  onChange={(e) => handleSettingsUpdate({ language: e.target.value })}
-                  disabled={isUpdating || isLoadingSettings}
-                >
-                  <option value="en">English</option>
-                  <option value="es">Spanish</option>
-                  <option value="fr">French</option>
-                  <option value="de">German</option>
-                  <option value="it">Italian</option>
-                  <option value="pt">Portuguese</option>
-                  <option value="ru">Russian</option>
-                  <option value="zh">Chinese</option>
-                  <option value="ja">Japanese</option>
-                  <option value="ko">Korean</option>
-                </select>
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                  <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-            </div>
+                    <label htmlFor="current-password" className="block text-sm font-medium text-[#374151] mb-1.5">
+                      Current Password
+                    </label>
+                    <input
+                      id="current-password"
+                      type="password"
+                      value={passwordData.currentPassword}
+                      onChange={(e) => handlePasswordFieldChange("currentPassword", e.target.value)}
+                      className={`w-full border rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors ${
+                        passwordFieldErrors.currentPassword 
+                          ? "border-red-500 bg-red-50" 
+                          : "border-[#E5E7EB]"
+                      }`}
+                      placeholder="Enter current password"
+                    />
+                    {passwordFieldErrors.currentPassword && (
+                      <p className="mt-1 text-sm text-red-600">{passwordFieldErrors.currentPassword}</p>
+                    )}
                   </div>
-        </div>
-                  </div>
-
-      {/* Logout Section */}
-      <div className="mt-6 bg-[#F8F0FF] rounded-lg shadow-sm border border-[#E5E7EB] p-6">
-        <div className="flex items-center justify-between">
+                  
                   <div>
-            <h3 className="text-lg font-semibold text-[#111827] mb-1">Account Actions</h3>
-            <p className="text-sm text-[#6B7280]">Sign out of your account.</p>
-          </div>
-                    <button
-                      onClick={() => signOut({ callbackUrl: "/login" })}
-            className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
-                    >
-            <FiLogOut className="w-4 h-4" />
-                      Logout
-                    </button>
+                    <label htmlFor="new-password" className="block text-sm font-medium text-[#374151] mb-1.5">
+                      New Password
+                    </label>
+                    <input
+                      id="new-password"
+                      type="password"
+                      value={passwordData.newPassword}
+                      onChange={(e) => handlePasswordFieldChange("newPassword", e.target.value)}
+                      className={`w-full border rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors ${
+                        passwordFieldErrors.newPassword 
+                          ? "border-red-500 bg-red-50" 
+                          : "border-[#E5E7EB]"
+                      }`}
+                      placeholder="Enter new password"
+                    />
+                    {passwordFieldErrors.newPassword && (
+                      <p className="mt-1 text-sm text-red-600">{passwordFieldErrors.newPassword}</p>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="confirm-password" className="block text-sm font-medium text-[#374151] mb-1.5">
+                      Confirm New Password
+                    </label>
+                    <input
+                      id="confirm-password"
+                      type="password"
+                      value={passwordData.confirmPassword}
+                      onChange={(e) => handlePasswordFieldChange("confirmPassword", e.target.value)}
+                      className={`w-full border rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors ${
+                        passwordFieldErrors.confirmPassword 
+                          ? "border-red-500 bg-red-50" 
+                          : "border-[#E5E7EB]"
+                      }`}
+                      placeholder="Confirm new password"
+                    />
+                    {passwordFieldErrors.confirmPassword && (
+                      <p className="mt-1 text-sm text-red-600">{passwordFieldErrors.confirmPassword}</p>
+                    )}
                   </div>
                 </div>
 
-      {/* Success Modal */}
-      {showSuccessModal && (
-        <div 
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4" 
-          role="dialog" 
-          aria-modal="true"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setShowSuccessModal(false);
-            }
-          }}
-        >
-          <div 
-            className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" 
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex flex-col items-center text-center">
-              <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
-                <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
-                <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
-                    <FiCheck className="h-6 w-6" />
-                  </span>
-                </span>
-              </div>
-              <h3 className="text-xl font-semibold text-[#111827] mb-2">
-                {isPasswordChangeSuccess ? "Password Changed Successfully!" : "Settings Updated Successfully!"}
-              </h3>
-              <p className="text-sm text-[#6B7280] mb-6">
-                {isPasswordChangeSuccess 
-                  ? "Your password has been changed successfully. You will be logged out shortly."
-                  : "Your changes have been saved successfully."
-                }
-              </p>
-              <button
-                className="w-full rounded-lg px-4 py-2 bg-[#701CC0] text-white hover:bg-[#5f17a5] text-sm font-medium transition-colors"
-                onClick={() => {
-                  setShowSuccessModal(false);
-                  setIsPasswordChangeSuccess(false);
-                }}
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Password Change Modal */}
-      {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => {
-          setShowPasswordModal(false);
-          setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
-          setPasswordFieldErrors({});
-        }}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md border border-[#E5E7EB]" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-[#E5E7EB]">
-              <div>
-                <h2 className="text-xl font-semibold text-[#111827]">Change Password</h2>
-                <p className="text-sm text-[#6B7280] mt-1">Update your account password.</p>
-              </div>
-              <button 
-                onClick={() => {
-                  setShowPasswordModal(false);
-                  setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
-                  setPasswordFieldErrors({});
-                }}
-                className="text-red-400 hover:text-red-600 transition-colors duration-200 p-1 rounded-md hover:bg-red-50"
-                aria-label="Close modal"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Form */}
-            <div className="p-6 space-y-5">
-              {passwordFieldErrors.general && (
-                <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-start gap-2">
-                  <p className="text-sm text-red-700">{passwordFieldErrors.general}</p>
+                <div className="px-6 py-4 bg-gray-50 border-t border-[#E5E7EB] rounded-b-xl flex items-center justify-between gap-3">
+                  <button
+                    onClick={closePasswordModal}
+                    disabled={isUpdating}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handlePasswordChange}
+                    disabled={isUpdating}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                  >
+                    {isUpdating ? "Changing..." : "Change Password"}
+                  </button>
                 </div>
-              )}
-
-              <div>
-                <label htmlFor="current-password" className="block text-sm font-medium text-[#374151] mb-1.5">
-                  Current Password
-                </label>
-                <input
-                  id="current-password"
-                  type="password"
-                  value={passwordData.currentPassword}
-                  onChange={(e) => handlePasswordFieldChange("currentPassword", e.target.value)}
-                  className={`w-full border rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors ${
-                    passwordFieldErrors.currentPassword 
-                      ? "border-red-500 bg-red-50" 
-                      : "border-[#E5E7EB]"
-                  }`}
-                  placeholder="Enter current password"
-                />
-                {passwordFieldErrors.currentPassword && (
-                  <p className="mt-1 text-sm text-red-600">{passwordFieldErrors.currentPassword}</p>
-                )}
-              </div>
-              
-              <div>
-                <label htmlFor="new-password" className="block text-sm font-medium text-[#374151] mb-1.5">
-                  New Password
-                </label>
-                <input
-                  id="new-password"
-                  type="password"
-                  value={passwordData.newPassword}
-                  onChange={(e) => handlePasswordFieldChange("newPassword", e.target.value)}
-                  className={`w-full border rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors ${
-                    passwordFieldErrors.newPassword 
-                      ? "border-red-500 bg-red-50" 
-                      : "border-[#E5E7EB]"
-                  }`}
-                  placeholder="Enter new password"
-                />
-                {passwordFieldErrors.newPassword && (
-                  <p className="mt-1 text-sm text-red-600">{passwordFieldErrors.newPassword}</p>
-                )}
-              </div>
-              
-              <div>
-                <label htmlFor="confirm-password" className="block text-sm font-medium text-[#374151] mb-1.5">
-                  Confirm New Password
-                </label>
-                <input
-                  id="confirm-password"
-                  type="password"
-                  value={passwordData.confirmPassword}
-                  onChange={(e) => handlePasswordFieldChange("confirmPassword", e.target.value)}
-                  className={`w-full border rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors ${
-                    passwordFieldErrors.confirmPassword 
-                      ? "border-red-500 bg-red-50" 
-                      : "border-[#E5E7EB]"
-                  }`}
-                  placeholder="Confirm new password"
-                />
-                {passwordFieldErrors.confirmPassword && (
-                  <p className="mt-1 text-sm text-red-600">{passwordFieldErrors.confirmPassword}</p>
-                )}
               </div>
             </div>
-
-            {/* Footer */}
-            <div className="px-6 py-4 bg-gray-50 border-t border-[#E5E7EB] rounded-b-xl flex items-center justify-between gap-3">
-              <button
-                onClick={() => {
-                  setShowPasswordModal(false);
-                  setPasswordData({ currentPassword: "", newPassword: "", confirmPassword: "" });
-                  setPasswordFieldErrors({});
-                }}
-                disabled={isUpdating}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePasswordChange}
-                disabled={isUpdating}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-              >
-                {isUpdating ? "Changing..." : "Change Password"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
         </div>
       </div>
     </div>
