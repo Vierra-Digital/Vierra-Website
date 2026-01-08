@@ -43,14 +43,17 @@ const LTVCalculatorSection = () => {
     });
 
     return (
-        <div className={`w-full h-full bg-white p-8 ${inter.className}`}>
-            <div className="max-w-7xl mx-auto">
-                <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-2xl font-semibold text-[#111827]">LTV Calculator</h1>
-                    <div className="flex items-center gap-3">
-                        <button className="px-4 py-2 rounded-lg font-semibold text-white bg-[#701CC0] hover:bg-[#8F42FF]">Calculate</button>
+        <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
+            <div className="flex-1 flex justify-center px-6 pt-2">
+                <div className="w-full max-w-6xl flex flex-col h-full">
+                    <div className="w-full flex justify-between items-center mb-2">
+                        <div>
+                            <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">LTV Calculator</h1>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <button className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium">Calculate</button>
+                        </div>
                     </div>
-                </div>
 
                 <div className="bg-[#F8F0FF] rounded-2xl shadow-sm border border-[#EDE6FB] p-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -144,6 +147,7 @@ const LTVCalculatorSection = () => {
                             <div className="text-2xl font-semibold text-[#111827]">${isNaN(retainer) ? (0).toLocaleString() : Math.round(retainer).toLocaleString()}</div>
                         </div>
                     </div>
+                </div>
                 </div>
             </div>
         </div>

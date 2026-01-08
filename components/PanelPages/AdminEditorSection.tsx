@@ -209,7 +209,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     const paginatedUsers = filteredUsers.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
     const totalPages = Math.ceil(filteredUsers.length / pageSize)
 
-    return (
+                            return (
         <>
             <div className="w-full flex justify-between items-center mb-2">
                 <div>
@@ -219,7 +219,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                     <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
                         <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
                         <label htmlFor="users-search" className="sr-only">Search Users</label>
-                        <input
+                                                    <input
                             id="users-search"
                             type="search"
                             value={searchQuery}
@@ -232,7 +232,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                         />
                     </div>
                     <div className="relative" ref={filterRef} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsFilterOpen(false) }} tabIndex={-1}>
-                        <button
+                                                    <button
                             type="button"
                             onClick={() => setIsFilterOpen((v) => !v)}
                             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
@@ -247,7 +247,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                             >
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
-                </button>
+                                                    </button>
                         {isFilterOpen && (
                             <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#E5E7EB] py-4 z-50">
                                 <div className="px-5">
@@ -304,7 +304,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                             </div>
                         )}
                     </div>
-                    <button
+                                                    <button
                         onClick={onManageSessions}
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
                     >
@@ -317,8 +317,8 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                     >
                         <FiPlus className="w-4 h-4" />
                         Create User
-                    </button>
-                </div>
+                                                    </button>
+                                                </div>
             </div>
 
             {loading ? (
@@ -349,15 +349,15 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                 <p className="text-sm text-gray-500 mb-3">
                                     {searchQuery ? "No users match your search." : "No users found."}
                                 </p>
-                                <button
+                                                    <button
                                     onClick={() => setShowCreate(true)}
                                     className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm font-medium hover:bg-[#5f17a5] transition-colors duration-200 shadow-sm"
-                                >
+                                                    >
                                     <FiPlus className="w-4 h-4" />
                                     Create User
-                                </button>
-                            </div>
-                        </div>
+                                                    </button>
+                                                </div>
+                                        </div>
                     )}
 
                     {!loading && filteredUsers.length > 0 && (
@@ -445,7 +445,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                     >
                                         Next
                                     </button>
-                                </div>
+        </div>
                             </div>
                         </div>
                     )}
@@ -538,7 +538,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
     }
 
     if (showSuccess) {
-        return (
+    return (
             <div 
                 className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4" 
                 role="dialog" 
@@ -563,7 +563,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                                     <FiCheck className="h-6 w-6" />
                                 </span>
                             </span>
-                        </div>
+                </div>
                         <h3 className="text-xl font-semibold text-[#111827] mb-2">User Created Successfully!</h3>
                         <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
                             The user has been created successfully and can now access the system.
@@ -577,11 +577,11 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                             }}
                         >
                             Done
-                        </button>
-                    </div>
+                    </button>
                 </div>
             </div>
-        )
+        </div>
+    )
     }
 
     return (
@@ -597,7 +597,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-5 border-b border-[#E5E7EB]">
                     <div>
-                        <h2 className="text-xl font-semibold text-[#111827]">Create New User</h2>
+                        <h2 className="text-xl font-semibold text-[#111827]">Create User</h2>
                         <p className="text-sm text-[#6B7280] mt-1">Add a new user to the system</p>
                     </div>
                     <button 
@@ -606,8 +606,8 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                         aria-label="Close modal"
                     >
                         <X className="w-5 h-5" />
-                    </button>
-                </div>
+                </button>
+            </div>
 
                 {/* Form */}
                 <div className="p-6 space-y-5">
@@ -676,7 +676,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                         {fieldErrors.password && (
                             <p className="mt-1 text-sm text-red-600">{fieldErrors.password}</p>
                         )}
-                    </div>
+            </div>
 
                     {/* Role Field */}
                     <div>
@@ -696,7 +696,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                             </select>
                             <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                                 <ChevronDown className="w-5 h-5 text-[#6B7280]" />
-                            </div>
+                        </div>
                         </div>
                     </div>
 
@@ -705,9 +705,9 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-start gap-2">
                             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                             <p className="text-sm text-red-700">{error}</p>
-                        </div>
-                    )}
                 </div>
+            )}
+        </div>
 
                 {/* Footer */}
                 <div className="px-6 py-4 bg-gray-50 border-t border-[#E5E7EB] rounded-b-xl flex items-center justify-between gap-3">
@@ -1108,7 +1108,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                         />
                     </div>
                     <div className="relative" ref={statusFilterRef} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsStatusFilterOpen(false) }} tabIndex={-1}>
-                        <button
+                <button
                             type="button"
                             onClick={() => setIsStatusFilterOpen((v) => !v)}
                             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
@@ -1123,7 +1123,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                             >
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                             </svg>
-                        </button>
+                </button>
                         {isStatusFilterOpen && (
                             <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#E5E7EB] py-4 z-50">
                                 <div className="px-5">
@@ -1153,7 +1153,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                                 </svg>
                                             </div>
                                         </div>
-                                    </div>
+            </div>
 
                                     {/* Sort Direction */}
                                     <div>
@@ -1174,9 +1174,9 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                                 <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                                 </svg>
-                                            </div>
-                                        </div>
-                                    </div>
+                </div>
+                </div>
+                </div>
                                 </div>
                             </div>
                         )}
@@ -1348,8 +1348,8 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                                         <Trash2 className="w-4 h-4" />
                                                         Delete Session
                                                     </button>
-                                                </div>
-                                            )}
+                                        </div>
+                                    )}
                                         </div>
                                     </div>
                                 </td>

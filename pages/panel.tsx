@@ -244,7 +244,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                     id="panel-search"
                     type="search"
                     placeholder="Search"
-                    className={`flex-1 text-sm placeholder:text-[#9CA3AF] bg-transparent outline-none ${inter.className}`}
+                    className={`flex-1 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none ${inter.className}`}
                   />
                 </div>
               </div>

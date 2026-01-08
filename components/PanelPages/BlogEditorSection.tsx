@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Inter } from "next/font/google"
-import { CiSearch } from "react-icons/ci"
-import { FiPlus, FiTrash2, FiFileText, FiFilter, FiBold, FiItalic, FiLink, FiUnderline, FiImage, FiVideo, FiCornerUpLeft, FiCornerUpRight, FiList } from "react-icons/fi"
-import { RiArrowDropDownLine } from "react-icons/ri"
+import { FiPlus, FiTrash2, FiFileText, FiFilter, FiSearch, FiBold, FiItalic, FiLink, FiUnderline, FiImage, FiVideo, FiCornerUpLeft, FiCornerUpRight, FiList } from "react-icons/fi"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -756,6 +754,7 @@ export default function BlogEditorSection() {
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 6
   const [filterOpen, setFilterOpen] = useState(false)
+  const filterRef = useRef<HTMLDivElement>(null)
   const [dateSort, setDateSort] = useState<'none' | 'asc' | 'desc'>('none')
   const [tagFilter, setTagFilter] = useState<string>('all')
   const [authorFilter, setAuthorFilter] = useState<string>('all')
@@ -878,46 +877,142 @@ export default function BlogEditorSection() {
     setDeleteModalOpen(true)
   }
 
-  const clearFilters = () => {
-    setDateSort('none')
-    setTagFilter('all')
-    setAuthorFilter('all')
-  }
 
   const headerBar = (
-    <div className="flex justify-between items-center mb-6">
-      <h1 className="text-2xl font-semibold text-[#111827]">Blog Editor</h1>
-      <div className="flex items-center gap-3">
+    <>
+            <div className="w-full flex justify-between items-center mb-2">
+                <div>
+                    <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Blog Editor</h1>
+                </div>
+                <div className="flex items-center gap-3">
         {mode === "list" && (
           <>
-            <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition w-64 md:w-80">
-              <CiSearch className="w-5 h-5 text-[#701CC0] flex-shrink-0" />
-              <input
-                type="search"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search posts"
-                className={`flex-1 text-sm placeholder:text-[#9CA3AF] bg-transparent outline-none text-[#111827] ${inter.className}`}
-              />
-            </div>
-            <button
-              onClick={() => setFilterOpen(!filterOpen)}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-gray-200 hover:bg-gray-50 flex items-center gap-1.5 text-gray-700"
-            >
-              <FiFilter className="w-4 h-4" />
-              Filter
-            </button>
-            <button onClick={() => { resetForm(); setMode("edit") }} className="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-[#701CC0] hover:bg-[#4C1D95] flex items-center gap-1.5">
-              <FiPlus className="w-3.5 h-3.5" />
-              New Blog
-            </button>
+                    <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
+                        <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
+                        <label htmlFor="blog-search" className="sr-only">Search Posts</label>
+                                                    <input
+                            id="blog-search"
+                            type="search"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search posts"
+                            className="w-64 md:w-80 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none"
+                        />
+                    </div>
+                    <div className="relative" ref={filterRef} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setFilterOpen(false) }} tabIndex={-1}>
+                                                    <button
+                            type="button"
+                            onClick={() => setFilterOpen((v) => !v)}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
+                        >
+                            <FiFilter className="w-4 h-4" />
+                            <span className="text-sm font-medium">Filter</span>
+                            <svg 
+                                className={`w-4 h-4 transition-transform duration-200 ${filterOpen ? 'rotate-180' : ''}`}
+                                fill="none" 
+                                stroke="currentColor" 
+                                viewBox="0 0 24 24"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                                                    </button>
+                        {filterOpen && (
+                            <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#E5E7EB] py-4 z-50">
+                                <div className="px-5">
+                                    <h3 className="text-sm font-semibold text-[#111827] mb-4">Filter & Sort</h3>
+                                    
+                                    {/* Date Sort */}
+                                    <div className="mb-4">
+                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By Date</label>
+                                        <div className="relative">
+                                            <select
+                                                value={dateSort}
+                                                onChange={(e) => {
+                                                    setDateSort(e.target.value as 'none' | 'asc' | 'desc')
+                                                    setCurrentPage(1)
+                                                }}
+                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
+                                            >
+                                                <option value="none">No Sorting</option>
+                                                <option value="asc">Ascending</option>
+                                                <option value="desc">Descending</option>
+                                            </select>
+                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Tag Filter */}
+                                    <div className="mb-4">
+                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Tag</label>
+                                        <div className="relative">
+                                            <select
+                                                value={tagFilter}
+                                                onChange={(e) => {
+                                                    setTagFilter(e.target.value)
+                                                    setCurrentPage(1)
+                                                }}
+                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
+                                            >
+                                                <option value="all">All Tags</option>
+                                                {Array.from(new Set(posts.flatMap(p => p.tag ? p.tag.split(',').map(t => t.trim()) : []).filter(Boolean))).map(tag => (
+                                                    <option key={tag} value={tag}>{tag}</option>
+                                                ))}
+                                            </select>
+                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Author Filter */}
+                                    <div>
+                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Author</label>
+                                        <div className="relative">
+                                            <select
+                                                value={authorFilter}
+                                                onChange={(e) => {
+                                                    setAuthorFilter(e.target.value)
+                                                    setCurrentPage(1)
+                                                }}
+                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
+                                            >
+                                                <option value="all">All Authors</option>
+                                                {Array.from(new Set(posts.map(p => p.author?.name).filter(Boolean))).map(author => (
+                                                    <option key={author} value={author}>{author}</option>
+                                                ))}
+                                            </select>
+                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                                                    <button
+                        onClick={() => { resetForm(); setMode("edit") }}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium"
+                    >
+                        <FiPlus className="w-4 h-4" />
+                        New Blog
+                                                    </button>
           </>
         )}
         {mode === "edit" && (
           <div></div>
         )}
-      </div>
-    </div>
+                                                </div>
+            </div>
+    </>
   )
 
   const filteredPosts = useMemo(() => {
@@ -957,72 +1052,12 @@ export default function BlogEditorSection() {
   const paginatedPosts = filteredPosts.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
   return (
-    <div className={`w-full h-full bg-white p-8 pb-32 md:pb-48 lg:pb-64 xl:pb-96 ${inter.className}`}>
-      <div className="max-w-7xl mx-auto">
+    <>
+    <div className={`w-full h-full bg-white text-[#111014] flex flex-col pb-32 md:pb-48 lg:pb-64 xl:pb-96 ${inter.className}`}>
+      <div className="flex-1 flex justify-center px-6 pt-2">
+        <div className="w-full max-w-6xl flex flex-col h-full">
         {headerBar}
 
-      {filterOpen && (
-        <div className="mb-4 bg-[#F8F0FF] rounded-2xl shadow-sm border border-[#EDE6FB] p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-[#111827]">Filter Posts</h3>
-            <button
-              onClick={clearFilters}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"
-            >
-              Clear All
-            </button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-[#374151] mb-2">Date Sort</label>
-              <div className="relative">
-                <select
-                  value={dateSort}
-                  onChange={(e) => setDateSort(e.target.value as 'none' | 'asc' | 'desc')}
-                  className="w-full appearance-none bg-white border border-[#D1D5DB] rounded-lg px-3 py-2 pr-8 text-sm text-[#111827] focus:ring-2 focus:ring-[#701CC0] focus:border-[#701CC0] outline-none cursor-pointer"
-                >
-                  <option value="none">No Sort</option>
-                  <option value="asc">Oldest First</option>
-                  <option value="desc">Newest First</option>
-                </select>
-                <RiArrowDropDownLine className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[#374151] mb-2">Tags</label>
-              <div className="relative">
-                <select
-                  value={tagFilter}
-                  onChange={(e) => setTagFilter(e.target.value)}
-                  className="w-full appearance-none bg-white border border-[#D1D5DB] rounded-lg px-3 py-2 pr-8 text-sm text-[#111827] focus:ring-2 focus:ring-[#701CC0] focus:border-[#701CC0] outline-none cursor-pointer"
-                >
-                  <option value="all">All Tags</option>
-                  {Array.from(new Set(posts.flatMap(p => p.tag ? p.tag.split(',').map(t => t.trim()) : []).filter(Boolean))).map(tag => (
-                    <option key={tag} value={tag}>{tag}</option>
-                  ))}
-                </select>
-                <RiArrowDropDownLine className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[#374151] mb-2">Author</label>
-              <div className="relative">
-                <select
-                  value={authorFilter}
-                  onChange={(e) => setAuthorFilter(e.target.value)}
-                  className="w-full appearance-none bg-white border border-[#D1D5DB] rounded-lg px-3 py-2 pr-8 text-sm text-[#111827] focus:ring-2 focus:ring-[#701CC0] focus:border-[#701CC0] outline-none cursor-pointer"
-                >
-                  <option value="all">All Authors</option>
-                  {Array.from(new Set(posts.map(p => p.author?.name).filter(Boolean))).map(author => (
-                    <option key={author} value={author || ''}>{author}</option>
-                  ))}
-                </select>
-                <RiArrowDropDownLine className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {error && (
         <div className="mb-4 rounded-md bg-red-50 text-red-700 px-3 py-2 text-sm">{error}</div>
@@ -1149,6 +1184,8 @@ export default function BlogEditorSection() {
           </div>
         </div>
       )}
+        </div>
+      </div>
       </div>
 
       <ConfirmDeleteModal
@@ -1160,7 +1197,7 @@ export default function BlogEditorSection() {
           setPostToDelete(null)
         }}
       />
-    </div>
+    </>
   )
 }
 
