@@ -276,11 +276,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             </div>
           </div>
           <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden relative">
-            {error && (
-              <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-red-100 text-red-700 px-4 py-2 rounded-md">
-                {error}
-              </div>
-            )}
             {showSettings ? (<>
               <UserSettingsPage
                 user={{

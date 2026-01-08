@@ -95,7 +95,7 @@ const ClientActionsMenu: React.FC<{
     hasImage: boolean
     onDelete: () => void
     onToggleStatus: (isActive: boolean) => void
-}> = ({ clientId, clientName, isActive, onDelete, onToggleStatus }) => {
+}> = ({ clientName, isActive, onDelete, onToggleStatus }) => {
     const [isOpen, setIsOpen] = useState(false)
     const [position, setPosition] = useState<{ top: number; right: number } | null>(null)
     const buttonRef = useRef<HTMLButtonElement>(null)
