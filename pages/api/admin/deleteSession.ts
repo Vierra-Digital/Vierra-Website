@@ -18,21 +18,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Check if session exists
+    // Check if session exists and get clientId
     const onboardingSession = await prisma.onboardingSession.findUnique({
-      where: { id: token }
+      where: { id: token },
+      select: { id: true, clientId: true }
     });
 
     if (!onboardingSession) {
       return res.status(404).json({ message: "Session not found" });
     }
 
-    // Delete the session
-    await prisma.onboardingSession.delete({
-      where: { id: token }
+    const clientId = onboardingSession.clientId;
+
+    // Delete the session and client in a transaction
+    await prisma.$transaction(async (tx) => {
+      // Delete the session first
+      await tx.onboardingSession.delete({
+        where: { id: token }
+      });
+
+      // Delete the associated client (this will cascade delete any other sessions for this client)
+      await tx.client.delete({
+        where: { id: clientId }
+      });
     });
 
-    res.status(200).json({ message: "Session deleted successfully", token });
+    res.status(200).json({ message: "Session and client deleted successfully", token });
   } catch (err) {
     console.error("/api/admin/deleteSession error", err);
     res.status(500).json({ message: "Failed to delete session" });

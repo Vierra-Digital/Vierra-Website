@@ -1047,12 +1047,11 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                 const data = await r.json()
                 throw new Error(data.message || "Failed to delete session")
             }
-            setExpireMessage("Session Deleted Successfully!")
             setDeleteModalOpen(false)
             setSessionToDelete(null)
             await load()
         } catch (e: any) {
-            setExpireMessage("Failed To Delete Session: " + (e?.message || "Unknown Error"))
+            console.error("Failed to delete session:", e?.message || "Unknown Error")
         } finally {
             setDeletingSession(null)
             setActionMenuOpen(null)
