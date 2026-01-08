@@ -1,9 +1,9 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react"
-import { Users, FileText, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, Eye, X, Check, XIcon as XIconLucide, MoreVertical, Copy, Trash2, RotateCw, Link as LinkIcon } from "lucide-react"
+import { Users, FileText, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, Eye, X, XIcon as XIconLucide, MoreVertical, Copy, Trash2, RotateCw, Link as LinkIcon } from "lucide-react"
 import { FiCheck } from "react-icons/fi"
-import { FiSearch, FiFilter, FiPlus, FiTrash2, FiEdit2 } from "react-icons/fi"
+import { FiSearch, FiFilter, FiPlus, FiTrash2 } from "react-icons/fi"
 import { Inter } from "next/font/google"
 import Image from "next/image"
 import { motion } from "framer-motion"
@@ -90,8 +90,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     const [error, setError] = useState<string>("")
     const [showCreate, setShowCreate] = useState<boolean>(false)
     const [revealed, setRevealed] = useState<Record<number, string>>({})
-    const [editingName, setEditingName] = useState<Record<number, string>>({})
-    const [updatingNames, setUpdatingNames] = useState<Set<number>>(new Set())
     const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
     const [userToDelete, setUserToDelete] = useState<{ id: number; name: string | null; email: string | null } | null>(null)
     const [searchQuery, setSearchQuery] = useState<string>("")
@@ -153,29 +151,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
         } catch {}
     }
 
-    const updateName = async (userId: number, newName: string) => {
-        setUpdatingNames(prev => new Set(prev).add(userId))
-        try {
-            await fetch("/api/admin/users", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id: userId, name: newName }),
-            })
-            setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, name: newName } : u)))
-            setEditingName(prev => {
-                const newState = { ...prev }
-                delete newState[userId]
-                return newState
-            })
-        } catch {}
-        finally {
-            setUpdatingNames(prev => {
-                const newSet = new Set(prev)
-                newSet.delete(userId)
-                return newSet
-            })
-        }
-    }
 
 
     const deleteUser = async (userId: number) => {
@@ -405,56 +380,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                             return (
                                                 <tr key={u.id} className="hover:bg-purple-50">
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{u.id}</td>
-                                                    <td className="px-4 py-4">
-                                        <div className="flex items-center gap-2">
-                                            {editingName[u.id] !== undefined ? (
-                                                <div className="flex items-center gap-2">
-                                                    <input
-                                                        type="text"
-                                                        value={editingName[u.id]}
-                                                        onChange={(e) => setEditingName(prev => ({ ...prev, [u.id]: e.target.value }))}
-                                                        className="border border-[#E5E7EB] rounded-md px-3 py-1.5 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                                                        autoFocus
-                                                    />
-                                                    <button
-                                                        onClick={() => updateName(u.id, editingName[u.id])}
-                                                        disabled={updatingNames.has(u.id)}
-                                                        className="flex items-center justify-center w-8 h-8 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 shadow-sm"
-                                                        aria-label="Save name"
-                                                    >
-                                                        {updatingNames.has(u.id) ? (
-                                                            <RefreshCw className="w-4 h-4 animate-spin" />
-                                                        ) : (
-                                                            <Check className="w-4 h-4" />
-                                                        )}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setEditingName(prev => {
-                                                            const newState = { ...prev }
-                                                            delete newState[u.id]
-                                                            return newState
-                                                        })}
-                                                        className="flex items-center justify-center w-8 h-8 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors duration-200 shadow-sm"
-                                                        aria-label="Cancel editing"
-                                                    >
-                                                        <X className="w-4 h-4" />
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm font-medium text-[#111827]">{u.name ?? "-"}</span>
-                                                    <button
-                                                        onClick={() => setEditingName(prev => ({ ...prev, [u.id]: u.name || "" }))}
-                                                        className="flex items-center justify-center gap-1.5 px-2.5 py-1 bg-[#701CC0] text-white rounded-md text-xs font-medium hover:bg-[#5f17a5] transition-colors duration-200 shadow-sm"
-                                                        aria-label="Edit name"
-                                                    >
-                                                        <FiEdit2 className="w-3 h-3" />
-                                                        Edit
-                                                    </button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </td>
+                                                    <td className="px-4 py-4 text-sm font-medium text-[#111827]">{u.name ?? "-"}</td>
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{u.email ?? "-"}</td>
                                                     <td className="px-4 py-4">
                                         <div className="flex items-center gap-3">
@@ -551,10 +477,37 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
     const [role, setRole] = useState<string>("admin")
     const [submitting, setSubmitting] = useState<boolean>(false)
     const [error, setError] = useState<string>("")
+    const [showSuccess, setShowSuccess] = useState<boolean>(false)
+    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+
+    const isValidEmail = (email: string) => {
+        const emailRegex = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i
+        return emailRegex.test(email)
+    }
+
+    const validateForm = () => {
+        const errors: Record<string, string> = {}
+
+        if (!name.trim()) {
+            errors.name = "Name is required"
+        }
+
+        if (!email.trim()) {
+            errors.email = "Email is required"
+        } else if (!isValidEmail(email)) {
+            errors.email = "Please enter a valid email address"
+        }
+
+        if (!password.trim()) {
+            errors.password = "Password is required"
+        }
+
+        setFieldErrors(errors)
+        return Object.keys(errors).length === 0
+    }
 
     const submit = async () => {
-        if (!email.trim() || !password.trim()) {
-            setError("Email and password are required")
+        if (!validateForm()) {
             return
         }
 
@@ -567,12 +520,68 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                 body: JSON.stringify({ name, email, password, role }),
             })
             if (!r.ok) throw new Error((await r.json())?.message || "Failed to create user")
-            onCreated()
+            setShowSuccess(true)
         } catch (e: any) {
             setError(e?.message || "Failed to create user")
         } finally {
             setSubmitting(false)
         }
+    }
+
+    const handleFieldChange = (field: string, value: string) => {
+        setFieldErrors((prev) => ({ ...prev, [field]: "" }))
+        setError("")
+        if (field === "name") setName(value)
+        else if (field === "email") setEmail(value)
+        else if (field === "password") setPassword(value)
+        else if (field === "role") setRole(value)
+    }
+
+    if (showSuccess) {
+        return (
+            <div 
+                className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4" 
+                role="dialog" 
+                aria-modal="true"
+                onClick={(e) => {
+                    if (e.target === e.currentTarget) {
+                        setShowSuccess(false)
+                        onCreated()
+                        onClose()
+                    }
+                }}
+            >
+                <div 
+                    className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" 
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <div className="flex flex-col items-center text-center">
+                        <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
+                            <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
+                                    <FiCheck className="h-6 w-6" />
+                                </span>
+                            </span>
+                        </div>
+                        <h3 className="text-xl font-semibold text-[#111827] mb-2">User Created Successfully!</h3>
+                        <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
+                            The user has been created successfully and can now access the system.
+                        </p>
+                        <button
+                            className="w-full rounded-lg px-4 py-2 bg-[#701CC0] text-white hover:bg-[#5f17a5] text-sm font-medium transition-colors"
+                            onClick={() => {
+                                setShowSuccess(false)
+                                onCreated()
+                                onClose()
+                            }}
+                        >
+                            Done
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )
     }
 
     return (
@@ -593,7 +602,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                     </div>
                     <button 
                         onClick={onClose} 
-                        className="text-[#6B7280] hover:text-[#111827] transition-colors duration-200 p-1 rounded-md hover:bg-gray-100"
+                        className="text-red-400 hover:text-red-600 transition-colors duration-200 p-1 rounded-md hover:bg-red-50"
                         aria-label="Close modal"
                     >
                         <X className="w-5 h-5" />
@@ -605,16 +614,21 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                     {/* Name Field */}
                     <div>
                         <label htmlFor="create-user-name" className="block text-sm font-medium text-[#374151] mb-1.5">
-                            Name <span className="text-[#9CA3AF]">(optional)</span>
+                            Name <span className="text-red-500">*</span>
                         </label>
                         <input 
                             id="create-user-name"
                             type="text" 
                             value={name} 
-                            onChange={(e) => setName(e.target.value)} 
+                            onChange={(e) => handleFieldChange("name", e.target.value)} 
                             placeholder="Enter user's full name"
-                            className="w-full border border-[#E5E7EB] rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors"
+                            className={`w-full border rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors ${
+                                fieldErrors.name ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB]'
+                            }`}
                         />
+                        {fieldErrors.name && (
+                            <p className="mt-1 text-sm text-red-600">{fieldErrors.name}</p>
+                        )}
                     </div>
 
                     {/* Email Field */}
@@ -626,11 +640,21 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                             id="create-user-email"
                             type="email" 
                             value={email} 
-                            onChange={(e) => setEmail(e.target.value)} 
+                            onChange={(e) => handleFieldChange("email", e.target.value)} 
                             placeholder="user@example.com"
                             required
-                            className="w-full border border-[#E5E7EB] rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors"
+                            className={`w-full border rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors ${
+                                fieldErrors.email || (email && !isValidEmail(email))
+                                    ? 'border-red-500 bg-red-50' 
+                                    : 'border-[#E5E7EB]'
+                            }`}
                         />
+                        {fieldErrors.email && (
+                            <p className="mt-1 text-sm text-red-600">{fieldErrors.email}</p>
+                        )}
+                        {email && !fieldErrors.email && !isValidEmail(email) && (
+                            <p className="mt-1 text-sm text-red-600">Please enter a valid email address</p>
+                        )}
                     </div>
 
                     {/* Password Field */}
@@ -642,11 +666,16 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                             id="create-user-password"
                             type="password" 
                             value={password} 
-                            onChange={(e) => setPassword(e.target.value)} 
+                            onChange={(e) => handleFieldChange("password", e.target.value)} 
                             placeholder="Enter secure password"
                             required
-                            className="w-full border border-[#E5E7EB] rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors"
+                            className={`w-full border rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors ${
+                                fieldErrors.password ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB]'
+                            }`}
                         />
+                        {fieldErrors.password && (
+                            <p className="mt-1 text-sm text-red-600">{fieldErrors.password}</p>
+                        )}
                     </div>
 
                     {/* Role Field */}
@@ -658,7 +687,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                             <select 
                                 id="create-user-role"
                                 value={role} 
-                                onChange={(e) => setRole(e.target.value)} 
+                                onChange={(e) => handleFieldChange("role", e.target.value)} 
                                 className="w-full border border-[#E5E7EB] rounded-lg px-4 py-2.5 pr-10 text-sm text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none transition-colors"
                             >
                                 <option value="admin">Admin</option>
@@ -681,16 +710,16 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 bg-gray-50 border-t border-[#E5E7EB] rounded-b-xl flex items-center justify-end gap-3">
+                <div className="px-6 py-4 bg-gray-50 border-t border-[#E5E7EB] rounded-b-xl flex items-center justify-between gap-3">
                     <button 
                         onClick={onClose}
                         disabled={submitting}
-                        className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#E5E7EB] rounded-lg hover:bg-gray-50 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Cancel
                     </button>
                     <button 
-                        disabled={submitting || !email.trim() || !password.trim()} 
+                        disabled={submitting || !name.trim() || !email.trim() || !password.trim() || (email && !isValidEmail(email))} 
                         onClick={submit} 
                         className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                     >
