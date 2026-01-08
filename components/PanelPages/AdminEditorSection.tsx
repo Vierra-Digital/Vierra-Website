@@ -95,6 +95,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     const [searchQuery, setSearchQuery] = useState<string>("")
     const [currentPage, setCurrentPage] = useState<number>(0)
     const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'staff' | 'client'>('all')
+    const [sortBy, setSortBy] = useState<'id' | 'name' | 'email' | 'role'>('role')
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
     const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
     const pageSize = 10
@@ -197,14 +198,23 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
             )
         }
         
-        // Sort by ID in the specified direction
+        // Sort by selected field in the specified direction
         const sorted = [...filtered].sort((a, b) => {
-            const comparison = a.id - b.id
+            let comparison = 0
+            if (sortBy === 'id') {
+                comparison = a.id - b.id
+            } else if (sortBy === 'name') {
+                comparison = (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+            } else if (sortBy === 'email') {
+                comparison = (a.email || '').localeCompare(b.email || '', undefined, { sensitivity: 'base' })
+            } else if (sortBy === 'role') {
+                comparison = (a.role || '').localeCompare(b.role || '', undefined, { sensitivity: 'base' })
+            }
             return sortDir === 'asc' ? comparison : -comparison
         })
         
         return sorted
-    }, [users, searchQuery, roleFilter, sortDir])
+    }, [users, searchQuery, roleFilter, sortBy, sortDir])
 
     const paginatedUsers = filteredUsers.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
     const totalPages = Math.ceil(filteredUsers.length / pageSize)
@@ -251,10 +261,34 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                         {isFilterOpen && (
                             <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#E5E7EB] py-4 z-50">
                                 <div className="px-5">
-                                    <h3 className="text-sm font-semibold text-[#111827] mb-4">Filter & Sort</h3>
+                                    <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
                                     
+                                    {/* Sort By */}
+                                    <div className="mb-5">
+                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By</label>
+                                        <div className="relative">
+                                            <select
+                                                value={sortBy}
+                                                onChange={(e) => {
+                                                    setSortBy(e.target.value as 'id' | 'name' | 'email' | 'role')
+                                                    setCurrentPage(0)
+                                                }}
+                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
+                                            >
+                                                <option value="name">Name</option>
+                                                <option value="email">Email</option>
+                                                <option value="role">Role</option>
+                                            </select>
+                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     {/* Role Filter */}
-                                    <div className="mb-4">
+                                    <div className="mb-5">
                                         <label className="block text-xs font-medium text-[#6B7280] mb-2">Role</label>
                                         <div className="relative">
                                             <select
@@ -278,27 +312,54 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                         </div>
                                     </div>
 
-                                    {/* Sort Direction */}
-                                    <div>
+                                    {/* Sort Order */}
+                                    <div className="mb-4">
                                         <label className="block text-xs font-medium text-[#6B7280] mb-2">Order</label>
-                                        <div className="relative">
-                                            <select
-                                                value={sortDir}
-                                                onChange={(e) => {
-                                                    setSortDir(e.target.value as 'asc' | 'desc')
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => {
+                                                    setSortDir("asc")
                                                     setCurrentPage(0)
                                                 }}
-                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
+                                                className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
+                                                    sortDir === "asc" 
+                                                        ? "bg-[#701CC0] text-white shadow-sm" 
+                                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                                }`}
                                             >
-                                                <option value="asc">Ascending</option>
-                                                <option value="desc">Descending</option>
-                                            </select>
-                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </div>
+                                                Ascending
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setSortDir("desc")
+                                                    setCurrentPage(0)
+                                                }}
+                                                className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
+                                                    sortDir === "desc" 
+                                                        ? "bg-[#701CC0] text-white shadow-sm" 
+                                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                                }`}
+                                            >
+                                                Descending
+                                            </button>
                                         </div>
+                                    </div>
+
+                                    {/* Clear Button */}
+                                    <div className="pt-3 border-t border-[#E5E7EB]">
+                                        <button
+                                            onClick={() => {
+                                                setSearchQuery("")
+                                                setRoleFilter("all")
+                                                setSortBy("role")
+                                                setSortDir("asc")
+                                                setCurrentPage(0)
+                                                setIsFilterOpen(false)
+                                            }}
+                                            className="w-full text-xs py-2 px-3 rounded-lg font-medium text-[#6B7280] bg-gray-50 hover:bg-gray-100 hover:text-[#374151] transition-colors duration-200"
+                                        >
+                                            Clear All Filters
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -371,7 +432,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Email</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Password</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Role</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Actions</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Manage</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-[#E5E7EB]">
@@ -424,28 +485,28 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                         </div>
                     )}
 
-                    {!loading && filteredUsers.length > 0 && totalPages > 1 && (
+                    {!loading && filteredUsers.length > 0 && (
                         <div className="mt-4 pt-4 text-xs text-[#677489]">
                             <div className="w-full flex items-center justify-center">
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
                                         disabled={currentPage === 0}
-                                        className="px-3 py-1 rounded-md border border-[#E5E7EB] bg-white text-[#374151] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Previous
                                     </button>
-                                    <span className="px-3 py-1 text-[#6B7280]">
+                                    <span className="text-xs text-[#6B7280]">
                                         Page {currentPage + 1} of {totalPages}
                                     </span>
                                     <button
                                         onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
                                         disabled={currentPage >= totalPages - 1}
-                                        className="px-3 py-1 rounded-md border border-[#E5E7EB] bg-white text-[#374151] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Next
                                     </button>
-        </div>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -789,8 +850,8 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
     const updateSessionsModalRef = useRef<HTMLDivElement>(null)
     const [sessionLinks, setSessionLinks] = useState<Record<string, { link: string; loading: boolean }>>({})
     const pageSize = 10
-    const [sortKey, setSortKey] = useState<"client" | "business" | "status" | "created" | "updated" | "platforms">("created")
-    const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
+    const [sortKey, setSortKey] = useState<"client" | "business" | "status" | "created" | "updated">("client")
+    const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
     const load = async () => {
         setLoading(true)
@@ -835,10 +896,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                 const av = a.lastUpdatedAt ?? -Infinity
                 const bv = b.lastUpdatedAt ?? -Infinity
                 v = av - bv
-            } else if (sortKey === "platforms") {
-                const ac = a.platforms ? a.platforms.length : 0
-                const bc = b.platforms ? b.platforms.length : 0
-                v = ac - bc
             }
             return sortDir === "asc" ? v : -v
         }
@@ -1127,10 +1184,42 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                         {isStatusFilterOpen && (
                             <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#E5E7EB] py-4 z-50">
                                 <div className="px-5">
-                                    <h3 className="text-sm font-semibold text-[#111827] mb-4">Filter & Sort</h3>
+                                    <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
                                     
+                                    {/* Sort By */}
+                                    <div className="mb-5">
+                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By</label>
+                                        <div className="relative">
+                                            <select
+                                                value={sortKey}
+                                                onChange={(e) => {
+                                                    setSortKey(e.target.value as "client" | "business" | "status" | "created" | "updated")
+                                                    setCurrentPage(0)
+                                                    // Set default sort direction based on field
+                                                    if (e.target.value === "created" || e.target.value === "updated") {
+                                                        setSortDir("desc")
+                                                    } else {
+                                                        setSortDir("asc")
+                                                    }
+                                                }}
+                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
+                                            >
+                                                <option value="client">Client</option>
+                                                <option value="business">Business</option>
+                                                <option value="status">Status</option>
+                                                <option value="created">Created Date</option>
+                                                <option value="updated">Last Updated</option>
+                                            </select>
+                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     {/* Status Filter */}
-                                    <div className="mb-4">
+                                    <div className="mb-5">
                                         <label className="block text-xs font-medium text-[#6B7280] mb-2">Status</label>
                                         <div className="relative">
                                             <select
@@ -1153,35 +1242,62 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                                 </svg>
                                             </div>
                                         </div>
-            </div>
+                                    </div>
 
-                                    {/* Sort Direction */}
-                                    <div>
+                                    {/* Sort Order */}
+                                    <div className="mb-4">
                                         <label className="block text-xs font-medium text-[#6B7280] mb-2">Order</label>
-                                        <div className="relative">
-                                            <select
-                                                value={sortDir}
-                                                onChange={(e) => {
-                                                    setSortDir(e.target.value as "asc" | "desc")
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => {
+                                                    setSortDir("asc")
                                                     setCurrentPage(0)
                                                 }}
-                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
+                                                className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
+                                                    sortDir === "asc" 
+                                                        ? "bg-[#701CC0] text-white shadow-sm" 
+                                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                                }`}
                                             >
-                                                <option value="asc">Ascending</option>
-                                                <option value="desc">Descending</option>
-                                            </select>
-                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                </div>
-                </div>
-                </div>
+                                                Ascending
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    setSortDir("desc")
+                                                    setCurrentPage(0)
+                                                }}
+                                                className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
+                                                    sortDir === "desc" 
+                                                        ? "bg-[#701CC0] text-white shadow-sm" 
+                                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                                }`}
+                                            >
+                                                Descending
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Clear Button */}
+                                    <div className="pt-3 border-t border-[#E5E7EB]">
+                                        <button
+                                            onClick={() => {
+                                                    setSearchQuery("")
+                                                setStatusFilter("all")
+                                                setSortKey("client")
+                                                setSortDir("asc")
+                                                setCurrentPage(0)
+                                                setIsStatusFilterOpen(false)
+                                            }}
+                                            className="w-full text-xs py-2 px-3 rounded-lg font-medium text-[#6B7280] bg-gray-50 hover:bg-gray-100 hover:text-[#374151] transition-colors duration-200"
+                                        >
+                                            Clear All Filters
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
                     </div>
-                <button
+                    <button
                         onClick={expireSessions}
                         disabled={expiring}
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm disabled:opacity-60"
@@ -1195,7 +1311,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                     >
                         <Users size={16} />
                         <span>Manage Users</span>
-                </button>
+                    </button>
                 </div>
             </div>
 
@@ -1205,7 +1321,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                     <div className="text-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto"></div>
                         <p className="mt-2 text-sm text-[#6B7280]">Loading Sessions...</p>
-                </div>
+                    </div>
                 </div>
             ) : (
                 <>
@@ -1268,7 +1384,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                     <SortIcon active={sortKey === "updated"} dir={sortDir} />
                                 </button>
                             </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Actions</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Manage</th>
                         </tr>
                     </thead>
                                     <tbody className="bg-white divide-y divide-[#E5E7EB]">
@@ -1362,24 +1478,24 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                         </div>
                     )}
 
-                    {!loading && filteredSessions.length > 0 && totalPages > 1 && (
+                    {!loading && filteredSessions.length > 0 && (
                         <div className="mt-4 pt-4 text-xs text-[#677489]">
                             <div className="w-full flex items-center justify-center">
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
                                         disabled={currentPage === 0}
-                                        className="px-3 py-1 rounded-md border border-[#E5E7EB] bg-white text-[#374151] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Previous
                                     </button>
-                                    <span className="px-3 py-1 text-[#6B7280]">
+                                    <span className="text-xs text-[#6B7280]">
                                         Page {currentPage + 1} of {totalPages}
                                     </span>
                                     <button
                                         onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
                                         disabled={currentPage >= totalPages - 1}
-                                        className="px-3 py-1 rounded-md border border-[#E5E7EB] bg-white text-[#374151] hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Next
                                     </button>
