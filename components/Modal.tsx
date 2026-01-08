@@ -207,7 +207,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
             >
               <div>
                 <h2 className={`text-2xl font-semibold text-white mb-6 ${bricolage.className}`}>
-                  Let's Get Started
+                  Let&apos;s Get Started
                 </h2>
                 <p className="text-gray-300 mb-6">Tell us a bit about yourself to begin your free audit.</p>
               </div>
@@ -525,7 +525,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                 Application Submitted!
               </h2>
               <p className={`text-gray-300 text-lg mb-8 max-w-md mx-auto ${inter.className}`}>
-                Thank you for your interest in Vierra. We've received your application and will review it shortly. Our team will get back to you within 24-48 hours.
+                Thank you for your interest in Vierra. We&apos;ve received your application and will review it shortly. Our team will get back to you within 24-48 hours.
               </p>
               <motion.button
                 className="px-8 py-3 bg-[#701CC0] text-white rounded-lg font-medium shadow-[0px_4px_15.9px_0px_#701CC0B8] hover:bg-[#8F42FF] transform transition-all duration-300 hover:scale-105"

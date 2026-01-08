@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react"
-import { Users, FileText, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, Eye, X, XIcon as XIconLucide, MoreVertical, Copy, Trash2, RotateCw, Link as LinkIcon } from "lucide-react"
+import { Users, FileText, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, Eye, X, MoreVertical, Trash2, RotateCw, Link as LinkIcon } from "lucide-react"
 import { FiCheck } from "react-icons/fi"
 import { FiSearch, FiFilter, FiPlus, FiTrash2 } from "react-icons/fi"
 import { Inter } from "next/font/google"
@@ -828,7 +828,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
     const [searchQuery, setSearchQuery] = useState<string>("")
     const [currentPage, setCurrentPage] = useState<number>(0)
     const [expiring, setExpiring] = useState<boolean>(false)
-    const [expireMessage, setExpireMessage] = useState<string>("")
     const [showUpdateSessionsModal, setShowUpdateSessionsModal] = useState<boolean>(false)
     const [updateSessionsSuccess, setUpdateSessionsSuccess] = useState<boolean>(false)
     const [updatedCount, setUpdatedCount] = useState<number>(0)
@@ -853,7 +852,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
     const [sortKey, setSortKey] = useState<"client" | "business" | "status" | "created" | "updated">("client")
     const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
-    const load = async () => {
+    const load = useCallback(async () => {
         setLoading(true)
         setError("")
         try {
@@ -866,11 +865,11 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
         } finally {
             setLoading(false)
         }
-    }
+    }, [])
 
     useEffect(() => {
         load()
-    }, [])
+    }, [load])
 
     const statusOrder = useMemo<Record<SessionStatus, number>>(() => ({
         pending: 1,
@@ -961,7 +960,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
     const expireSessions = useCallback(async () => {
         try {
             setExpiring(true)
-            setExpireMessage("")
             const r = await fetch("/api/admin/expireSessions", { method: "POST" })
             if (!r.ok) throw new Error("Failed to update sessions")
             const j = await r.json()
@@ -1028,7 +1026,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
             setRenewSuccess(true)
             setRenewModalOpen(true)
             await load()
-        } catch (e: any) {
+        } catch {
             setRenewSuccess(false)
             setRenewModalOpen(true)
         } finally {
@@ -1391,7 +1389,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                         {paginatedSessions.map((s) => {
                                             const linkKey = `${s.token}-${s.clientEmail}`
                                             const sessionLink = sessionLinks[linkKey]
-                                            const isPending = s.status === "pending" || s.status === "in_progress"
                                             return (
                                                 <tr key={s.token} className="hover:bg-purple-50">
                                                     <td className="px-4 py-4">

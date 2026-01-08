@@ -44,7 +44,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
   const { data: session } = useSession()
   const [isAddClientOpen, setIsAddClientOpen] = useState(false)
   const [clientRefreshTrigger, setClientRefreshTrigger] = useState(0)
-  const [error, setError] = useState<string | null>(null)
   const [currentUserName, setCurrentUserName] = useState<string | null>(null)
   const [currentUserImage, setCurrentUserImage] = useState<string | null>(null)
 
