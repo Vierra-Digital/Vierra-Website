@@ -2,22 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@keyframes float {
-  0% {
-    transform: translateY(0px) rotate(45deg);
-  }
-  50% {
-    transform: translateY(-10px) rotate(45deg);
-  }
-  100% {
-    transform: translateY(0px) rotate(45deg);
-  }
-}
-
-.animate-float {
-  animation: float 3s ease-in-out infinite;
-}
-
 @keyframes gradient-horizontal {
   0% {
     background-position: 0% 50%;
@@ -33,34 +17,6 @@
 .animate-gradient {
   background-size: 200% 200%;
   animation: gradient-horizontal 10s ease infinite;
-}
-
-.animate-gradient-fast {
-  background-size: 200% 200%;
-  animation: gradient-horizontal 5s ease infinite;
-}
-
-@keyframes gradient-move {
-  0% {
-    background-position: 0% 0%;
-  }
-  25% {
-    background-position: 50% 0%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  75% {
-    background-position: 50% 100%;
-  }
-  100% {
-    background-position: 0% 0%;
-  }
-}
-
-.animate-gradient-move {
-  background-size: 300% 300%;
-  animation: gradient-move 6s ease infinite;
 }
 
 body {

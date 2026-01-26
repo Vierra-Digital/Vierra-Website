@@ -116,23 +116,6 @@ export default function RootLayoutClient({
     }
   }, []);
 
-  // const organizationSchema = {
-  //   "@context": "https://schema.org",
-  //   "@type": "Organization",
-  //   name: "Vierra Development",
-  //   url: "https://vierradev.com",
-  //   logo: "https://vierradev.com/assets/meta-banner.png",
-  //   contactPoint: {
-  //     "@type": "Contact",
-  //     telephone: "+1-781-496-8867",
-  //     contactType: "Sales",
-  //   },
-  //   sameAs: [
-  //     "https://www.linkedin.com/company/vierra/",
-  //   ],
-  // };
-
-  // CRITICAL FIX: Don't render html/head tags in client component
   return (
     <>
       <div className={`${geistSansVariable} ${geistMonoVariable} antialiased`}>
