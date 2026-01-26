@@ -88,7 +88,6 @@ model OnboardingPlatformToken {
   session      OnboardingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@unique([sessionId, platform], name: "sessionId_platform")
-  @@index([sessionId, platform])
   @@map("onboarding_platform_tokens")
 }
 
@@ -103,7 +102,6 @@ model UserToken {
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, platform], name: "userId_platform")
-  @@index([userId, platform])
   @@map("user_tokens")
 }
 
@@ -129,6 +127,7 @@ model BlogPost {
   tag            String?
   author         Author   @relation(fields: [author_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_author")
 
+  @@index([author_id])
   @@map("blog_posts")
 }
 
@@ -149,7 +148,6 @@ model MarketingTracker {
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, year, month, outreach])
-  @@index([userId, year])
   @@map("marketing_tracker")
 }
 
@@ -168,7 +166,6 @@ model MarketingYearlySummary {
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, year])
-  @@index([userId, year])
   @@map("marketing_yearly_summary")
 }
 
@@ -185,7 +182,6 @@ model SignedDocuments {
   userId           Int
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([sessionToken])
   @@index([userId])
   @@map("signed_documents")
 }
