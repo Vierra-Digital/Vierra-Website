@@ -26,19 +26,47 @@ export function Header() {
             <Image src="/assets/vierra-logo.png" alt="Vierra Logo" width={120} height={40} className="w-auto h-8" />
           </Link>
           <nav className={`hidden md:flex items-center gap-8 text-[16px] ${bricolage.className}`}>
-            <Link href="/#about" className="hover:text-[#8F42FF] transition-colors relative group">
+            <Link
+              href="/#about"
+              className="hover:text-[#8F42FF] transition-colors relative group"
+              onClick={(event) => {
+                event.preventDefault()
+                document.getElementById("about")?.scrollIntoView({ behavior: "smooth" })
+              }}
+            >
               About us
               <span className="absolute left-0 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-full" />
             </Link>
-            <Link href="/#services" className="hover:text-[#8F42FF] transition-colors relative group">
+            <Link
+              href="/#services"
+              className="hover:text-[#8F42FF] transition-colors relative group"
+              onClick={(event) => {
+                event.preventDefault()
+                document.getElementById("services")?.scrollIntoView({ behavior: "smooth" })
+              }}
+            >
               Services
               <span className="absolute left-0 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-full" />
             </Link>
-            <Link href="/#solutions" className="hover:text-[#8F42FF] transition-colors relative group">
+            <Link
+              href="/#solutions"
+              className="hover:text-[#8F42FF] transition-colors relative group"
+              onClick={(event) => {
+                event.preventDefault()
+                document.getElementById("solutions")?.scrollIntoView({ behavior: "smooth" })
+              }}
+            >
               Solutions
               <span className="absolute left-0 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-full" />
             </Link>
-            <Link href="/#cases" className="hover:text-[#8F42FF] transition-colors relative group">
+            <Link
+              href="/#cases"
+              className="hover:text-[#8F42FF] transition-colors relative group"
+              onClick={(event) => {
+                event.preventDefault()
+                document.getElementById("cases")?.scrollIntoView({ behavior: "smooth" })
+              }}
+            >
               Case Studies
               <span className="absolute left-0 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-full" />
             </Link>
@@ -78,10 +106,50 @@ export function Header() {
                   </button>
                 </div>
                 <nav className={`flex flex-col p-4 ${bricolage.className}`}>
-                  <Link href="/#about" className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors" onClick={() => setIsMobileMenuOpen(false)}>About us</Link>
-                  <Link href="/#services" className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Services</Link>
-                  <Link href="/#solutions" className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Solutions</Link>
-                  <Link href="/#cases" className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Cases</Link>
+                  <Link
+                    href="/#about"
+                    className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      setIsMobileMenuOpen(false)
+                      document.getElementById("about")?.scrollIntoView({ behavior: "smooth" })
+                    }}
+                  >
+                    About us
+                  </Link>
+                  <Link
+                    href="/#services"
+                    className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      setIsMobileMenuOpen(false)
+                      document.getElementById("services")?.scrollIntoView({ behavior: "smooth" })
+                    }}
+                  >
+                    Services
+                  </Link>
+                  <Link
+                    href="/#solutions"
+                    className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      setIsMobileMenuOpen(false)
+                      document.getElementById("solutions")?.scrollIntoView({ behavior: "smooth" })
+                    }}
+                  >
+                    Solutions
+                  </Link>
+                  <Link
+                    href="/#cases"
+                    className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      setIsMobileMenuOpen(false)
+                      document.getElementById("cases")?.scrollIntoView({ behavior: "smooth" })
+                    }}
+                  >
+                    Cases
+                  </Link>
                   <Link href="/blog" className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Blog</Link>
                 </nav>
                 <div className="mt-auto p-4 border-t border-white/10">
