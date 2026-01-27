@@ -161,15 +161,9 @@ export function BusinessSolutions() {
                         transition={{ duration: 0.4, delay: 0.15 }}
                         className={`${figtree.className}`}
                       >
-                        <p className="text-[#646A69] text-[18px] mb-2">
+                        <p className="text-[#646A69] text-[18px] mb-6">
                           {tab.content}
                         </p>
-                        <Button
-                          variant="link"
-                          className="text-[#022C22] text-[18px] hover:text-[#701CC0] p-0"
-                        >
-                          Learn More
-                        </Button>
                       </motion.div>
                     </motion.div>
                   )}
