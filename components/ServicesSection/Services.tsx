@@ -499,17 +499,6 @@ export function Services() {
               />
             ))}
           </div>
-          <motion.div
-            initial={{ x: 0, y: 0 }}
-            animate={{ x: [0, 15, 0], y: [0, 15, 0] }}
-            transition={{
-              duration: 5,
-              repeat: Infinity,
-              repeatType: "loop",
-              ease: "easeInOut",
-            }}
-            className="absolute top-[165px] left-[415px] w-[540px] h-[540px] opacity-50 blur-[10px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10"
-          />
         </div>
       </div>
     </div>
