@@ -6,7 +6,6 @@ import Image from "next/image"
 import { X } from "lucide-react"
 import "react-pdf/dist/esm/Page/AnnotationLayer.css"
 import "react-pdf/dist/esm/Page/TextLayer.css"
-import styles from "./SignPdfModal.module.css"
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
 
@@ -268,7 +267,7 @@ const SignPdfModal: React.FC<SignPdfModalProps> = ({ isOpen, onClose }) => {
               <p className="mb-4 text-sm text-gray-300">
                 Click on the PDF page below to place the signature box.
               </p>
-              <div className={`${styles.pdfContainer} border border-gray-500 mb-4 relative bg-white w-full`}>
+              <div className="pdf-container border border-gray-500 mb-4 relative bg-white w-full">
                 <Document
                   file={pdfFile}
                   onLoadSuccess={onDocumentLoadSuccess}
