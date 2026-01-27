@@ -1,6 +1,6 @@
-const CACHE_NAME = 'vierra-v1';
+const CACHE_NAME = 'vierra-v2';
 const START_URL = '/';
-const RUNTIME_CACHE = 'vierra-runtime-v1';
+const RUNTIME_CACHE = 'vierra-runtime-v2';
 
 // Install event - cache essential resources
 self.addEventListener('install', (event) => {
@@ -49,6 +49,14 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
   const isStartUrl = url.pathname === '/' || url.pathname === '/index.html';
+  const isNextAsset = url.pathname.startsWith('/_next/');
+  const isApiRoute = url.pathname.startsWith('/api/');
+
+  // Never cache Next.js build assets or API responses to avoid stale chunk errors
+  if (isNextAsset || isApiRoute) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
 
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
