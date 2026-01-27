@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react"
 import { Bricolage_Grotesque, Inter, Figtree } from "next/font/google"
-import { Button } from "@/components/ui/button"
 import { StatsGrid } from "./StatsGrid"
 import { motion, AnimatePresence } from "framer-motion"
 import Timeline from "./Timeline"
