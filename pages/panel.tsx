@@ -14,6 +14,7 @@ import { RiArrowDropDownLine, RiFolder3Line } from "react-icons/ri";
 import { FaRegFilePdf } from "react-icons/fa6";
 import { HiOutlineDocumentText } from "react-icons/hi";
 import { HiGlobeAlt } from "react-icons/hi2";
+import styles from "./panel-search.module.css"
 import { useSession, signOut } from "next-auth/react"
 const SignPdfModal = dynamic(() => import("@/components/ui/SignPdfModal"), {
   ssr: false,
@@ -274,7 +275,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                     id="panel-search"
                     type="search"
                     placeholder="Search"
-                    className={`flex-1 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none ${inter.className}`}
+                    className={`flex-1 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none ${inter.className} ${styles.searchInput}`}
                   />
                 </div>
               </div>
