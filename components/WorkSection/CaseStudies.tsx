@@ -1,12 +1,20 @@
+"use client"
+
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { ArrowUpRight } from "lucide-react"
+import { ArrowUpRight, Play } from "lucide-react"
 import { Bricolage_Grotesque, Inter } from "next/font/google"
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
 const inter = Inter({ subsets: ["latin"] })
 
 export function CaseStudies() {
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false)
+  const videoId = "ZK-rNEhJIDs"
+  const videoSrc = `https://www.youtube.com/embed/${videoId}?autoplay=1`
+  const videoPoster = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+
   return (
     <div className="mt-16 md:mt-32 md:px-20" id="cases">
       <div className="mb-8 md:mb-24">
@@ -51,16 +59,40 @@ export function CaseStudies() {
       </div>
       <div className="container mx-auto mb-10 px-4 md:px-16">
         <div className="max-w-full mx-auto flex justify-center items-center">
-          <div className="w-full h-[670px] rounded-[50px] max-sm:rounded-3xl overflow-hidden lg:shadow-[20px_15px_100px_0px_#7A13D080]">
-            <iframe
-              width="100%"
-              height="100%"
-              src="https://www.youtube.com/embed/ZK-rNEhJIDs?si=bplSAJC6A2_4xskR"
-              title="YouTube video player"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              className="w-full h-full"
-            ></iframe>
+          <div className="w-full h-[670px] rounded-[50px] max-sm:rounded-3xl overflow-hidden lg:shadow-[20px_15px_100px_0px_#7A13D080] bg-black">
+            {isVideoLoaded ? (
+              <iframe
+                width="100%"
+                height="100%"
+                src={videoSrc}
+                title="YouTube video player"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="strict-origin-when-cross-origin"
+                className="w-full h-full"
+              />
+            ) : (
+              <button
+                type="button"
+                className="relative w-full h-full group"
+                onClick={() => setIsVideoLoaded(true)}
+                aria-label="Play case study video"
+              >
+                <img
+                  src={videoPoster}
+                  alt="Case study video preview"
+                  loading="lazy"
+                  className="w-full h-full object-cover"
+                />
+                <span className="absolute inset-0 bg-black/30 transition-colors duration-300 group-hover:bg-black/40" />
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <span className="flex items-center justify-center w-20 h-20 rounded-full bg-white/90 text-black shadow-lg transition-transform duration-300 group-hover:scale-105">
+                    <Play className="w-8 h-8 ml-1" />
+                  </span>
+                </span>
+              </button>
+            )}
           </div>
         </div>
       </div>
