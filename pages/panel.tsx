@@ -3,7 +3,7 @@ import Head from "next/head"
 import { Inter } from "next/font/google"
 import Image from "next/image"
 import ProfileImage from "@/components/ProfileImage"
-import SignPdfModal from "@/components/ui/SignPdfModal"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { FiLogOut, FiShield } from "react-icons/fi"
 import { AiOutlineAppstore } from "react-icons/ai";
@@ -15,19 +15,50 @@ import { FaRegFilePdf } from "react-icons/fa6";
 import { HiOutlineDocumentText } from "react-icons/hi";
 import { HiGlobeAlt } from "react-icons/hi2";
 import { useSession, signOut } from "next-auth/react"
-import UserSettingsPage from "@/components/UserSettingsPage"
-import AddClientModal from "@/components/ui/AddClientModal"
+const SignPdfModal = dynamic(() => import("@/components/ui/SignPdfModal"), {
+  ssr: false,
+})
+const AddClientModal = dynamic(() => import("@/components/ui/AddClientModal"), {
+  ssr: false,
+})
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/pages/api/auth/[...nextauth]"
 import type { GetServerSideProps } from "next"
-import DashboardSection from "@/components/PanelPages/DashboardSection"
-import ClientsSection from "@/components/PanelPages/ClientsSection"
-import TeamPanelSection from "@/components/PanelPages/TeamPanelSection"
-import LtvCalculatorSection from "@/components/PanelPages/LTVCalculatorSection"
-import OutreachSection from "@/components/PanelPages/OutreachSection"
-import ProjectManagement from "../components/PanelPages/ProjectManagement"
-import BlogEditorSection from "@/components/PanelPages/BlogEditorSection"
-import AdminEditorSection from "@/components/PanelPages/AdminEditorSection"
+const DashboardSection = dynamic(
+  () => import("@/components/PanelPages/DashboardSection"),
+  { ssr: false }
+)
+const ClientsSection = dynamic(
+  () => import("@/components/PanelPages/ClientsSection"),
+  { ssr: false }
+)
+const TeamPanelSection = dynamic(
+  () => import("@/components/PanelPages/TeamPanelSection"),
+  { ssr: false }
+)
+const LtvCalculatorSection = dynamic(
+  () => import("@/components/PanelPages/LTVCalculatorSection"),
+  { ssr: false }
+)
+const OutreachSection = dynamic(
+  () => import("@/components/PanelPages/OutreachSection"),
+  { ssr: false }
+)
+const ProjectManagement = dynamic(
+  () => import("../components/PanelPages/ProjectManagement"),
+  { ssr: false }
+)
+const BlogEditorSection = dynamic(
+  () => import("@/components/PanelPages/BlogEditorSection"),
+  { ssr: false }
+)
+const AdminEditorSection = dynamic(
+  () => import("@/components/PanelPages/AdminEditorSection"),
+  { ssr: false }
+)
+const UserSettingsPage = dynamic(() => import("@/components/UserSettingsPage"), {
+  ssr: false,
+})
 
 const inter = Inter({ subsets: ["latin"] })
 
