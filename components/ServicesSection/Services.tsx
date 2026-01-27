@@ -361,6 +361,7 @@ export function Services() {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasWrapperRef = useRef<HTMLDivElement>(null)
   const [canvasSize, setCanvasSize] = useState({ width: 480, height: 800 })
+  const [isCanvasActive, setIsCanvasActive] = useState(false)
 
   useEffect(() => {
     if (!canvasWrapperRef.current) return
@@ -381,6 +382,25 @@ export function Services() {
 
     updateCanvasSize()
 
+    return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (!canvasWrapperRef.current) return
+    if (typeof IntersectionObserver === "undefined") {
+      setIsCanvasActive(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsCanvasActive(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin: "200px" }
+    )
+    observer.observe(canvasWrapperRef.current)
     return () => observer.disconnect()
   }, [])
 
@@ -417,18 +437,22 @@ export function Services() {
             ref={canvasWrapperRef}
             style={{ minHeight: "350px" }}
           >
-            <Canvas
-              style={{
-                width: canvasSize.width,
-                height: canvasSize.height,
-                minHeight: "350px",
-              }}
-              gl={{ antialias: true, alpha: true }}
-              camera={{ position: [0, 0, 5], fov: 75 }}
-            >
-              <Lighting />
-              <Model selectedId={openServiceId} isMobile={true} />
-            </Canvas>
+            {isCanvasActive ? (
+              <Canvas
+                style={{
+                  width: canvasSize.width,
+                  height: canvasSize.height,
+                  minHeight: "350px",
+                }}
+                gl={{ antialias: true, alpha: true }}
+                camera={{ position: [0, 0, 5], fov: 75 }}
+              >
+                <Lighting />
+                <Model selectedId={openServiceId} isMobile={true} />
+              </Canvas>
+            ) : (
+              <div className="w-full h-[350px]" />
+            )}
           </div>
           <div className="px-4 py-4">
             {services.map((service) => (
@@ -446,18 +470,24 @@ export function Services() {
             className="z-10 absolute right-[12%] top-1/3 -translate-y-[40%] translate-x-1/2"
             ref={canvasWrapperRef}
           >
-            <Canvas
-              style={{
-                width: canvasSize.width,
-                height: canvasSize.height,
-              }}
-              gl={{ antialias: true }}
-              onPointerOver={() => (document.body.style.cursor = "grab")}
-              onPointerOut={() => (document.body.style.cursor = "default")}
-            >
-              <Lighting />
-              <Model selectedId={openServiceId} isMobile={false} />
-            </Canvas>
+            {isCanvasActive ? (
+              <Canvas
+                style={{
+                  width: canvasSize.width,
+                  height: canvasSize.height,
+                }}
+                gl={{ antialias: true }}
+                onPointerOver={() => (document.body.style.cursor = "grab")}
+                onPointerOut={() => (document.body.style.cursor = "default")}
+              >
+                <Lighting />
+                <Model selectedId={openServiceId} isMobile={false} />
+              </Canvas>
+            ) : (
+              <div
+                style={{ width: canvasSize.width, height: canvasSize.height }}
+              />
+            )}
           </div>
           <div className="px-4 md:ml-40 md:mr-20 py-8 md:py-20">
             {services.map((service) => (
