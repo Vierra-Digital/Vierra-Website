@@ -32,7 +32,7 @@ const services: Service[] = [
     id: "03",
     name: "Targeted Ads",
     description:
-      "We use the changing market's self-interests to push ads that reach an audience that wants your service. Save money by spending on premium ad spend that helps reach your desired audience.",
+      "We use the changing market's trends to push ads that reach an audience that wants your service. Save money by spending on premium ad spend that helps reach your desired audience.",
   },
   {
     id: "04",
