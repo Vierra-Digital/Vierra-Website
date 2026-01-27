@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowUpRight, Play } from "lucide-react"
@@ -79,11 +80,13 @@ export function CaseStudies() {
                 onClick={() => setIsVideoLoaded(true)}
                 aria-label="Play case study video"
               >
-                <img
+                <Image
                   src={videoPoster}
                   alt="Case study video preview"
-                  loading="lazy"
-                  className="w-full h-full object-cover"
+                  fill
+                  sizes="(max-width: 768px) 100vw, 1200px"
+                  priority={false}
+                  className="object-cover"
                 />
                 <span className="absolute inset-0 bg-black/30 transition-colors duration-300 group-hover:bg-black/40" />
                 <span className="absolute inset-0 flex items-center justify-center">
