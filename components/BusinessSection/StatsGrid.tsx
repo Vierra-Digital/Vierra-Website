@@ -18,7 +18,7 @@ export function StatsGrid() {
       progressPercent: 66.66,
     },
     {
-      number: "30+",
+      number: "80+",
       text: "business helped. We prioritize your business like our own.",
       progressPercent: 100,
     },
@@ -69,7 +69,7 @@ export function StatsGrid() {
               className={`mt-4 font-light leading-6 text-[#9BAFC3] text-left max-sm:text-sm max-sm:leading-5 ${inter.className}`}
             >
               profits raised. The total amount of profit generated for our
-              partners.
+              clients.
             </div>
           </div>
         </div>
