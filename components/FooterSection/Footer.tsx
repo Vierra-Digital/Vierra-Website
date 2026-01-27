@@ -73,7 +73,7 @@ const Footer = () => {
       </div>
       <div className="flex flex-col md:flex-row justify-center md:justify-end items-center gap-4 mt-14 px-5 md:px-20">
         <a href="https://vierradev.com/privacy-policy" className={`text-[#FFFFFFCC] text-sm hover:text-white transition-colors ${inter.className}`}>Privacy Policy</a>
-        <p className={`text-[#FFFFFFCC] text-sm ${inter.className}`}>© 2025 Vierra Digital Inc, All rights reserved</p>
+        <p className={`text-[#FFFFFFCC] text-sm ${inter.className}`}>© 2026 Vierra Digital Inc, All rights reserved</p>
       </div>
     </footer>
   );
