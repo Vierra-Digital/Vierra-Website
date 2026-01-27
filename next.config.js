@@ -2,6 +2,14 @@ const nextConfig = {
   reactStrictMode: true,
   compress: true,
   poweredByHeader: false,
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'i.ytimg.com',
+      },
+    ],
+  },
   async headers() {
     return [
       {
