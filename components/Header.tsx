@@ -18,6 +18,23 @@ export function Header() {
     document.body.style.overflow = isMobileMenuOpen ? "hidden" : "unset";
   }, [isMobileMenuOpen]);
 
+  const handleSectionClick = (
+    event: React.MouseEvent<HTMLAnchorElement>,
+    sectionId: string,
+    closeMobile = false
+  ) => {
+    event.preventDefault()
+    if (closeMobile) {
+      setIsMobileMenuOpen(false)
+    }
+    if (typeof window === "undefined") return
+    if (window.location.pathname !== "/") {
+      window.location.href = `/#${sectionId}`
+      return
+    }
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth" })
+  }
+
   return (
     <>
       <header className="relative z-50 flex items-center justify-between px-2 py-6 max-w-7xl mx-auto">
@@ -29,10 +46,7 @@ export function Header() {
             <Link
               href="/#about"
               className="hover:text-[#8F42FF] transition-colors relative group"
-              onClick={(event) => {
-                event.preventDefault()
-                document.getElementById("about")?.scrollIntoView({ behavior: "smooth" })
-              }}
+              onClick={(event) => handleSectionClick(event, "about")}
             >
               About us
               <span className="absolute left-0 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-full" />
@@ -40,10 +54,7 @@ export function Header() {
             <Link
               href="/#services"
               className="hover:text-[#8F42FF] transition-colors relative group"
-              onClick={(event) => {
-                event.preventDefault()
-                document.getElementById("services")?.scrollIntoView({ behavior: "smooth" })
-              }}
+              onClick={(event) => handleSectionClick(event, "services")}
             >
               Services
               <span className="absolute left-0 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-full" />
@@ -51,10 +62,7 @@ export function Header() {
             <Link
               href="/#solutions"
               className="hover:text-[#8F42FF] transition-colors relative group"
-              onClick={(event) => {
-                event.preventDefault()
-                document.getElementById("solutions")?.scrollIntoView({ behavior: "smooth" })
-              }}
+              onClick={(event) => handleSectionClick(event, "solutions")}
             >
               Solutions
               <span className="absolute left-0 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-full" />
@@ -62,10 +70,7 @@ export function Header() {
             <Link
               href="/#cases"
               className="hover:text-[#8F42FF] transition-colors relative group"
-              onClick={(event) => {
-                event.preventDefault()
-                document.getElementById("cases")?.scrollIntoView({ behavior: "smooth" })
-              }}
+              onClick={(event) => handleSectionClick(event, "cases")}
             >
               Case Studies
               <span className="absolute left-0 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-full" />
@@ -109,44 +114,28 @@ export function Header() {
                   <Link
                     href="/#about"
                     className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors"
-                    onClick={(event) => {
-                      event.preventDefault()
-                      setIsMobileMenuOpen(false)
-                      document.getElementById("about")?.scrollIntoView({ behavior: "smooth" })
-                    }}
+                    onClick={(event) => handleSectionClick(event, "about", true)}
                   >
                     About us
                   </Link>
                   <Link
                     href="/#services"
                     className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors"
-                    onClick={(event) => {
-                      event.preventDefault()
-                      setIsMobileMenuOpen(false)
-                      document.getElementById("services")?.scrollIntoView({ behavior: "smooth" })
-                    }}
+                    onClick={(event) => handleSectionClick(event, "services", true)}
                   >
                     Services
                   </Link>
                   <Link
                     href="/#solutions"
                     className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors"
-                    onClick={(event) => {
-                      event.preventDefault()
-                      setIsMobileMenuOpen(false)
-                      document.getElementById("solutions")?.scrollIntoView({ behavior: "smooth" })
-                    }}
+                    onClick={(event) => handleSectionClick(event, "solutions", true)}
                   >
                     Solutions
                   </Link>
                   <Link
                     href="/#cases"
                     className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors"
-                    onClick={(event) => {
-                      event.preventDefault()
-                      setIsMobileMenuOpen(false)
-                      document.getElementById("cases")?.scrollIntoView({ behavior: "smooth" })
-                    }}
+                    onClick={(event) => handleSectionClick(event, "cases", true)}
                   >
                     Cases
                   </Link>

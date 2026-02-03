@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Bricolage_Grotesque, Inter } from "next/font/google"
 import Image from "next/image"
 import { motion } from "framer-motion"
@@ -77,6 +77,28 @@ const LazyFooter = dynamic(
 
 export default function Page() {
   const [isModalOpen, setIsModalOpen] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const hash = window.location.hash
+    if (!hash) return
+    const sectionId = hash.replace("#", "")
+    let attempts = 0
+    const maxAttempts = 30
+    const tryScroll = () => {
+      const target = document.getElementById(sectionId)
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth" })
+        window.history.replaceState(null, "", window.location.pathname)
+        return
+      }
+      attempts += 1
+      if (attempts < maxAttempts) {
+        window.setTimeout(tryScroll, 100)
+      }
+    }
+    tryScroll()
+  }, [])
 
   return (
     <>
