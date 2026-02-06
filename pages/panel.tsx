@@ -326,7 +326,11 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                   {currentSection === 4 && session?.user?.role !== "staff" && <LtvCalculatorSection />}
                   {currentSection === 5 && <OutreachSection />}
                   {currentSection === 6 && <ProjectManagement />}
-                  {currentSection === 7 && <BlogEditorSection />}
+                  {currentSection === 7 && (
+                    <div className="w-full pb-24">
+                      <BlogEditorSection />
+                    </div>
+                  )}
                   {currentSection === 8 && session?.user?.role !== "staff" && <AdminEditorSection />}
                 </>
               )}

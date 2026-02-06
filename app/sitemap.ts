@@ -20,6 +20,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
     },
     {
+      url: `${baseUrl}/blog/rss.xml`,
+      lastModified: now,
+      changeFrequency: 'daily',
+      priority: 0.4,
+    },
+    {
       url: `${baseUrl}/privacy-policy`,
       lastModified: now,
       changeFrequency: 'yearly',
@@ -41,12 +47,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Try to fetch blog posts, but handle errors gracefully
   let blogPages: MetadataRoute.Sitemap = [];
+  let tagPages: MetadataRoute.Sitemap = [];
+  let authorPages: MetadataRoute.Sitemap = [];
   try {
     const blogPosts = await prisma.blogPost.findMany({
       select: {
         slug: true,
         title: true,
         published_date: true,
+        tag: true,
+        author: { select: { name: true } },
       },
       orderBy: {
         published_date: 'desc',
@@ -66,11 +76,40 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'monthly' as const,
       priority: 0.7,
     }));
+
+    const tagSet = new Set<string>();
+    const authorSet = new Set<string>();
+    filteredPosts.forEach((post) => {
+      if (post.tag) {
+        post.tag
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .forEach((t) => tagSet.add(t));
+      }
+      if (post.author?.name) {
+        authorSet.add(post.author.name);
+      }
+    });
+
+    tagPages = Array.from(tagSet).map((tag) => ({
+      url: `${baseUrl}/blog/tag/${encodeURIComponent(tag)}`,
+      lastModified: now,
+      changeFrequency: 'weekly' as const,
+      priority: 0.5,
+    }));
+
+    authorPages = Array.from(authorSet).map((name) => ({
+      url: `${baseUrl}/blog/author/${encodeURIComponent(name)}`,
+      lastModified: now,
+      changeFrequency: 'weekly' as const,
+      priority: 0.5,
+    }));
   } catch (error) {
     // If database is unavailable during build, just return static pages
     // Blog posts will be added at runtime when database is available
     console.warn('Database unavailable during sitemap generation, skipping blog posts:', error);
   }
 
-  return [...staticPages, ...blogPages];
+  return [...staticPages, ...blogPages, ...tagPages, ...authorPages];
 }

@@ -131,6 +131,16 @@ model BlogPost {
   @@map("blog_posts")
 }
 
+model BlogImage {
+  id            String   @id @default(cuid())
+  data          Bytes
+  mimeType      String
+  filename      String?
+  createdAt     DateTime @default(now())
+
+  @@map("blog_images")
+}
+
 model MarketingTracker {
   id                    String   @id
   year                  Int

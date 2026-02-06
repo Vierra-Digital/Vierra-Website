@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
 import Script from 'next/script';
@@ -10,18 +10,14 @@ import { Search } from "lucide-react";
 import Footer from "@/components/FooterSection/Footer";
 import { GetStaticProps } from "next";
 import Link from "next/link";
-// removed search modal usage for inline search
 
 type BlogPostType = {
     id: number;
-    author_id?: number | null;
     title: string;
     description?: string | null;
     content: string;
-    image_url?: string | null;
     published_date?: string | null;
     slug: string;
-    visits?: number | null;
     tag?: string | null;
     author: {
         name: string;
@@ -30,32 +26,19 @@ type BlogPostType = {
 
 type Props = {
     latestPosts: BlogPostType[];
-    trendingPosts: BlogPostType[];
 };
 
 export const getStaticProps: GetStaticProps<Props> = async () => {
     try {
-    const [latestPosts, trendingPosts] = await Promise.all([
-        prisma.blogPost.findMany({
-            orderBy: { published_date: "desc" },
-            take: 10,
-            include: { author: { select: { name: true } } },
-        }),
-        prisma.blogPost.findMany({
-            orderBy: { visits: "desc" },
-            take: 10,
-            include: { author: { select: { name: true } } },
-        }),
-    ]);
+    const latestPosts = await prisma.blogPost.findMany({
+        orderBy: { published_date: "desc" },
+        take: 10,
+        include: { author: { select: { name: true } } },
+    });
 
     return {
         props: {
             latestPosts: latestPosts.map(post => ({
-                ...post,
-                published_date: post.published_date.toISOString(),
-                author: { name: post.author.name },
-            })),
-            trendingPosts: trendingPosts.map(post => ({
                 ...post,
                 published_date: post.published_date.toISOString(),
                 author: { name: post.author.name },
@@ -70,21 +53,11 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
         return {
             props: {
                 latestPosts: [],
-                trendingPosts: [],
             },
             revalidate: 60,
         };
     }
 };
-
-declare global {
-    interface Window {
-        particlesJS: {
-            load: (tagId: string, path: string, callback?: () => void) => void;
-        };
-        pJSDom?: { pJS: Record<string, unknown> }[];
-    }
-}
 
 const formatDate = (dateString?: string | null): string => {
     if (!dateString) return "";
@@ -170,21 +143,54 @@ const BlogPage = ({ latestPosts }: Props) => {
     const totalPages = Math.ceil(filteredLatestPosts.length / pageSize) || 1;
     const paginatedPosts = filteredLatestPosts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+    const baseUrl = "https://vierradev.com";
+    const canonicalUrl = currentPage > 1 ? `${baseUrl}/blog?page=${currentPage}` : `${baseUrl}/blog`;
+    const prevUrl = currentPage > 1 ? `${baseUrl}/blog?page=${currentPage - 1}` : null;
+    const nextUrl = currentPage < totalPages ? `${baseUrl}/blog?page=${currentPage + 1}` : null;
+
     return (
         <>
             <Head>
                 <title>Vierra | Blog</title>
                 <meta name="description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients. Learn about marketing, lead generation, business growth, and digital optimization." />
                 <meta name="keywords" content="marketing blog, business growth strategies, lead generation tips, digital marketing insights, case studies, business scaling, marketing automation" />
-                <link rel="canonical" href="https://vierradev.com/blog" />
+                <link rel="canonical" href={canonicalUrl} />
+                {prevUrl && <link rel="prev" href={prevUrl} />}
+                {nextUrl && <link rel="next" href={nextUrl} />}
                 <meta property="og:title" content="Vierra | Blog" />
                 <meta property="og:description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients." />
-                <meta property="og:url" content="https://vierradev.com/blog" />
+                <meta property="og:url" content={canonicalUrl} />
                 <meta property="og:type" content="website" />
+                <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
                 <meta name="twitter:card" content="summary_large_image" />
                 <meta name="twitter:title" content="Vierra | Blog" />
                 <meta name="twitter:description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients." />
+                <meta name="twitter:image" content="https://vierradev.com/assets/meta-banner.png" />
             </Head>
+            <Script
+                id="schema-org-breadcrumbs"
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{
+                    __html: JSON.stringify({
+                        "@context": "https://schema.org",
+                        "@type": "BreadcrumbList",
+                        itemListElement: [
+                            {
+                                "@type": "ListItem",
+                                position: 1,
+                                name: "Home",
+                                item: "https://vierradev.com",
+                            },
+                            {
+                                "@type": "ListItem",
+                                position: 2,
+                                name: "Blog",
+                                item: "https://vierradev.com/blog",
+                            },
+                        ],
+                    }),
+                }}
+            />
             <Script
                 id="schema-org-blog"
                 type="application/ld+json"
@@ -398,16 +404,25 @@ const BlogPage = ({ latestPosts }: Props) => {
                                                 <div className="rounded-2xl bg-white p-5 md:p-6 shadow-sm hover:shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
                                                     <h3 className={`text-base md:text-lg font-bold text-[#0F172A] ${bricolage.className}`}>{blog.title}</h3>
                                                     <div className="mt-1 text-[11px] md:text-xs text-[#334155] flex items-center gap-2">
-                                                        <span>By {blog.author?.name ?? "Unknown"}</span>
+                                                        <span>
+                                                            By{" "}
+                                                            {blog.author?.name ? (
+                                                                <Link href={`/blog/author/${encodeURIComponent(blog.author.name)}`} className="hover:text-[#701CC0]">
+                                                                    {blog.author.name}
+                                                                </Link>
+                                                            ) : "Unknown"}
+                                                        </span>
                                                         <div className="h-1 w-1 bg-gray-400 rounded-full"></div>
                                                         <span>{blog.published_date ? formatDate(blog.published_date) : ''}</span>
                                                     </div>
                                                     <p className={`mt-3 text-sm md:text-base text-[#475569] ${inter.className}`}>{blog.description || getExcerpt(blog.content)}</p>
                                                     <div className="flex flex-wrap gap-1 mt-3">
                                                         {blog.tag ? blog.tag.split(',').map((tag, index) => (
-                                                            <span key={index} className="text-[10px] md:text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
-                                                                {tag.trim()}
-                                                            </span>
+                                                            <Link key={index} href={`/blog/tag/${encodeURIComponent(tag.trim())}`}>
+                                                                <span className="text-[10px] md:text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded-full hover:bg-purple-100">
+                                                                    {tag.trim()}
+                                                                </span>
+                                                            </Link>
                                                         )) : (
                                                             <span className="text-[10px] md:text-xs font-semibold text-purple-600">Blog</span>
                                                         )}
@@ -443,9 +458,7 @@ const BlogPage = ({ latestPosts }: Props) => {
                         )}
                     </div>
                 </div>
-                {/* inline search only; modals removed */}
-
-            </div >
+            </div>
             <Footer />
         </>
     )
