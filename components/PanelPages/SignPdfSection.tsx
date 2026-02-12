@@ -306,7 +306,7 @@ const SignPdfSection: React.FC = () => {
         <div className="w-full max-w-6xl flex flex-col h-full">
           <div className="w-full flex justify-between items-center mb-2">
             <div>
-              <h1 className="text-2xl font-semibold text-[#111827] mt-2 mb-4">
+              <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">
                 PDF Signer
               </h1>
             </div>
