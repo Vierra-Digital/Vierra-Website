@@ -6,7 +6,7 @@ declare global {
 
 function getDatasourceUrl(): string {
   const url = process.env.DATABASE_URL;
-  if (!url) return url;
+  if (!url) throw new Error("DATABASE_URL is required");
   if (url.includes("connection_limit=")) return url;
   const sep = url.includes("?") ? "&" : "?";
   return `${url}${sep}connection_limit=1`;
