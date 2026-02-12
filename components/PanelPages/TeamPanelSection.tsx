@@ -797,10 +797,7 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
             const response = await fetch("/api/admin/addStaff", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    ...formData,
-                    password: "Password" // Default password
-                }),
+                body: JSON.stringify(formData),
             })
             if (!response.ok) {
                 const errorData = await response.json()

@@ -48,11 +48,25 @@ model OnboardingSession {
   @@map("onboarding_sessions")
 }
 
+model PasswordResetToken {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
 model User {
   id                       Int                      @id @default(autoincrement())
   email                    String?                  @unique
   role                     String                   @default("user")
   passwordEnc              String?
+  passwordResetTokens      PasswordResetToken[]
   name                     String?
   image                    Bytes?
   imageMimeType           String?
