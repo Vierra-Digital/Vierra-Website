@@ -1,18 +1,36 @@
 import fs from 'fs';
 import path from 'path';
 
+export type PdfFieldType = 'signature' | 'date' | 'text';
+
+export interface PdfField {
+    type: PdfFieldType;
+    page: number;
+    xRatio: number;
+    yRatio: number;
+    width: number;
+    height: number;
+    id?: string;
+}
+
+/** @deprecated Use fields instead. Kept for backward compatibility. */
+export interface LegacyCoordinates {
+    page: number;
+    xRatio: number;
+    yRatio: number;
+    width: number;
+    height: number;
+}
+
 export interface SessionData {
     token: string;
     originalFilename: string;
     pdfPath: string;
-    pdfBase64?:  string,
-    coordinates: {
-        page: number;
-        xRatio: number;
-        yRatio: number;
-        width: number;
-        height: number;
-    };
+    pdfBase64?: string;
+    /** @deprecated Use fields instead. */
+    coordinates?: LegacyCoordinates;
+    /** Array of fields to place on the PDF. */
+    fields?: PdfField[];
     status: 'pending' | 'signed' | 'expired';
     createdAt: number;
     signedPdfPath?: string;

@@ -3,29 +3,19 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { Document, Page, pdfjs } from 'react-pdf';
 import SignatureCanvas from 'react-signature-canvas';
-import { Bricolage_Grotesque, Inter } from 'next/font/google';
+import { Inter } from 'next/font/google';
 import Image from 'next/image';
-import Script from 'next/script';
+import { FaRegFilePdf } from 'react-icons/fa6';
+import { FiCheck, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
-import type { SessionData } from '@/lib/sessionStore';
-
-declare global {
-  interface Window {
-    particlesJS: {
-      load: (tagId: string, path: string, callback?: () => void) => void;
-    };
-  }
-}
+import type { PdfField } from '@/lib/sessionStore';
 
 if (typeof window !== 'undefined') {
-  pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+  pdfjs.GlobalWorkerOptions.workerSrc = `${window.location.origin}/pdf.worker.min.mjs`;
 }
 
-const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
 const inter = Inter({ subsets: ['latin'] });
-
-type SigningCoordinates = SessionData['coordinates'];
 
 // Helper function to convert base64 to ArrayBuffer
 const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
@@ -42,7 +32,7 @@ const SignDocumentPage: React.FC = () => {
   const router = useRouter();
   const { tokenId } = router.query as { tokenId?: string };
   const [numPages, setNumPages] = useState<number>(0);
-  const [fetchedCoords, setFetchedCoords] = useState<SigningCoordinates | null>(null);
+  const [fields, setFields] = useState<PdfField[]>([]);
   const [pageDimensions, setPageDimensions] = useState<{ [page: number]: { width: number; height: number } }>({});
   const [isLoadingDetails, setIsLoadingDetails] = useState<boolean>(true);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -53,18 +43,10 @@ const SignDocumentPage: React.FC = () => {
   const [signerEmail, setSignerEmail] = useState<string>('');
   const [isEmailValid, setIsEmailValid] = useState<boolean>(true);
   const [pdfData, setPdfData] = useState<string | ArrayBuffer | { data: ArrayBuffer } | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [usingBase64, setUsingBase64] = useState<boolean>(false);
-  const sigRef = useRef<SignatureCanvas>(null);
+  const sigRefs = useRef<Record<string, SignatureCanvas | null>>({});
+  const [textValues, setTextValues] = useState<Record<string, string>>({});
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const pageRefs = useRef<{ [page: number]: HTMLDivElement | null }>({});
-
-  const initParticles = () => {
-    if (typeof window !== 'undefined' && window.particlesJS) {
-      window.particlesJS.load('particles-container', '/particles-config.json', () => {
-        console.log('particles.js loaded - callback');
-      });
-    }
-  };
 
   useEffect(() => {
     if (!tokenId) {
@@ -83,24 +65,28 @@ const SignDocumentPage: React.FC = () => {
           throw new Error(errorData.message || `Failed to fetch details (${response.status})`);
         }
         const data = await response.json();
-        if (!data.coordinates) {
-          throw new Error('Coordinates not found in session data.');
+        const fs = data.fields ?? (data.coordinates ? [{
+          type: 'signature' as const,
+          page: data.coordinates.page,
+          xRatio: data.coordinates.xRatio,
+          yRatio: data.coordinates.yRatio,
+          width: data.coordinates.width,
+          height: data.coordinates.height,
+          id: 'legacy',
+        }] : []);
+        if (fs.length === 0) {
+          throw new Error('Fields or coordinates not found in session data.');
         }
-        setFetchedCoords(data.coordinates);
+        setFields(fs);
         setSessionDetails({ 
           originalFilename: data.originalFilename, 
-          // Store base64 PDF if available
           pdfBase64: data.pdfBase64
         });
 
-        // Process PDF data - either URL or base64
         if (data.pdfBase64) {
-          setUsingBase64(true);
-          // Convert base64 to ArrayBuffer for PDF.js
           const arrayBuffer = base64ToArrayBuffer(data.pdfBase64);
           setPdfData({ data: arrayBuffer });
         } else {
-          setUsingBase64(false);
           setPdfData(`/signing_pdfs/${tokenId}.pdf`);
         }
       } catch (err: unknown) {
@@ -153,31 +139,42 @@ const SignDocumentPage: React.FC = () => {
   }, []);
 
   const handleClear = () => {
-    sigRef.current?.clear();
+    Object.values(sigRefs.current).forEach(ref => ref?.clear());
     setError(null);
   };
 
-  // Validate email format
   const validateEmail = (email: string): boolean => {
     const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return regex.test(email);
-  }
+  };
 
-  // Handle email input changes
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const email = e.target.value;
     setSignerEmail(email);
     setIsEmailValid(email === '' || validateEmail(email));
   };
-  
 
   const handleSubmit = async () => {
-    if (!sigRef.current || sigRef.current.isEmpty() || !fetchedCoords) {
-      setError('Please sign in the designated area first.');
+    const signatureFields = fields.filter(f => f.type === 'signature');
+    const allSigned = signatureFields.every(f => {
+      const ref = sigRefs.current[f.id ?? 'legacy'];
+      return ref && !ref.isEmpty();
+    });
+    if (!allSigned || signatureFields.length === 0) {
+      setError('Please fill in all designated signature areas first.');
       return;
     }
 
-    // Validate email
+    const textFields = fields.filter(f => f.type === 'text');
+    const allTextFilled = textFields.every(f => {
+      const val = (textValues[f.id ?? ''] ?? '').trim();
+      return val.length > 0;
+    });
+    if (textFields.length > 0 && !allTextFilled) {
+      setError('Please fill in all text boxes before submitting.');
+      return;
+    }
+
     if (signerEmail && !validateEmail(signerEmail)) {
       setIsEmailValid(false);
       setError('Please enter a valid email address.');
@@ -186,17 +183,21 @@ const SignDocumentPage: React.FC = () => {
 
     setIsSubmitting(true);
     setError(null);
-    const img = sigRef.current.toDataURL('image/png');
+    const signatures: Record<string, string> = {};
+    for (const f of signatureFields) {
+      const ref = sigRefs.current[f.id ?? 'legacy'];
+      if (ref) signatures[f.id ?? 'legacy'] = ref.toDataURL('image/png');
+    }
     try {
       const response = await fetch('/api/submitSignature', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           tokenId, 
-          signature: img, 
-          position: fetchedCoords,
-          email: signerEmail || undefined // Include email in submission payload and only if it is provided
-          })
+          signatures,
+          textValues,
+          email: signerEmail || undefined,
+        }),
       });
       if (!response.ok) {
         const errorData = await response.json();
@@ -215,19 +216,35 @@ const SignDocumentPage: React.FC = () => {
   };
 
   if (!tokenId) {
-    return <div className="p-4 text-center">Invalid or missing token.</div>;
+    return (
+      <div className={`min-h-screen bg-[#F9FAFB] flex items-center justify-center p-4 ${inter.className}`}>
+        <div className="text-[#374151]">Invalid or missing token.</div>
+      </div>
+    );
   }
-
-  // const pdfFileUrl = `/signing_pdfs/${tokenId}.pdf`;
 
   if (isLoadingDetails) {
-    return <div className="p-4 text-center text-white">Loading signing details...</div>;
+    return (
+      <div className={`min-h-screen bg-[#FAFAFA] flex flex-col items-center justify-center p-4 ${inter.className}`}>
+          <div className="w-14 h-14 rounded-full bg-[#7A13D0]/10 flex items-center justify-center mb-4">
+          <FaRegFilePdf className="w-7 h-7 text-[#7A13D0]" />
+        </div>
+        <p className="text-[#6B7280]">Loading signing details...</p>
+      </div>
+    );
   }
 
-  if ((error && !fetchedCoords) || !tokenId) {
-    const errorMessage = !tokenId ? "Invalid or missing token." : error || "Could not load signature coordinates.";
-    return <div className="p-4 text-center text-red-500">{errorMessage}</div>;
+  if ((error && fields.length === 0) || !tokenId) {
+    const errorMessage = !tokenId ? "Invalid or missing token." : error || "Could not load signing fields.";
+    return (
+      <div className={`min-h-screen bg-[#FAFAFA] flex items-center justify-center p-4 ${inter.className}`}>
+        <div className="text-red-500 font-medium">{errorMessage}</div>
+      </div>
+    );
   }
+
+  const textFields = fields.filter((f) => f.type === 'text');
+  const allTextFilled = textFields.length === 0 || textFields.every((f) => ((textValues[f.id ?? ''] ?? '') as string).trim().length > 0);
 
   return (
     <>
@@ -235,153 +252,204 @@ const SignDocumentPage: React.FC = () => {
         <title>Vierra | Sign {sessionDetails?.originalFilename || 'Document'}</title>
         <meta name="robots" content="noindex, nofollow" />
       </Head>
-      <Script
-        src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"
-        strategy="afterInteractive"
-        onLoad={initParticles}
-      />
-      <div className={`relative min-h-screen bg-gradient-to-br from-[#4F1488] via-[#2E0A4F] to-[#18042A] text-white p-4 md:p-8 ${inter.className} animate-gradient-move`}>
-        <div id="particles-container" className="absolute inset-0 z-0 w-full h-full"></div>
-        <div className="relative z-10 flex flex-col items-center">
-          <div className="flex justify-center mb-8">
-            <Image src="/assets/vierra-logo.png" alt="Vierra Logo" width={150} height={50} className="w-auto h-12" />
+      <div className={`min-h-screen bg-[#FAFAFA] text-[#111827] overflow-auto ${inter.className}`}>
+        <header className="bg-white border-b border-[#E5E7EB] px-4 lg:px-6 py-2 flex items-center justify-between">
+          <div className="h-12 lg:h-14 w-32 lg:w-36 overflow-hidden flex items-center shrink-0">
+            <Image
+              src="/assets/vierra-logo-black.png"
+              alt="Vierra"
+              width={320}
+              height={96}
+              className="h-full w-full object-cover object-center"
+              priority
+            />
           </div>
-          <h1 className={`text-3xl md:text-4xl font-bold mb-8 text-center ${bricolage.className}`}>
-            {isSubmitted ? 'Signature Submitted' : 'Sign Your Document'}
-          </h1>
-          <div className="w-full max-w-5xl mx-auto bg-[#18042A]/90 border border-[#701CC0]/60 backdrop-blur-md rounded-lg p-4 md:p-8 shadow-2xl">
+        </header>
+
+        <main className="max-w-5xl mx-auto px-4 lg:px-6 py-8">
+          <div className="rounded-2xl border border-[#E5E7EB] bg-white shadow-sm overflow-hidden">
             {isSubmitted ? (
-              <div className="text-center py-10 px-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-green-400 mx-auto mb-4 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <h2 className={`text-2xl font-bold mb-3 ${bricolage.className}`}>Signature Successfully Submitted!</h2>
-                <p className="text-gray-300">Your signed document has been processed and sent to the Vierra team.</p>
-                <p className="text-gray-300 mt-4 text-sm">
-                  Redirecting to homepage in {redirectCountdown} second{redirectCountdown !== 1 ? 's' : ''}...
+              <div className="p-6 lg:p-10 text-center">
+                <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center mx-auto">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
+                  <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
+                      <FiCheck className="h-6 w-6" />
+                    </span>
+                  </span>
+                </div>
+                <h2 className="text-xl font-semibold text-[#111827] mb-2">Signature Successfully Submitted!</h2>
+                <p className="text-sm text-[#6B7280]">Your signed document has been processed and sent to the Vierra team.</p>
+                <p className="text-sm text-[#6B7280] mt-4">
+                  Redirecting in {redirectCountdown} second{redirectCountdown !== 1 ? 's' : ''}...
                 </p>
               </div>
             ) : (
               <>
-                <div className="pdf-viewer-container w-full max-h-[70vh] overflow-auto flex justify-center mb-6 bg-gray-800/30 rounded p-2">
-                  <Document
-                    file={pdfData}
-                    onLoadSuccess={onDocumentLoadSuccess}
-                    onLoadError={(err) => { setError(`Failed to load PDF document: ${err.message}`); }}
-                    loading={<div className="text-white p-10">Loading PDF document...</div>}
-                    className="flex flex-col items-center"
-                  >
-                    {Array.from({ length: numPages ?? 0 }, (_v, i) => {
-                      const pageNumber = i + 1;
-                      let sigBoxStyle: React.CSSProperties = { display: 'none' };
-                      const currentPageDimensions = pageDimensions[pageNumber];
-
-                      if (fetchedCoords && fetchedCoords.page === pageNumber && currentPageDimensions && pageRefs.current[pageNumber]) {
-                        const pageElement = pageRefs.current[pageNumber];
-                        const scale = pageElement ? pageElement.clientWidth / currentPageDimensions.width : 1;
-                        const boxWidth = fetchedCoords.width * scale;
-                        const boxHeight = fetchedCoords.height * scale;
-                        const boxLeft = fetchedCoords.xRatio * pageElement.clientWidth;
-                        const boxTop = fetchedCoords.yRatio * pageElement.clientHeight;
-
-                        sigBoxStyle = {
-                          position: 'absolute',
-                          top: `${boxTop}px`,
-                          left: `${boxLeft}px`,
-                          width: `${boxWidth}px`,
-                          height: `${boxHeight}px`,
-                          backgroundColor: 'rgba(255, 255, 255, 0.85)',
-                          border: '2px dashed #A050FF',
-                          borderRadius: '4px',
-                          zIndex: 10,
-                          cursor: 'crosshair',
-                          display: 'block',
-                          boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-                        };
-                      }
-
-                      return (
-                        <div
-                          key={`page_${pageNumber}`}
-                          ref={el => { pageRefs.current[pageNumber] = el; }}
-                          style={{ position: 'relative', marginBottom: '1rem', display: 'inline-block', boxShadow: '0 4px 15px rgba(0,0,0,0.3)' }}
-                        >
-                          <Page
-                            pageNumber={pageNumber}
-                            renderTextLayer={false}
-                            renderAnnotationLayer={false}
-                            width={Math.min(window.innerWidth * 0.95, 900)}
-                            onLoadSuccess={(page) => onPageLoadSuccess({
-                              pageNumber: page.pageNumber,
-                              width: page.width,
-                              height: page.height
-                            })}
-                            onRenderError={() => setError(`Failed to render page ${pageNumber}.`)}
-                          />
-                          {fetchedCoords && fetchedCoords.page === pageNumber && (
-                            <div
-                              style={sigBoxStyle}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <span className="text-xs font-semibold text-purple-800 absolute -top-5 left-0 bg-white/80 px-1 rounded">Sign Here:</span>
-                              <SignatureCanvas
-                                ref={sigRef}
-                                penColor="#333333"
-                                minWidth={0.5}
-                                maxWidth={1.5}
-                                canvasProps={{ width: fetchedCoords.width, height: fetchedCoords.height, style: { width: '100%', height: '100%', borderRadius: '3px' } }}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </Document>
+                <div className="p-6 lg:p-8 border-b border-[#E5E7EB] bg-white">
+                  <h2 className="text-lg font-semibold text-[#111827] mb-1">
+                    Sign Your Document
+                  </h2>
+                  <p className="text-sm text-[#6B7280]">Fill out all text boxes and signatures to complete the document.</p>
                 </div>
-                {fetchedCoords && (
-                  <div className="mt-6 flex flex-col items-center">
-                    {/* Add email input field */}
-                    <div className="mb-4 w-full max-w-md">
-                      <label className="block text-sm font-medium text-gray-300 mb-1">
-                        Your Email Address (optional - to receive a copy of the signed document)
+                <div className="p-6 lg:p-8 bg-[#FAFAFA]">
+                  <div className="flex items-start justify-center overflow-auto max-h-[70vh] min-h-[400px] rounded-lg">
+                    <Document
+                      file={pdfData}
+                      onLoadSuccess={onDocumentLoadSuccess}
+                      onLoadError={(err) => { setError(`Failed to load PDF document: ${err.message}`); }}
+                      loading={<div className="text-[#6B7280] p-10">Loading PDF document...</div>}
+                      className="flex flex-col items-center"
+                    >
+                      {numPages > 0 && (() => {
+                        const pageNumber = currentPage;
+                        const pageFields = fields.filter(f => f.page === pageNumber);
+                        const currentPageDimensions = pageDimensions[pageNumber];
+
+                        return (
+                          <div
+                            key={`page_${pageNumber}`}
+                            ref={el => { pageRefs.current[pageNumber] = el; }}
+                            className="relative inline-block rounded-2xl border border-[#E5E7EB] bg-white shadow-sm"
+                          >
+                            <Page
+                              pageNumber={pageNumber}
+                              renderTextLayer={false}
+                              renderAnnotationLayer={false}
+                              onLoadSuccess={(page) => onPageLoadSuccess({
+                                pageNumber: page.pageNumber,
+                                width: page.width,
+                                height: page.height
+                              })}
+                              onRenderError={() => setError(`Failed to render page ${pageNumber}.`)}
+                            />
+                            {pageFields.map((field) => {
+                            if (!pageRefs.current[pageNumber] || !currentPageDimensions) return null;
+                            const pageElement = pageRefs.current[pageNumber];
+                            const scale = pageElement ? pageElement.clientWidth / currentPageDimensions.width : 1;
+                            const boxWidth = field.width * scale;
+                            const boxHeight = field.height * scale;
+                            const boxLeft = field.xRatio * pageElement!.clientWidth;
+                            const boxTop = field.yRatio * pageElement!.clientHeight;
+
+                            const boxStyle: React.CSSProperties = {
+                              position: 'absolute',
+                              top: `${boxTop}px`,
+                              left: `${boxLeft}px`,
+                              width: `${boxWidth}px`,
+                              height: `${boxHeight}px`,
+                              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                              border: '2px dashed #7A13D0',
+                              borderRadius: '6px',
+                              zIndex: 10,
+                              display: 'block',
+                              boxShadow: '0 2px 8px rgba(122, 19, 208, 0.2)',
+                            };
+
+                            return (
+                              <div key={field.id ?? `${field.page}-${field.xRatio}`} style={boxStyle} onClick={(e) => e.stopPropagation()}>
+                                {field.type === 'signature' && (
+                                  <>
+                                    <span className="text-xs font-semibold text-[#7A13D0] absolute -top-5 left-0 bg-white px-1.5 py-0.5 rounded border border-[#E5E7EB]">Sign Here</span>
+                                    <SignatureCanvas
+                                      ref={el => { if (el) sigRefs.current[field.id ?? 'legacy'] = el; }}
+                                      penColor="#374151"
+                                      minWidth={0.5}
+                                      maxWidth={1.5}
+                                      canvasProps={{ width: field.width, height: field.height, style: { width: '100%', height: '100%', borderRadius: '4px' } }}
+                                    />
+                                  </>
+                                )}
+                                {field.type === 'date' && (
+                                  <span className="text-xs text-[#374151] flex items-center justify-center h-full p-1 font-medium">Date: {new Date().toLocaleDateString()}</span>
+                                )}
+                                {field.type === 'text' && (
+                                  <input
+                                    type="text"
+                                    placeholder="Enter text..."
+                                    value={textValues[field.id ?? ''] ?? ''}
+                                    onChange={(e) => setTextValues(prev => ({ ...prev, [field.id ?? '']: e.target.value }))}
+                                    className="w-full h-full text-xs px-2 border-0 bg-transparent focus:outline-none focus:ring-0 text-[#374151] placeholder:text-[#9CA3AF]"
+                                  />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        );
+                      })()}
+                    </Document>
+                  </div>
+                  {numPages > 1 && (
+                    <div className="flex items-center justify-center gap-3 mt-4 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                        disabled={currentPage <= 1}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-[#E5E7EB] bg-white text-[#374151] hover:border-[#7A13D0] hover:text-[#7A13D0] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-[#E5E7EB] disabled:hover:text-[#374151] transition"
+                      >
+                        <FiChevronLeft className="w-4 h-4" />
+                        Prev
+                      </button>
+                      <span className="text-sm text-[#6B7280] min-w-[5rem] text-center">
+                        {currentPage} / {numPages}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentPage((p) => Math.min(numPages ?? 1, p + 1))}
+                        disabled={currentPage >= (numPages ?? 1)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-[#E5E7EB] bg-white text-[#374151] hover:border-[#7A13D0] hover:text-[#7A13D0] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-[#E5E7EB] disabled:hover:text-[#374151] transition"
+                      >
+                        Next
+                        <FiChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {fields.length > 0 && (
+                    <div className="p-6 lg:p-8 border-t border-[#E5E7EB] bg-white">
+                    <div className="max-w-md mx-auto mb-4">
+                      <label className="block text-sm font-medium text-[#374151] mb-1">
+                        Add Your Email (Optional) To Receive A Copy
                       </label>
                       <input
                         type="email"
                         value={signerEmail}
                         onChange={handleEmailChange}
-                        className={`w-full px-4 py-2 bg-gray-800 border ${isEmailValid ? 'border-gray-600' : 'border-red-500'} rounded-md text-white focus:outline-none focus:ring-2 focus:ring-[#701CC0]`}
+                        className={`w-full px-4 py-2.5 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#7A13D0]/20 focus:border-[#7A13D0] ${
+                          isEmailValid ? 'border-[#E5E7EB] bg-[#FAFAFA]' : 'border-red-500 bg-red-50'
+                        }`}
                         placeholder="your.email@example.com"
                       />
                       {!isEmailValid && (
-                        <p className="text-sm text-red-500 mt-1">Please enter a valid email address</p>
+                        <p className="text-sm text-red-500 mt-1">Please enter a valid email address.</p>
                       )}
                     </div>
                     <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
                       <button
                         onClick={handleClear}
                         disabled={isSubmitting}
-                        className={`px-6 py-2 bg-gray-600 text-white rounded-md shadow-md transform transition-all duration-300 hover:scale-105 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed ${inter.className}`}
+                        className="px-4 py-2.5 border border-[#E5E7EB] rounded-xl text-sm font-medium text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         Clear Signature
                       </button>
                       <button
                         onClick={handleSubmit}
-                        disabled={isSubmitting}
-                        className={`px-6 py-2 bg-[#701CC0] text-white rounded-md shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-all duration-300 hover:scale-105 hover:bg-[#8F42FF] disabled:opacity-50 disabled:cursor-not-allowed ${inter.className}`}
+                        disabled={isSubmitting || !allTextFilled}
+                        className="px-6 py-2.5 bg-[#7A13D0] text-white rounded-xl font-medium text-sm hover:bg-[#6B11B8] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-[#7A13D0]/20"
                       >
                         {isSubmitting ? 'Submitting...' : 'Submit Signature'}
                       </button>
                     </div>
                     {error && !isSubmitting && (
-                      <p className="text-red-500 mt-4 text-center font-semibold animate-pulse">{error}</p>
+                      <p className="text-red-500 mt-4 text-center text-sm font-medium">{error}</p>
                     )}
                   </div>
                 )}
-                {numPages > 0 && <p className="text-center text-gray-400 mt-6 text-sm">Document Pages: {numPages}</p>}
               </>
             )}
           </div>
-        </div>
+        </main>
       </div>
     </>
   );

@@ -5,7 +5,7 @@ import Image from "next/image"
 import ProfileImage from "@/components/ProfileImage"
 import dynamic from "next/dynamic"
 import Link from "next/link"
-import { FiLogOut, FiShield } from "react-icons/fi"
+import { FiLogOut, FiShield, FiFolder } from "react-icons/fi"
 import { AiOutlineAppstore } from "react-icons/ai";
 import { PiUsersThree, PiCalculator } from "react-icons/pi";
 import { BsPeople } from "react-icons/bs";
@@ -15,9 +15,10 @@ import { FaRegFilePdf } from "react-icons/fa6";
 import { HiOutlineDocumentText } from "react-icons/hi";
 import { HiGlobeAlt } from "react-icons/hi2";
 import { useSession, signOut } from "next-auth/react"
-const SignPdfModal = dynamic(() => import("@/components/ui/SignPdfModal"), {
-  ssr: false,
-})
+const SignPdfSection = dynamic(
+  () => import("@/components/PanelPages/SignPdfSection"),
+  { ssr: false }
+)
 const AddClientModal = dynamic(() => import("@/components/ui/AddClientModal"), {
   ssr: false,
 })
@@ -56,6 +57,10 @@ const AdminEditorSection = dynamic(
   () => import("@/components/PanelPages/AdminEditorSection"),
   { ssr: false }
 )
+const FilesSection = dynamic(
+  () => import("@/components/PanelPages/FilesSection"),
+  { ssr: false }
+)
 const UserSettingsPage = dynamic(() => import("@/components/UserSettingsPage"), {
   ssr: false,
 })
@@ -65,7 +70,6 @@ const inter = Inter({ subsets: ["latin"] })
 type PageProps = { dashboardHref: string }
 
 const PanelPage = ({ dashboardHref }: PageProps) => {
-  const [isSignModalOpen, setIsSignModalOpen] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
 
   const [currentSection, setCurrentSection] = useState(0);
@@ -189,7 +193,11 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
             </div>
             
             {session?.user?.role !== "staff" && (
-              <div id="panel-nav-item" onClick={() => setIsSignModalOpen(true)} className="w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 cursor-pointer hover:bg-white rounded-xl hover:text-black">
+              <div
+                id="panel-nav-item"
+                onClick={() => { setCurrentSection(9); setShowSettings(false); setIsSidebarOpen(false); }}
+                className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 9 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+              >
                 <FaRegFilePdf />
                 <span className={`text-xs ${inter.className}`}>
                   PDF Signer
@@ -216,6 +224,16 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
               <HiOutlineDocumentText />
               <span className={`text-xs ${inter.className}`}>
                 Blog Editor
+              </span>
+            </div>
+            <div
+              id="panel-nav-item"
+              onClick={() => { setCurrentSection(10); setShowSettings(false); setIsSidebarOpen(false)}}
+              className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 10 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+            >
+              <FiFolder />
+              <span className={`text-xs ${inter.className}`}>
+                Files
               </span>
             </div>
             {session?.user?.role !== "staff" && (
@@ -332,6 +350,8 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                     </div>
                   )}
                   {currentSection === 8 && session?.user?.role !== "staff" && <AdminEditorSection />}
+                  {currentSection === 9 && session?.user?.role !== "staff" && <SignPdfSection />}
+                  {currentSection === 10 && <FilesSection />}
                 </>
               )}
 
@@ -340,10 +360,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
         </div>
       </div>
 
-      <SignPdfModal
-        isOpen={isSignModalOpen}
-        onClose={() => setIsSignModalOpen(false)}
-      />
       {isAddClientOpen && (
         <AddClientModal
           isOpen={isAddClientOpen}

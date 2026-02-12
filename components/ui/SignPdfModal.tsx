@@ -7,7 +7,9 @@ import { X } from "lucide-react"
 import "react-pdf/dist/esm/Page/AnnotationLayer.css"
 import "react-pdf/dist/esm/Page/TextLayer.css"
 
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
+if (typeof window !== "undefined") {
+  pdfjs.GlobalWorkerOptions.workerSrc = `${window.location.origin}/pdf.worker.min.mjs`
+}
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
 const inter = Inter({ subsets: ["latin"] })

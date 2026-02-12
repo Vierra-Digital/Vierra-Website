@@ -2,20 +2,28 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import fs from 'fs/promises';
 import path from 'path';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { getSessionData, saveSessionData, SessionData } from '@/lib/sessionStore';
+import { getSessionData, saveSessionData, PdfField } from '@/lib/sessionStore';
 import { sendSignedDocumentEmail, sendSignerCopyEmail } from '@/lib/emailSender';
+import { prisma } from '@/lib/prisma';
 
 interface SubmitSignatureBody {
     tokenId: string;
-    signature: string;
-    position: SessionData['coordinates'];
-    email?: string; // Make email optional
+    signature?: string;
+    position?: { page: number; xRatio: number; yRatio: number; width: number; height: number };
+    /** New format: field values by field id */
+    signatures?: Record<string, string>;
+    textValues?: Record<string, string>;
+    email?: string;
 }
 
 // Change directory to /tmp for serverless environment compatibility
 const signedPdfsDir = process.env.NODE_ENV === 'production' 
     ? path.resolve('/tmp', 'signed_pdfs')
     : path.resolve(process.cwd(), 'public', 'signed_pdfs');
+
+const signingPdfsDir = process.env.NODE_ENV === 'production'
+    ? path.resolve('/tmp', 'signing_pdfs')
+    : path.resolve(process.cwd(), 'public', 'signing_pdfs');
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== 'POST') {
@@ -37,13 +45,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         // Extract data from request body
-        const { tokenId, signature, position, email }: SubmitSignatureBody = req.body;
+        const { tokenId, signature, position, signatures, textValues, email }: SubmitSignatureBody = req.body;
 
-        if (!tokenId || !signature || !position) {
-            return res.status(400).json({ message: 'Missing required fields: tokenId, signature, or position.' });
-        }
-        if (!signature.startsWith('data:image/png;base64,')) {
-             return res.status(400).json({ message: 'Invalid signature format. Expected base64 PNG data URL.' });
+        if (!tokenId) {
+            return res.status(400).json({ message: 'Missing required field: tokenId.' });
         }
 
         const sessionData = getSessionData(tokenId);
@@ -52,6 +57,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
         if (sessionData.status === 'signed') {
              return res.status(400).json({ message: 'Document already signed.' });
+        }
+
+        const fields = sessionData.fields ?? (position ? [{
+            type: 'signature' as const,
+            page: position.page,
+            xRatio: position.xRatio,
+            yRatio: position.yRatio,
+            width: position.width,
+            height: position.height,
+            id: 'legacy',
+        }] : []);
+
+        const useLegacy = !sessionData.fields && signature && position;
+        if (useLegacy) {
+            if (!signature.startsWith('data:image/png;base64,')) {
+                return res.status(400).json({ message: 'Invalid signature format. Expected base64 PNG data URL.' });
+            }
+        } else {
+            const sigFields = fields.filter((f: PdfField) => f.type === 'signature');
+            if (sigFields.length === 0) {
+                return res.status(400).json({ message: 'No signature fields in session.' });
+            }
+            const sigs = signatures ?? (signature ? { [sigFields[0].id ?? 'legacy']: signature } : {});
+            for (const f of sigFields) {
+                const sid = f.id ?? 'legacy';
+                if (!sigs[sid] || !sigs[sid].startsWith('data:image/png;base64,')) {
+                    return res.status(400).json({ message: `Missing or invalid signature for field ${sid}.` });
+                }
+            }
         }
 
         let pdfBytes: Buffer;
@@ -79,39 +113,56 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         const pdfDoc = await PDFDocument.load(pdfBytes);
         const pages = pdfDoc.getPages();
-
-        const targetPageNumber = position.page;
-        if (targetPageNumber < 1 || targetPageNumber > pages.length) {
-            return res.status(400).json({ message: `Invalid page number: ${targetPageNumber}.` });
-        }
-        const targetPage = pages[targetPageNumber - 1];
-        const { width: pageOriginalWidth, height: pageOriginalHeight } = targetPage.getSize();
-
-        const signaturePngBase64 = signature.replace('data:image/png;base64,', '');
-        const signatureBytes = Buffer.from(signaturePngBase64, 'base64');
-        const signatureImage = await pdfDoc.embedPng(signatureBytes);
-        signatureImage.scale(1);
-
-        const embedX = position.xRatio * pageOriginalWidth;
-        const embedY = pageOriginalHeight - (position.yRatio * pageOriginalHeight) - (position.height);
-        const embedWidth = position.width;
-        const embedHeight = position.height;
-
-        targetPage.drawImage(signatureImage, {
-            x: embedX,
-            y: embedY,
-            width: embedWidth,
-            height: embedHeight,
-        });
-
         const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-        targetPage.drawText(`Signed on: ${new Date().toLocaleString()}`, {
-            x: embedX,
-            y: embedY - 12,
-            size: 8,
-            font: helveticaFont,
-            color: rgb(0.5, 0.5, 0.5),
-        });
+        const sigs = signatures ?? (signature ? { legacy: signature } : {});
+        const texts = textValues ?? {};
+        const now = new Date();
+        const dateStr = now.toLocaleDateString();
+
+        for (const field of fields) {
+            if (field.page < 1 || field.page > pages.length) continue;
+            const targetPage = pages[field.page - 1];
+            const { width: pageOriginalWidth, height: pageOriginalHeight } = targetPage.getSize();
+
+            const embedX = field.xRatio * pageOriginalWidth;
+            const embedY = pageOriginalHeight - (field.yRatio * pageOriginalHeight) - field.height;
+            const embedW = field.width;
+            const embedH = field.height;
+
+            if (field.type === 'signature') {
+                const sigData = sigs[field.id ?? 'legacy'];
+                if (!sigData) continue;
+                const sigPngBase64 = sigData.replace('data:image/png;base64,', '');
+                const signatureBytes = Buffer.from(sigPngBase64, 'base64');
+                const signatureImage = await pdfDoc.embedPng(signatureBytes);
+                signatureImage.scale(1);
+                targetPage.drawImage(signatureImage, {
+                    x: embedX,
+                    y: embedY,
+                    width: embedW,
+                    height: embedH,
+                });
+            } else if (field.type === 'date') {
+                targetPage.drawText(dateStr, {
+                    x: embedX,
+                    y: embedY + embedH * 0.5 - 6,
+                    size: Math.min(10, embedH * 0.6),
+                    font: helveticaFont,
+                    color: rgb(0.2, 0.2, 0.2),
+                });
+            } else if (field.type === 'text') {
+                const value = texts[field.id ?? ''] ?? '';
+                if (value) {
+                    targetPage.drawText(value, {
+                        x: embedX + 2,
+                        y: embedY + embedH * 0.5 - 6,
+                        size: Math.min(10, embedH * 0.6),
+                        font: helveticaFont,
+                        color: rgb(0.2, 0.2, 0.2),
+                    });
+                }
+            }
+        }
 
         const signedPdfBytes = await pdfDoc.save();
         const signedPdfFilename = `${tokenId}_signed.pdf`;
@@ -140,6 +191,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             console.log(`[submit-signature] Successfully updated session status for token ${tokenId}`);
         } catch (sessionError) {
             console.warn(`[submit-signature] WARNING: Failed to update session data for token ${tokenId} after saving PDF:`, sessionError);
+        }
+
+        // If this document was saved to a staff member's files, update the stored file with the signed PDF
+        try {
+            const storedFiles = await prisma.storedFile.findMany({
+                where: { signingTokenId: tokenId, userId: { not: null } },
+                select: { id: true },
+            });
+            if (storedFiles.length > 0) {
+                const signingPdfPath = path.join(signingPdfsDir, `${tokenId}.pdf`);
+                await fs.mkdir(signingPdfsDir, { recursive: true });
+                await fs.writeFile(signingPdfPath, signedPdfBytes);
+                console.log(`[submit-signature] Updated stored file with signed PDF for token ${tokenId}`);
+            }
+        } catch (updateError) {
+            console.warn(`[submit-signature] WARNING: Failed to update stored file with signed PDF for token ${tokenId}:`, updateError);
         }
 
         // Email sending sequence - modified to be more atomic in production

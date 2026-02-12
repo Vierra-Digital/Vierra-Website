@@ -24,6 +24,7 @@ model Client {
   userId             Int?                @unique
   user               User?               @relation("UserClient", fields: [userId], references: [id])
   onboardingSessions OnboardingSession[]
+  storedFiles        StoredFile[]
 
   @@map("clients")
 }
@@ -71,6 +72,7 @@ model User {
   marketingTrackers        MarketingTracker[]
   marketingYearlySummaries MarketingYearlySummary[]
   signedDocuments          SignedDocuments[]
+  storedFiles              StoredFile[]
   tokens                   UserToken[]
 
   @@map("users")
@@ -194,6 +196,22 @@ model SignedDocuments {
 
   @@index([userId])
   @@map("signed_documents")
+}
+
+model StoredFile {
+  id             String   @id @default(cuid())
+  name           String
+  signingTokenId String
+  fileType       String   @default("pdf")
+  createdAt      DateTime @default(now())
+  userId         Int?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId       String?
+  client         Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([clientId])
+  @@map("stored_files")
 }
 
 

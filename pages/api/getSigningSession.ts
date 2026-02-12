@@ -22,9 +22,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(404).json({ message: 'Session not found or expired' });
         }
 
-        // Return only necessary data to the client
+        // Return fields for new format, or construct from coordinates for legacy
+        const firstSignature = sessionData.fields?.find(f => f.type === 'signature');
+        const coords = sessionData.coordinates ?? (firstSignature ? {
+            page: firstSignature.page,
+            xRatio: firstSignature.xRatio,
+            yRatio: firstSignature.yRatio,
+            width: firstSignature.width,
+            height: firstSignature.height,
+        } : undefined);
+        const fields = sessionData.fields ?? (coords ? [{
+            type: 'signature' as const,
+            page: coords.page,
+            xRatio: coords.xRatio,
+            yRatio: coords.yRatio,
+            width: coords.width,
+            height: coords.height,
+            id: 'legacy',
+        }] : undefined);
         const responseData = {
-            coordinates: sessionData.coordinates,
+            coordinates: coords,
+            fields,
             originalFilename: sessionData.originalFilename,
             status: sessionData.status,
             pdfBase64: sessionData.pdfBase64

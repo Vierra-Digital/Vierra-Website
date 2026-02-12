@@ -25,7 +25,7 @@ const PdfUploader: React.FC<PdfUploaderProps> = ({ onFileSelect }) => {
     <div className="w-full">
       <label
         htmlFor="pdf-upload"
-        className={`cursor-pointer inline-block w-full px-4 py-3 bg-[#701CC0] text-white text-center rounded-md shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-all duration-300 hover:scale-105 hover:bg-[#8F42FF] ${inter.className}`}
+        className={`cursor-pointer inline-block w-full px-4 py-3 bg-[#701CC0] text-white text-center rounded-lg font-medium hover:bg-[#5F18B0] transition ${inter.className}`}
       >
         Upload PDF
       </label>
