@@ -306,14 +306,14 @@ const SignPdfSection: React.FC = () => {
         <div className="w-full max-w-6xl flex flex-col h-full">
           <div className="w-full flex justify-between items-center mb-2">
             <div>
-              <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">
+              <h1 className="text-2xl font-semibold text-[#111827] mt-2 mb-4">
                 PDF Signer
               </h1>
             </div>
           </div>
 
           {!pdfFile ? (
-            <div className="flex-1 flex flex-col items-center justify-center w-full">
+            <div className="flex-1 flex flex-col items-center justify-center w-full -mt-[20vh]">
               <div className="w-20 h-20 rounded-full bg-[#F3E8FF] flex items-center justify-center mb-4">
                 <FaRegFilePdf className="w-10 h-10 text-[#701CC0]" />
               </div>
