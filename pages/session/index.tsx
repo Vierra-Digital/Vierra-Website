@@ -6,7 +6,6 @@ export default function SessionIndex() {
   const router = useRouter();
   
   useEffect(() => {
-    // Redirect to onboarding by default
     const token = router.query.token;
     if (token) {
       router.replace(`/session/onboarding/${token}`);

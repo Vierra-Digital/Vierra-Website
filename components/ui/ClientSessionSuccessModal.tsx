@@ -7,14 +7,14 @@ const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
 interface ClientSessionSuccessModalProps {
   isOpen: boolean;
   onClose: () => void;
+  token: string;
 }
 
-export default function ClientSessionSuccessModal({ isOpen, onClose }: ClientSessionSuccessModalProps) {
+export default function ClientSessionSuccessModal({ isOpen, onClose, token }: ClientSessionSuccessModalProps) {
   const router = useRouter();
 
   const handleProceed = () => {
-    router.push("/panel");
-    // also call onClose if provided to allow parent to close modal state
+    router.push("/");
     onClose?.();
   };
 
@@ -44,19 +44,27 @@ export default function ClientSessionSuccessModal({ isOpen, onClose }: ClientSes
           </div>
           
           <h1 className={`text-2xl font-bold text-gray-900 mb-4 ${bricolage.className}`}>
-            Account Created Successfully
+            Modules Completed Successfully
           </h1>
           
           <p className="text-gray-600 mb-8">
-            Your Account has been created successfully
+            You&apos;ve completed all modules. Thank you for your time!
           </p>
           
-          <button
-            onClick={handleProceed}
-            className={`w-full px-6 py-3 bg-[#7A13D0] text-white rounded-lg font-semibold hover:bg-[#6B11B8] transition ${bricolage.className}`}
-          >
-            Proceed to Dashboard
-          </button>
+          <div className="flex justify-center gap-4">
+            <button
+              onClick={onClose}
+              className={`px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50 transition ${bricolage.className}`}
+            >
+              Close
+            </button>
+            <button
+              onClick={handleProceed}
+              className={`px-8 py-3 bg-[#7A13D0] text-white rounded-lg font-semibold hover:bg-[#6B11B8] transition ${bricolage.className}`}
+            >
+              Go back to homepage
+            </button>
+          </div>
         </div>
       </div>
     </div>

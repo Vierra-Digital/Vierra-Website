@@ -83,7 +83,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       create: { sessionId, platform: Platform.facebook, accessToken: enc, ...(expiresAt && { expiresAt }) },
     });
 
-    return res.redirect("/session?linked=facebook");
+    return res.redirect(`/session/onboarding/${sessionId}?linked=facebook`);
 
   }
 }
