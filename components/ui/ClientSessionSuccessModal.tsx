@@ -7,10 +7,10 @@ const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
 interface ClientSessionSuccessModalProps {
   isOpen: boolean;
   onClose: () => void;
-  token: string;
+  token?: string;
 }
 
-export default function ClientSessionSuccessModal({ isOpen, onClose, token }: ClientSessionSuccessModalProps) {
+export default function ClientSessionSuccessModal({ isOpen, onClose }: ClientSessionSuccessModalProps) {
   const router = useRouter();
 
   const handleProceed = () => {

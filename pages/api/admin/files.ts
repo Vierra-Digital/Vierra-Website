@@ -20,8 +20,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const where: { userId?: number; clientId?: string } = {}
     if (filter === "me") {
-      const uid = (session.user as { id?: number })?.id
-      if (uid) where.userId = uid
+      const rawId = (session.user as { id?: number | string })?.id
+      const uid = rawId != null ? Number(rawId) : undefined
+      if (uid != null && !Number.isNaN(uid)) where.userId = uid
     } else if (filter && typeof filter === "string") {
       const num = Number(filter)
       if (!Number.isNaN(num)) {

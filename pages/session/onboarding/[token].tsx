@@ -2,12 +2,11 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import Head from "next/head";
 import Image from "next/image";
 import { useRouter } from "next/router";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { Inter } from "next/font/google";
 import type { GetServerSideProps } from "next"; import { prisma } from "@/lib/prisma";
 import { serialize as serializeCookie } from "cookie";
 import ClientSessionSuccessModal from "@/components/ui/ClientSessionSuccessModal";
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
 const inter = Inter({ subsets: ["latin"] });
 
 interface ClientSessionData {
@@ -599,7 +598,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                           { name: "targetAudience", label: "Who is your target audience (age, location, interests, demographics)?", type: "textarea" as const },
                           { name: "socialMediaGoals", label: "What's your primary desire for social media growth (leads, awareness, event signups, etc)?", type: "textarea" as const },
                           { name: "leadGeneration", label: "Describe your current lead generation funnel and primary offer.", type: "textarea" as const },
-                        ].map(({ name, label, type }) => (
+                        ].map(({ name, label }) => (
                           <div key={name}>
                             <label className={`block text-sm font-medium text-[#374151] mb-2 ${inter.className}`}>{label}</label>
                             <textarea

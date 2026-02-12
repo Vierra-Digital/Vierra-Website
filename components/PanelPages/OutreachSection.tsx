@@ -1,11 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react"
-import { Inter } from "next/font/google"
 import Image from "next/image"
 import { useSession } from "next-auth/react"
 import { FiChevronLeft, FiChevronRight, FiCalendar, FiTrendingUp, FiDollarSign, FiUsers, FiTarget } from "react-icons/fi"
 import { motion } from "framer-motion"
-
-const inter = Inter({ subsets: ["latin"] })
 
 const statFields = [
     { key: "attempts", label: "Attempts", icon: FiTarget },
