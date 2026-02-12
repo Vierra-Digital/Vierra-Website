@@ -31,7 +31,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const name = fileName || `document-${tokenId.slice(0, 8)}.pdf`
 
   try {
-    // Validate that the signing PDF exists
     const pdfsDir =
       process.env.NODE_ENV === "production"
         ? path.resolve("/tmp", "signing_pdfs")

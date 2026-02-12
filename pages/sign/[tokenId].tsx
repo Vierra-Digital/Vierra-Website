@@ -17,7 +17,6 @@ if (typeof window !== 'undefined') {
 
 const inter = Inter({ subsets: ['latin'] });
 
-// Helper function to convert base64 to ArrayBuffer
 const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
   const binaryString = window.atob(base64);
   const len = binaryString.length;

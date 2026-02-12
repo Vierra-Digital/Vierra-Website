@@ -16,7 +16,6 @@ interface SubmitSignatureBody {
     email?: string;
 }
 
-// Change directory to /tmp for serverless environment compatibility
 const signedPdfsDir = process.env.NODE_ENV === 'production' 
     ? path.resolve('/tmp', 'signed_pdfs')
     : path.resolve(process.cwd(), 'public', 'signed_pdfs');
@@ -32,7 +31,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        // Ensure the signed PDFs directory exists
         try {
             await fs.mkdir(signedPdfsDir, { recursive: true });
         } catch (mkdirError: unknown) {
@@ -44,7 +42,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             console.log(`[submit-signature] Directory ${signedPdfsDir} already exists.`);
         }
 
-        // Extract data from request body
         const { tokenId, signature, position, signatures, textValues, email }: SubmitSignatureBody = req.body;
 
         if (!tokenId) {
@@ -90,13 +87,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         let pdfBytes: Buffer;
         
-        // SERVERLESS OPTIMIZATION: Prioritize using base64 PDF from session data instead of filesystem
         if (sessionData.pdfBase64) {
-            // Use the base64 encoded PDF directly from session data - no filesystem dependency
             console.log(`[submit-signature] Using base64 encoded PDF from session data for token ${tokenId}`);
             pdfBytes = Buffer.from(sessionData.pdfBase64, 'base64');
         } else {
-            // Fall back to filesystem as before (mainly for development environment)
             const originalPdfPathRel = sessionData.pdfPath.replace(/^\//, '');
             const originalPdfPathAbs = process.env.NODE_ENV === 'production'
                 ? path.join('/tmp', originalPdfPathRel) // In production, look in /tmp
@@ -178,12 +172,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         try {
             sessionData.status = 'signed';
-            // Store relative path for consistency between environments
             sessionData.signedPdfPath = process.env.NODE_ENV === 'production' 
                 ? `/tmp/signed_pdfs/${signedPdfFilename}` 
                 : `/signed_pdfs/${signedPdfFilename}`;
 
-            // Store signer's email if provided
             if (email) {
                 sessionData.signerEmail = email;
             }
@@ -193,7 +185,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             console.warn(`[submit-signature] WARNING: Failed to update session data for token ${tokenId} after saving PDF:`, sessionError);
         }
 
-        // If this document was saved to a staff member's files, update the stored file with the signed PDF
         try {
             const storedFiles = await prisma.storedFile.findMany({
                 where: { signingTokenId: tokenId, userId: { not: null } },
@@ -209,13 +200,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             console.warn(`[submit-signature] WARNING: Failed to update stored file with signed PDF for token ${tokenId}:`, updateError);
         }
 
-        // Email sending sequence - modified to be more atomic in production
         if (process.env.NODE_ENV === 'production') {
-            // In production, guarantee emails are sent within same function execution as PDF creation
-            // This ensures /tmp files are still available when emails are sent
             const emailPromises = [];
-            
-            // Primary email to document owner/admin
             const emailSubject = `Signed Document: ${sessionData.originalFilename}`;
             const emailText = `The document "${sessionData.originalFilename}" has been signed. See the signed version attached.`;
             emailPromises.push(
@@ -225,8 +211,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                         // Continue execution even if email fails
                     })
             );
-            
-            // Copy to signer if email provided
             if (email) {
                 emailPromises.push(
                     sendSignerCopyEmail(email, sessionData.originalFilename, signedPdfPathAbs)
@@ -237,11 +221,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 );
             }
             
-            // Wait for all emails to complete or fail before responding
             await Promise.all(emailPromises);
             console.log(`[submit-signature] Email sending sequence completed for token ${tokenId}`);
         } else {
-            // In development, keep original sequential behavior
             try {
                 const emailSubject = `Signed Document: ${sessionData.originalFilename}`;
                 const emailText = `The document "${sessionData.originalFilename}" has been signed. See the signed version attached.`;

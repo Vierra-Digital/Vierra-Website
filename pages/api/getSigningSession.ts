@@ -8,21 +8,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
-        // Extract token from query parameters
         const { tokenId } = req.query;
-        
         if (!tokenId || typeof tokenId !== 'string') {
             return res.status(400).json({ message: 'Missing required tokenId parameter' });
         }
 
-        // Get session data for the token
         const sessionData = getSessionData(tokenId);
-        
         if (!sessionData) {
             return res.status(404).json({ message: 'Session not found or expired' });
         }
 
-        // Return fields for new format, or construct from coordinates for legacy
         const firstSignature = sessionData.fields?.find(f => f.type === 'signature');
         const coords = sessionData.coordinates ?? (firstSignature ? {
             page: firstSignature.page,

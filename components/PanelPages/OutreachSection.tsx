@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo, useCallback } from "react"
 import Image from "next/image"
 import { useSession } from "next-auth/react"
 import { FiChevronLeft, FiChevronRight, FiCalendar, FiTrendingUp, FiDollarSign, FiUsers, FiTarget } from "react-icons/fi"
@@ -90,10 +90,10 @@ const OutreachSection = () => {
         Other: { attempts: 0, meetings: 0, clients: 0, revenue: 0 }
     });
 
-    function calculatePercentage(numerator: number, denominator: number) {
+    const calculatePercentage = useCallback((numerator: number, denominator: number) => {
         if (!denominator) return 0
         return Math.round((numerator / denominator) * 100 * 100) / 100
-    }
+    }, [])
 
     function handleStatChange(card: CardKey, field: StatField, value: string) {
         if (!isEditable) return
@@ -199,7 +199,7 @@ const OutreachSection = () => {
         }
     };
 
-    const fetchMonthlyData = async () => {
+    const fetchMonthlyData = useCallback(async () => {
         setIsLoading(true);
         try {
             const response = await fetch(`/api/marketing/tracker?year=${selectedYear}&month=${selectedMonth}`);
@@ -246,9 +246,9 @@ const OutreachSection = () => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [selectedYear, selectedMonth]);
 
-    const fetchYearlySummary = async () => {
+    const fetchYearlySummary = useCallback(async () => {
         setIsLoading(true);
         try {
             // Calculate yearly summary from all months
@@ -310,7 +310,7 @@ const OutreachSection = () => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [selectedYear, calculatePercentage]);
     
     useEffect(() => {
         if (viewMode === "monthly") {
@@ -318,7 +318,7 @@ const OutreachSection = () => {
         } else {
             fetchYearlySummary();
         }
-    }, [selectedYear, selectedMonth, viewMode]);
+    }, [selectedYear, selectedMonth, viewMode, fetchMonthlyData, fetchYearlySummary]);
 
     const navigateMonth = (direction: "prev" | "next") => {
         if (direction === "prev") {

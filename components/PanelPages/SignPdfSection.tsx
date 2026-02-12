@@ -596,7 +596,6 @@ const SignPdfSection: React.FC = () => {
                                     color: "#374151",
                                     overflow: "hidden",
                                   }}
-                                  className="group"
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <span className="opacity-70 font-bold">

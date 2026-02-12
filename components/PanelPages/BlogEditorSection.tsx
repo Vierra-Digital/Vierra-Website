@@ -5,6 +5,15 @@ import { RiArrowDropDownLine } from "react-icons/ri"
 
 const inter = Inter({ subsets: ["latin"] })
 
+const FONT_SIZE_OPTIONS = [8, 9, 10, 11, 12, 14, 16, 18, 24, 36, 48, 72]
+
+const normalizeUrl = (u: string) => {
+  const t = u.trim()
+  if (/^(https?:|data:|blob:)/i.test(t)) return t
+  if (t.startsWith('//')) return `https:${t}`
+  return `https://${t.replace(/^\/+/, '')}`
+}
+
 const RichTextEditor: React.FC<{
   value: string
   onChange: (value: string) => void
@@ -58,7 +67,7 @@ const RichTextEditor: React.FC<{
     "48": "7",
     "72": "7",
   }
-  const fontSizeOptions = [8, 9, 10, 11, 12, 14, 16, 18, 24, 36, 48, 72]
+  const fontSizeOptions = FONT_SIZE_OPTIONS
   const allowFontSize = (size: string) => {
     if (!size) return false
     const n = parseInt(size, 10)
@@ -80,7 +89,7 @@ const RichTextEditor: React.FC<{
     return "Inter"
   }
 
-  const getFontFromSelection = () => {
+  const getFontFromSelection = useCallback(() => {
     try {
       const cmd = document.queryCommandValue("fontName")
       if (typeof cmd === "string" && cmd.trim()) {
@@ -104,7 +113,7 @@ const RichTextEditor: React.FC<{
     } catch {
       return null
     }
-  }
+  }, [])
 
   const restoreSelection = () => {
     try {
@@ -116,7 +125,7 @@ const RichTextEditor: React.FC<{
     } catch {}
   }
 
-  const getFontSizeFromSelection = () => {
+  const getFontSizeFromSelection = useCallback(() => {
     try {
       const el = editableRef.current
       const sel = window.getSelection()
@@ -129,14 +138,14 @@ const RichTextEditor: React.FC<{
       const size = window.getComputedStyle(node).fontSize || ""
       const px = parseFloat(size)
       if (!px || Number.isNaN(px)) return null
-      const closest = fontSizeOptions.reduce((prev, curr) =>
+      const closest = FONT_SIZE_OPTIONS.reduce((prev, curr) =>
         Math.abs(curr - px) < Math.abs(prev - px) ? curr : prev
       )
       return String(closest)
     } catch {
       return null
     }
-  }
+  }, [])
 
   const getColorFromSelection = () => {
     try {
@@ -215,8 +224,8 @@ const RichTextEditor: React.FC<{
       if (detectedHighlight) setSelectedHighlightColor(detectedHighlight)
     }
     document.addEventListener('selectionchange', updateStates)
-    return () => document.removeEventListener('selectionchange', updateStates)
-  }, [])
+      return () => document.removeEventListener('selectionchange', updateStates)
+  }, [getFontFromSelection, getFontSizeFromSelection])
 
   // Resize state
   const isResizingRef = useRef(false)
@@ -384,13 +393,7 @@ const RichTextEditor: React.FC<{
   const [historyIndex, setHistoryIndex] = useState(0)
   // We avoid storing display HTML in React state to prevent rerenders that reset the caret.
 
-  const normalizeUrl = (u: string) => {
-    const t = u.trim()
-    if (/^(https?:|data:|blob:)/i.test(t)) return t
-    if (t.startsWith('//')) return `https:${t}`
-    return `https://${t.replace(/^\/+/, '')}`
-  }
-  const toYoutubeEmbed = (u: string): string | null => {
+  const toYoutubeEmbed = useCallback((u: string): string | null => {
     const url = normalizeUrl(u)
     try {
       const a = new URL(url)
@@ -410,14 +413,14 @@ const RichTextEditor: React.FC<{
       }
     } catch {}
     return null
-  }
-  const buildVideoEmbedHtml = (u: string) => {
+  }, [])
+  const buildVideoEmbedHtml = useCallback((u: string) => {
     const yt = toYoutubeEmbed(u)
     if (yt) {
       return `<iframe class="rte-media" src="${yt}" title="YouTube video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`
     }
     return `<video class="rte-media" controls src="${normalizeUrl(u)}">Your browser does not support the video tag.</video>`
-  }
+  }, [toYoutubeEmbed])
   const buildImageEmbedHtml = (u: string) => `<img class="rte-media" src="${normalizeUrl(u)}" alt="" />`
 
   // Transform stored HTML into an editing-friendly display
@@ -489,7 +492,7 @@ const RichTextEditor: React.FC<{
       return `<a href="${url}" data-url="${url}" class="rte-link not-prose" title="${url}" style="color:#2563eb;text-decoration:underline;">${text}</a>`
     })
     return out
-  }, [])
+  }, [buildVideoEmbedHtml])
 
   // Transform display (with placeholders) back to real HTML for saving
   const toHtml = useCallback((display: string): string => {
@@ -561,7 +564,7 @@ const RichTextEditor: React.FC<{
     // Legacy placeholder links (if any remain)
     out = out.replace(/<span[^>]*data-type="link"[^>]*data-url="([^"]+)"[^>]*>.*?<\/span>/gi, (_m, url) => `<a href="${normalizeUrl(url)}" target="_blank" rel="noopener noreferrer">${normalizeUrl(url)}<\/a>`)
     return out
-  }, [])
+  }, [toYoutubeEmbed])
 
   const setupEmbedHandlers = useCallback((embed: HTMLElement) => {
     if (embed.hasAttribute('data-initialized')) return

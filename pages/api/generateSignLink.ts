@@ -11,7 +11,6 @@ export const config = {
   },
 }
 
-// Update directory path for production environment compatibility
 const pdfsDir = process.env.NODE_ENV === 'production'
   ? path.resolve('/tmp', "signing_pdfs")
   : path.resolve(process.cwd(), "public", "signing_pdfs")
@@ -110,17 +109,14 @@ export default async function handler(
     const tokenId = uuidv4()
     const originalFilename = pdfFile.originalFilename || "document.pdf"
 
-    // Check that tempPdfPath is not null before reading
     if (!tempPdfPath) {
       throw new Error("Temporary PDF path is null.")
     }
 
-    // Read PDF file as base64
     const pdfContent = fs.readFileSync(tempPdfPath);
-    const pdfBased64 = pdfContent.toString('base64');
+    const pdfBase64 = pdfContent.toString('base64');
 
     persistentPdfPath = path.join(pdfsDir, `${tokenId}.pdf`)
-    // Adjust path handling based on environment
     publicPdfPath = process.env.NODE_ENV === 'production'
       ? `/tmp/signing_pdfs/${tokenId}.pdf`
       : `/signing_pdfs/${tokenId}.pdf`
@@ -140,7 +136,7 @@ export default async function handler(
       token: tokenId,
       originalFilename: originalFilename,
       pdfPath: publicPdfPath,
-      pdfBase64: pdfBased64,
+      pdfBase64,
       fields: fieldsData,
       status: "pending",
       createdAt: Date.now(),
