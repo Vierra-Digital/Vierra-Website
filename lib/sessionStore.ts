@@ -92,7 +92,7 @@ export async function saveSessionData(tokenId: string, data: SessionData): Promi
         token: tokenId,
         originalFilename: data.originalFilename,
         pdfBase64: data.pdfBase64 ?? null,
-        fields: (data.fields ?? undefined) as unknown as Prisma.InputJsonValue,
+        fields: data.fields != null ? (data.fields as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
         status: data.status,
         signerEmail: data.signerEmail ?? null,
         updatedAt: new Date(),
@@ -100,7 +100,7 @@ export async function saveSessionData(tokenId: string, data: SessionData): Promi
       update: {
         originalFilename: data.originalFilename,
         pdfBase64: data.pdfBase64 ?? null,
-        fields: (data.fields ?? undefined) as unknown as Prisma.InputJsonValue,
+        fields: data.fields != null ? (data.fields as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
         status: data.status,
         signerEmail: data.signerEmail ?? null,
         updatedAt: new Date(),
