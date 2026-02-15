@@ -396,12 +396,9 @@ const SignPdfSection: React.FC = () => {
                       className={`inline-flex items-center gap-2 px-4 py-2.5 bg-[#701CC0] text-white rounded-lg font-medium hover:bg-[#5F18B0] text-sm transition flex-shrink-0 ${inter.className}`}
                     >
                       <FiCopy className="w-4 h-4" />
-                      Copy
+                      {linkCopied ? "Copied" : "Copy"}
                     </button>
                   </div>
-                  {linkCopied && (
-                    <p className="text-[#059669] text-sm mt-2 font-medium">Copied To Clipboard</p>
-                  )}
                 </div>
               </div>
 
@@ -479,10 +476,10 @@ const SignPdfSection: React.FC = () => {
               <button
                 type="button"
                 onClick={handleStartOver}
-                className="mt-8 inline-flex items-center justify-center gap-2 px-5 py-2.5 border border-[#701CC0] text-[#701CC0] rounded-lg font-medium text-sm hover:bg-[#F3E8FF] hover:border-[#5F18B0] hover:text-[#5F18B0] transition"
+                className={`mt-8 w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#701CC0] text-white rounded-lg font-medium hover:bg-[#5F18B0] transition ${inter.className}`}
               >
                 <FaRegFilePdf className="w-4 h-4" />
-                Create Another Link
+                Upload Another PDF
               </button>
 
               {saveStatus === "success" && (
@@ -509,7 +506,7 @@ const SignPdfSection: React.FC = () => {
                       </div>
                       <h3 className="text-xl font-semibold text-[#111827] mb-2">Saved Successfully!</h3>
                       <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
-                        The PDF has been saved to the selected files.
+                        The PDF has been saved to the selected user.
                       </p>
                       <button
                         type="button"

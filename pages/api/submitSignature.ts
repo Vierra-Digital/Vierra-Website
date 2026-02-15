@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
-import { getSessionData, saveSessionData, PdfField } from '@/lib/sessionStore';
+import { getSessionData, saveSessionData, deleteSessionFile, PdfField } from '@/lib/sessionStore';
 import { sendSignedDocumentEmail, sendSignerCopyEmail } from '@/lib/emailSender';
 import { prisma } from '@/lib/prisma';
 
@@ -129,7 +129,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         const signedPdfBytes = Buffer.from(await pdfDoc.save());
-        const signedPdfFilename = `${tokenId}_signed.pdf`;
 
         try {
             sessionData.status = 'signed';
@@ -158,10 +157,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             console.warn(`[submit-signature] WARNING: Failed to update stored file with signed PDF for token ${tokenId}:`, updateError);
         }
 
-        const emailSubject = `Signed Document: ${sessionData.originalFilename}`;
-        const emailText = `The document "${sessionData.originalFilename}" has been signed. See the signed version attached.`;
         const emailPromises = [
-            sendSignedDocumentEmail(emailSubject, emailText, signedPdfBytes, signedPdfFilename)
+            sendSignedDocumentEmail(sessionData.originalFilename, signedPdfBytes)
                 .catch(emailError => {
                     console.warn(`[submit-signature] WARNING: Failed to send admin email for token ${tokenId}:`, emailError);
                 }),
@@ -176,6 +173,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
         await Promise.all(emailPromises);
         console.log(`[submit-signature] Email sending completed for token ${tokenId}`);
+
+        try {
+            await deleteSessionFile(tokenId);
+            console.log(`[submit-signature] Deleted signing session for token ${tokenId}`);
+        } catch (deleteError) {
+            console.warn(`[submit-signature] WARNING: Failed to delete signing session for token ${tokenId}:`, deleteError);
+        }
 
         return res.status(200).json({ message: 'Signature submitted and document saved successfully.' });
 

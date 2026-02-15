@@ -38,6 +38,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!user) {
         return res.status(404).json({ message: "Staff member not found." })
       }
+      const existing = await prisma.storedFile.findFirst({
+        where: { signingTokenId: tokenId, userId },
+      })
+      if (existing) {
+        return res.status(200).json({ success: true, alreadySaved: true })
+      }
       await prisma.storedFile.create({
         data: {
           name,
@@ -51,6 +57,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const client = await prisma.client.findUnique({ where: { id: clientId } })
       if (!client) {
         return res.status(404).json({ message: "Client not found." })
+      }
+      const existing = await prisma.storedFile.findFirst({
+        where: { signingTokenId: tokenId, clientId },
+      })
+      if (existing) {
+        return res.status(200).json({ success: true, alreadySaved: true })
       }
       await prisma.storedFile.create({
         data: {

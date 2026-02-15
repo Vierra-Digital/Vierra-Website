@@ -68,36 +68,70 @@ export async function sendEmail(data: EmailData): Promise<void> {
   }
 }
 
-export async function sendSignedDocumentEmail(subject: string, text: string, attachment: Buffer, filename: string): Promise<void> {
+function ensurePdfExtension(name: string): string {
+  return name.toLowerCase().endsWith('.pdf') ? name : `${name}.pdf`;
+}
+
+function stripPdfExtension(name: string): string {
+  return name.replace(/\.pdf$/i, '');
+}
+
+const signedEmailFooterHtml = `
+  <div style="margin:40px 0 30px;text-align:center;">
+    <a href="https://www.LinkedIn.com/company/Vierra" style="margin:0 12px;display:inline-block;">
+      <img src="https://vierradev.com/assets/Socials/LinkedIn.png" alt="LinkedIn" style="width:32px;height:32px;">
+    </a>
+    <a href="https://www.instagram.com/vierra.dev" style="margin:0 12px;display:inline-block;">
+      <img src="https://vierradev.com/assets/Socials/Instagram.png" alt="Instagram" style="width:32px;height:32px;">
+    </a>
+    <a href="https://www.facebook.com/share/1GXE6s4NSX/?mibextid=wwXIfr" style="margin:0 12px;display:inline-block;">
+      <img src="https://vierradev.com/assets/Socials/Facebook.png" alt="Facebook" style="width:32px;height:32px;">
+    </a>
+  </div>
+  <div style="color:#999;font-size:14px;margin-top:30px;padding-top:20px;border-top:1px solid #eee;text-align:center;">
+    Copyright &copy; ${new Date().getFullYear()} <a href="https://vierradev.com" style="color:#7A13D0;text-decoration:none;font-weight:600;">Vierra Digital</a>. All rights reserved.<br/>
+    Contact: <a href="mailto:alex@vierradev.com" style="color:#999;text-decoration:none;">alex@vierradev.com</a>
+  </div>
+`;
+
+export async function sendSignedDocumentEmail(documentName: string, attachment: Buffer): Promise<void> {
+  const pdfFilename = ensurePdfExtension(documentName);
   const mailOptions = {
     from: fromEmail,
     to: recipients.join(","),
-    subject: subject,
+    subject: `Vierra | Signed Document: ${stripPdfExtension(documentName)}`,
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #FAFAFA; color: #111827; padding: 32px; max-width: 560px; margin: 0 auto;">
-        <div style="background: white; border-radius: 12px; border: 1px solid #E5E7EB; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-          <div style="padding: 12px 24px; border-bottom: 1px solid #E5E7EB; text-align: center; overflow: hidden; background: #FFFFFF;">
-            <img src="${emailLogoUrl}" alt="Vierra" style="${emailLogoStyle}" />
-          </div>
-          <div style="padding: 24px;">
-            <table cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 16px;"><tr>
-              <td style="width: 48px; height: 48px; border-radius: 12px; background: #F3E8FF; text-align: center; line-height: 48px; font-size: 24px; vertical-align: middle;">✓</td>
-              <td style="padding-left: 12px; vertical-align: middle;"><h2 style="margin: 0; font-size: 18px; font-weight: 600; color: #111827;">${subject}</h2></td>
-            </tr></table>
-            <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #6B7280;">${text}</p>
-            <p style="margin: 16px 0 0; font-size: 13px; color: #9CA3AF;">The signed PDF is attached to this email.</p>
-          </div>
-          <div style="padding: 16px 24px; background: #F9FAFB; border-top: 1px solid #E5E7EB;">
-            <p style="margin: 0; font-size: 12px; color: #9CA3AF; text-align: center;">© ${new Date().getFullYear()} Vierra Digital Inc. · <a href="https://vierradev.com" style="color: #701CC0; text-decoration: none;">vierradev.com</a></p>
-          </div>
-        </div>
+      <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
+        <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
+              <img src="https://vierradev.com/assets/vierra-logo.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:50px 40px;text-align:left;vertical-align:top;">
+              <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">Signed Document</h2>
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 24px;">
+                The document "${documentName}" has been signed. See the signed version attached.
+              </p>
+              <div style="margin-bottom:40px;text-align:center;">
+                <a href="cid:signedPdf" style="display:inline-block;background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);color:#fff;font-weight:600;text-decoration:none;padding:10px 24px;border-radius:10px;font-size:14px;box-shadow:0 4px 15px rgba(122,19,208,0.3);">
+                  Download PDF
+                </a>
+              </div>
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">Best Wishes,<br/>- The Vierra Team</p>
+              ${signedEmailFooterHtml}
+            </td>
+          </tr>
+        </table>
       </div>
     `,
     attachments: [
       {
-        filename: filename,
+        filename: pdfFilename,
         content: attachment,
-        contentType: 'application/pdf'
+        contentType: 'application/pdf',
+        cid: 'signedPdf'
       }
     ]
   };
@@ -111,34 +145,43 @@ export async function sendSignedDocumentEmail(subject: string, text: string, att
 }
 
 export async function sendSignerCopyEmail(email: string, documentName: string, attachment: Buffer): Promise<void> {
+  const pdfFilename = ensurePdfExtension(documentName);
   const mailOptions = {
     from: fromEmail,
     to: email,
-    subject: `Signed Document: ${documentName}`,
+    subject: `Vierra | Signed Document: ${stripPdfExtension(documentName)}`,
     html: `
-      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #FAFAFA; color: #111827; padding: 32px; max-width: 560px; margin: 0 auto;">
-        <div style="background: white; border-radius: 12px; border: 1px solid #E5E7EB; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-          <div style="padding: 12px 24px; border-bottom: 1px solid #E5E7EB; text-align: center; overflow: hidden; background: #FFFFFF;">
-            <img src="${emailLogoUrl}" alt="Vierra" style="${emailLogoStyle}" />
-          </div>
-          <div style="padding: 24px;">
-            <table cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 16px;"><tr>
-              <td style="width: 48px; height: 48px; border-radius: 12px; background: #F3E8FF; text-align: center; line-height: 48px; font-size: 24px; vertical-align: middle;">✓</td>
-              <td style="padding-left: 12px; vertical-align: middle;"><h2 style="margin: 0; font-size: 18px; font-weight: 600; color: #111827;">Signed Document</h2></td>
-            </tr></table>
-            <p style="margin: 0; font-size: 14px; line-height: 1.5; color: #6B7280;">Thank you for signing "${documentName}" with Vierra. A copy is attached for your records.</p>
-          </div>
-          <div style="padding: 16px 24px; background: #F9FAFB; border-top: 1px solid #E5E7EB;">
-            <p style="margin: 0; font-size: 12px; color: #9CA3AF; text-align: center;">© ${new Date().getFullYear()} Vierra Digital Inc. · <a href="https://vierradev.com" style="color: #701CC0; text-decoration: none;">vierradev.com</a></p>
-          </div>
-        </div>
+      <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
+        <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
+              <img src="https://vierradev.com/assets/vierra-logo.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:50px 40px;text-align:left;vertical-align:top;">
+              <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">Signed Document</h2>
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 24px;">
+                Thank you for signing "${documentName}" with Vierra. A copy is attached for your records.
+              </p>
+              <div style="margin-bottom:40px;text-align:center;">
+                <a href="cid:signedPdf" style="display:inline-block;background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);color:#fff;font-weight:600;text-decoration:none;padding:10px 24px;border-radius:10px;font-size:14px;box-shadow:0 4px 15px rgba(122,19,208,0.3);">
+                  Download PDF
+                </a>
+              </div>
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">Best Wishes,<br/>- The Vierra Team</p>
+              ${signedEmailFooterHtml}
+            </td>
+          </tr>
+        </table>
       </div>
     `,
     attachments: [
       {
-        filename: `${documentName}.pdf`,
+        filename: pdfFilename,
         content: attachment,
-        contentType: 'application/pdf'
+        contentType: 'application/pdf',
+        cid: 'signedPdf'
       }
     ]
   };

@@ -1,14 +1,15 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
+import type { GetServerSideProps } from 'next';
 import { Document, Page, pdfjs } from 'react-pdf';
 import SignatureCanvas from 'react-signature-canvas';
 import { Inter } from 'next/font/google';
 import Image from 'next/image';
-import { FaRegFilePdf } from 'react-icons/fa6';
 import { FiCheck, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
+import { getSessionData } from '@/lib/sessionStore';
 import type { PdfField } from '@/lib/sessionStore';
 
 if (typeof window !== 'undefined') {
@@ -225,10 +226,8 @@ const SignDocumentPage: React.FC = () => {
   if (isLoadingDetails) {
     return (
       <div className={`min-h-screen bg-[#FAFAFA] flex flex-col items-center justify-center p-4 ${inter.className}`}>
-          <div className="w-14 h-14 rounded-full bg-[#7A13D0]/10 flex items-center justify-center mb-4">
-          <FaRegFilePdf className="w-7 h-7 text-[#7A13D0]" />
-        </div>
-        <p className="text-[#6B7280]">Loading signing details...</p>
+        <div className="w-14 h-14 rounded-full border-4 border-[#7A13D0]/20 border-t-[#7A13D0] animate-spin mb-4" />
+        <p className="text-[#6B7280]">Loading Signing Details...</p>
       </div>
     );
   }
@@ -297,7 +296,7 @@ const SignDocumentPage: React.FC = () => {
                       file={pdfData}
                       onLoadSuccess={onDocumentLoadSuccess}
                       onLoadError={(err) => { setError(`Failed to load PDF document: ${err.message}`); }}
-                      loading={<div className="text-[#6B7280] p-10">Loading PDF document...</div>}
+                      loading={<div className="text-[#6B7280] p-10">Loading PDF Document...</div>}
                       className="flex flex-col items-center"
                     >
                       {numPages > 0 && (() => {
@@ -452,6 +451,18 @@ const SignDocumentPage: React.FC = () => {
       </div>
     </>
   );
+};
+
+export const getServerSideProps: GetServerSideProps = async (ctx) => {
+  const tokenId = ctx.params?.tokenId;
+  if (!tokenId || typeof tokenId !== 'string') {
+    return { notFound: true };
+  }
+  const session = await getSessionData(tokenId);
+  if (!session || session.status === 'signed' || session.status === 'expired') {
+    return { notFound: true };
+  }
+  return { props: {} };
 };
 
 export default SignDocumentPage;
