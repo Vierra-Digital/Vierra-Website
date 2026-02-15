@@ -2,11 +2,9 @@ const nextConfig = {
   reactStrictMode: true,
   compress: true,
   poweredByHeader: false,
-  experimental: {
-    outputFileTracingIncludes: {
-      "/api/presets": ["./data/presets/**/*"],
-      "/api/generateSignLinkFromPreset": ["./data/presets/**/*"],
-    },
+  outputFileTracingIncludes: {
+    "/api/presets": ["./data/presets/**/*"],
+    "/api/generateSignLinkFromPreset": ["./data/presets/**/*"],
   },
   images: {
     remotePatterns: [
