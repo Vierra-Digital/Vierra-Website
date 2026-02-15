@@ -46,7 +46,7 @@ const testimonials = [
   },
 ]
 
-export function TestimonialsSection() {
+export default function TestimonialsSection() {
   const [currentTestimonial, setCurrentTestimonial] = useState(0)
 
   const nextTestimonial = () =>
@@ -138,5 +138,3 @@ export function TestimonialsSection() {
     </section>
   )
 }
-
-export default TestimonialsSection
