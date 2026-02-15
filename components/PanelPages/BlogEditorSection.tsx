@@ -1865,6 +1865,7 @@ type Post = {
 
 export default function BlogEditorSection() {
   const [posts, setPosts] = useState<Post[]>([])
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [postToDelete, setPostToDelete] = useState<{ id: number; title: string } | null>(null)
@@ -1895,6 +1896,7 @@ export default function BlogEditorSection() {
   useEffect(() => {
     ;(async () => {
       try {
+        setLoading(true)
         const r = await fetch(`/api/blog/posts?page=1&limit=50`)
         const data = await r.json()
         const mapped: Post[] = data.posts
@@ -1905,6 +1907,8 @@ export default function BlogEditorSection() {
         setPosts(mapped)
       } catch (e: any) {
         setError(e?.message ?? "Failed to load posts")
+      } finally {
+        setLoading(false)
       }
     })()
   }, [])
@@ -2216,7 +2220,14 @@ export default function BlogEditorSection() {
       )}
 
       {mode === "list" && (
-        paginatedPosts.length === 0 ? (
+        loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto"></div>
+              <p className="mt-2 text-sm text-[#6B7280]">Loading Blog Data...</p>
+            </div>
+          </div>
+        ) : paginatedPosts.length === 0 ? (
           <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-sm p-10">
             <div className="flex flex-col items-center justify-center text-center">
               <div className="w-14 h-14 rounded-full bg-[#F3E8FF] flex items-center justify-center mb-4">
