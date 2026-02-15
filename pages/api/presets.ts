@@ -4,6 +4,15 @@ import path from "path"
 import { requireSession } from "@/lib/auth"
 import { PRESETS } from "@/lib/presets"
 
+function presetPdfExists(preset: { pdfPath: string }): boolean {
+  const cwd = process.cwd()
+  const pathsToTry = [
+    path.join(cwd, preset.pdfPath),
+    path.join(cwd, preset.pdfPath.replace("data/presets/", "public/presets/")),
+  ]
+  return pathsToTry.some((p) => fs.existsSync(p))
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
     res.setHeader("Allow", ["GET"])
@@ -16,10 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (role !== "admin" && role !== "staff")
     return res.status(403).json({ message: "Forbidden" })
 
-  const list = PRESETS.filter((p) => {
-    const fullPath = path.join(process.cwd(), p.pdfPath)
-    return fs.existsSync(fullPath)
-  }).map((p) => ({
+  const list = PRESETS.filter((p) => presetPdfExists(p)).map((p) => ({
     id: p.id,
     name: p.name,
     description: p.description,

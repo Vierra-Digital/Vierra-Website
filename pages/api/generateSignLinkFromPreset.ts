@@ -43,8 +43,13 @@ export default async function handler(
     })
   }
 
-  const pdfFullPath = path.join(process.cwd(), preset.pdfPath)
-  if (!fs.existsSync(pdfFullPath)) {
+  const cwd = process.cwd()
+  const pathsToTry = [
+    path.join(cwd, preset.pdfPath),
+    path.join(cwd, preset.pdfPath.replace("data/presets/", "public/presets/")),
+  ]
+  const pdfFullPath = pathsToTry.find((p) => fs.existsSync(p))
+  if (!pdfFullPath) {
     return res.status(503).json({
       message: `This preset is not available. The PDF file for "${preset.name}" has not been added to this deployment.`,
     })

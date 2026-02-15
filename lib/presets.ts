@@ -8,26 +8,27 @@ export interface PresetDefinition {
 }
 
 /** Preset metadata. Field positions come from data/preset-overrides.json only. */
+/** PDFs in data/presets/ are bundled with the server for Netlify compatibility. */
 export const PRESETS: PresetDefinition[] = [
   {
     id: "vierra-staffing-handbook",
     name: "Vierra Staffing Handbook",
     description: "Staff handbook with rules and policies.",
-    pdfPath: "public/presets/vierra-staffing-handbook.pdf",
+    pdfPath: "data/presets/vierra-staffing-handbook.pdf",
     originalFilename: "Vierra Staffing Handbook.pdf",
   },
   {
     id: "employee-payment-details",
     name: "Employee Payment Details",
     description: "Payment details form for payroll.",
-    pdfPath: "public/presets/employee-payment-details.pdf",
+    pdfPath: "data/presets/employee-payment-details.pdf",
     originalFilename: "Payment Details Contract For Direct Deposit.pdf",
   },
   {
     id: "non-disclosure-agreement",
     name: "Non-Disclosure Agreement",
     description: "NDA contract for staff and clients.",
-    pdfPath: "public/presets/non-disclosure-agreement.pdf",
+    pdfPath: "data/presets/non-disclosure-agreement.pdf",
     originalFilename: "Non-Disclosure Agreement.pdf",
   },
 ]
