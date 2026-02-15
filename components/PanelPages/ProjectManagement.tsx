@@ -619,7 +619,6 @@ export default function ProjectManagement() {
       {/* Add Task Modal - Multi-step */}
       {showAddModal && selectedBoard && (
         <AddTaskModal
-          board={selectedBoard}
           form={addForm}
           setForm={setAddForm}
           step={addStep}
@@ -686,7 +685,6 @@ function ConfirmDeleteTaskModal({
 }
 
 function AddTaskModal({
-  board,
   form,
   setForm,
   step,
@@ -695,7 +693,6 @@ function AddTaskModal({
   onSubmit,
   onClose,
 }: {
-  board: string;
   form: { name: string; description: string; checklistText: string; assignedTo: number[]; deadline: string };
   setForm: React.Dispatch<React.SetStateAction<{ name: string; description: string; checklistText: string; assignedTo: number[]; deadline: string }>>;
   step: number;
