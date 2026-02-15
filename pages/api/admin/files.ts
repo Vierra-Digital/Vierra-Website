@@ -15,14 +15,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const { filter } = req.query
-  // filter: "me" | userId | clientId - optional; when omitted, return all (admin view)
+  // filter: "me" | userId | clientId - optional; when omitted, default to current user only (privacy)
 
   try {
+    const rawId = (session.user as { id?: number | string })?.id
+    const uid = rawId != null ? Number(rawId) : undefined
+
     const where: { userId?: number; clientId?: string } = {}
-    if (filter === "me") {
-      const rawId = (session.user as { id?: number | string })?.id
-      const uid = rawId != null ? Number(rawId) : undefined
-      if (uid != null && !Number.isNaN(uid)) where.userId = uid
+    if (filter === "me" || !filter) {
+      if (uid != null && !Number.isNaN(uid)) {
+        where.userId = uid
+      } else {
+        where.userId = -1
+      }
     } else if (filter && typeof filter === "string") {
       const num = Number(filter)
       if (!Number.isNaN(num)) {

@@ -20,7 +20,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ message: "File id is required." })
   }
 
+  const rawId = (session.user as { id?: number | string })?.id
+  const uid = rawId != null ? Number(rawId) : null
+
   try {
+    const file = await prisma.storedFile.findUnique({
+      where: { id: fileId },
+      select: { userId: true, clientId: true },
+    })
+    if (!file) {
+      return res.status(404).json({ message: "File not found." })
+    }
+    const isOwner = file.userId != null && uid != null && file.userId === uid
+    if (!isOwner) {
+      return res.status(403).json({ message: "You can only delete files saved to you." })
+    }
     await prisma.storedFile.delete({ where: { id: fileId } })
     return res.status(200).json({ success: true })
   } catch (e) {

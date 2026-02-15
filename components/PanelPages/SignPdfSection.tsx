@@ -48,6 +48,7 @@ const SignPdfSection: React.FC = () => {
   const [generatedFileName, setGeneratedFileName] = useState<string>("")
   const [recipientType, setRecipientType] = useState<"staff" | "client">("staff")
   const [recipientId, setRecipientId] = useState<string>("")
+  const recipientIdRef = useRef<string>("")
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
   const [clientOptions, setClientOptions] = useState<ClientOption[]>([])
   const [saveStatus, setSaveStatus] = useState<"idle" | "loading" | "success" | "error">("idle")
@@ -236,6 +237,7 @@ const SignPdfSection: React.FC = () => {
       setGeneratedTokenId(tokenId)
       setGeneratedFileName(pdfFile.name || "document.pdf")
       setRecipientId("")
+      recipientIdRef.current = ""
       setSaveStatus("idle")
       setSaveError(null)
     } catch (err: unknown) {
@@ -256,7 +258,8 @@ const SignPdfSection: React.FC = () => {
   }
 
   const handleSaveToFiles = async () => {
-    if (!generatedTokenId || !recipientId) {
+    const selectedId = recipientIdRef.current || recipientId
+    if (!generatedTokenId || !selectedId) {
       setSaveError("Please select a staff member or client.")
       return
     }
@@ -270,7 +273,7 @@ const SignPdfSection: React.FC = () => {
           tokenId: generatedTokenId,
           fileName: generatedFileName,
           recipientType,
-          recipientId: recipientType === "staff" ? Number(recipientId) : recipientId,
+          recipientId: recipientType === "staff" ? Number(selectedId) : selectedId,
         }),
       })
       const data = await r.json().catch(() => ({}))
@@ -292,6 +295,8 @@ const SignPdfSection: React.FC = () => {
     setGeneratedLink(null)
     setGeneratedTokenId(null)
     setGeneratedFileName("")
+    setRecipientId("")
+    recipientIdRef.current = ""
     setError(null)
     setLinkCopied(false)
   }
@@ -377,6 +382,7 @@ const SignPdfSection: React.FC = () => {
                           onChange={(e) => {
                             setRecipientType(e.target.value as "staff" | "client")
                             setRecipientId("")
+                            recipientIdRef.current = ""
                             setSaveStatus("idle")
                             setSaveError(null)
                           }}
@@ -389,7 +395,9 @@ const SignPdfSection: React.FC = () => {
                       <select
                         value={recipientId}
                         onChange={(e) => {
-                          setRecipientId(e.target.value)
+                          const val = e.target.value
+                          setRecipientId(val)
+                          recipientIdRef.current = val
                           setSaveStatus("idle")
                           setSaveError(null)
                         }}
@@ -398,7 +406,7 @@ const SignPdfSection: React.FC = () => {
                         <option value="">Select {recipientType === "staff" ? "staff" : "client"}...</option>
                         {recipientType === "staff"
                           ? staffOptions.map((s) => (
-                              <option key={s.id} value={s.id}>
+                              <option key={s.id} value={String(s.id)}>
                                 {s.name || s.role || `User ${s.id}`}
                               </option>
                             ))

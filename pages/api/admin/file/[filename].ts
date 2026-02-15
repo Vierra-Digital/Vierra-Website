@@ -30,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const uid = sessionUserId != null ? Number(sessionUserId) : null
 
   const where: { signingTokenId: string; userId?: number } = { signingTokenId: tokenId }
-  if (role === "staff" && uid != null) where.userId = uid
+  if (uid != null) where.userId = uid
 
   const stored = await prisma.storedFile.findFirst({
     where,
