@@ -43,7 +43,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         where: { email: userEmail },
         data: { 
           image: null,
-          imageMimeType: null
+          imageMimeType: null,
+          imageUpdatedAt: null
         },
         select: { id: true, name: true, email: true },
       });
@@ -58,12 +59,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Convert base64 to buffer
     const imageBuffer = Buffer.from(imageData, 'base64');
 
-    // Update user with new image
+    // Update user with new image (imageUpdatedAt busts cache on refresh)
     const updated = await prisma.user.update({
       where: { email: userEmail },
       data: { 
         image: imageBuffer,
-        imageMimeType: mimeType
+        imageMimeType: mimeType,
+        imageUpdatedAt: new Date()
       },
       select: { id: true, name: true, email: true },
     });

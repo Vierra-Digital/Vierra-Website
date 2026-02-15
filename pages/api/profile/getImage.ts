@@ -31,7 +31,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Set appropriate headers
     res.setHeader('Content-Type', user.imageMimeType || 'image/jpeg');
     res.setHeader('Content-Length', imageBuffer.length);
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // Prevent caching
+    // Cache for 1 hour - version param in URL busts cache when image changes
+    res.setHeader('Cache-Control', 'private, max-age=3600, stale-while-revalidate=86400');
     
     // Send the image data
     res.end(imageBuffer);

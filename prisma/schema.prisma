@@ -70,6 +70,7 @@ model User {
   name                     String?
   image                    Bytes?
   imageMimeType           String?
+  imageUpdatedAt          DateTime?
   emailNotifications       Boolean                  @default(true)
   twoFactorEnabled         Boolean                  @default(false)
   theme                    String                   @default("auto")

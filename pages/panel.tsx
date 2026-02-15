@@ -80,7 +80,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
   const [isAddClientOpen, setIsAddClientOpen] = useState(false)
   const [clientRefreshTrigger, setClientRefreshTrigger] = useState(0)
   const [currentUserName, setCurrentUserName] = useState<string | null>(null)
-  const [currentUserImage, setCurrentUserImage] = useState<string | null>(null)
+  const [imageVersion, setImageVersion] = useState<number>(0)
 
   // keep prop used to satisfy linting after removing the button usage
   void dashboardHref
@@ -131,7 +131,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
       if (response.ok) {
         const userData = await response.json()
         setCurrentUserName(userData.name)
-        setCurrentUserImage(userData.image)
+        if (userData.imageVersion) setImageVersion(userData.imageVersion)
       }
     } catch (error) {
       console.error("Failed to fetch current user:", error)
@@ -305,7 +305,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                   onClick={() => setShowSettings((prev) => !prev)}
                 >
                 <ProfileImage
-                  src={currentUserImage ? `/api/profile/getImage?t=${Date.now()}` : null}
+                  src={imageVersion > 0 ? `/api/profile/getImage?v=${imageVersion}` : null}
                   alt="Profile"
                   name={currentUserName || session?.user?.name || "User"}
                   size={32}
@@ -330,10 +330,18 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                 user={{
                   name: currentUserName,
                   email: session?.user?.email || "test@vierra.com",
-                  image: currentUserImage ? `/api/profile/getImage?t=${Date.now()}` : null,
+                  image: imageVersion > 0 ? `/api/profile/getImage?v=${imageVersion}` : null,
                 }}
                 onNameUpdate={setCurrentUserName}
-                onImageUpdate={() => setCurrentUserImage(`updated-${Date.now()}`)}
+                onImageUpdate={async () => {
+                  const r = await fetch("/api/profile/getUser")
+                  if (r.ok) {
+                    const d = await r.json()
+                    if (d.imageVersion) setImageVersion(d.imageVersion)
+                  }
+                }}
+                onClose={() => setShowSettings(false)}
+                variant="panel"
               />
             </>)
               : (

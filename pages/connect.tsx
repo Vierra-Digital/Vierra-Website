@@ -24,6 +24,21 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
   const [liConnected, setLi] = useState(false)
   const [gaConnected, setGa] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [imageVersion, setImageVersion] = useState(0)
+
+  useEffect(() => {
+    if (!session) return
+    const fetchUser = async () => {
+      try {
+        const r = await fetch("/api/profile/getUser")
+        if (r.ok) {
+          const d = await r.json()
+          if (d.imageVersion) setImageVersion(d.imageVersion)
+        }
+      } catch {}
+    }
+    fetchUser()
+  }, [session])
 
   // Fetch connection status
   useEffect(() => {
@@ -136,8 +151,9 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
             >
               <Image
                 src={
-                  typeof session?.user?.image === "string" &&
-                  session.user.image.length > 0
+                  imageVersion > 0
+                    ? `/api/profile/getImage?v=${imageVersion}`
+                    : typeof session?.user?.image === "string" && session?.user?.image?.length > 0
                     ? session.user.image
                     : "/assets/vierra-logo.png"
                 }
@@ -155,13 +171,20 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
           <div className="flex-1 bg-[#18042A] overflow-auto p-6">
             {showSettings ? (
               <UserSettingsPage
-                user={
-                  session?.user || {
-                    name: "Test User",
-                    email: "test@vierra.com",
-                    image: "/assets/vierra-logo.png",
+                user={{
+                  name: session?.user?.name ?? "Test User",
+                  email: session?.user?.email ?? "test@vierra.com",
+                  image: imageVersion > 0 ? `/api/profile/getImage?v=${imageVersion}` : (typeof session?.user?.image === "string" && session.user.image ? session.user.image : null),
+                }}
+                onImageUpdate={async () => {
+                  const r = await fetch("/api/profile/getUser")
+                  if (r.ok) {
+                    const d = await r.json()
+                    if (d.imageVersion) setImageVersion(d.imageVersion)
                   }
-                }
+                }}
+                onClose={() => setShowSettings(false)}
+                variant="dark"
               />
             ) : (
               <>
