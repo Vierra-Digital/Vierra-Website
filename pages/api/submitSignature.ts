@@ -78,8 +78,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
         const sigs = signatures ?? (signature ? { legacy: signature } : {});
         const texts = textValues ?? {};
-        const now = new Date();
-        const dateStr = now.toLocaleDateString();
+        const dateForFields = sessionData.createdAt
+            ? new Date(sessionData.createdAt)
+            : new Date();
+        const dateStr = dateForFields.toLocaleDateString();
 
         for (const field of fields) {
             if (field.page < 1 || field.page > pages.length) continue;

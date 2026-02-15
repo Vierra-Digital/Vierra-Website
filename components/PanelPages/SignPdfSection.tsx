@@ -2,7 +2,7 @@ import React, { useState, useRef, MouseEvent, useEffect } from "react"
 import PdfUploader from "@/components/ui/PdfUploader"
 import { Inter } from "next/font/google"
 import { Document, Page, pdfjs } from "react-pdf"
-import { FiPenTool, FiCalendar, FiType, FiTrash2, FiChevronLeft, FiChevronRight, FiLink, FiCopy, FiFolderPlus, FiCheck } from "react-icons/fi"
+import { FiPenTool, FiCalendar, FiType, FiTrash2, FiChevronLeft, FiChevronRight, FiLink, FiCopy, FiFolderPlus, FiCheck, FiFileText } from "react-icons/fi"
 import { FaRegFilePdf } from "react-icons/fa6"
 import "react-pdf/dist/esm/Page/AnnotationLayer.css"
 import "react-pdf/dist/esm/Page/TextLayer.css"
@@ -27,7 +27,11 @@ const BOX_SIZES: Record<Exclude<ToolType, null>, { width: number; height: number
 
 const PDF_LOAD_TIMEOUT = 30000
 
+type PresetOption = { id: string; name: string; description: string }
+
 const SignPdfSection: React.FC = () => {
+  const [presets, setPresets] = useState<PresetOption[]>([])
+  const [presetLoading, setPresetLoading] = useState<string | null>(null)
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [numPages, setNumPages] = useState<number | null>(null)
   const [currentPage, setCurrentPage] = useState<number>(1)
@@ -55,6 +59,21 @@ const SignPdfSection: React.FC = () => {
   const [saveError, setSaveError] = useState<string | null>(null)
   const pageRef = useRef<HTMLDivElement>(null)
   const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    const fetchPresets = async () => {
+      try {
+        const r = await fetch("/api/presets")
+        if (r.ok) {
+          const data = await r.json()
+          setPresets(data || [])
+        }
+      } catch {
+        setPresets([])
+      }
+    }
+    fetchPresets()
+  }, [])
 
   useEffect(() => {
     const fetchStaff = async () => {
@@ -287,7 +306,41 @@ const SignPdfSection: React.FC = () => {
     }
   }
 
+  const handlePresetClick = async (presetId: string) => {
+    setPresetLoading(presetId)
+    setError(null)
+    setGeneratedLink(null)
+    setLinkCopied(false)
+    try {
+      const response = await fetch("/api/generateSignLinkFromPreset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ presetId }),
+      })
+      if (!response.ok) {
+        const errData = await response.json()
+        throw new Error(errData.message || `HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      if (!data?.link) throw new Error("Invalid server response (missing link)")
+      const fullLink = `${window.location.origin}${data.link}`
+      const tokenId = data.link.replace(/^\/sign\//, "") || null
+      setGeneratedLink(fullLink)
+      setGeneratedTokenId(tokenId)
+      setGeneratedFileName(presets.find((p) => p.id === presetId)?.name || "document.pdf")
+      setRecipientId("")
+      recipientIdRef.current = ""
+      setSaveStatus("idle")
+      setSaveError(null)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to generate link from preset.")
+    } finally {
+      setPresetLoading(null)
+    }
+  }
+
   const handleStartOver = () => {
+    setPresetLoading(null)
     setPdfFile(null)
     setNumPages(null)
     setFields([])
@@ -317,17 +370,7 @@ const SignPdfSection: React.FC = () => {
             </div>
           </div>
 
-          {!pdfFile ? (
-            <div className="flex-1 flex flex-col items-center justify-center w-full -mt-[20vh]">
-              <div className="w-20 h-20 rounded-full bg-[#F3E8FF] flex items-center justify-center mb-4">
-                <FaRegFilePdf className="w-10 h-10 text-[#701CC0]" />
-              </div>
-              <p className="text-sm text-[#6B7280] mb-4 text-center">Upload a PDF to create a signing link.</p>
-              <div className="w-full max-w-md">
-                <PdfUploader onFileSelect={handleFileSelect} />
-              </div>
-            </div>
-          ) : generatedLink ? (
+          {generatedLink ? (
             <div className="w-full flex flex-col items-center max-w-xl mx-auto pb-12 pt-4">
               <div className="w-full bg-white rounded-xl shadow-sm border border-[#E5E7EB] overflow-hidden">
                 <div className="p-6">
@@ -478,6 +521,42 @@ const SignPdfSection: React.FC = () => {
                     </div>
                   </div>
                 </div>
+              )}
+            </div>
+          ) : !pdfFile ? (
+            <div className="flex-1 flex flex-col w-full">
+              <div className="mb-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {presets.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => handlePresetClick(preset.id)}
+                      disabled={!!presetLoading}
+                      className="flex flex-col items-start p-4 rounded-xl border border-[#E5E7EB] bg-white hover:border-[#701CC0] hover:bg-[#FDF4FF] hover:shadow-sm transition text-left disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-[#F3E8FF] flex items-center justify-center mb-3">
+                        <FiFileText className="w-5 h-5 text-[#701CC0]" />
+                      </div>
+                      <span className="font-medium text-[#111827]">{preset.name}</span>
+                      <span className="text-sm text-[#6B7280] mt-1 line-clamp-2">{preset.description}</span>
+                      {presetLoading === preset.id ? (
+                        <span className="text-sm text-[#701CC0] font-medium mt-2">Generating...</span>
+                      ) : (
+                        <span className="text-sm text-[#701CC0] font-medium mt-2">Generate Link →</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-col items-center mt-12">
+                <p className="text-sm text-[#6B7280] mb-4 text-center">Or upload your own PDF to create a signing link.</p>
+                <div className="w-full max-w-md">
+                  <PdfUploader onFileSelect={handleFileSelect} />
+                </div>
+              </div>
+              {error && presetLoading === null && (
+                <p className="text-red-500 text-sm mt-4 text-center">{error}</p>
               )}
             </div>
           ) : (

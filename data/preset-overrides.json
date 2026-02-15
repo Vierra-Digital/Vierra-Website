@@ -1,0 +1,185 @@
+{
+  "employee-payment-details": {
+    "fields": [
+      {
+        "type": "text",
+        "page": 1,
+        "xRatio": 0.25,
+        "yRatio": 0.2342171717171717,
+        "width": 150,
+        "height": 28,
+        "id": "f-11"
+      },
+      {
+        "type": "text",
+        "page": 1,
+        "xRatio": 0.23529411764705882,
+        "yRatio": 0.29608585858585856,
+        "width": 150,
+        "height": 28,
+        "id": "f-14"
+      },
+      {
+        "type": "text",
+        "page": 1,
+        "xRatio": 0.20098039215686275,
+        "yRatio": 0.3327020202020202,
+        "width": 150,
+        "height": 28,
+        "id": "f-25"
+      },
+      {
+        "type": "text",
+        "page": 1,
+        "xRatio": 0.32189542483660133,
+        "yRatio": 0.3667929292929293,
+        "width": 150,
+        "height": 28,
+        "id": "f-28"
+      },
+      {
+        "type": "text",
+        "page": 1,
+        "xRatio": 0.27450980392156865,
+        "yRatio": 0.3996212121212121,
+        "width": 150,
+        "height": 28,
+        "id": "f-35"
+      },
+      {
+        "type": "text",
+        "page": 1,
+        "xRatio": 0.11437908496732026,
+        "yRatio": 0.45012626262626265,
+        "width": 150,
+        "height": 28,
+        "id": "f-42"
+      },
+      {
+        "type": "text",
+        "page": 1,
+        "xRatio": 0.2957516339869281,
+        "yRatio": 0.5321969696969697,
+        "width": 150,
+        "height": 28,
+        "id": "f-47"
+      },
+      {
+        "type": "signature",
+        "page": 1,
+        "xRatio": 0.4133986928104575,
+        "yRatio": 0.5486111111111112,
+        "width": 150,
+        "height": 50,
+        "id": "f-51"
+      },
+      {
+        "type": "date",
+        "page": 1,
+        "xRatio": 0.15196078431372548,
+        "yRatio": 0.6041666666666666,
+        "width": 120,
+        "height": 24,
+        "id": "f-57"
+      }
+    ]
+  },
+  "vierra-staffing-handbook": {
+    "fields": [
+      {
+        "type": "text",
+        "page": 32,
+        "xRatio": 0.05392156862745098,
+        "yRatio": 0.15088383838383837,
+        "width": 150,
+        "height": 28,
+        "id": "f-3"
+      },
+      {
+        "type": "date",
+        "page": 32,
+        "xRatio": 0.26143790849673204,
+        "yRatio": 0.1976010101010101,
+        "width": 120,
+        "height": 24,
+        "id": "f-5"
+      },
+      {
+        "type": "signature",
+        "page": 33,
+        "xRatio": 0.2679738562091503,
+        "yRatio": 0.1407828282828283,
+        "width": 150,
+        "height": 50,
+        "id": "f-6"
+      },
+      {
+        "type": "text",
+        "page": 33,
+        "xRatio": 0.2647058823529412,
+        "yRatio": 0.20012626262626262,
+        "width": 150,
+        "height": 28,
+        "id": "f-17"
+      },
+      {
+        "type": "date",
+        "page": 33,
+        "xRatio": 0.1454248366013072,
+        "yRatio": 0.24305555555555555,
+        "width": 120,
+        "height": 24,
+        "id": "f-19"
+      }
+    ]
+  },
+  "non-disclosure-agreement": {
+    "fields": [
+      {
+        "type": "text",
+        "page": 1,
+        "xRatio": 0.6813725490196079,
+        "yRatio": 0.16603535353535354,
+        "width": 150,
+        "height": 28,
+        "id": "f-3"
+      },
+      {
+        "type": "signature",
+        "page": 3,
+        "xRatio": 0.2777777777777778,
+        "yRatio": 0.22032828282828282,
+        "width": 150,
+        "height": 50,
+        "id": "f-4"
+      },
+      {
+        "type": "text",
+        "page": 3,
+        "xRatio": 0.2761437908496732,
+        "yRatio": 0.2708333333333333,
+        "width": 150,
+        "height": 28,
+        "id": "f-7"
+      },
+      {
+        "type": "date",
+        "page": 3,
+        "xRatio": 0.10457516339869281,
+        "yRatio": 0.3061868686868687,
+        "width": 120,
+        "height": 24,
+        "id": "f-8"
+      },
+      {
+        "type": "date",
+        "page": 3,
+        "xRatio": 0.1111111111111111,
+        "yRatio": 0.4412878787878788,
+        "width": 120,
+        "height": 24,
+        "id": "f-10"
+      }
+    ]
+  }
+}
