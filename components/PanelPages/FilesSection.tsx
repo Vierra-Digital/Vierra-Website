@@ -111,7 +111,7 @@ const FilesSection: React.FC = () => {
   const handleDownload = (file: FileItem) => {
     if (file.signingTokenId) {
       window.open(
-        `/api/admin/downloadFile?tokenId=${encodeURIComponent(file.signingTokenId)}&name=${encodeURIComponent(file.name)}`,
+        `/api/admin/file/${encodeURIComponent(file.name)}?tokenId=${encodeURIComponent(file.signingTokenId)}`,
         "_blank"
       )
     }
@@ -144,8 +144,11 @@ const FilesSection: React.FC = () => {
           </div>
 
           {loading ? (
-            <div className="bg-white rounded-xl shadow-sm border border-[#E5E7EB] p-10 text-center text-[#6B7280]">
-              Loading...
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto"></div>
+                <p className="mt-2 text-sm text-[#6B7280]">Loading File Data...</p>
+              </div>
             </div>
           ) : filteredFiles.length === 0 ? (
             <div className="bg-white rounded-xl shadow-sm border border-[#E5E7EB] p-10">

@@ -16,12 +16,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const tokenId = req.query.tokenId
   const preview = req.query.preview === "1" || req.query.preview === "true"
-  const nameParam = req.query.name
-  const filename =
-    typeof nameParam === "string" && nameParam.trim()
-      ? nameParam.trim().replace(/["\\]/g, "_")
-      : "document.pdf"
-  const safeFilename = filename.endsWith(".pdf") ? filename : `${filename}.pdf`
+  const filenameFromPath = req.query.filename
+  const nameParam =
+    typeof filenameFromPath === "string"
+      ? decodeURIComponent(filenameFromPath)
+      : req.query.name
+
   if (!tokenId || typeof tokenId !== "string") {
     return res.status(400).json({ message: "tokenId is required." })
   }
@@ -29,40 +29,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const sessionUserId = (session.user as unknown as { id?: number })?.id
   const uid = sessionUserId != null ? Number(sessionUserId) : null
 
-  // Try database first (persistent storage; works on serverless)
   const where: { signingTokenId: string; userId?: number } = { signingTokenId: tokenId }
   if (role === "staff" && uid != null) where.userId = uid
 
   const stored = await prisma.storedFile.findFirst({
     where,
-    select: { pdfData: true },
+    select: { pdfData: true, name: true },
   })
 
-  if (stored?.pdfData) {
-    const buffer = Buffer.from(stored.pdfData)
+  const getSafeFilename = (fallback: string) => {
+    const base =
+      typeof nameParam === "string" && nameParam.trim()
+        ? nameParam.trim().replace(/["\\]/g, "_")
+        : fallback
+    return base.endsWith(".pdf") ? base : `${base}.pdf`
+  }
+
+  const setPdfHeaders = (safeFilename: string, buffer: Buffer) => {
     res.setHeader("Content-Type", "application/pdf")
     res.setHeader("Content-Length", buffer.length)
+    const encoded = encodeURIComponent(safeFilename)
     res.setHeader(
       "Content-Disposition",
-      preview ? "inline" : `attachment; filename="${safeFilename}"`
+      `${preview ? "inline" : "attachment"}; filename="${safeFilename.replace(/"/g, '\\"')}"; filename*=UTF-8''${encoded}`
     )
+  }
+
+  if (stored?.pdfData) {
+    const safeFilename = getSafeFilename(stored.name || "document")
+    const buffer = Buffer.from(stored.pdfData)
+    setPdfHeaders(safeFilename, buffer)
     return res.send(buffer)
   }
 
-  // Not yet signed: serve original PDF from signing session
   if (stored && !stored.pdfData) {
     const signingSession = await prisma.signingSession.findUnique({
       where: { token: tokenId },
-      select: { pdfBase64: true },
+      select: { pdfBase64: true, originalFilename: true },
     })
     if (signingSession?.pdfBase64) {
-      const buffer = Buffer.from(signingSession.pdfBase64, "base64")
-      res.setHeader("Content-Type", "application/pdf")
-      res.setHeader("Content-Length", buffer.length)
-      res.setHeader(
-        "Content-Disposition",
-        preview ? "inline" : `attachment; filename="${safeFilename}"`
+      const safeFilename = getSafeFilename(
+        signingSession.originalFilename || stored.name || "document"
       )
+      const buffer = Buffer.from(signingSession.pdfBase64, "base64")
+      setPdfHeaders(safeFilename, buffer)
       return res.send(buffer)
     }
     return res.status(404).json({

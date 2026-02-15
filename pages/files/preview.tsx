@@ -11,7 +11,7 @@ type Props = {
 
 export default function FilePreviewPage({ tokenId, name }: Props) {
   const displayName = name.replace(/\.[^/.]+$/, "") || name
-  const pdfUrl = `/api/admin/downloadFile?tokenId=${encodeURIComponent(tokenId)}&preview=1`
+  const pdfUrl = `/api/admin/file/${encodeURIComponent(name)}?tokenId=${encodeURIComponent(tokenId)}&preview=1`
 
   return (
     <>
