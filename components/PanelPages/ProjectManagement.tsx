@@ -382,7 +382,7 @@ export default function ProjectManagement() {
             <div className="w-16 h-16 rounded-2xl bg-[#F8F0FF] flex items-center justify-center mx-auto mb-4">
               <FiLayers className="w-8 h-8 text-[#701CC0]" />
             </div>
-            <h3 className="text-lg font-semibold text-[#111827] mb-2">No boards yet</h3>
+            <h3 className="text-lg font-semibold text-[#111827] mb-2">No Boards Assigned</h3>
             <p className="text-sm text-[#6B7280]">
               You don&apos;t have access to any project boards. Contact an administrator to assign your position in Staff Orbital.
             </p>
