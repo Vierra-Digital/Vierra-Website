@@ -1,5 +1,4 @@
 import nodemailer from "nodemailer";
-import fs from "fs/promises"
 
 interface EmailData {
   fullName: string;
@@ -69,7 +68,7 @@ export async function sendEmail(data: EmailData): Promise<void> {
   }
 }
 
-export async function sendSignedDocumentEmail(subject: string, text: string, attachmentPath: string, filename: string): Promise<void> {
+export async function sendSignedDocumentEmail(subject: string, text: string, attachment: Buffer, filename: string): Promise<void> {
   const mailOptions = {
     from: fromEmail,
     to: recipients.join(","),
@@ -97,7 +96,7 @@ export async function sendSignedDocumentEmail(subject: string, text: string, att
     attachments: [
       {
         filename: filename,
-        path: attachmentPath,
+        content: attachment,
         contentType: 'application/pdf'
       }
     ]
@@ -111,9 +110,7 @@ export async function sendSignedDocumentEmail(subject: string, text: string, att
   }
 }
 
-export async function sendSignerCopyEmail(email: string, documentName: string, attachmentPath: string): Promise<void> {
-  const fileBuffer = await fs.readFile(attachmentPath);
-
+export async function sendSignerCopyEmail(email: string, documentName: string, attachment: Buffer): Promise<void> {
   const mailOptions = {
     from: fromEmail,
     to: email,
@@ -140,7 +137,7 @@ export async function sendSignerCopyEmail(email: string, documentName: string, a
     attachments: [
       {
         filename: `${documentName}.pdf`,
-        content: fileBuffer,
+        content: attachment,
         contentType: 'application/pdf'
       }
     ]

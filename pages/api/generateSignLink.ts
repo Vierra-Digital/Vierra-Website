@@ -1,7 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next"
 import formidable from "formidable"
 import fs from "fs"
-import path from "path"
 import { v4 as uuidv4 } from "uuid"
 import { SessionData, saveSessionData, PdfField } from "@/lib/sessionStore"
 
@@ -10,10 +9,6 @@ export const config = {
     bodyParser: false,
   },
 }
-
-const pdfsDir = process.env.NODE_ENV === 'production'
-  ? path.resolve('/tmp', "signing_pdfs")
-  : path.resolve(process.cwd(), "public", "signing_pdfs")
 
 export default async function handler(
   req: NextApiRequest,
@@ -26,8 +21,6 @@ export default async function handler(
 
   const form = formidable({})
   let tempPdfPath: string | null = null
-  let persistentPdfPath: string | null = null
-  let publicPdfPath: string | null = null
 
   try {
     const [fields, files] = await form.parse(req)
@@ -116,49 +109,28 @@ export default async function handler(
     const pdfContent = fs.readFileSync(tempPdfPath);
     const pdfBase64 = pdfContent.toString('base64');
 
-    persistentPdfPath = path.join(pdfsDir, `${tokenId}.pdf`)
-    publicPdfPath = process.env.NODE_ENV === 'production'
-      ? `/tmp/signing_pdfs/${tokenId}.pdf`
-      : `/signing_pdfs/${tokenId}.pdf`
-
-    if (!fs.existsSync(pdfsDir)) {
-      fs.mkdirSync(pdfsDir, { recursive: true })
+    if (tempPdfPath && fs.existsSync(tempPdfPath)) {
+      fs.unlinkSync(tempPdfPath);
     }
-
-    if (tempPdfPath) {
-      fs.renameSync(tempPdfPath, persistentPdfPath)
-    } else {
-      throw new Error("Temporary PDF path is null.")
-    }
-    tempPdfPath = null
+    tempPdfPath = null;
 
     const sessionData: SessionData = {
       token: tokenId,
       originalFilename: originalFilename,
-      pdfPath: publicPdfPath,
+      pdfPath: "",
       pdfBase64,
       fields: fieldsData,
       status: "pending",
       createdAt: Date.now(),
     }
 
-    saveSessionData(tokenId, sessionData)
+    await saveSessionData(tokenId, sessionData)
 
     res.status(200).json({ link: `/sign/${tokenId}` })
   } catch (error: unknown) {
     if (error instanceof Error) {
       console.error("[generate-sign-link] Error processing PDF upload:", error)
 
-      if (persistentPdfPath && fs.existsSync(persistentPdfPath)) {
-        try {
-          fs.unlinkSync(persistentPdfPath)
-        } catch (cleanupError) {
-          console.error(
-            `[generate-sign-link] Error cleaning up PDF ${persistentPdfPath}:`,
-            cleanupError
-          )
-        }
-      }
       if (tempPdfPath && fs.existsSync(tempPdfPath)) {
         try {
           fs.unlinkSync(tempPdfPath)

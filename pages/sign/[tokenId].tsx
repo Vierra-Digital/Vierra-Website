@@ -86,7 +86,7 @@ const SignDocumentPage: React.FC = () => {
           const arrayBuffer = base64ToArrayBuffer(data.pdfBase64);
           setPdfData({ data: arrayBuffer });
         } else {
-          setPdfData(`/signing_pdfs/${tokenId}.pdf`);
+          setError("Document not available. The signing session may have expired.");
         }
       } catch (err: unknown) {
         if (err instanceof Error) {

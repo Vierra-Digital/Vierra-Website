@@ -1,6 +1,4 @@
 import { NextApiRequest, NextApiResponse } from "next"
-import fs from "fs"
-import path from "path"
 import { getSessionData, SessionData } from "@/lib/sessionStore"
 
 interface TokenDetailsResponse {
@@ -8,7 +6,7 @@ interface TokenDetailsResponse {
   coordinates: SessionData["coordinates"]
 }
 
-export default function handler(
+export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<TokenDetailsResponse | { message: string } | Buffer>
 ) {
@@ -18,7 +16,7 @@ export default function handler(
     return res.status(400).json({ message: "Invalid token." })
   }
 
-  const session = getSessionData(tokenId)
+  const session = await getSessionData(tokenId)
 
   if (!session) {
     return res.status(404).json({ message: "Session not found." })
@@ -26,38 +24,22 @@ export default function handler(
 
   if (req.method === "GET") {
     if (content === "pdf") {
-      const rel = session.pdfPath.replace(/^\//, "")
-      const abs = path.join(process.cwd(), "public", rel)
-
-      if (!fs.existsSync(abs)) {
-        console.error(`[API ${tokenId}] PDF file not found at path: ${abs}`)
-        return res.status(404).json({ message: "PDF file not found." })
+      if (!session.pdfBase64) {
+        return res.status(404).json({ message: "PDF not available." })
       }
       try {
-        const stat = fs.statSync(abs)
+        const buffer = Buffer.from(session.pdfBase64, "base64")
         res.setHeader("Content-Type", "application/pdf")
         res.setHeader(
           "Content-Disposition",
           `inline; filename="${session.originalFilename}"`
         )
-        res.setHeader("Content-Length", stat.size.toString())
-        const readStream = fs.createReadStream(abs)
-        readStream.pipe(res)
-        readStream.on("error", (err) => {
-          console.error(`[API ${tokenId}] Error streaming PDF:`, err)
-          if (!res.headersSent) {
-            res.status(500).json({ message: "Error streaming PDF file." })
-          } else {
-            res.end()
-          }
-        })
+        res.setHeader("Content-Length", buffer.length.toString())
+        return res.send(buffer)
       } catch (err) {
-        console.error(
-          `[API ${tokenId}] Error accessing PDF stats or creating stream:`,
-          err
-        )
+        console.error(`[API ${tokenId}] Error serving PDF:`, err)
         if (!res.headersSent) {
-          res.status(500).json({ message: "Error accessing PDF file." })
+          return res.status(500).json({ message: "Error serving PDF file." })
         }
       }
     } else {

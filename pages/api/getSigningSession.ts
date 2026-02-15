@@ -13,7 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             return res.status(400).json({ message: 'Missing required tokenId parameter' });
         }
 
-        const sessionData = getSessionData(tokenId);
+        const sessionData = await getSessionData(tokenId);
         if (!sessionData) {
             return res.status(404).json({ message: 'Session not found or expired' });
         }

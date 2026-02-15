@@ -217,6 +217,7 @@ model StoredFile {
   name           String
   signingTokenId String
   fileType       String   @default("pdf")
+  pdfData        Bytes?   // Signed PDF bytes; used in production (serverless /tmp is ephemeral)
   createdAt      DateTime @default(now())
   userId         Int?
   user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -226,6 +227,19 @@ model StoredFile {
   @@index([userId])
   @@index([clientId])
   @@map("stored_files")
+}
+
+model SigningSession {
+  token            String   @id
+  originalFilename String
+  pdfBase64        String?  @db.Text
+  fields           Json?
+  status           String   @default("pending")
+  signerEmail      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("signing_sessions")
 }
 
 

@@ -1,8 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { prisma } from "@/lib/prisma"
 import { requireSession } from "@/lib/auth"
-import fs from "fs"
-import path from "path"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireSession(req, res)
@@ -31,15 +29,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const name = fileName || `document-${tokenId.slice(0, 8)}.pdf`
 
   try {
-    const pdfsDir =
-      process.env.NODE_ENV === "production"
-        ? path.resolve("/tmp", "signing_pdfs")
-        : path.resolve(process.cwd(), "public", "signing_pdfs")
-    const pdfPath = path.join(pdfsDir, `${tokenId}.pdf`)
-    if (!fs.existsSync(pdfPath)) {
-      return res.status(404).json({ message: "PDF not found. It may have expired." })
-    }
-
     if (recipientType === "staff") {
       const userId = Number(recipientId)
       if (!Number.isInteger(userId)) {
