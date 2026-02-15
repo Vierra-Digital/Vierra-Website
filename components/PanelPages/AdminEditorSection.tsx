@@ -386,7 +386,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                 <div className="flex items-center justify-center py-12">
                     <div className="text-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto"></div>
-                        <p className="mt-2 text-sm text-[#6B7280]">Loading Users...</p>
+                        <p className="mt-2 text-sm text-[#6B7280]">Loading User Data...</p>
                     </div>
                 </div>
             ) : (
