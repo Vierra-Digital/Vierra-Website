@@ -26,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ message: "tokenId is required." })
   }
 
-  const sessionUserId = (session.user as { id?: number })?.id
+  const sessionUserId = (session.user as unknown as { id?: number })?.id
   const uid = sessionUserId != null ? Number(sessionUserId) : null
 
   // Try database first (persistent storage; works on serverless)
