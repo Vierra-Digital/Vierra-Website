@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import DefaultAvatar from './DefaultAvatar';
 
@@ -21,35 +21,41 @@ const ProfileImage: React.FC<ProfileImageProps> = ({
   priority = false,
   quality = 100
 }) => {
-  // If we have a custom image source, use it
-  if (src && src.length > 0) {
+  const [imgError, setImgError] = useState(false);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [src]);
+
+  // Use default avatar when no src, empty src, or image failed to load
+  if (!src || src.length === 0 || imgError) {
     return (
-      <div 
-        className={`rounded-full overflow-hidden ${className}`}
-        style={{ width: size, height: size }}
-      >
-        <Image
-          src={src}
-          alt={alt}
-          width={size}
-          height={size}
-          className="w-full h-full object-cover"
-          style={{ borderRadius: "50%" }}
-          priority={priority}
-          quality={quality}
-          unoptimized
-        />
-      </div>
+      <DefaultAvatar 
+        name={name} 
+        size={size} 
+        className={className}
+      />
     );
   }
 
-  // Otherwise, use the default avatar with initials
   return (
-    <DefaultAvatar 
-      name={name} 
-      size={size} 
-      className={className}
-    />
+    <div 
+      className={`rounded-full overflow-hidden ${className}`}
+      style={{ width: size, height: size }}
+    >
+      <Image
+        src={src}
+        alt={alt}
+        width={size}
+        height={size}
+        className="w-full h-full object-cover"
+        style={{ borderRadius: "50%" }}
+        priority={priority}
+        quality={quality}
+        unoptimized
+        onError={() => setImgError(true)}
+      />
+    </div>
   );
 };
 

@@ -368,7 +368,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                         "Leadership": 2,
                         "Business Advisor": 3,
                         "Developer": 4,
-                        "UI/UX Designer": 5,
+                        "Designer": 5,
                         "Outreach": 6
                     }
                     aValue = positionOrder[a.position as keyof typeof positionOrder] || 999
@@ -440,7 +440,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 return "bg-red-100 text-red-800"
             case "Developer":
                 return "bg-blue-100 text-blue-800"
-            case "UI/UX Designer":
+            case "Designer":
                 return "bg-purple-100 text-purple-800"
             case "Outreach":
                 return "bg-green-100 text-green-800"
@@ -888,10 +888,10 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
 
     const positionOptions = [
         "Founder",
-        "Leadership", 
+        "Leadership",
         "Business Advisor",
         "Developer",
-        "UI/UX Designer",
+        "Designer",
         "Outreach"
     ]
 
@@ -1149,10 +1149,10 @@ const ManageStaffModal: React.FC<{
 
     const positionOptions = [
         "Founder",
-        "Leadership", 
+        "Leadership",
         "Business Advisor",
         "Developer",
-        "UI/UX Designer",
+        "Designer",
         "Outreach"
     ]
 

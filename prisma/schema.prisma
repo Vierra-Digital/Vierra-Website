@@ -270,3 +270,33 @@ enum Outreach {
   autoresponder
   other
 }
+
+enum ProjectBoard {
+  Design
+  Development
+  Outreach
+  Leadership
+}
+
+enum ProjectTaskStatus {
+  NotStarted
+  Ongoing
+  UnderReview
+  Completed
+}
+
+model ProjectTask {
+  id          String            @id @default(cuid())
+  board       ProjectBoard
+  name        String
+  description String           @db.Text
+  checklist   Json?             // [{ text: string, completed: boolean }]
+  status      ProjectTaskStatus @default(NotStarted)
+  assignedTo  Json?             // [userId: number]
+  deadline    DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([board])
+  @@map("project_tasks")
+}
