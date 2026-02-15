@@ -45,8 +45,8 @@ export default async function handler(
 
   const pdfFullPath = path.join(process.cwd(), preset.pdfPath)
   if (!fs.existsSync(pdfFullPath)) {
-    return res.status(404).json({
-      message: `Preset PDF not found. Add ${preset.pdfPath} to your project.`,
+    return res.status(503).json({
+      message: `This preset is not available. The PDF file for "${preset.name}" has not been added to this deployment.`,
     })
   }
 
