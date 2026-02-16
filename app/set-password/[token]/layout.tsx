@@ -1,7 +1,7 @@
 import { Metadata } from "next";
 
 export const metadata: Metadata = {
-    title: "Password Reset Request",
+    title: "Password Reset",
     robots: { index: false, follow: false },
 };
 

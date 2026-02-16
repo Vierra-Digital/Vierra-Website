@@ -24,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
 
         if (existingUser) {
-            return res.status(400).json({ message: "Email already exists" });
+            return res.status(400).json({ message: "Email already exists." });
         }
 
         const staffEmail = email.trim().toLowerCase();
@@ -77,11 +77,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         try {
             await sendStaffSetPasswordEmail(staffEmail, name.trim(), setPasswordLink);
-        } catch (emailErr) {
-            console.error("addStaff: Failed to send set-password email:", emailErr);
+        } catch (emailErr: unknown) {
+            const errMsg = emailErr instanceof Error ? emailErr.message : String(emailErr);
+            const errCode = emailErr && typeof emailErr === "object" && "code" in emailErr ? (emailErr as { code?: string }).code : undefined;
+            console.error("addStaff: Failed to send set-password email:", errMsg, errCode ?? "", emailErr);
             await prisma.passwordResetToken.deleteMany({ where: { token } });
             await prisma.user.delete({ where: { id: newUser.id } });
-            return res.status(500).json({ message: "Failed to send welcome email. Please try again." });
+            return res.status(500).json({
+                message: "Failed to send welcome email. Please try again.",
+                debug: process.env.NODE_ENV === "development" ? errMsg : undefined,
+            });
         }
 
         return res.status(201).json({
