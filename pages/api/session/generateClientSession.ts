@@ -10,7 +10,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Make email case-insensitive & unique
     const email = String(clientEmail).toLowerCase();
 
     const token = crypto.randomUUID();
@@ -20,7 +19,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       update: { name: clientName, businessName },
       select: { id: true, name: true, email: true, businessName: true, createdAt: true },
     });
-    // Persist industry in latest onboarding session answers scaffold
     const session = await prisma.onboardingSession.create({
       data: {
         id: token,
@@ -34,7 +32,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({
       link: `/session/${token}`, token,
-      // summary for panel row:
       summary: {
         token: session.id,
         clientName: client.name,

@@ -32,8 +32,6 @@ const AdminEditorSection = () => {
 
 export default AdminEditorSection
 
-// ----- Users Panel -----
-
 const ConfirmRemoveUserModal: React.FC<{
     isOpen: boolean
     userName: string
@@ -157,8 +155,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     const deleteUser = async (userId: number) => {
         const user = users.find(u => u.id === userId)
         if (!user) return
-        
-        // Check if it's the protected email
         if (user.email?.toLowerCase() === "business@alexshick.com") {
             alert("This user cannot be removed.")
             return
@@ -181,13 +177,9 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
 
     const filteredUsers = useMemo(() => {
         let filtered = users
-        
-        // Filter by role (user = client accounts)
         if (roleFilter !== 'all') {
             filtered = filtered.filter(u => u.role === roleFilter || (roleFilter === 'user' && u.role === 'client'))
         }
-        
-        // Filter by search query
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase()
             filtered = filtered.filter(u => 
@@ -197,8 +189,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                 (u.role?.toLowerCase().includes(q))
             )
         }
-        
-        // Sort by selected field in the specified direction
         const sorted = [...filtered].sort((a, b) => {
             let comparison = 0
             if (sortBy === 'id') {
@@ -263,7 +253,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                 <div className="px-5">
                                     <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
                                     
-                                    {/* Sort By */}
+                                    
                                     <div className="mb-5">
                                         <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By</label>
                                         <div className="relative">
@@ -287,7 +277,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                         </div>
                                     </div>
 
-                                    {/* Role Filter */}
+                                    
                                     <div className="mb-5">
                                         <label className="block text-xs font-medium text-[#6B7280] mb-2">Role</label>
                                         <div className="relative">
@@ -312,7 +302,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                         </div>
                                     </div>
 
-                                    {/* Sort Order */}
+                                    
                                     <div className="mb-4">
                                         <label className="block text-xs font-medium text-[#6B7280] mb-2">Order</label>
                                         <div className="flex gap-2">
@@ -345,7 +335,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                         </div>
                                     </div>
 
-                                    {/* Clear Button */}
+                                    
                                     <div className="pt-3 border-t border-[#E5E7EB]">
                                         <button
                                             onClick={() => {
@@ -655,7 +645,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
             }}
         >
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md border border-[#E5E7EB]" onClick={(e) => e.stopPropagation()}>
-                {/* Header */}
+                
                 <div className="flex items-center justify-between px-6 py-5 border-b border-[#E5E7EB]">
                     <div>
                         <h2 className="text-xl font-semibold text-[#111827]">Create User</h2>
@@ -670,9 +660,9 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                 </button>
             </div>
 
-                {/* Form */}
+                
                 <div className="p-6 space-y-5">
-                    {/* Name Field */}
+                    
                     <div>
                         <label htmlFor="create-user-name" className="block text-sm font-medium text-[#374151] mb-1.5">
                             Name <span className="text-red-500">*</span>
@@ -692,7 +682,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                         )}
                     </div>
 
-                    {/* Email Field */}
+                    
                     <div>
                         <label htmlFor="create-user-email" className="block text-sm font-medium text-[#374151] mb-1.5">
                             Email <span className="text-red-500">*</span>
@@ -718,7 +708,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                         )}
                     </div>
 
-                    {/* Password Field */}
+                    
                     <div>
                         <label htmlFor="create-user-password" className="block text-sm font-medium text-[#374151] mb-1.5">
                             Password <span className="text-red-500">*</span>
@@ -739,7 +729,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                         )}
             </div>
 
-                    {/* Role Field */}
+                    
                     <div>
                         <label htmlFor="create-user-role" className="block text-sm font-medium text-[#374151] mb-1.5">
                             Role <span className="text-red-500">*</span>
@@ -761,7 +751,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                         </div>
                     </div>
 
-                    {/* Error Message */}
+                    
                     {error && (
                         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-start gap-2">
                             <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
@@ -770,7 +760,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
             )}
         </div>
 
-                {/* Footer */}
+                
                 <div className="px-6 py-4 bg-gray-50 border-t border-[#E5E7EB] rounded-b-xl flex items-center justify-between gap-3">
                     <button 
                         onClick={onClose}
@@ -802,8 +792,6 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
     )
 }
 
-// ----- Sessions Panel -----
-
 type SessionStatus = "pending" | "in_progress" | "completed" | "expired" | "canceled"
 
 type SessionRow = {
@@ -818,8 +806,6 @@ type SessionRow = {
     hasAnswers: boolean
     platforms?: string[]
 }
-
-// ----- Sessions Panel -----
 
 function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
     const [sessions, setSessions] = useState<SessionRow[]>([])
@@ -1087,8 +1073,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                 const dropdownHeight = 150 // Approximate height
                 const viewportHeight = window.innerHeight
                 const viewportMiddle = viewportHeight / 2
-                
-                // Show below if in first half of page, above if in bottom half
                 const showAbove = rect.top > viewportMiddle
                 
                 setActionMenuPosition({
@@ -1115,13 +1099,9 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
 
     const filteredSessions = useMemo(() => {
         let filtered = sorted
-        
-        // Filter by status
         if (statusFilter !== 'all') {
             filtered = filtered.filter(s => s.status === statusFilter)
         }
-        
-        // Filter by search query
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase()
             filtered = filtered.filter(s => {
@@ -1183,7 +1163,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                 <div className="px-5">
                                     <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
                                     
-                                    {/* Sort By */}
+                                    
                                     <div className="mb-5">
                                         <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By</label>
                                         <div className="relative">
@@ -1192,7 +1172,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                                 onChange={(e) => {
                                                     setSortKey(e.target.value as "client" | "business" | "status" | "created" | "updated")
                                                     setCurrentPage(0)
-                                                    // Set default sort direction based on field
                                                     if (e.target.value === "created" || e.target.value === "updated") {
                                                         setSortDir("desc")
                                                     } else {
@@ -1215,7 +1194,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                         </div>
                                     </div>
 
-                                    {/* Status Filter */}
+                                    
                                     <div className="mb-5">
                                         <label className="block text-xs font-medium text-[#6B7280] mb-2">Status</label>
                                         <div className="relative">
@@ -1241,7 +1220,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                         </div>
                                     </div>
 
-                                    {/* Sort Order */}
+                                    
                                     <div className="mb-4">
                                         <label className="block text-xs font-medium text-[#6B7280] mb-2">Order</label>
                                         <div className="flex gap-2">
@@ -1274,7 +1253,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                         </div>
                                     </div>
 
-                                    {/* Clear Button */}
+                                    
                                     <div className="pt-3 border-t border-[#E5E7EB]">
                                         <button
                                             onClick={() => {
@@ -1620,8 +1599,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
     )
 }
 
-// ----- Confirm Delete Session Modal -----
-
 const ConfirmDeleteSessionModal: React.FC<{
     isOpen: boolean
     clientName: string
@@ -1668,8 +1645,6 @@ const ConfirmDeleteSessionModal: React.FC<{
     )
 }
 
-// ----- Get Link Modal -----
-
 const GetLinkModal: React.FC<{
     isOpen: boolean
     link: string | null
@@ -1684,7 +1659,6 @@ const GetLinkModal: React.FC<{
                 setCopied(true)
                 setTimeout(() => setCopied(false), 2000)
             } catch {
-                // Failed to copy
             }
         }
     }
@@ -1754,8 +1728,6 @@ const GetLinkModal: React.FC<{
         </div>
     )
 }
-
-// ----- Renew Session Modal -----
 
 const RenewSessionModal: React.FC<{
     isOpen: boolean

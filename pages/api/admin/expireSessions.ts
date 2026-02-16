@@ -6,7 +6,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const now = new Date();
-    // Find pending or in_progress sessions whose expiresAt is in the past
     const expired = await prisma.onboardingSession.updateMany({
       where: {
         status: { in: ["pending", "in_progress"] },

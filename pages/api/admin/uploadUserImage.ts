@@ -26,11 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!userId || !imageData || !mimeType) {
       return res.status(400).json({ message: "User ID, image data and mime type are required" });
     }
-
-    // Convert base64 to buffer
     const imageBuffer = Buffer.from(imageData, 'base64');
-
-    // Update user with new image
     const updated = await prisma.user.update({
       where: { id: Number(userId) },
       data: { 

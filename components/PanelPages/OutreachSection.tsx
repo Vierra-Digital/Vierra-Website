@@ -165,7 +165,6 @@ const OutreachSection = () => {
             if (!response.ok) {
                 throw new Error("Failed to update marketing data");
             }
-            // Show success message
             const successModal = document.createElement('div')
             successModal.className = 'fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm'
             successModal.innerHTML = `
@@ -242,7 +241,6 @@ const OutreachSection = () => {
             }
             setStats(newStats);
         } catch {
-            // Error handling
         } finally {
             setIsLoading(false);
         }
@@ -251,7 +249,6 @@ const OutreachSection = () => {
     const fetchYearlySummary = useCallback(async () => {
         setIsLoading(true);
         try {
-            // Calculate yearly summary from all months
             const monthlyData: StatsType[] = []
             for (let month = 1; month <= 12; month++) {
                 const response = await fetch(`/api/marketing/tracker?year=${selectedYear}&month=${month}`);
@@ -306,7 +303,6 @@ const OutreachSection = () => {
                 meetingsToClientsPct: calculatePercentage(yearly.totalClientsLosed, yearly.totalMeetingsSet)
             })
         } catch {
-            // Error handling
         } finally {
             setIsLoading(false);
         }
@@ -408,13 +404,13 @@ const OutreachSection = () => {
         <div className="w-full h-full bg-white text-[#111014] flex flex-col overflow-auto">
             <div className="flex-1 flex justify-center px-6 pt-2">
                 <div className="w-full max-w-6xl flex flex-col h-full">
-                    {/* Header */}
+                    
                     <div className="w-full flex justify-between items-center mb-2">
                         <div>
                             <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Marketing Tracker</h1>
                         </div>
                         <div className="flex items-center gap-3">
-                            {/* View Mode Toggle */}
+                            
                             <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
                                 <button
                                     onClick={() => setViewMode("monthly")}
@@ -440,7 +436,7 @@ const OutreachSection = () => {
 
                             {viewMode === "monthly" ? (
                                 <>
-                                    {/* Month Navigation */}
+                                    
                                     <div className="flex items-center gap-2 bg-white rounded-lg border border-[#E5E7EB] shadow-sm">
                                         <button
                                             onClick={() => navigateMonth("prev")}
@@ -461,7 +457,7 @@ const OutreachSection = () => {
                                         </button>
                                     </div>
 
-                                    {/* Update Button */}
+                                    
                                     {isEditable && (
                                         <button
                                             className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -605,12 +601,12 @@ const OutreachSection = () => {
                                 </div>
                             )}
 
-                            {/* Outreach Cards Grid */}
+                            
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                                 {Object.keys(outreachConfig).map(key => renderOutreachCard(key as CardKey))}
                             </div>
 
-                            {/* Monthly Summary */}
+                            
                             <motion.div
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}

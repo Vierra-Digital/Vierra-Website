@@ -26,8 +26,6 @@ const ProfileImage: React.FC<ProfileImageProps> = ({
   useEffect(() => {
     setImgError(false);
   }, [src]);
-
-  // Use default avatar when no src, empty src, or image failed to load
   if (!src || src.length === 0 || imgError) {
     return (
       <DefaultAvatar 

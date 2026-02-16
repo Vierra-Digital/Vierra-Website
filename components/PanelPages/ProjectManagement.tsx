@@ -427,7 +427,7 @@ export default function ProjectManagement() {
             </div>
           </div>
 
-          {/* Kanban */}
+          
           <div className="flex-1 overflow-auto pb-6 min-h-0">
             <div className="w-full">
               {loading ? (
@@ -580,7 +580,7 @@ export default function ProjectManagement() {
         </div>
       </div>
 
-      {/* Task Detail Modal */}
+      
       {selectedTask && (
         <TaskDetailModal
           task={selectedTask}
@@ -594,7 +594,7 @@ export default function ProjectManagement() {
         />
       )}
 
-      {/* Edit Task Modal (admin only) */}
+      
       {showEditModal && selectedTask && isAdmin && (
         <EditTaskModal
           task={selectedTask}
@@ -607,7 +607,7 @@ export default function ProjectManagement() {
         />
       )}
 
-      {/* Delete Task Confirmation Modal */}
+      
       {taskToDelete && (
         <ConfirmDeleteTaskModal
           taskName={taskToDelete.name}
@@ -616,7 +616,7 @@ export default function ProjectManagement() {
         />
       )}
 
-      {/* Add Task Modal - Multi-step */}
+      
       {showAddModal && selectedBoard && (
         <AddTaskModal
           form={addForm}
@@ -736,7 +736,7 @@ function AddTaskModal({
           </button>
         </div>
 
-        {/* Progress steps */}
+        
         <div className="px-6 pt-4">
           <div className="flex items-center gap-2">
             {steps.map((s, i) => (
@@ -945,7 +945,7 @@ function TaskDetailModal({
         className="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-[#E5E7EB] max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
+        
         <div className="flex-shrink-0 flex items-center gap-3 px-6 py-5 border-b border-[#E5E7EB]">
           <div className="min-w-0 flex-1">
             <h2 className="text-lg font-semibold text-[#111827] leading-snug truncate">{task.name}</h2>
@@ -983,9 +983,9 @@ function TaskDetailModal({
           </button>
         </div>
 
-        {/* Content */}
+        
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {/* Meta: assignees */}
+          
           {assignees.length > 0 && (
             <div className="flex items-center gap-2">
               <div className="flex -space-x-2">
@@ -1014,7 +1014,7 @@ function TaskDetailModal({
             </div>
           )}
 
-          {/* Description */}
+          
           <div>
             <span className="text-xs font-medium text-[#6B7280] block mb-2">Description</span>
             <p className="text-sm text-[#374151] leading-relaxed whitespace-pre-wrap">
@@ -1022,7 +1022,7 @@ function TaskDetailModal({
             </p>
           </div>
 
-          {/* Checklist */}
+          
           {task.checklist && task.checklist.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -1075,7 +1075,7 @@ function TaskDetailModal({
             </div>
           )}
 
-          {/* Status */}
+          
           <div>
             <span className="text-xs font-medium text-[#6B7280] block mb-2">Status</span>
             <div className="flex flex-wrap gap-1.5">
@@ -1139,7 +1139,7 @@ function TaskDetailModal({
           </div>
         </div>
 
-        {/* Actions */}
+        
         {isAdmin && (
           <div className="flex-shrink-0 px-6 py-4 border-t border-[#E5E7EB] flex gap-3">
             <button
@@ -1240,7 +1240,7 @@ function EditTaskModal({
           </button>
         </div>
 
-        {/* Progress steps */}
+        
         <div className="px-6 pt-4">
           <div className="flex items-center gap-2">
             {steps.map((s, i) => (

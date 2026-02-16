@@ -1,8 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-
-// Minimal admin clients list API
 // Returns clients with latest onboarding session answers mapped to table columns
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") return res.status(405).end();
@@ -39,24 +37,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const rows = clients.map((c) => {
       const latest = c.onboardingSessions?.[0] ?? null;
       const answers: any = (latest?.answers as any) ?? {};
-
-      // Map to desired columns; fall back to sensible defaults
       const website = answers.website ?? "";
       const targetAudience = answers.targetAudience ?? "";
       const adGoal = answers.socialMediaGoals ?? "N/A";
       const brandTone = answers.brandTone ?? "N/A";
       const industry = answers.industry ?? "";
-      
-      // Determine display status based on session state and expiration
       let displayStatus: string = latest?.status ?? "pending";
       const isExpired = latest?.expiresAt && now > latest.expiresAt;
-      
-      // If session is pending/in_progress but expired and not completed, mark as inactive
       if (isExpired && displayStatus !== "completed") {
         displayStatus = "expired";
       }
-      
-      // Override with client's isActive flag if manually set to inactive
       if (!c.isActive) {
         displayStatus = "inactive";
       }

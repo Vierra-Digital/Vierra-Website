@@ -90,7 +90,6 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   };
 
   useEffect(() => {
-    // When sessionLink is set, send email (success step)
     if (step === 2 && sessionLink && clientData.clientEmail) {
       setEmailSending(true);
       setEmailError(null);
@@ -121,7 +120,6 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   }, [step, sessionLink, clientData.clientEmail, origin, clientData.clientName, clientData.businessName]);
 
   const handleFinish = () => {
-    // Just close the modal - the client will complete the session themselves
     // by filling out the onboarding form via the link we sent them
     onClose();
   };
@@ -297,7 +295,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
               >
                 Copy Link
               </button>
-              {/* Email sending status */}
+              
               <div className="mb-2">
                 {emailSending && (
                   <span className="text-yellow-200 text-sm">Sending session link to {clientData.clientEmail}...</span>

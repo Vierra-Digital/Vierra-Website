@@ -14,7 +14,7 @@ const inter = Inter({ subsets: ["latin"] })
 export default function NotFound() {
   return (
     <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden">
-      {/* Animated gradient blobs */}
+      
       <motion.div
         initial={{ x: 0, y: 0 }}
         animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
@@ -38,7 +38,7 @@ export default function NotFound() {
         className="fixed -bottom-[32%] -right-[3%] w-[545px] h-[545px] max-w-[550px] max-h-[550px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A] -z-10 pointer-events-none"
       />
 
-      {/* Grid lines */}
+      
       {Array.from({ length: 7 }).map((_, index) => (
         <motion.div
           key={index}

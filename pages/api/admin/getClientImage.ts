@@ -27,16 +27,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!client || !client.image) {
       return res.status(404).json({ message: "No image found" });
     }
-
-    // Convert Buffer to Uint8Array for proper binary response
     const imageBuffer = Buffer.from(client.image);
-    
-    // Set appropriate headers
     res.setHeader('Content-Type', client.imageMimeType || 'image/jpeg');
     res.setHeader('Content-Length', imageBuffer.length);
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // Prevent caching
-    
-    // Send the image data
     res.end(imageBuffer);
   } catch (e) {
     console.error("admin/getClientImage", e);

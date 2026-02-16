@@ -21,8 +21,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!userEmail) {
       return res.status(400).json({ message: "User email not found in session" });
     }
-
-    // First check if user exists
     const existingUser = await prisma.user.findUnique({
       where: { email: userEmail },
       select: { id: true, name: true, email: true },

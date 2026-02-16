@@ -18,7 +18,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Check if client exists
     const client = await prisma.client.findUnique({
       where: { id: clientId }
     });
@@ -26,8 +25,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!client) {
       return res.status(404).json({ message: "Client not found" });
     }
-
-    // Delete the client (cascade delete will remove related records)
     await prisma.client.delete({
       where: { id: clientId }
     });

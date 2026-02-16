@@ -43,17 +43,12 @@ export const authOptions: NextAuthOptions = {
 
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user?.passwordEnc) return null;
-
-        // Decrypt stored password and compare
         let storedPlain: string;
         try {
           storedPlain = decrypt(user.passwordEnc);
         } catch {
-          // wrong key / corrupted ciphertext
           return null;
         }
-
-        // timing-safe compare
         const ok =
           storedPlain.length === password.length &&
           crypto.timingSafeEqual(Buffer.from(storedPlain), Buffer.from(password));
@@ -71,7 +66,6 @@ export const authOptions: NextAuthOptions = {
   ],
 
   callbacks: {
-    // Gate Google by domain, allow credentials if password was valid
     async signIn({ user, account, profile }) {
       if (account?.provider === "google") {
         const email = user.email?.toLowerCase() ?? "";
@@ -81,8 +75,6 @@ export const authOptions: NextAuthOptions = {
       }
       return true; // credentials path already verified
     },
-
-    // Put id/role on the JWT
     async jwt({ token, user }) {
       if (user) {
         token.id = (user as any).id;    
@@ -90,8 +82,6 @@ export const authOptions: NextAuthOptions = {
       }
       return token;
     },
-
-    // Expose id/role to the client session
     async session({ session, token }) {
       if (session.user) {
         (session.user as any).id = token.id;

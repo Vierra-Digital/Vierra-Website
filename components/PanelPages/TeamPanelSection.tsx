@@ -39,8 +39,6 @@ const StaffActionsMenu: React.FC<{
             const dropdownHeight = 150 // Approximate height
             const viewportHeight = window.innerHeight
             const viewportMiddle = viewportHeight / 2
-            
-            // Show below if in first half of page, above if in bottom half
             const showAbove = rect.top > viewportMiddle
             
             setPosition({
@@ -176,12 +174,8 @@ const StatusBadge: React.FC<{ lastActiveAt: string | null }> = ({ lastActiveAt }
         const lastActive = new Date(lastActiveAt)
         const now = new Date()
         const diffMinutes = (now.getTime() - lastActive.getTime()) / (1000 * 60)
-        
-        // If last active more than 30 minutes ago, consider offline
         if (diffMinutes > 30) return "offline"
-        // If last active more than 10 minutes ago, consider away
         if (diffMinutes > 10) return "away"
-        // Otherwise consider online
         return "online"
     }
 
@@ -260,8 +254,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             if (!response.ok) {
                 throw new Error("Failed to delete staff member")
             }
-
-            // Remove from local state
             setRows(prev => prev.filter(r => r.id !== staffToDelete.id))
             setShowDeleteModal(false)
             setStaffToDelete(null)
@@ -287,8 +279,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             if (!response.ok) {
                 throw new Error("Failed to update staff member")
             }
-
-            // Update local state
             setRows(prev => prev.map(r => 
                 r.id === selectedStaff.id ? { ...r, ...updatedData } : r
             ))
@@ -303,7 +293,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const loadTeamData = async () => {
         setLoading(true)
         try {
-            // First update user statuses based on activity
             try {
                 await fetch("/api/admin/updateUserStatus", { method: "POST" })
             } catch (e) {
@@ -313,7 +302,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             const res = await fetch("/api/admin/users")
             if (!res.ok) throw new Error("Failed to fetch team data")
             const data = await res.json()
-            // Only show staff and admin in Staff Orbital (exclude client/user accounts)
             const teamOnly = (data as any[]).filter((u: any) => u.role === "admin" || u.role === "staff")
             const shaped = teamOnly.map((u: any) => ({
                 id: u.id,
@@ -339,7 +327,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
     const applyFiltersAndSort = useMemo(() => {
         const filtered = rows.filter(row => {
-            // Search filter
             const matchesSearch = !searchTerm || 
                 row.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 row.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -347,8 +334,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 row.country?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 row.company_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 row.mentor?.toLowerCase().includes(searchTerm.toLowerCase())
-
-            // Status filter
             const matchesStatus = statusFilter === "all" || 
                 (statusFilter === "online" && row.status === "online") ||
                 (statusFilter === "away" && row.status === "away") ||
@@ -356,15 +341,12 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
             return matchesSearch && matchesStatus
         })
-
-        // Sort logic
         filtered.sort((a, b) => {
             let aValue: string | number
             let bValue: string | number
 
             switch (sortBy) {
                 case "position":
-                    // Define position hierarchy for proper sorting
                     const positionOrder = {
                         "Founder": 1,
                         "Leadership": 2,
@@ -381,12 +363,10 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                     bValue = b.country || ""
                     break
                 case "strikes":
-                    // Parse strikes (e.g., "2/3" -> 2)
                     aValue = parseInt(a.strikes?.split("/")[0] || "0")
                     bValue = parseInt(b.strikes?.split("/")[0] || "0")
                     break
                 case "status":
-                    // Define status hierarchy
                     const statusOrder = { "online": 1, "away": 2, "offline": 3 }
                     aValue = statusOrder[a.status as keyof typeof statusOrder] || 999
                     bValue = statusOrder[b.status as keyof typeof statusOrder] || 999
@@ -425,8 +405,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             { key: "strikes", header: "Strikes" },
             { key: "status", header: "Status" },
         ]
-        
-        // Only add Manage column for admin users
         if (userRole === "admin") {
             baseColumns.push({ key: "manage", header: "Manage" })
         }
@@ -496,7 +474,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                         <div className="px-5">
                                             <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
                                             
-                                            {/* Sort By */}
+                                            
                                             <div className="mb-5">
                                                 <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By</label>
                                                 <div className="relative">
@@ -518,7 +496,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                                 </div>
                                             </div>
 
-                                            {/* Sort Order */}
+                                            
                                             <div className="mb-5">
                                                 <label className="block text-xs font-medium text-[#6B7280] mb-2">Order</label>
                                                 <div className="flex gap-2">
@@ -545,7 +523,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 </div>
             </div>
 
-                                            {/* Status Filter */}
+                                            
                                             <div className="mb-4">
                                                 <label className="block text-xs font-medium text-[#6B7280] mb-2">Status</label>
                                                 <div className="relative">
@@ -567,7 +545,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                                 </div>
                                             </div>
                                             
-                                            {/* Clear Button */}
+                                            
                                             <div className="pt-3 border-t border-[#E5E7EB]">
                                                 <button
                                                     onClick={() => {
@@ -753,8 +731,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         </div>
     )
 }
-
-// Add Staff Modal Component
 const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = ({ onClose, onCreated }) => {
     const [currentStep, setCurrentStep] = useState(1)
     const [formData, setFormData] = useState({
@@ -878,11 +854,9 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
 
     const isCurrentStepEmailValid = () => {
         if (currentStep === 1) {
-            // Step 1 has the main email field
             return formData.email ? isValidEmail(formData.email) : false
         }
         if (currentStep === 3) {
-            // Step 3 has company email field
             return formData.company_email ? isValidEmail(formData.company_email) : true
         }
         return true
@@ -907,7 +881,7 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
                     <h3 className="text-xl font-semibold text-[#111827]">Add Staff Member</h3>
             </div>
 
-                {/* Progress Steps */}
+                
                 <div className="mb-6">
                     <div className="flex items-center justify-between">
                         {steps.map((step, index) => (
@@ -934,7 +908,7 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
                     </div>
                 </div>
 
-                {/* Step Content */}
+                
                 {currentStep === 1 && (
                     <div className="space-y-4">
                         <div>
@@ -1090,8 +1064,6 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
         </div>
     )
 }
-
-// Manage Staff Modal Component
 const ManageStaffModal: React.FC<{
     staff: TeamRow
     onClose: () => void

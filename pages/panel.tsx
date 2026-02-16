@@ -82,14 +82,12 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
   const [currentUserName, setCurrentUserName] = useState<string | null>(null)
   const [imageVersion, setImageVersion] = useState<number>(0)
 
-  // keep prop used to satisfy linting after removing the button usage
   void dashboardHref
 
   useEffect(() => {
     fetchCurrentUser()
   }, [])
 
-  // Track user activity
   useEffect(() => {
     const updateActivity = async () => {
       try {
@@ -103,13 +101,8 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
       }
     };
 
-    // Update activity on mount
     updateActivity();
-
-    // Update activity every 2 minutes while user is active
     const interval = setInterval(updateActivity, 2 * 60 * 1000);
-
-    // Update activity on page visibility change
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         updateActivity();
@@ -117,8 +110,6 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    // Cleanup
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -248,10 +239,8 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
                 </span>
               </div>
             )}
-            {/* Logout moved to bottom of sidebar */}
           </div>
 
-          {/* Bottom logout button: keep as the last item in the sidebar with some breathing room */}
           <div className="w-full flex justify-center absolute bottom-6 left-0">
             <button
               onClick={() => signOut({ callbackUrl: "/login" })}
@@ -390,7 +379,6 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     return { redirect: { destination: "/login", permanent: false } }
   }
   const role = (session.user as any).role
-  // Only allow staff and admin roles to access panel
   if ((session.user as any).role !== "staff" && (session.user as any).role !== "admin") {
     return { redirect: { destination: "/client", permanent: false } }
   }

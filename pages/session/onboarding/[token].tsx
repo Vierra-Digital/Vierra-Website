@@ -297,7 +297,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
       <div className="min-h-screen bg-[#FAFAFA] overflow-auto hide-scrollbar">
-        {/* Header */}
+        
         <header className="bg-white border-b border-[#E5E7EB] px-4 lg:px-6 py-2 flex items-center justify-between">
           <div className="h-12 lg:h-14 w-32 lg:w-36 overflow-hidden flex items-center shrink-0">
             <Image
@@ -319,13 +319,13 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
           </div>
         </header>
 
-        {/* Main Layout */}
+        
         <div className="flex flex-col lg:flex-row min-h-[calc(100vh-5rem)]">
-          {/* Left Content Area */}
+          
           <div className="flex-1 p-6 lg:p-10 xl:p-14">
             <div className="w-full max-w-4xl mx-auto">
 
-              {/* Step Indicator */}
+              
               <div className="flex items-center gap-3 mb-2">
                 <span className={`text-xs font-semibold tracking-widest uppercase text-[#7A13D0] ${inter.className}`}>
                   Module {step + 1} of {questions.length}
@@ -335,7 +335,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                 </span>
               </div>
 
-              {/* Progress Bar */}
+              
               <div className="w-full h-1 bg-[#E5E7EB] rounded-full mb-8">
                 <div
                   className="h-full bg-gradient-to-r from-[#7A13D0] to-[#9D4EDD] rounded-full transition-all duration-500 ease-out"
@@ -343,12 +343,12 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                 />
               </div>
 
-              {/* Title */}
+              
               <h1 className={`text-3xl lg:text-4xl font-semibold text-[#111827] mb-8 leading-tight tracking-tight ${inter.className}`}>
                 {q.label}
               </h1>
 
-              {/* Content */}
+              
               {q.type === "video" && (!isVideo3 || video3SubStep === 0) && (!isVideo4 || video4SubStep === 0) ? (
                 <div className="rounded-2xl overflow-hidden shadow-lg mb-8 bg-black">
                   <video
@@ -618,7 +618,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                 </div>
               )}
 
-              {/* Navigation */}
+              
               <div className="flex items-center justify-between pt-2">
                 <button
                   type="button"
@@ -714,7 +714,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
             </div>
           </div>
 
-          {/* Right Sidebar */}
+          
           <aside className="w-full lg:w-80 xl:w-[340px] bg-white border-t lg:border-t-0 lg:border-l border-[#E5E7EB] p-6 lg:p-8 flex flex-col">
             <h3 className={`text-sm font-semibold tracking-widest uppercase text-[#9CA3AF] mb-5 ${inter.className}`}>
               Modules
@@ -785,7 +785,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
               })}
             </div>
 
-            {/* Session Info */}
+            
             <div className="mt-8 pt-6 border-t border-[#E5E7EB]">
               <div className={`text-xs text-[#9CA3AF] space-y-1.5 ${inter.className}`}>
                 <div className="flex justify-between">

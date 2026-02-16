@@ -24,17 +24,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!user || !user.image) {
       return res.status(404).json({ message: "No image found" });
     }
-
-    // Convert Buffer to Uint8Array for proper binary response
     const imageBuffer = Buffer.from(user.image);
-    
-    // Set appropriate headers
     res.setHeader('Content-Type', user.imageMimeType || 'image/jpeg');
     res.setHeader('Content-Length', imageBuffer.length);
-    // Cache for 1 hour - version param in URL busts cache when image changes
     res.setHeader('Cache-Control', 'private, max-age=3600, stale-while-revalidate=86400');
-    
-    // Send the image data
     res.end(imageBuffer);
   } catch (e) {
     console.error("profile/getImage", e);

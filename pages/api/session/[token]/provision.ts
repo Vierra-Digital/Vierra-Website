@@ -17,8 +17,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     if (!sess) throw new Error("Session not found");
     if (!sess.client) throw new Error("Client not found");
-
-    // Create user if not exists
     let user = await tx.user.findUnique({ where: { email: sess.client.email } });
     if (!user) {
       user = await tx.user.create({
@@ -29,8 +27,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
       });
     }
-
-    // Link client to user
     await tx.client.update({
       where: { id: sess.clientId },
       data: { userId: user.id },

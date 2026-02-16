@@ -13,8 +13,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const code  = asStr(req.query.code);
   const state = asStr(req.query.state);
   if (!code) { res.status(400).send("Missing code"); return; }
-
-  // Exchange code -> tokens
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -47,9 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const hasStateCookie = !!cookies.ga_oauth_state;
 
   if (hasStateCookie) {
-    // Logged-in Connect flow
     if (!state || cookies.ga_oauth_state !== state) { res.status(400).send("Invalid state"); return; }
-    // clear the state cookie
     res.setHeader("Set-Cookie", serializeCookie("ga_oauth_state", "", {
       path: "/api/googleads/callback",
       maxAge: 0,
@@ -68,8 +64,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.redirect("/connect?connected=googleads");
     return;
   }
-
-  // Onboarding flow (no login). `state` must be the onboarding session id
   if (!state) { res.status(400).send("Missing state"); return; }
 
   const sess = await prisma.onboardingSession.findUnique({ where: { id: state } });
@@ -80,8 +74,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     update: { accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
     create: { sessionId: state, platform: "googleads", accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
   });
-
-  // ensure the resume cookie exists so /session (no token) can load
   res.setHeader("Set-Cookie", serializeCookie("ob_session", state, {
     httpOnly: true,
     sameSite: "lax",

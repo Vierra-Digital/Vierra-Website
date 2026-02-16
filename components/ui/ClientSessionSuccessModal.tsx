@@ -28,7 +28,7 @@ export default function ClientSessionSuccessModal({ isOpen, onClose }: ClientSes
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={handleOverlayClick}>
       <div className="bg-white rounded-lg p-8 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
         <div className="text-center">
-          {/* Success Icon */}
+          
           <div className="w-20 h-20 mx-auto mb-6 relative">
             <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
               <div className="w-16 h-16 bg-green-200 rounded-full flex items-center justify-center">

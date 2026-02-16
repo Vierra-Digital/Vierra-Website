@@ -14,7 +14,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const { id, title, description, content, date, tag, authorName } = req.body || {};
       const published_date = date ? new Date(date) : new Date();
-      // Author has unique email in schema; use upsert via find/create by name
       const existingAuthor = await prisma.author.findFirst({ where: { name: authorName || "Unknown" } })
       const author = existingAuthor ?? (await prisma.author.create({ data: { name: authorName || "Unknown" } }))
 

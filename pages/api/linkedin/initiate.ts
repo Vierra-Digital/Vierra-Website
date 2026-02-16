@@ -13,8 +13,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const clientId = process.env.LINKEDIN_CLIENT_ID!;
   const redirectUri = process.env.LINKEDIN_REDIRECT_URI!;
-
-  // onboarding (no login)
   const onboardingSessionId = asStr(req.query.session);
   if (onboardingSessionId) {
     const sess = await prisma.onboardingSession.findUnique({ where: { id: onboardingSessionId } });
@@ -31,8 +29,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.redirect(authUrl);
     return;
   }
-
-  // logged in connect
   const session = await requireSession(req, res);
   if (!session) { res.status(401).json({ message: "Not authenticated" }); return; }
 

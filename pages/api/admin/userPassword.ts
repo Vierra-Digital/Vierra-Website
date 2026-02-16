@@ -22,13 +22,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!user.passwordEnc) {
       return res.status(200).json({ id: userId, password: null });
     }
-    
-    // Try to decrypt the password
     let password: string | null = null;
     try {
       password = decrypt(user.passwordEnc);
     } catch {
-      // If decryption fails, it might be a bcrypt hash or other format
       console.log(`Password for user ${userId} cannot be decrypted - might be bcrypt hash or other format`);
       return res.status(200).json({ 
         id: userId, 

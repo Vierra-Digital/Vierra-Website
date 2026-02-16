@@ -41,8 +41,6 @@ const RichTextEditor: React.FC<{
       sel.addRange(range)
     } catch {}
   }
-
-  // Track active formatting states to change icon styles
   const [activeBold, setActiveBold] = useState(false)
   const [activeItalic, setActiveItalic] = useState(false)
   const [activeUnderline, setActiveUnderline] = useState(false)
@@ -226,13 +224,9 @@ const RichTextEditor: React.FC<{
     document.addEventListener('selectionchange', updateStates)
       return () => document.removeEventListener('selectionchange', updateStates)
   }, [getFontFromSelection, getFontSizeFromSelection])
-
-  // Resize state
   const isResizingRef = useRef(false)
   const resizeStartRef = useRef<{ x: number; width: number; isLeftSide: boolean } | null>(null)
   const handleResizeStartRef = useRef<((e: MouseEvent, embed: HTMLElement) => void) | null>(null)
-
-  // Find embed element from a click target
   const findEmbed = useCallback((target: HTMLElement): HTMLElement | null => {
     if (!target) return null
     if (target.classList?.contains('rte-embed')) {
@@ -241,33 +235,24 @@ const RichTextEditor: React.FC<{
     if (target.classList?.contains('rte-media') || target.tagName === 'IMG' || target.tagName === 'IFRAME' || target.tagName === 'VIDEO') {
       return target.closest('.rte-embed') as HTMLElement | null
     }
-    // Check for resize handle
     if (target.classList?.contains('rte-resize-handle')) {
       return target.closest('.rte-embed') as HTMLElement | null
     }
     return target.closest('.rte-embed') as HTMLElement | null
   }, [])
-
-  // Select an embed element and add resize handles
   const selectEmbed = useCallback((embed: HTMLElement) => {
-    // Clear previous selection
     if (selectedEmbedRef.current && selectedEmbedRef.current !== embed) {
       selectedEmbedRef.current.removeAttribute("data-selected")
-      // Remove old resize handles
       selectedEmbedRef.current.querySelectorAll('.rte-resize-handle').forEach(h => h.remove())
     }
-    // Set new selection
     embed.setAttribute("data-selected", "true")
     selectedEmbedRef.current = embed
-    // Update alignment state
     const align = embed.getAttribute("data-align")
     if (align === "center" || align === "right" || align === "left") {
       setActiveAlign(align)
     } else {
       setActiveAlign("left")
     }
-    
-    // Add resize handles on all 4 corners if this is an image
     const isImage = embed.getAttribute("data-type") === "image"
     if (isImage && !embed.querySelector('.rte-resize-handle')) {
       const corners = ['nw', 'ne', 'sw', 'se']
@@ -280,19 +265,14 @@ const RichTextEditor: React.FC<{
       })
     }
   }, [])
-
-  // Clear embed selection
   const clearEmbedSelection = useCallback(() => {
     if (selectedEmbedRef.current) {
       selectedEmbedRef.current.removeAttribute("data-selected")
-      // Remove resize handles
       selectedEmbedRef.current.querySelectorAll('.rte-resize-handle').forEach(h => h.remove())
       selectedEmbedRef.current = null
       setActiveAlign("none")
     }
   }, [])
-
-  // Handle resize - stored in ref to avoid stale closures in useEffect
   handleResizeStartRef.current = (e: MouseEvent, embed: HTMLElement) => {
     e.preventDefault()
     e.stopPropagation()
@@ -301,7 +281,6 @@ const RichTextEditor: React.FC<{
     const currentWidth = media?.naturalWidth ? media.offsetWidth : (media?.offsetWidth || 300)
     const handle = e.target as HTMLElement
     const corner = handle.getAttribute('data-corner') || 'se'
-    // For left-side handles, dragging left increases width (inverted)
     const isLeftSide = corner === 'nw' || corner === 'sw'
     const startData = { x: e.clientX, width: currentWidth, isLeftSide }
     resizeStartRef.current = startData
@@ -309,14 +288,12 @@ const RichTextEditor: React.FC<{
     const handleResizeMove = (moveEvent: MouseEvent) => {
       if (!isResizingRef.current || !resizeStartRef.current || !selectedEmbedRef.current) return
       let delta = moveEvent.clientX - resizeStartRef.current.x
-      // Invert delta for left-side handles
       if (resizeStartRef.current.isLeftSide) {
         delta = -delta
       }
       const newWidth = Math.max(50, Math.min(800, resizeStartRef.current.width + delta))
       const mediaEl = selectedEmbedRef.current.querySelector('.rte-media') as HTMLElement
       if (mediaEl) {
-        // Only set width - height will auto-adjust to maintain aspect ratio
         mediaEl.style.width = `${newWidth}px`
         mediaEl.style.height = 'auto'
       }
@@ -328,7 +305,6 @@ const RichTextEditor: React.FC<{
       resizeStartRef.current = null
       document.removeEventListener('mousemove', handleResizeMove)
       document.removeEventListener('mouseup', handleResizeEnd)
-      // Trigger input event to save the change (this calls toHtml via onInput handler)
       if (editableRef.current) {
         editableRef.current.dispatchEvent(new Event('input', { bubbles: true }))
       }
@@ -337,8 +313,6 @@ const RichTextEditor: React.FC<{
     document.addEventListener('mousemove', handleResizeMove)
     document.addEventListener('mouseup', handleResizeEnd)
   }
-
-  // Handle clicks on the editor - select embeds or clear selection
   useEffect(() => {
     const el = editableRef.current
     if (!el) return
@@ -346,8 +320,6 @@ const RichTextEditor: React.FC<{
     const onMouseDown = (e: MouseEvent) => {
       const t = e.target as HTMLElement
       if (!t) return
-      
-      // Check if clicking on a resize handle
       if (t.classList?.contains('rte-resize-handle')) {
         const embed = t.closest('.rte-embed') as HTMLElement
         if (embed && handleResizeStartRef.current) {
@@ -361,7 +333,6 @@ const RichTextEditor: React.FC<{
         e.preventDefault()
         e.stopPropagation()
         selectEmbed(embed)
-        // Force a repaint to ensure CSS is applied
         void embed.offsetHeight
       }
     }
@@ -369,13 +340,9 @@ const RichTextEditor: React.FC<{
     const onClick = (e: MouseEvent) => {
       const t = e.target as HTMLElement
       if (!t) return
-      
-      // Prevent link navigation in editor
       if (t.tagName === 'A') {
         e.preventDefault()
       }
-      
-      // If clicking outside an embed, clear selection
       const embed = findEmbed(t)
       if (!embed && selectedEmbedRef.current) {
         clearEmbedSelection()
@@ -391,7 +358,6 @@ const RichTextEditor: React.FC<{
   }, [findEmbed, selectEmbed, clearEmbedSelection])
   const [history, setHistory] = useState<string[]>([value])
   const [historyIndex, setHistoryIndex] = useState(0)
-  // We avoid storing display HTML in React state to prevent rerenders that reset the caret.
 
   const toYoutubeEmbed = useCallback((u: string): string | null => {
     const url = normalizeUrl(u)
@@ -422,14 +388,10 @@ const RichTextEditor: React.FC<{
     return `<video class="rte-media" controls src="${normalizeUrl(u)}">Your browser does not support the video tag.</video>`
   }, [toYoutubeEmbed])
   const buildImageEmbedHtml = (u: string) => `<img class="rte-media" src="${normalizeUrl(u)}" alt="" />`
-
-  // Transform stored HTML into an editing-friendly display
   const toDisplay = useCallback((html: string): string => {
     if (!html) return ""
     let out = html
-    // Strip editor-only rte-media class from saved HTML so images get properly wrapped
     out = out.replace(/(<img[^>]*)\s*class="[^"]*rte-media[^"]*"/gi, '$1')
-    // First, handle wrapped media (with alignment divs from saved HTML)
     out = out.replace(/<div[^>]*style="[^"]*text-align:(left|center|right)[^"]*"[^>]*>[\s\S]*?<img([^>]*)>[\s\S]*?<\/div>/gi, (match, align, imgAttrs) => {
       const srcMatch = imgAttrs.match(/src="([^"]+)"/)
       const widthMatch = imgAttrs.match(/style="[^"]*width:\s*(\d+)px/)
@@ -450,10 +412,8 @@ const RichTextEditor: React.FC<{
       }
       return _m
     })
-    // Convert remaining raw img/iframe/video tags that aren't already wrapped in rte-embed
     // Skip img tags that already have rte-media class (those are inside embeds)
     out = out.replace(/<img([^>]*)>/gi, (match, attrs) => {
-      // Skip if already has rte-media class (already inside an embed)
       if (attrs.includes('rte-media')) return match
       const srcMatch = attrs.match(/src="([^"]+)"/)
       const widthMatch = attrs.match(/width:\s*(\d+)px/)
@@ -465,7 +425,6 @@ const RichTextEditor: React.FC<{
       const embed = `<img class="rte-media" src="${normalizeUrl(url)}" alt=""${widthStyle} />`
       return `<div data-type="image" data-url="${url}"${widthAttr} class="rte-embed" contenteditable="false">${embed}</div>`
     })
-    // Video -> embedded preview (only if not already wrapped)
     out = out.replace(/<iframe([^>]*)>[\s\S]*?<\/iframe>/gi, (match, attrs) => {
       if (attrs.includes('rte-media')) return match
       const srcMatch = attrs.match(/src="([^"]+)"/)
@@ -486,32 +445,24 @@ const RichTextEditor: React.FC<{
       const embed = buildVideoEmbedHtml(url)
       return `<div data-type="video" data-url="${url}" class="rte-embed" contenteditable="false">${embed}</div>`
     })
-    // Links -> keep text and store URL on data-url
     out = out.replace(/<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, href, text) => {
       const url = normalizeUrl(href)
       return `<a href="${url}" data-url="${url}" class="rte-link not-prose" title="${url}" style="color:#2563eb;text-decoration:underline;">${text}</a>`
     })
     return out
   }, [buildVideoEmbedHtml])
-
-  // Transform display (with placeholders) back to real HTML for saving
   const toHtml = useCallback((display: string): string => {
     if (!display) return ""
     let out = display
-    // Remove resize handles before saving
     out = out.replace(/<div[^>]*class="rte-resize-handle[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
-    // Image embeds - match any div with rte-embed class and data-type="image" (regardless of attribute order)
     out = out.replace(/<div[^>]*\bclass="[^"]*rte-embed[^"]*"[^>]*>[\s\S]*?<\/div>/gi, (match) => {
-      // Check if this is an image embed
       if (!match.includes('data-type="image"')) {
-        // Check if it's a video embed
         if (match.includes('data-type="video"')) {
           const urlMatch = match.match(/data-url="([^"]+)"/)
           const alignMatch = match.match(/data-align="([^"]+)"/)
           const url = urlMatch ? urlMatch[1] : ''
           const align = alignMatch ? alignMatch[1] : ''
           if (!url) return match
-          // Build inline styles for alignment
           let mediaStyles = 'display:block;'
           if (align === 'center') {
             mediaStyles += 'margin-left:auto;margin-right:auto;'
@@ -541,10 +492,8 @@ const RichTextEditor: React.FC<{
       const align = alignMatch ? alignMatch[1] : ''
       const width = widthMatch ? widthMatch[1] : ''
       if (!url) return match
-      // Build inline styles for the image
       let imgStyles = 'display:block;'
       if (width) imgStyles += `width:${width}px;`
-      // Add margin styles based on alignment
       if (align === 'center') {
         imgStyles += 'margin-left:auto;margin-right:auto;'
       } else if (align === 'right') {
@@ -553,15 +502,12 @@ const RichTextEditor: React.FC<{
         imgStyles += 'margin-left:0;margin-right:auto;'
       }
       const media = `<img src="${normalizeUrl(url)}" alt="" style="${imgStyles}" />`
-      // Wrap in a div with text-align for additional alignment support
       if (align && (align === 'left' || align === 'center' || align === 'right')) {
         return `<div style="text-align:${align};">${media}</div>`
       }
       return media
     })
-    // Anchors created in the editor
     out = out.replace(/<a[^>]*data-url="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (_m, url, text) => `<a href="${normalizeUrl(url)}" target="_blank" rel="noopener noreferrer">${text}<\/a>`)
-    // Legacy placeholder links (if any remain)
     out = out.replace(/<span[^>]*data-type="link"[^>]*data-url="([^"]+)"[^>]*>.*?<\/span>/gi, (_m, url) => `<a href="${normalizeUrl(url)}" target="_blank" rel="noopener noreferrer">${normalizeUrl(url)}<\/a>`)
     return out
   }, [toYoutubeEmbed])
@@ -602,15 +548,9 @@ const RichTextEditor: React.FC<{
       onChange(history[newIndex])
     }
   }
-
-  // Track the last value we synced to avoid redundant innerHTML resets
   const lastSyncedValueRef = useRef<string>('')
-
-  // Keep display in sync with incoming value
   useEffect(() => {
-    // When updates come from outside the editor, sync the display.
     if (!isLocalEditRef.current) {
-      // Only reset innerHTML if the value actually changed from what we last synced
       if (value !== lastSyncedValueRef.current) {
         const disp = toDisplay(value || "")
         if (editableRef.current) {
@@ -620,7 +560,6 @@ const RichTextEditor: React.FC<{
         lastSyncedValueRef.current = value
       }
     } else {
-      // Clear the flag after the render triggered by a local edit
       isLocalEditRef.current = false
       lastSyncedValueRef.current = value
     }
@@ -630,11 +569,8 @@ const RichTextEditor: React.FC<{
       setHistory(newHistory)
       setHistoryIndex(newHistory.length - 1)
     }
-    
-    // Make embeds draggable and selectable
     const el = editableRef.current
     if (el) {
-      // Use requestAnimationFrame to ensure DOM is ready
       requestAnimationFrame(() => {
         const embeds = el.querySelectorAll('.rte-embed:not([data-initialized])')
         embeds.forEach((embed) => {
@@ -643,8 +579,6 @@ const RichTextEditor: React.FC<{
       })
     }
   }, [value, history, historyIndex, toDisplay, setupEmbedHandlers])
-
-  // Upload an image file to the server and return its permanent URL
   const uploadBlogImage = async (file: File): Promise<string | null> => {
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
@@ -694,7 +628,6 @@ const RichTextEditor: React.FC<{
       } else {
         el.appendChild(embed)
       }
-      // Mark as local edit to prevent useEffect from resetting content
       isLocalEditRef.current = true
       const newDisplay = el.innerHTML
       onChange(toHtml(newDisplay))
@@ -719,7 +652,6 @@ const RichTextEditor: React.FC<{
       } else {
         el.appendChild(embed)
       }
-      // Mark as local edit to prevent useEffect from resetting content
       isLocalEditRef.current = true
       const newDisplay = el.innerHTML
       onChange(toHtml(newDisplay))
@@ -784,7 +716,6 @@ const RichTextEditor: React.FC<{
         document.execCommand('bold')
         break
       case 'italic':
-        // Ensure italic doesn't inherit bold styles
         document.execCommand('italic')
         break
       case 'underline':
@@ -797,21 +728,15 @@ const RichTextEditor: React.FC<{
           const alignValue = format === 'alignLeft' ? 'left' : format === 'alignCenter' ? 'center' : 'right'
           const embed = selectedEmbedRef.current
           if (embed && embed.classList.contains('rte-embed')) {
-            // Set alignment on embed
             embed.setAttribute('data-align', alignValue)
-            // Force repaint
             void embed.offsetHeight
-            // Update state
             setActiveAlign(alignValue)
-            // Keep selection
             embed.setAttribute('data-selected', 'true')
-            // Sync HTML - mark as local edit to prevent reset
             isLocalEditRef.current = true
             const newDisplay = el.innerHTML
             onChange(toHtml(newDisplay))
             return
           } else {
-            // No embed selected, use text alignment
             const cmd = format === 'alignLeft' ? 'justifyLeft' : format === 'alignCenter' ? 'justifyCenter' : 'justifyRight'
             document.execCommand(cmd)
           }
@@ -825,7 +750,6 @@ const RichTextEditor: React.FC<{
           const range = sel.rangeCount > 0 ? sel.getRangeAt(0) : null
           
           if (selectedText.trim() || (range && selectedText.includes('\n'))) {
-            // Handle multi-line selection (including empty lines)
             const lines = selectedText.split(/\r?\n/)
             const ul = document.createElement('ul')
             ul.style.listStyleType = 'disc'
@@ -859,9 +783,7 @@ const RichTextEditor: React.FC<{
             onChange(toHtml(newDisplay))
             return
           } else {
-            // Handle single line or empty line
             if (range && range.collapsed && !selectedText.trim()) {
-              // Empty line - create list directly
               const ul = document.createElement('ul')
               ul.style.listStyleType = 'disc'
               ul.style.paddingLeft = '24px'
@@ -870,17 +792,13 @@ const RichTextEditor: React.FC<{
               li.style.display = 'list-item'
               li.innerHTML = '<br>'
               ul.appendChild(li)
-              
-              // Check if we're in an empty paragraph or at start/end
               const container = range.startContainer
               const parent = container.nodeType === Node.TEXT_NODE ? container.parentElement : container as HTMLElement
               
               if (parent && (parent.tagName === 'P' || parent.tagName === 'DIV')) {
-                // Replace empty paragraph/div with list
                 if (!parent.textContent?.trim() && parent.children.length === 0) {
                   parent.parentNode?.replaceChild(ul, parent)
                 } else {
-                  // Insert before or after based on position
                   if (range.startOffset === 0 && !parent.textContent?.trim()) {
                     parent.parentNode?.insertBefore(ul, parent)
                   } else {
@@ -901,14 +819,11 @@ const RichTextEditor: React.FC<{
               onChange(toHtml(newDisplay))
               return
             }
-            
-            // Try execCommand first for non-empty selections
             const before = el?.innerHTML || ""
             const ok = document.execCommand('insertUnorderedList')
             const after = el?.innerHTML || ""
             
             if (!ok || before === after) {
-              // Fallback: create list manually
               const ul = document.createElement('ul')
               ul.style.listStyleType = 'disc'
               ul.style.paddingLeft = '24px'
@@ -977,8 +892,6 @@ const RichTextEditor: React.FC<{
     const current = activeAlign === "none" ? "left" : activeAlign
     const next = current === "left" ? "center" : current === "center" ? "right" : "left"
     const command = next === "left" ? "alignLeft" : next === "center" ? "alignCenter" : "alignRight"
-    
-    // If there's a selected embed, don't call el.focus() which would clear selection
     if (selectedEmbedRef.current) {
       const embed = selectedEmbedRef.current
       embed.setAttribute('data-align', next)
@@ -987,7 +900,6 @@ const RichTextEditor: React.FC<{
       embed.setAttribute('data-selected', 'true')
       const el = editableRef.current
       if (el) {
-        // Mark as local edit to prevent useEffect from resetting content
         isLocalEditRef.current = true
         onChange(toHtml(el.innerHTML))
       }
@@ -1031,7 +943,6 @@ const RichTextEditor: React.FC<{
       el.focus()
       for (const file of files) {
         if (file.type.startsWith('image/')) {
-          // Upload first, then insert with permanent URL
           const permanentUrl = await uploadBlogImage(file)
           if (permanentUrl) {
             insertPlaceholder('image', permanentUrl)
@@ -1075,7 +986,6 @@ const RichTextEditor: React.FC<{
             sel.removeAllRanges()
             sel.addRange(range)
           }
-          // Mark as local edit to prevent useEffect from resetting content
           isLocalEditRef.current = true
           const newDisplay = el.innerHTML
           onChange(toHtml(newDisplay))
@@ -1086,7 +996,7 @@ const RichTextEditor: React.FC<{
 
   return (
     <div className="border border-[#D1D5DB] rounded-lg overflow-hidden">
-      {/* Toolbar */}
+      
       <div className="bg-gray-50 border-b border-[#D1D5DB] px-3 py-2 flex items-center gap-2">
         <button
           type="button"
@@ -1350,13 +1260,13 @@ const RichTextEditor: React.FC<{
         </button>
       </div>
 
-      {/* Content Area */}
+      
       <div 
         className="min-h-[420px] max-h-[80vh] overflow-auto rounded-md resize-y"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
-        {/* Visible editor (no raw tags) */}
+        
         <div
           id="rte-visible"
           ref={editableRef}
@@ -1364,7 +1274,6 @@ const RichTextEditor: React.FC<{
           suppressContentEditableWarning
           className="w-full min-h-[420px] p-4 bg-white border-0 outline-none text-sm text-[#111827] prose max-w-none"
           onKeyDown={(e) => {
-            // Don't clear selection for navigation keys
             const navKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'Shift', 'Control', 'Alt', 'Meta']
             if (navKeys.includes(e.key)) return
             
@@ -1377,10 +1286,8 @@ const RichTextEditor: React.FC<{
           onInput={() => {
             if (!editableRef.current) return
             const newDisplay = editableRef.current.innerHTML
-            // Mark this change as local to prevent caret-jumping resets
             isLocalEditRef.current = true
             onChange(toHtml(newDisplay))
-            // Re-initialize embeds after content change
             requestAnimationFrame(() => {
               const embeds = editableRef.current?.querySelectorAll('.rte-embed:not([data-initialized])')
               embeds?.forEach((embed) => {
@@ -1388,9 +1295,8 @@ const RichTextEditor: React.FC<{
               })
             })
           }}
-          // Initial content is injected by the effect above; no innerHTML binding here to avoid caret resets.
         />
-        {/* Force italic to never appear bold in the visible editor */}
+        
         <style jsx global>{`
           #rte-visible em, #rte-visible i { font-weight: 400 !important; font-style: italic; }
           #rte-visible a, #rte-visible .rte-link { 
@@ -1521,7 +1427,7 @@ const RichTextEditor: React.FC<{
             display: none !important;
           }
         `}</style>
-        {/* Hidden field with actual HTML (posted value) */}
+        
         <textarea
           className="absolute -left-[10000px] w-[1px] h-[1px] opacity-0"
           aria-hidden
@@ -1642,8 +1548,6 @@ const ConfirmDeleteModal: React.FC<{
         </div>
     )
 }
-
-// Insert Link Modal
 const InsertLinkModal: React.FC<{
   isOpen: boolean
   linkText: string
@@ -1716,8 +1620,6 @@ const InsertLinkModal: React.FC<{
     </div>
   )
 }
-
-// Insert Image Modal
 const InsertImageModal: React.FC<{
   isOpen: boolean
   imageUrl: string
@@ -1800,8 +1702,6 @@ const InsertImageModal: React.FC<{
     </div>
   )
 }
-
-// Insert Video Modal
 const InsertVideoModal: React.FC<{
   isOpen: boolean
   videoUrl: string
@@ -2042,7 +1942,7 @@ export default function BlogEditorSection() {
                                 <div className="px-5">
                                     <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
                                     
-                                    {/* Date Sort */}
+                                    
                                     <div className="mb-4">
                                         <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By Date</label>
                                         <div className="flex gap-2">
@@ -2077,7 +1977,7 @@ export default function BlogEditorSection() {
                                         </div>
                                     </div>
 
-                                    {/* Tag Filter */}
+                                    
                                     <div className="mb-4">
                                         <label className="block text-xs font-medium text-[#6B7280] mb-2">Tag</label>
                                         <div className="relative">
@@ -2102,7 +2002,7 @@ export default function BlogEditorSection() {
                                         </div>
                                     </div>
 
-                                    {/* Author Filter */}
+                                    
                                     <div className="mb-4">
                                         <label className="block text-xs font-medium text-[#6B7280] mb-2">Author</label>
                                         <div className="relative">
@@ -2127,7 +2027,7 @@ export default function BlogEditorSection() {
                                         </div>
                                     </div>
                                     
-                                    {/* Clear Button */}
+                                    
                                     <div className="pt-3 border-t border-[#E5E7EB]">
                                         <button
                                             onClick={() => {
@@ -2171,26 +2071,18 @@ export default function BlogEditorSection() {
 
   const filteredPosts = useMemo(() => {
     let filtered = posts
-
-    // Search filter
     const q = search.trim().toLowerCase()
     if (q) {
       filtered = filtered.filter((p) =>
         [p.title, p.description ?? "", p.tag ?? "", p.author?.name ?? ""].some((v) => v.toLowerCase().includes(q))
       )
     }
-
-    // Tag filter
     if (tagFilter !== 'all') {
       filtered = filtered.filter((p) => p.tag && p.tag.split(',').map(t => t.trim()).includes(tagFilter))
     }
-
-    // Author filter
     if (authorFilter !== 'all') {
       filtered = filtered.filter((p) => p.author?.name === authorFilter)
     }
-
-    // Date sort
     if (dateSort !== 'none') {
       filtered = [...filtered].sort((a, b) => {
         const dateA = new Date(a.published_date).getTime()

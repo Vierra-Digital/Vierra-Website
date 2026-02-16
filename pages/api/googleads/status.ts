@@ -28,8 +28,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(405).json({ message: "Method Not Allowed" });
     return;
   }
-
-  // Onboarding status (no login): ?session=<OnboardingSession.id>
   const sessionId = asStr(req.query.session);
   if (sessionId) {
     try {
@@ -49,8 +47,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return;
     }
   }
-
-  // Logged-in connect status
   const session = await getServerSession(req, res, authOptions);
   if (!session) { res.status(401).json({ connected: false }); return; }
 

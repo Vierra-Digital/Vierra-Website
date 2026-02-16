@@ -23,8 +23,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!userEmail) {
       return res.status(400).json({ message: "User email not found in session" });
     }
-
-    // Check if user exists
     const existingUser = await prisma.user.findUnique({
       where: { email: userEmail },
       select: { id: true, name: true, email: true },
@@ -33,11 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!existingUser) {
       return res.status(404).json({ message: "User not found" });
     }
-
-    // Get the uploaded file from the request
     const { imageData, mimeType } = req.body;
-    
-    // Handle image reset (null values)
     if (imageData === null && mimeType === null) {
       const updated = await prisma.user.update({
         where: { email: userEmail },
@@ -55,11 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!imageData || !mimeType) {
       return res.status(400).json({ message: "Image data and mime type are required" });
     }
-
-    // Convert base64 to buffer
     const imageBuffer = Buffer.from(imageData, 'base64');
-
-    // Update user with new image (imageUpdatedAt busts cache on refresh)
     const updated = await prisma.user.update({
       where: { email: userEmail },
       data: { 

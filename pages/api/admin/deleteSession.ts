@@ -18,7 +18,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Check if session exists and get clientId
     const onboardingSession = await prisma.onboardingSession.findUnique({
       where: { id: token },
       select: { id: true, clientId: true }
@@ -29,15 +28,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const clientId = onboardingSession.clientId;
-
-    // Delete the session and client in a transaction
     await prisma.$transaction(async (tx) => {
-      // Delete the session first
       await tx.onboardingSession.delete({
         where: { id: token }
       });
-
-      // Delete the associated client (this will cascade delete any other sessions for this client)
       await tx.client.delete({
         where: { id: clientId }
       });

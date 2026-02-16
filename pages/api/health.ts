@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    // Run a very simple query
     await prisma.$queryRaw`SELECT 1`;
 
     res.status(200).json({ ok: true, message: "DB connection successful" });

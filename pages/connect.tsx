@@ -39,8 +39,6 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
     }
     fetchUser()
   }, [session])
-
-  // Fetch connection status
   useEffect(() => {
     const token = localStorage.getItem("token")
     if (!token) {
@@ -79,8 +77,6 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
   const startOauth = (provider: "facebook" | "linkedin" | "googleads") => {
     window.location.href = `/api/${provider}/initiate`
   }
-
-  // Layout (same as /client)
   return (
     <>
       <Head>
@@ -88,7 +84,7 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
         <meta name="robots" content="noindex, nofollow" />
       </Head>
       <div className="relative min-h-screen bg-[#18042A] text-white flex">
-        {/* Logo */}
+        
         <div className="absolute top-4 left-4 z-20">
           <Link
             href={dashboardHref}
@@ -105,7 +101,7 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
           </Link>
         </div>
 
-        {/* Sidebar */}
+        
         <div className="w-56 bg-[#2E0A4F] h-screen flex flex-col justify-between pt-20 pb-4 px-4">
           <div className="flex flex-col space-y-2">
             <button
@@ -140,9 +136,9 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
           </button>
         </div>
 
-        {/* Right side */}
+        
         <div className="flex-1 flex flex-col">
-          {/* Top bar */}
+          
           <div className="h-16 bg-[#2E0A4F] flex items-center pl-64 pr-8 justify-end relative">
             <button
               className="ml-4 flex items-center focus:outline-none absolute right-8 top-1/2 -translate-y-1/2"
@@ -167,7 +163,7 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
             </button>
           </div>
 
-          {/* Content */}
+          
           <div className="flex-1 bg-[#18042A] overflow-auto p-6">
             {showSettings ? (
               <UserSettingsPage

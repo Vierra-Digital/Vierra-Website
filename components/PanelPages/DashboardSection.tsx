@@ -8,27 +8,19 @@ const DashboardSection = () => {
     const [monthFilter] = useState("March")
     const [activeClientsCount, setActiveClientsCount] = useState(0)
     const [loading, setLoading] = useState(true)
-
-    // Get current month and year for default calendar
     const currentDate = new Date()
     const currentMonth = currentDate.toLocaleString('default', { month: 'long' })
     const currentYear = currentDate.getFullYear().toString()
     
     const [calendarMonth, setCalendarMonth] = useState(currentMonth)
     const [calendarYear, setCalendarYear] = useState(currentYear)
-
-    // Generate week options dynamically
     const generateWeekOptions = () => {
         const options = []
         const today = new Date()
         const currentWeekStart = new Date(today)
-        
-        // Find Monday of current week
         const dayOfWeek = today.getDay()
         const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
         currentWeekStart.setDate(today.getDate() + daysToMonday)
-        
-        // Generate past 3 weeks, current week, and future 3 weeks
         for (let i = -3; i <= 3; i++) {
             const weekDate = new Date(currentWeekStart)
             weekDate.setDate(currentWeekStart.getDate() + (i * 7))
@@ -55,8 +47,6 @@ const DashboardSection = () => {
         
         return options
     }
-
-    // Fetch active clients count
     useEffect(() => {
         const fetchActiveClients = async () => {
             try {
@@ -81,8 +71,6 @@ const DashboardSection = () => {
     const weekOptions = generateWeekOptions()
     const currentWeekValue = weekOptions.find(option => option.label === "This Week")?.value || weekOptions[3]?.value || ""
     const [timeFilter, setTimeFilter] = useState(currentWeekValue)
-
-    // Generate calendar days for selected month/year
     const generateCalendarDays = () => {
         const monthNames = [
             "January", "February", "March", "April", "May", "June",
@@ -91,43 +79,27 @@ const DashboardSection = () => {
         
         const monthIndex = monthNames.indexOf(calendarMonth)
         const year = parseInt(calendarYear)
-        
-        // Get first day of month and number of days
         const firstDay = new Date(year, monthIndex, 1)
         const lastDay = new Date(year, monthIndex + 1, 0)
         const daysInMonth = lastDay.getDate()
-        
-        // Convert Sunday=0 to Monday=0 system
         let startingDayOfWeek = firstDay.getDay()
         startingDayOfWeek = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1 // Monday=0, Sunday=6
         
         const days = []
-        
-        // Add empty cells for days before the first day of the month
         for (let i = 0; i < startingDayOfWeek; i++) {
             days.push(null)
         }
-        
-        // Add days of the month
         for (let day = 1; day <= daysInMonth; day++) {
             days.push(day)
         }
         
         return days
     }
-
-    // Get highlighted days based on selected week
     const getHighlightedDays = () => {
         if (!timeFilter) return []
-        
-        // Parse the selected week date (format: MM/DD)
         const [month, day] = timeFilter.split('/').map(Number)
         const year = parseInt(calendarYear)
-        
-        // Create date for the Monday of the selected week
         const selectedDate = new Date(year, month - 1, day)
-        
-        // Check if the selected week is in the current calendar month
         const selectedMonth = selectedDate.getMonth()
         const calendarMonthIndex = ["January", "February", "March", "April", "May", "June",
             "July", "August", "September", "October", "November", "December"].indexOf(calendarMonth)
@@ -135,14 +107,10 @@ const DashboardSection = () => {
         if (selectedMonth !== calendarMonthIndex) {
             return [] // Selected week is not in the current calendar month
         }
-        
-        // Get all days in the selected week (Monday to Sunday)
         const highlightedDays = []
         for (let i = 0; i < 7; i++) {
             const weekDay = new Date(selectedDate)
             weekDay.setDate(selectedDate.getDate() + i)
-            
-            // Only highlight days that are in the current calendar month
             if (weekDay.getMonth() === calendarMonthIndex) {
                 highlightedDays.push(weekDay.getDate())
             }
@@ -159,8 +127,6 @@ const DashboardSection = () => {
         "July", "August", "September", "October", "November", "December"
     ]
     const yearOptions = Array.from({ length: 5 }, (_, i) => (2022 + i).toString())
-
-    // Sample data for charts
     const websiteVisitsData = [
         { week: "Week 1", visits: 20000 },
         { week: "Week 2", visits: 10000 },
@@ -192,7 +158,7 @@ const DashboardSection = () => {
 
     return (
         <div className="w-full h-full bg-white text-[#111014] flex flex-col p-6 pb-16">
-            {/* Header */}
+            
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold text-[#111827]">Dashboard</h1>
                 <div className="flex items-center gap-4">
@@ -227,11 +193,11 @@ const DashboardSection = () => {
                 </div>
             </div>
 
-            {/* Main Layout */}
+            
             <div className="flex gap-6">
-                {/* Left Content */}
+                
                 <div className="flex-1">
-                    {/* Metrics Cards */}
+                    
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                         <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
                             <div className="mb-2">
@@ -280,7 +246,7 @@ const DashboardSection = () => {
                         </div>
                     </div>
 
-                    {/* Website Visits Chart - Same width as metrics cards */}
+                    
                     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-8">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Website Visits</h3>
@@ -315,9 +281,9 @@ const DashboardSection = () => {
                         </div>
                     </div>
 
-                    {/* Bottom Row - Traffic by Device and Outreach */}
+                    
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Traffic by Device Chart */}
+                        
                         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className="text-lg font-semibold text-[#111827]">Traffic by Device</h3>
@@ -342,7 +308,7 @@ const DashboardSection = () => {
                             </div>
                         </div>
 
-                        {/* Outreach Donut Chart */}
+                        
                         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className="text-lg font-semibold text-[#111827]">Outreach</h3>
@@ -387,9 +353,9 @@ const DashboardSection = () => {
                     </div>
                 </div>
 
-                {/* Right Sidebar - Calendar and Meetings */}
+                
                 <div className="w-80 space-y-6">
-                    {/* Calendar */}
+                    
                     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
                         <div className="mb-6">
                             <h3 className="text-lg font-semibold text-[#111827] mb-4">Calendar</h3>
@@ -442,7 +408,7 @@ const DashboardSection = () => {
                         </div>
                     </div>
 
-                    {/* Upcoming Meetings */}
+                    
                     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Upcoming Meetings</h3>

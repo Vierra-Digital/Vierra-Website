@@ -90,31 +90,23 @@ export function Modal({ isOpen, onClose }: ModalProps) {
       onClose();
     }
   };
-
-  // Disable body scroll when modal is open
   useEffect(() => {
     if (isOpen) {
-      // Save the current scroll position
       const scrollY = window.scrollY;
-      // Disable scroll
       document.body.style.position = 'fixed';
       document.body.style.top = `-${scrollY}px`;
       document.body.style.width = '100%';
       document.body.style.overflow = 'hidden';
     } else {
-      // Re-enable scroll
       const scrollY = document.body.style.top;
       document.body.style.position = '';
       document.body.style.top = '';
       document.body.style.width = '';
       document.body.style.overflow = '';
-      // Restore scroll position
       if (scrollY) {
         window.scrollTo(0, parseInt(scrollY || '0') * -1);
       }
     }
-
-    // Cleanup function
     return () => {
       if (isOpen) {
         const scrollY = document.body.style.top;
@@ -141,10 +133,10 @@ export function Modal({ isOpen, onClose }: ModalProps) {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
       >
-        {/* Decorative gradient overlay */}
+        
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#701CC0] via-[#8F42FF] to-[#701CC0]" />
         
-        {/* Close button */}
+        
         <button
           className="absolute top-5 right-5 text-gray-300 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/10 z-10"
           onClick={onClose}
@@ -153,13 +145,13 @@ export function Modal({ isOpen, onClose }: ModalProps) {
           <X size={20} />
         </button>
 
-        {/* Header with logo and step indicator */}
+        
         <div className="pt-8 px-6 md:px-8 pb-6 border-b border-white/10">
           <div className="flex justify-center mb-6">
             <Image src="/assets/vierra-logo.png" alt="Vierra Logo" width={150} height={50} className="w-auto h-12" />
           </div>
           
-          {/* Step indicator */}
+          
           <div className="flex items-center justify-center gap-2">
             {[1, 2, 3].map((step) => (
               <div key={step} className="flex items-center">

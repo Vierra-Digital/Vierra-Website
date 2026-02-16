@@ -7,7 +7,6 @@ interface DefaultAvatarProps {
 }
 
 const DefaultAvatar: React.FC<DefaultAvatarProps> = ({ name, size = 40, className = "" }) => {
-  // Extract initials from name
   const getInitials = (name: string): string => {
     if (!name || name.trim().length === 0) return "U";
     

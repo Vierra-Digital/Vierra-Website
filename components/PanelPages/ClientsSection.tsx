@@ -23,9 +23,7 @@ type ClientRow = {
 }
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
-    // pending (yellow) - session generated but not expired and not completed
     // completed (green) - session completed
-    // expired/inactive (red) - session expired or manually deactivated
     
     let bgColor = "bg-red-100";
     let textColor = "text-red-700";
@@ -122,8 +120,6 @@ const ClientActionsMenu: React.FC<{
             const dropdownHeight = 150 // Approximate height
             const viewportHeight = window.innerHeight
             const viewportMiddle = viewportHeight / 2
-            
-            // Show below if in first half of page, above if in bottom half
             const showAbove = rect.top > viewportMiddle
             
             setPosition({
@@ -248,8 +244,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                 const data = await r.json()
                 throw new Error(data.message || `HTTP ${r.status}`)
             }
-
-            // Remove client from local state
             setRows(prev => prev.filter(client => client.id !== clientToDelete.id))
             setDeleteModalOpen(false)
             setClientToDelete(null)
@@ -275,8 +269,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                 const data = await r.json()
                 throw new Error(data.message || `HTTP ${r.status}`)
             }
-
-            // Refresh the client list to get the updated status from the server
             // This ensures the status is calculated correctly based on session state
             await fetchClients()
         } catch (e: any) {
@@ -300,14 +292,12 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
     const filteredRows = useMemo(() => {
         const query = searchQuery.trim().toLowerCase()
         let base = rows
-        // status filter
         if (statusFilter !== 'all') {
             base = base.filter((r) => {
                 const statusKey = r.status === 'completed' ? 'active' : (r.status === 'pending' || r.status === 'in_progress') ? 'pending' : 'inactive'
                 return statusKey === statusFilter
             })
         }
-        // search filter
         if (query) {
             base = base.filter((r) => {
             return [
@@ -323,7 +313,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                 .some((v) => String(v).toLowerCase().includes(query))
             })
         }
-        // sorting
         const sorted = [...base]
         if (retainerSort !== 'none') {
             sorted.sort((a, b) => {
@@ -344,7 +333,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
     }, [rows, searchQuery, statusFilter, nameSort, retainerSort])
 
     useEffect(() => {
-        // reset to first page when search changes
         setCurrentPage(0)
     }, [searchQuery])
 
@@ -391,7 +379,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                     <div className="px-5">
                                         <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
                                         
-                                        {/* Sort By */}
+                                        
                                         <div className="mb-5">
                                             <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By</label>
                                             <div className="flex gap-2">
@@ -418,7 +406,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                             </div>
                                         </div>
 
-                                        {/* Retainer Sort */}
+                                        
                                         <div className="mb-5">
                                             <label className="block text-xs font-medium text-[#6B7280] mb-2">Monthly Retainer</label>
                                             <div className="flex gap-2">
@@ -445,7 +433,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                             </div>
                                         </div>
 
-                                        {/* Status Filter */}
+                                        
                                         <div className="mb-4">
                                             <label className="block text-xs font-medium text-[#6B7280] mb-2">Status</label>
                                             <div className="relative">
@@ -467,7 +455,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                             </div>
                                         </div>
                                         
-                                        {/* Clear Button */}
+                                        
                                         <div className="pt-3 border-t border-[#E5E7EB]">
                                             <button
                                                 onClick={() => {

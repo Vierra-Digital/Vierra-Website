@@ -93,17 +93,13 @@ function GridComponent() {
 
   const assignIconToKey = useCallback((key: string) => {
     setCellIconMap((prev) => {
-      // If icon already assigned to this cell in current cycle, don't change it
       if (prev[key] !== undefined) return prev
       
       const total = socialIcons.length
-      // If all icons are used, reset and start over for next cycle
       if (usedIconsRef.current.size >= total) {
         usedIconsRef.current.clear()
         iconCursorRef.current = 0
       }
-      
-      // Find next unused icon, cycling through all icons
       let probe = iconCursorRef.current
       let attempts = 0
       while (usedIconsRef.current.has(probe % total) && attempts < total) {
@@ -134,7 +130,6 @@ function GridComponent() {
 
       targetTimer = setTimeout(() => {
         setActiveNodes([currentSet.source, ...currentSet.targets])
-        // Assign icons to all target cells, ensuring no duplicates
           currentSet.targets.forEach(assignIconToKey)
         setAnimationPhase("showing")
       }, 500)
@@ -150,7 +145,6 @@ function GridComponent() {
         setActiveSet((prev) => {
           const next = (prev + 1) % animationSets.length
           if (next === 0) {
-            // one full runthrough completed; reset for next pass
             setCellIconMap({})
             iconCursorRef.current = 0
             usedIconsRef.current.clear()
@@ -186,14 +180,12 @@ function GridComponent() {
     }
 
     document.addEventListener("visibilitychange", handleVisibilityChange)
-    // Start once on mount
     startAnimationLoop()
 
     return () => {
       stopAnimationLoop()
       document.removeEventListener("visibilitychange", handleVisibilityChange)
     }
-  // Only depend on stable callbacks; activeSet is advanced internally to avoid effect re-run
   }, [assignIconToKey, getIconIndexByAlt, activeSet])
 
   const isNodeActive = (key: string) => {
@@ -471,7 +463,6 @@ function GridComponent() {
           </div>
         )
       default:
-        // If cell has an assigned icon, show it with hover animation
         if (isActive && cellIconMap[key] !== undefined) {
           return (
             <motion.div
@@ -488,14 +479,11 @@ function GridComponent() {
             </motion.div>
           )
         }
-        // Otherwise show empty bordered box
         return (
           <div className="w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full border border-[#D9DEDD]" />
         )
     }
   }
-
-  // Renders Each Cell
   const GridCell = ({
     cellKey,
     isFilled,
@@ -510,12 +498,8 @@ function GridComponent() {
     socialIcons: IconEntry[]
   }) => {
     if (!isFilled) return null
-
-    // Get background gradient - check hardcoded cells first, then use icon gradient from cellIconMap
     const getBackground = () => {
       if (!isActive) return "#F7F7F8"
-      
-      // Hardcoded cell backgrounds
       if (cellKey === "3-0") return "linear-gradient(135deg,#EAF2FF,#F5E9FF)"
       if (cellKey === "2-2") return "linear-gradient(135deg,#FFE6F2,#FFF0E6)"
       if (cellKey === "4-2") return "linear-gradient(135deg,#E6F0FF,#EAF7FF)"
@@ -529,8 +513,6 @@ function GridComponent() {
       if (cellKey === "1-0") return "linear-gradient(135deg,#FFFDE6,#FFFCEB)"
       if (cellKey === "1-5") return "linear-gradient(135deg,#EEF0FF,#F2EFFF)"
       if (cellKey === "3-5") return "linear-gradient(135deg,#EAF8FF,#EFFFF7)"
-      
-      // For dynamically assigned icons, use the gradient from socialIcons
       if (cellIconMap[cellKey] !== undefined) {
         const iconIndex = cellIconMap[cellKey]
         return socialIcons[iconIndex]?.gradient || "#F7F7F8"
@@ -553,15 +535,7 @@ function GridComponent() {
         animate={isActive ? "active" : "inactive"} // Only change when `isActive` changes
       >
         {renderSVG(cellKey, isActive, cellIconMap)}
-        {/*
-        {isActive && (
-          <p
-            className={`text-[7px] sm:text-xs text-[#18042A] mt-1 font-medium ${inter.className}`}
-          >
-            {titlesMap[cellKey as keyof typeof titlesMap]}
-          </p>
-        )}
-          */}
+        
       </motion.div>
     )
   }

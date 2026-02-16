@@ -22,7 +22,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Find the client
     const client = await prisma.client.findUnique({
       where: { email: clientEmail.toLowerCase() },
       include: {
@@ -36,11 +35,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!client) {
       return res.status(404).json({ message: "Client not found" });
     }
-
-    // Check if there's a non-completed session
     const latestSession = client.onboardingSessions[0];
     if (latestSession && latestSession.status !== "completed" && !latestSession.submittedAt) {
-      // Check if expired
       const now = new Date();
       const isExpired = latestSession.expiresAt && now > latestSession.expiresAt;
       
@@ -52,8 +48,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
     }
-
-    // If no valid session exists, generate a new one
     const token = crypto.randomUUID();
     await prisma.onboardingSession.create({
       data: {

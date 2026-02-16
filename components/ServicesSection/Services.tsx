@@ -132,12 +132,8 @@ const Model = React.memo(function Model({
       return () => clearTimeout(timeout)
     }
   }, [selectedId])
-
-  // Fix materials and handle texture errors
   useEffect(() => {
     if (!gltf.scene) return
-
-    // Create uniform Vierra purple texture
     const createGradientTexture = () => {
       const size = 512
       const canvas = document.createElement("canvas")
@@ -146,8 +142,6 @@ const Model = React.memo(function Model({
       const context = canvas.getContext("2d")
       
       if (!context) return null
-      
-      // Solid Vierra purple color
       context.fillStyle = "#701CC0" // Vierra purple
       context.fillRect(0, 0, size, size)
       
@@ -159,34 +153,26 @@ const Model = React.memo(function Model({
       texture.needsUpdate = true
       return texture
     }
-
-    // Traverse the scene and fix materials
     const fixMaterials = () => {
       const gradientTexture = createGradientTexture()
       
       gltf.scene.traverse((child) => {
         if (child instanceof THREE.Mesh) {
-          // Ensure smooth geometry on ALL sides
           if (child.geometry) {
-            // Force smooth normals for all faces
             child.geometry.computeVertexNormals()
             child.geometry.normalizeNormals()
-            
-            // Ensure all faces use smooth shading
             if (child.geometry.attributes.normal) {
               child.geometry.attributes.normal.needsUpdate = true
             }
           }
           
           if (child.material) {
-            // If material is an array, process each material
             const materials = Array.isArray(child.material)
               ? child.material
               : [child.material]
 
             materials.forEach((material) => {
               if (material instanceof THREE.MeshStandardMaterial) {
-                // Check if texture is a blob URL or failed to load
                 let hasValidTexture = false
                 if (material.map) {
                   try {
@@ -201,38 +187,27 @@ const Model = React.memo(function Model({
                 }
 
                 if (!hasValidTexture && gradientTexture) {
-                  // Remove invalid texture
                   if (material.map) {
                     try {
                       material.map.dispose()
                     } catch {
-                      // Ignore disposal errors
                     }
                   }
-                  
-                  // Apply uniform Vierra purple texture
                   material.map = gradientTexture
                   material.color = new THREE.Color(0x701CC0) // Vierra purple
-                  
-                  // Smooth, glossy appearance - uniform Vierra purple
                   material.emissive = new THREE.Color(0x701CC0) // Vierra purple glow
                   material.emissiveIntensity = 0.05
                   material.metalness = 0.15
                   material.roughness = 0.1 // Very smooth, highly reflective surface
                   material.side = THREE.DoubleSide // Render both sides for smooth appearance
                   material.flatShading = false // Always use smooth shading
-                  
-                  // Ensure texture is properly applied
                   material.map.needsUpdate = true
                 } else if (hasValidTexture) {
-                  // Enhance existing textures with smooth properties
                   material.metalness = 0.1
                   material.roughness = 0.25
                   material.flatShading = false
                   material.side = THREE.DoubleSide
                 }
-                
-                // Always ensure smooth shading
                 material.flatShading = false
                 material.needsUpdate = true
               }
@@ -241,8 +216,6 @@ const Model = React.memo(function Model({
         }
       })
     }
-
-    // Fix materials immediately and after a short delay to catch async texture loads
     fixMaterials()
     const timeout = setTimeout(fixMaterials, 100)
     const timeout2 = setTimeout(fixMaterials, 500)

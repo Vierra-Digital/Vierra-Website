@@ -17,13 +17,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const { emailNotifications, twoFactorEnabled, theme, language } = req.body;
-
-    // Validate theme
     if (theme && !["light", "dark", "auto"].includes(theme)) {
       return res.status(400).json({ message: "Invalid theme value" });
     }
-
-    // Validate language
     if (language && !["en", "es", "fr", "de", "it", "pt", "ru", "zh", "ja", "ko"].includes(language)) {
       return res.status(400).json({ message: "Invalid language value" });
     }

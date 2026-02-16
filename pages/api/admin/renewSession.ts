@@ -18,7 +18,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Find the session
     const onboardingSession = await prisma.onboardingSession.findUnique({
       where: { id: token },
     });
@@ -26,8 +25,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!onboardingSession) {
       return res.status(404).json({ message: "Session not found" });
     }
-
-    // Update expired session to pending with new expiration time
     const now = new Date();
     const newExpiresAt = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour from now
 

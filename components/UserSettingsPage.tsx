@@ -376,7 +376,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
 
   const cardsContent = (
     <div className="space-y-6">
-      {/* Profile Card */}
+      
       <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
         <div className="flex flex-col sm:flex-row gap-6">
           <div className="relative flex-shrink-0 self-start" ref={avatarMenuRef}>
@@ -499,9 +499,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         </div>
       </div>
 
-      {/* Security & Preferences Grid */}
+      
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Security */}
+        
         <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
           <div className="flex items-center gap-2 mb-5">
             <div className="p-1.5 rounded-lg bg-[#701CC0]/10">
@@ -545,7 +545,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
           </div>
         </div>
 
-        {/* Preferences */}
+        
         <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
           <div className="flex items-center gap-2 mb-5">
             <div className="p-1.5 rounded-lg bg-[#701CC0]/10">
@@ -592,7 +592,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         </div>
       </div>
 
-      {/* Logout */}
+      
       <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -613,7 +613,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
 
   return (
     <div className={`w-full h-full ${pageBg} text-[#111014] flex flex-col`}>
-      {/* Panel: match Staff Orbital / User Management structure */}
+      
       {isPanel && (
         <div className="flex-1 flex justify-center px-6 pt-2">
           <div className="w-full max-w-6xl flex flex-col h-full">
@@ -629,7 +629,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         </div>
       )}
 
-      {/* Dark variant: connect/client pages */}
+      
       {isDark && (
         <>
           <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0">
@@ -648,7 +648,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         </>
       )}
 
-      {/* Image Crop Modal */}
+      
       {cropImageSrc && (
         <ImageCropModal
           imageSrc={cropImageSrc}
@@ -657,7 +657,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         />
       )}
 
-      {/* Success Modal */}
+      
       {showSuccessModal && (
         <div 
           className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4" 
@@ -693,7 +693,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         </div>
       )}
 
-      {/* Password Modal */}
+      
       {showPasswordModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={closePasswordModal}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-[#E5E7EB]" onClick={(e) => e.stopPropagation()}>

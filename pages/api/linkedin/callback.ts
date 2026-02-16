@@ -14,8 +14,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const code = asStr(req.query.code);
   const state = asStr(req.query.state);
   if (!code) { res.status(400).send("Missing code"); return; }
-
-  // Exchange code -> token
   const tokenRes = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -44,8 +42,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const encAccess = encrypt(access_token);
   const encRefresh = refresh_token ? encrypt(refresh_token) : undefined;
   const expiresAt = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
-
-  // Decide flow by presence of state cookie
   const cookies = parseCookie(req.headers.cookie || "");
   const hasStateCookie = !!cookies.li_oauth_state;
   console.log("[LI] cookies", Object.keys(cookies));
@@ -53,9 +49,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   console.log("[LI] hasStateCookie", !!cookies.li_oauth_state);
 
   if (hasStateCookie) {
-    // logged-in connect flow
     if (!state || cookies.li_oauth_state !== state) { res.status(400).send("Invalid state"); return; }
-    // clear state cookie
     res.setHeader("Set-Cookie", serializeCookie("li_oauth_state", "", {
       path: "/api/linkedin/callback",
       maxAge: 0,
@@ -74,8 +68,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.redirect("/connect?connected=linkedin");
     return;
   }
-
-  // onboarding flow (no login)
   if (!state) { res.status(400).send("Missing state"); return; }
   const sess = await prisma.onboardingSession.findUnique({ where: { id: state } });
   if (!sess) { res.status(400).send("Invalid onboarding session"); return; }
@@ -85,8 +77,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     update: { accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
     create: { sessionId: state, platform: "linkedin", accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
   });
-
-  // ensure resume cookie exists so /session (no token) can load
   res.setHeader("Set-Cookie", serializeCookie("ob_session", state, {
     httpOnly: true,
     sameSite: "lax",

@@ -14,15 +14,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const code = asStr(req.query.code);
   const state = asStr(req.query.state);
   if (!code || !state) return res.status(400).send("Missing code/state");
-
-  // Decide which flow we're in by presence of the state cookie
   const cookies = parseCookie(req.headers.cookie || "");
   const hasStateCookie = !!cookies.fb_oauth_state;
-
-  // Verify state
   if (hasStateCookie) {
     if (cookies.fb_oauth_state !== state) return res.status(400).send("Invalid state");
-    // clear cookie
     res.setHeader(
       "Set-Cookie",
       serializeCookie("fb_oauth_state", "", {
@@ -34,12 +29,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     );
   } else {
-    // Onboarding: ensure the state is a valid onboarding session id
     const sess = await prisma.onboardingSession.findUnique({ where: { id: state } });
     if (!sess) return res.status(400).send("Invalid onboarding session");
   }
-
-  // Exchange code -> token
   const tokenUrl = "https://graph.facebook.com/v23.0/oauth/access_token";
   const params = new URLSearchParams({
     client_id: process.env.FACEBOOK_CLIENT_ID!,
@@ -60,8 +52,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const expiresAt = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
 
   if (hasStateCookie) {
-
-    // LOGGED-IN CONNECT FLOW
     const session = await getServerSession(req, res, authOptions);
     if (!session) return res.redirect("/login");
     const userId = Number((session.user as any).id);
@@ -74,7 +64,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.redirect("/connect?connected=facebook");
   } else {
-    // ONBOARDING FLOW (no login)
     const sessionId = state;
 
     await prisma.onboardingPlatformToken.upsert({

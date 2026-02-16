@@ -27,15 +27,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let userEmail: string | null = null;
 
     await prisma.$transaction(async (tx) => {
-      // Load session + client
       const sess = await tx.onboardingSession.findUnique({
         where: { id: token },
         include: { client: true },
       });
       if (!sess) throw new Error("Session not found");
       if (!sess.client) throw new Error("Client missing for session");
-
-      // Update answers / status
       const updateData: any = {
         answers,
         lastUpdatedAt: new Date(),
@@ -46,11 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         updateData.status = "completed";
       }
       await tx.onboardingSession.update({ where: { id: token }, data: updateData });
-
-      // Stop here if not completing yet
       if (!completed) return;
-
-      // Create or reuse a user
       const email = sess.client.email.toLowerCase();
       userEmail = email;
 
@@ -62,13 +55,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           data: { email, passwordEnc, role: "user" },
         });
       }
-
-      // Link Client -> User
       if (!sess.client.userId || sess.client.userId !== user.id) {
         await tx.client.update({ where: { id: sess.client.id }, data: { userId: user.id } });
       }
-
-      // Migrate platform tokens from onboarding -> user tokens
       // (We stored tokens encrypted already in onboarding; copy as-is)
       const tmpTokens = await tx.onboardingPlatformToken.findMany({
         where: { sessionId: token },
@@ -88,8 +77,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           },
         });
       }
-
-      // Clean up onboarding tokens + mark consumed
       if (tmpTokens.length > 0) {
         await tx.onboardingPlatformToken.deleteMany({ where: { sessionId: token } });
       }

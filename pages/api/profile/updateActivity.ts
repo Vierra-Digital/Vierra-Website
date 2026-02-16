@@ -17,8 +17,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const { status } = req.body;
-    
-    // Validate status
     if (status && !["online", "offline", "away", "busy"].includes(status)) {
       return res.status(400).json({ message: "Invalid status value" });
     }

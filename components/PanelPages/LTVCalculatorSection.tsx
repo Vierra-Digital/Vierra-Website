@@ -4,7 +4,6 @@ import { Inter } from "next/font/google"
 const inter = Inter({ subsets: ["latin"] })
 
 const LTVCalculatorSection = () => {
-    // no tabs required for LTV; single focused calculator
     const [averagePurchaseValue, setAveragePurchaseValue] = useState(0);
     const [costOfGoods, setCostOfGoods] = useState(0);
     const [numReferrals, setNumReferrals] = useState(0);
@@ -53,7 +52,7 @@ const LTVCalculatorSection = () => {
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                        {/* Input Section */}
+                        
                         <div className="lg:col-span-2">
                             <div className="bg-white rounded-xl shadow-sm border border-[#E5E7EB] p-6">
                                 <h2 className="text-lg font-semibold text-[#111827] mb-6">Input Values</h2>
@@ -140,7 +139,7 @@ const LTVCalculatorSection = () => {
                             </div>
                         </div>
 
-                        {/* Results Section */}
+                        
                         <div className="lg:col-span-1">
                             <div className="bg-gradient-to-br from-[#701CC0] to-[#8F42FF] rounded-xl shadow-lg p-6 text-white sticky top-6">
                                 <h2 className="text-lg font-semibold mb-6">Calculated Results</h2>

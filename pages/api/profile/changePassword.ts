@@ -14,8 +14,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
         const { currentPassword, newPassword } = req.body;
-
-        // Validate input
         if (!currentPassword || !newPassword) {
             return res.status(400).json({ message: "Current password and new password are required" });
         }
@@ -28,8 +26,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (!userEmail) {
             return res.status(400).json({ message: "User email not found in session" });
         }
-
-        // Get user with current password
         const user = await prisma.user.findUnique({
             where: { email: userEmail },
             select: { id: true, passwordEnc: true },
@@ -42,16 +38,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (!user.passwordEnc) {
             return res.status(400).json({ message: "User does not have a password set" });
         }
-
-        // Verify current password
         let storedPlain: string;
         try {
             storedPlain = decrypt(user.passwordEnc);
         } catch {
             return res.status(400).json({ message: "Invalid stored password format" });
         }
-
-        // timing-safe compare
         const isCurrentPasswordValid =
             storedPlain.length === currentPassword.length &&
             crypto.timingSafeEqual(Buffer.from(storedPlain), Buffer.from(currentPassword));
@@ -59,11 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (!isCurrentPasswordValid) {
             return res.status(400).json({ message: "Current password is incorrect" });
         }
-
-        // Encrypt new password
         const encryptedNewPassword = encrypt(newPassword);
-
-        // Update password
         await prisma.user.update({
             where: { email: userEmail },
             data: { passwordEnc: encryptedNewPassword },

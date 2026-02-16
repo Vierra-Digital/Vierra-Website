@@ -12,11 +12,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const clientId = process.env.FACEBOOK_CLIENT_ID!;
   const redirectUri = process.env.FACEBOOK_REDIRECT_URI!;
   const scope = "public_profile,pages_manage_posts";
-
-  // If ?session=<OnboardingSession.id> is present, run the ONBOARDING flow (no login required)
   const onboardingSessionId = asStr(req.query.session);
   if (onboardingSessionId) {
-    // validate the onboarding session exists
     const sess = await prisma.onboardingSession.findUnique({ where: { id: onboardingSessionId } });
     if (!sess) return res.status(400).send("Invalid onboarding session");
 
@@ -26,17 +23,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
       `&response_type=code` +
       `&scope=${encodeURIComponent(scope)}` +
-      // Use the onboarding session id as state
       `&state=${encodeURIComponent(onboardingSessionId)}`;
 
     return res.redirect(authUrl);
   }
-
-  // Otherwise, LOGGED-IN "Connect" flow
   const session = await requireSession(req, res);
   if (!session) return res.status(401).json({ message: "Not authenticated" });
-
-  // CSRF state via cookie
   const state = randomBytes(16).toString("hex");
   res.setHeader(
     "Set-Cookie",

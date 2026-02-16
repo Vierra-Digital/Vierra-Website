@@ -138,7 +138,7 @@ export default function RootLayout({
         <link rel="canonical" href={SITE_URL} />
         <link rel="manifest" href="/manifest.json" />
         
-        {/* Preconnect to external origins for performance */}
+        
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://cdn.jsdelivr.net" />

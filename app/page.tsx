@@ -158,7 +158,7 @@ export default function Page() {
               eliminate risky marketing investments.
             </motion.p>
 
-            {/* Hidden from view but visible to crawlers in raw HTML */}
+            
             <div className="sr-only">
               <h2>About Vierra</h2>
               <p>

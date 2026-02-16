@@ -37,8 +37,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         filename: filename || null,
       },
     });
-
-    // Return the permanent URL for this image
     const url = `/api/blog/image/${image.id}`;
     return res.status(200).json({ url, id: image.id });
   } catch (e) {

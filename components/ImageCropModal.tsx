@@ -53,7 +53,7 @@ export default function ImageCropModal({ imageSrc, onComplete, onCancel }: Image
         className="relative w-full max-w-lg flex flex-col bg-white rounded-2xl shadow-2xl border border-[#E5E7EB] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header - matches Password modal */}
+        
         <div className="flex items-center justify-between px-6 py-5 border-b border-[#E5E7EB]">
           <div>
             <h2 className="text-lg font-semibold text-[#111827]">Crop Photo</h2>
@@ -68,7 +68,7 @@ export default function ImageCropModal({ imageSrc, onComplete, onCancel }: Image
           </button>
         </div>
 
-        {/* Crop area */}
+        
         <div className="relative h-[400px] w-full bg-[#111827]">
           <Cropper
             image={imageSrc}
@@ -84,7 +84,7 @@ export default function ImageCropModal({ imageSrc, onComplete, onCancel }: Image
           />
         </div>
 
-        {/* Content - Zoom slider */}
+        
         <div className="p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-1.5">Zoom</label>
@@ -100,7 +100,7 @@ export default function ImageCropModal({ imageSrc, onComplete, onCancel }: Image
           </div>
         </div>
 
-        {/* Footer - matches Password modal */}
+        
         <div className="px-6 py-4 bg-[#F9FAFB] border-t border-[#E5E7EB] rounded-b-2xl flex justify-end gap-3">
           <button
             onClick={onCancel}

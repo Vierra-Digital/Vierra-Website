@@ -7,7 +7,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireSession(req, res);
   if (!session) return res.status(401).json({ message: "Not authenticated" });
   const role = (session.user as any)?.role;
-  // Allow staff and admin to read data, but only admin to modify data
   if (req.method === "GET") {
     if (role !== "admin" && role !== "staff") return res.status(403).json({ message: "Forbidden" });
   } else {
@@ -66,7 +65,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!email || !password || !newRole) {
       return res.status(400).json({ message: "email, password and role are required" });
     }
-    // Normalize "client" to "user" (client is the UI label, user is the DB value)
     const roleToStore = String(newRole).toLowerCase() === "client" ? "user" : String(newRole);
     try {
       const created = await prisma.user.create({
@@ -142,7 +140,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const userId = Number(Array.isArray(id) ? id[0] : id);
     if (!userId) return res.status(400).json({ message: "id is required" });
     try {
-      // Detach any client relation first to avoid FK issues
       await prisma.client.updateMany({ where: { userId: userId }, data: { userId: null } });
       await prisma.user.delete({ where: { id: userId } });
       return res.status(200).json({ deleted: userId });

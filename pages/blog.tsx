@@ -47,7 +47,6 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
         revalidate: 60,
     };
     } catch (error) {
-        // If database is unavailable during build, return empty arrays
         // The page will be regenerated at runtime when database is available
         console.warn('Database unavailable during static props generation, using empty data:', error);
         return {
@@ -61,7 +60,6 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
 
 const formatDate = (dateString?: string | null): string => {
     if (!dateString) return "";
-    // Parse date string directly to avoid timezone issues
     const dateStr = dateString.split('T')[0]; // Get YYYY-MM-DD part
     const [year, month, day] = dateStr.split('-');
     return `${month}/${day}/${year}`;

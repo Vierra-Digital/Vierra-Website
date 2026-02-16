@@ -13,7 +13,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // Get all users with their lastActiveAt timestamps
     const users = await prisma.user.findMany({
       select: {
         id: true,
@@ -27,7 +26,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     for (const user of users) {
       if (!user.lastActiveAt) {
-        // If no lastActiveAt, set status to offline
         if (user.status !== "offline") {
           updates.push({ id: user.id, status: "offline" });
         }
@@ -43,14 +41,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       } else if (diffMinutes <= 30) {
         newStatus = "away";
       }
-
-      // Only update if status has changed
       if (user.status !== newStatus) {
         updates.push({ id: user.id, status: newStatus });
       }
     }
-
-    // Batch update all users whose status needs to change
     if (updates.length > 0) {
       await Promise.all(
         updates.map(update =>

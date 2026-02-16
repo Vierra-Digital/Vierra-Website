@@ -18,7 +18,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!session) return res.status(404).json({ message: "Session not found" });
 
     const now = new Date();
-    // Hard expiry (1 hour after creation via expiresAt)
     if (session.expiresAt && now > session.expiresAt) {
       if (session.status !== "expired") {
         try {
@@ -37,32 +36,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       return res.status(410).json({ message: "Session expired" });
     }
-
-    // If already submitted, block
     if (session.status === "completed" || session.submittedAt) {
       return res.status(410).json({ message: "Session already submitted" });
     }
-
-    // Single-use link via cookie
     const cookieName = `onb_${token}`;
     const cookies = parseCookie(req.headers.cookie ?? "");
     const hasCookie = Boolean(cookies[cookieName]);
 
     if (!session.firstAccessedAt) {
-      // First click - allow and set firstAccessedAt + cookie
       const updated = await prisma.onboardingSession.update({
         where: { id: token },
         data: { firstAccessedAt: now, status: "in_progress" },
         include: { client: true },
       });
-
-      // Set HttpOnly cookie valid for the remaining time (max 1h)
       const secondsLeft = session.expiresAt
         ? Math.max(1, Math.floor((session.expiresAt.getTime() - now.getTime()) / 1000))
         : 60 * 60;
 
       const cookiesToSet = [
-        // one-time link guard (cookie only needs to come back to this API group)
         serializeCookie(`onb_${token}`, "1", {
           httpOnly: true,
           sameSite: "lax",
@@ -70,7 +61,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           path: "/api/session",
           maxAge: secondsLeft,
         }),
-        // resume cookie for token-less /session route after OAuth
         serializeCookie("ob_session", token, {
           httpOnly: true,
           sameSite: "lax",
@@ -83,8 +73,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.setHeader("Set-Cookie", cookiesToSet);
       return res.status(200).json(updated);
     }
-
-    // Already accessed before:
     // Only allow if the same browser presents the cookie; otherwise "already used"
     if (!hasCookie) {
       return res.status(410).json({ message: "Link already used" });

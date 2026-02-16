@@ -7,13 +7,10 @@ const asStr = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v
 
 async function linkedinTokenIsValid(token: string) {
   try {
-    // Try OpenID userinfo first
     const r1 = await fetch("https://api.linkedin.com/v2/userinfo", {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (r1.ok) return true;
-
-    // Fallback to basic profile endpoint
     const r2 = await fetch("https://api.linkedin.com/v2/me", {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -32,8 +29,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(405).json({ message: "Method Not Allowed" });
     return;
   }
-
-  // Onboarding status (no login)
   const sessionId = asStr(req.query.session);
   if (sessionId) {
     try {
@@ -55,8 +50,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return;
     }
   }
-
-  // Logged-in status
   const session = await requireSession(req, res);
   if (!session) {
     res.status(401).json({ connected: false });

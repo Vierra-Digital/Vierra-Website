@@ -30,7 +30,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       FROM users WHERE email = ${userEmail} LIMIT 1
     `;
     const hasImage = hasImageResult[0]?.hasImage ?? false;
-    // Use imageUpdatedAt timestamp for cache busting; fallback to user id for existing images (unique per user)
     const imageVersion = user.imageUpdatedAt
       ? user.imageUpdatedAt.getTime()
       : hasImage

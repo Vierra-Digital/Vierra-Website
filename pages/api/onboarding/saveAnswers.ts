@@ -20,8 +20,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const existingAnswers = (session.answers as any) || {};
     const updatedAnswers = { ...existingAnswers, ...answers };
-
-    // Determine status: completed takes precedence over in_progress
     let newStatus: string | undefined;
     if (completed) {
       newStatus = "completed";

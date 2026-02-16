@@ -47,10 +47,7 @@ const LoginPage = () => {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
-
-    // // Temporary direct access - REMOVE THIS IN PRODUCTION
     // localStorage.setItem("isAuthenticated", "true");
-    // router.push("/panel");
 
     try {
       const response = await signIn("credentials", { email, password, redirect: false });
@@ -58,8 +55,6 @@ const LoginPage = () => {
       if (response?.ok) {
         const session = await getSession();
         const role = (session?.user as any)?.role;
-
-        // Staff members (User table) go to panel, Clients go to client page
         if (role === "staff" || role === "admin") {
           router.replace("/panel");
         } else {

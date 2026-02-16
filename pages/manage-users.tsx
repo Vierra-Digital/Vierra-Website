@@ -40,7 +40,7 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
         <meta name="robots" content="noindex, nofollow" />
       </Head>
     <div className="relative min-h-screen bg-[#18042A] text-white flex">
-      {/* Sidebar */}
+      
       <div className="absolute top-4 left-4 z-20">
         <Link
           href={dashboardHref}
@@ -89,7 +89,7 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
         </button>
       </div>
 
-      {/* Main Content */}
+      
       <div className="flex-1 p-6">
         <h1 className="text-2xl font-bold mb-4">Manage Users</h1>
         {users.map((u) => (
@@ -117,15 +117,11 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const session = await getServerSession(ctx.req, ctx.res, authOptions)
-
-  // Not logged in -> login
   if (!session) {
     return { redirect: { destination: "/login", permanent: false } }
   }
 
   const role = (session.user as any).role
-
-  // Only admins allowed
   if ((session.user as any).role !== "admin") {
     return { redirect: { destination: "/client", permanent: false } }
   }

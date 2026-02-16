@@ -24,7 +24,6 @@ const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
 const inter = Inter({ subsets: ["latin"] });
 
 const formatDate = (dateString: string): string => {
-    // Parse date string directly to avoid timezone issues
     const dateStr = dateString.split('T')[0]; // Get YYYY-MM-DD part
     const [year, month, day] = dateStr.split('-');
     const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
@@ -54,7 +53,7 @@ const BlogViewPage = ({
                 <meta name="keywords" content={tag ? tag.split(',').map(t => t.trim()).join(', ') : 'marketing, lead generation, business growth, digital marketing'} />
                 <link rel="canonical" href={blogUrl} />
                 
-                {/* Open Graph */}
+                
                 <meta property="og:type" content="article" />
                 <meta property="og:title" content={title} />
                 <meta property="og:description" content={description || `${title} - Insights and strategies from Vierra.`} />
@@ -68,7 +67,7 @@ const BlogViewPage = ({
                     <meta key={index} property="article:tag" content={t.trim()} />
                 ))}
                 
-                {/* Twitter */}
+                
                 <meta name="twitter:card" content="summary_large_image" />
                 <meta name="twitter:title" content={title} />
                 <meta name="twitter:description" content={description || `${title} - Insights and strategies from Vierra.`} />
@@ -317,7 +316,7 @@ const BlogViewPage = ({
                         </div>
                     </div>
                 )}
-                {/* Social Share Bar */}
+                
                 <SocialShareBar 
                   url={`${process.env.NODE_ENV === 'production' ? 'https://vierra.com' : 'http://localhost:3000'}/blog/${slug}`}
                   title={title}
@@ -347,7 +346,6 @@ export const getStaticPaths: GetStaticPaths = async () => {
 
     return { paths, fallback: 'blocking' };
     } catch (error) {
-        // If database is unavailable during build, return empty paths
         // Next.js will use fallback mode and generate pages at runtime
         console.warn('Database unavailable during static path generation, using fallback mode:', error);
         return { paths: [], fallback: 'blocking' };
@@ -406,7 +404,6 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
         revalidate: 60,
     };
     } catch (error) {
-        // If database is unavailable, return 404
         // This allows the build to complete, and the page will be generated at runtime
         console.warn('Database unavailable during static props generation:', error);
         return { notFound: true };

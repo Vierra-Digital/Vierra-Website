@@ -15,15 +15,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const { filter } = req.query
-  // filter: "me" | userId | clientId - optional; when omitted, default to current user only (privacy)
 
   try {
     const rawId = (session.user as { id?: number | string })?.id
     const uid = rawId != null ? Number(rawId) : undefined
 
     const where: { userId?: number; clientId?: string } = {}
-
-    // Client users (role "user") only see files linked to their client
     if (role === "user") {
       const client = await prisma.client.findUnique({
         where: { userId: uid != null && !Number.isNaN(uid) ? uid : -1 },
