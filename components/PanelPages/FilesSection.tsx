@@ -63,7 +63,7 @@ interface FileItem {
   owner?: string
 }
 
-const FilesSection: React.FC = () => {
+const FilesSection: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => {
   const [search, setSearch] = useState("")
   const [files, setFiles] = useState<FileItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -177,11 +177,13 @@ const FilesSection: React.FC = () => {
                       <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
                         File Type
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                        Owner
-                      </th>
+                      {!readOnly && (
+                        <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
+                          Owner
+                        </th>
+                      )}
                       <th className="px-4 py-3 text-right text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                        Manage
+                        {readOnly ? "Actions" : "Manage"}
                       </th>
                     </tr>
                   </thead>
@@ -210,9 +212,11 @@ const FilesSection: React.FC = () => {
                         <td className="px-4 py-4 text-sm text-[#374151]">
                           {file.fileType}
                         </td>
-                        <td className="px-4 py-4 text-sm text-[#374151]">
-                          {file.owner ?? "—"}
-                        </td>
+                        {!readOnly && (
+                          <td className="px-4 py-4 text-sm text-[#374151]">
+                            {file.owner ?? "—"}
+                          </td>
+                        )}
                         <td className="px-4 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button
@@ -224,14 +228,16 @@ const FilesSection: React.FC = () => {
                             >
                               <FiDownload className="w-4 h-4" />
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => setFileToDelete(file)}
-                              className="p-1.5 rounded-md hover:bg-red-50 text-red-600 transition-colors"
-                              aria-label="Delete"
-                            >
-                              <FiTrash2 className="w-4 h-4" />
-                            </button>
+                            {!readOnly && (
+                              <button
+                                type="button"
+                                onClick={() => setFileToDelete(file)}
+                                className="p-1.5 rounded-md hover:bg-red-50 text-red-600 transition-colors"
+                                aria-label="Delete"
+                              >
+                                <FiTrash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -242,12 +248,14 @@ const FilesSection: React.FC = () => {
             </div>
           )}
 
-          <ConfirmDeleteFileModal
-            isOpen={!!fileToDelete}
-            fileName={fileToDelete ? getNameWithoutExtension(fileToDelete.name) : ""}
-            onConfirm={handleConfirmDelete}
-            onCancel={() => setFileToDelete(null)}
-          />
+          {!readOnly && (
+            <ConfirmDeleteFileModal
+              isOpen={!!fileToDelete}
+              fileName={fileToDelete ? getNameWithoutExtension(fileToDelete.name) : ""}
+              onConfirm={handleConfirmDelete}
+              onCancel={() => setFileToDelete(null)}
+            />
+          )}
         </div>
       </div>
     </div>

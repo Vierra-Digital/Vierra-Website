@@ -66,12 +66,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!email || !password || !newRole) {
       return res.status(400).json({ message: "email, password and role are required" });
     }
+    // Normalize "client" to "user" (client is the UI label, user is the DB value)
+    const roleToStore = String(newRole).toLowerCase() === "client" ? "user" : String(newRole);
     try {
       const created = await prisma.user.create({
         data: {
           name: name || null,
           email,
-          role: String(newRole),
+          role: roleToStore,
           passwordEnc: encrypt(String(password)),
         },
         select: { id: true, name: true, email: true, role: true },
@@ -102,7 +104,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const updateData: any = {};
       if (name !== undefined) updateData.name = name;
       if (email !== undefined) updateData.email = email;
-      if (newRole) updateData.role = String(newRole);
+      if (newRole) updateData.role = String(newRole).toLowerCase() === "client" ? "user" : String(newRole);
       if (position !== undefined) updateData.position = position;
       if (country !== undefined) updateData.country = country;
       if (company_email !== undefined) updateData.company_email = company_email;

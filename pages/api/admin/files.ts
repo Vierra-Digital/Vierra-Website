@@ -6,7 +6,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireSession(req, res)
   if (!session) return res.status(401).json({ message: "Not authenticated" })
   const role = (session.user as { role?: string })?.role
-  if (role !== "admin" && role !== "staff")
+  if (role !== "admin" && role !== "staff" && role !== "user")
     return res.status(403).json({ message: "Forbidden" })
 
   if (req.method !== "GET") {
@@ -22,7 +22,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const uid = rawId != null ? Number(rawId) : undefined
 
     const where: { userId?: number; clientId?: string } = {}
-    if (filter === "me" || !filter) {
+
+    // Client users (role "user") only see files linked to their client
+    if (role === "user") {
+      const client = await prisma.client.findUnique({
+        where: { userId: uid != null && !Number.isNaN(uid) ? uid : -1 },
+        select: { id: true },
+      })
+      if (client) {
+        where.clientId = client.id
+      } else {
+        where.clientId = "__none__"
+      }
+    } else if (filter === "me" || !filter) {
       if (uid != null && !Number.isNaN(uid)) {
         where.userId = uid
       } else {

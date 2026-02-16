@@ -6,7 +6,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireSession(req, res)
   if (!session) return res.status(401).json({ message: "Not authenticated" })
   const role = (session.user as { role?: string })?.role
-  if (role !== "admin" && role !== "staff")
+  if (role !== "admin" && role !== "staff" && role !== "user")
     return res.status(403).json({ message: "Forbidden" })
 
   if (req.method !== "GET") {
@@ -29,8 +29,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const sessionUserId = (session.user as unknown as { id?: number })?.id
   const uid = sessionUserId != null ? Number(sessionUserId) : null
 
-  const where: { signingTokenId: string; userId?: number } = { signingTokenId: tokenId }
-  if (uid != null) where.userId = uid
+  const where: { signingTokenId: string; userId?: number; clientId?: string } = { signingTokenId: tokenId }
+
+  if (role === "user") {
+    const client = await prisma.client.findUnique({
+      where: { userId: uid != null && !Number.isNaN(uid) ? uid : -1 },
+      select: { id: true },
+    })
+    if (client) {
+      where.clientId = client.id
+    } else {
+      return res.status(404).json({ message: "File not found." })
+    }
+  } else if (uid != null) {
+    where.userId = uid
+  }
 
   const stored = await prisma.storedFile.findFirst({
     where,

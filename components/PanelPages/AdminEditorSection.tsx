@@ -94,7 +94,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     const [userToDelete, setUserToDelete] = useState<{ id: number; name: string | null; email: string | null } | null>(null)
     const [searchQuery, setSearchQuery] = useState<string>("")
     const [currentPage, setCurrentPage] = useState<number>(0)
-    const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'staff' | 'client'>('all')
+    const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'staff' | 'user'>('all')
     const [sortBy, setSortBy] = useState<'id' | 'name' | 'email' | 'role'>('role')
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
     const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
@@ -182,9 +182,9 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     const filteredUsers = useMemo(() => {
         let filtered = users
         
-        // Filter by role
+        // Filter by role (user = client accounts)
         if (roleFilter !== 'all') {
-            filtered = filtered.filter(u => u.role === roleFilter)
+            filtered = filtered.filter(u => u.role === roleFilter || (roleFilter === 'user' && u.role === 'client'))
         }
         
         // Filter by search query
@@ -294,7 +294,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                             <select
                                                 value={roleFilter}
                                                 onChange={(e) => {
-                                                    setRoleFilter(e.target.value as 'all' | 'admin' | 'staff' | 'client')
+                                                    setRoleFilter(e.target.value as 'all' | 'admin' | 'staff' | 'user')
                                                     setCurrentPage(0)
                                                 }}
                                                 className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
@@ -302,7 +302,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                                 <option value="all">All Roles</option>
                                                 <option value="admin">Admin</option>
                                                 <option value="staff">Staff</option>
-                                                <option value="client">Client</option>
+                                                <option value="user">Client</option>
                                             </select>
                                             <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                                                 <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -456,13 +456,13 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                     </td>
                                                     <td className="px-4 py-4">
                                                         <select 
-                                                            value={u.role === "user" ? "admin" : (u.role || "admin")} 
+                                                            value={u.role === "user" || u.role === "client" ? "user" : (u.role || "admin")} 
                                                             onChange={(e) => updateRole(u.id, e.target.value)} 
                                                             className="text-sm border border-[#E5E7EB] rounded-md pl-2 pr-[5px] mr-10 py-0.5 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
                                                         >
                                                             <option value="admin">Admin</option>
                                                             <option value="staff">Staff</option>
-                                                            <option value="client">Client</option>
+                                                            <option value="user">Client</option>
                                         </select>
                                     </td>
                                                     <td className="px-4 py-4">
@@ -535,7 +535,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
     const [name, setName] = useState<string>("")
     const [email, setEmail] = useState<string>("")
     const [password, setPassword] = useState<string>("")
-    const [role, setRole] = useState<string>("admin")
+    const [role, setRole] = useState<string>("user")
     const [submitting, setSubmitting] = useState<boolean>(false)
     const [error, setError] = useState<string>("")
     const [showSuccess, setShowSuccess] = useState<boolean>(false)
@@ -753,7 +753,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                             >
                                 <option value="admin">Admin</option>
                                 <option value="staff">Staff</option>
-                                <option value="client">Client</option>
+                                <option value="user">Client</option>
                             </select>
                             <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                                 <ChevronDown className="w-5 h-5 text-[#6B7280]" />
@@ -1201,7 +1201,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                                 }}
                                                 className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
                                             >
-                                                <option value="client">Client</option>
+                                                <option value="user">Client</option>
                                                 <option value="business">Business</option>
                                                 <option value="status">Status</option>
                                                 <option value="created">Created Date</option>

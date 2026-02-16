@@ -313,7 +313,9 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             const res = await fetch("/api/admin/users")
             if (!res.ok) throw new Error("Failed to fetch team data")
             const data = await res.json()
-            const shaped = data.map((u: any) => ({
+            // Only show staff and admin in Staff Orbital (exclude client/user accounts)
+            const teamOnly = (data as any[]).filter((u: any) => u.role === "admin" || u.role === "staff")
+            const shaped = teamOnly.map((u: any) => ({
                 id: u.id,
                 name: u.name,
                 email: u.email,

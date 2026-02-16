@@ -145,7 +145,7 @@ const PanelPage = ({ dashboardHref }: PageProps) => {
         <title>Vierra | Admin Panel</title>
         <meta name="robots" content="noindex,nofollow" />
       </Head>
-      <div id="main-panel" className="w-full h-screen bg-white flex flex-row overflow-hidden">
+      <div id="main-panel" className="fixed inset-0 w-full h-full bg-white flex flex-row overflow-hidden">
         <div id="left-side" className={`relative flex flex-col  h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
           <div id="vierra-nameplate-body" className="w-full h-20 flex items-center justify-center mb-4">
             <Link href="/">

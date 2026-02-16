@@ -3,7 +3,7 @@ import Image from "next/image";
 import Head from "next/head";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import { Eye, EyeOff } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/router";
 import Script from "next/script";
 import { signIn, useSession, getSession } from "next-auth/react";
 import { FcGoogle } from "react-icons/fc";
@@ -27,18 +27,15 @@ const LoginPage = () => {
   const [error, setError] = useState("");
   const router = useRouter();
   const { data: session, status } = useSession();
-  const searchParams = useSearchParams();
-  const googleError = searchParams ? searchParams.get("error") : null;
+  const googleError = typeof router.query?.error === "string" ? router.query.error : null;
 
   useEffect(() => {
-    if (status === "loading") return; // wait until session is loaded
-    if (!session) return; // stay on login if no session
+    if (status === "loading") return;
+    if (!session) return;
 
-    if ((session.user as any).role === "user") {
-      router.push("/client");
-    } else {
-      router.push("/panel");
-    }
+    const role = (session.user as any)?.role;
+    const target = role === "user" ? "/client" : "/panel";
+    router.replace(target);
   }, [session, status, router]);
 
   const initParticles = () => {
@@ -64,9 +61,9 @@ const LoginPage = () => {
 
         // Staff members (User table) go to panel, Clients go to client page
         if (role === "staff" || role === "admin") {
-          router.push("/panel");
+          router.replace("/panel");
         } else {
-          router.push("/client");
+          router.replace("/client");
         }
       } else {
         setError(response?.error ?? "Invalid credentials");
@@ -187,7 +184,7 @@ const LoginPage = () => {
             </div>
             <button
               type="button"
-              onClick={() => signIn("google", { callbackUrl: "/panel" })}
+              onClick={() => signIn("google", { callbackUrl: "/client" })}
               className={`w-full flex items-center justify-center px-4 py-2 bg-white text-gray-700 rounded-md shadow-md transform transition-transform duration-300 hover:scale-105 ${inter.className} font-medium`}
             >
               <FcGoogle className="w-5 h-5 mr-2" />

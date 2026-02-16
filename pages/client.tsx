@@ -1,145 +1,211 @@
-import { useSession, signOut } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
-import Image from "next/image"
-import Link from "next/link"
+import React, { useEffect, useState } from "react"
 import Head from "next/head"
-import { FiLogOut, FiFileText, FiLink } from "react-icons/fi"
 import { Inter } from "next/font/google"
-import type { GetServerSideProps } from "next"
+import Image from "next/image"
+import ProfileImage from "@/components/ProfileImage"
+import Link from "next/link"
+import { FiLogOut, FiFolder } from "react-icons/fi"
+import { AiOutlineAppstore } from "react-icons/ai"
+import { CiSearch } from "react-icons/ci"
+import { RiArrowDropDownLine } from "react-icons/ri"
+import { useSession, signOut } from "next-auth/react"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/pages/api/auth/[...nextauth]"
-import UserSettingsPage from "@/components/UserSettingsPage"
+import type { GetServerSideProps } from "next"
+import dynamic from "next/dynamic"
 
-type PageProps = { dashboardHref: string }
+const UserSettingsPage = dynamic(() => import("@/components/UserSettingsPage"), {
+  ssr: false,
+})
+const FilesSection = dynamic(() => import("@/components/PanelPages/FilesSection"), {
+  ssr: false,
+})
 
 const inter = Inter({ subsets: ["latin"] })
 
-export default function ClientsPage({ dashboardHref }: PageProps) {
-  const { data: session, status } = useSession()
-  const router = useRouter()
+type PageProps = { dashboardHref: string }
+
+const ClientPage = ({ dashboardHref }: PageProps) => {
   const [showSettings, setShowSettings] = useState(false)
-  const [imageVersion, setImageVersion] = useState(0)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [currentSection, setCurrentSection] = useState(0)
+  const { data: session, status } = useSession()
+  const [currentUserName, setCurrentUserName] = useState<string | null>(null)
+  const [imageVersion, setImageVersion] = useState<number>(0)
+
+  void dashboardHref
 
   useEffect(() => {
-    if (status === "loading") return
-    if (!session) router.replace("/login")
-  }, [session, status, router])
+    fetchCurrentUser()
+  }, [])
 
   useEffect(() => {
-    const fetchUser = async () => {
+    const updateActivity = async () => {
       try {
-        const r = await fetch("/api/profile/getUser")
-        if (r.ok) {
-          const d = await r.json()
-          if (d.imageVersion) setImageVersion(d.imageVersion)
-        }
-      } catch {}
+        await fetch("/api/profile/updateActivity", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "online" }),
+        })
+      } catch (error) {
+        console.error("Failed to update activity:", error)
+      }
     }
-    if (session) fetchUser()
-  }, [session])
+    updateActivity()
+    const interval = setInterval(updateActivity, 2 * 60 * 1000)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) updateActivity()
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [])
+
+  async function fetchCurrentUser() {
+    try {
+      const response = await fetch("/api/profile/getUser")
+      if (response.ok) {
+        const userData = await response.json()
+        setCurrentUserName(userData.name)
+        if (userData.imageVersion) setImageVersion(userData.imageVersion)
+      }
+    } catch (error) {
+      console.error("Failed to fetch current user:", error)
+    }
+  }
 
   if (status === "loading") {
     return (
-      <div className="relative min-h-screen bg-gradient-to-br from-[#4F1488] via-[#2E0A4F] to-[#18042A] flex items-center justify-center">
-        <p className="text-white text-xl">Loading...</p>
-      </div>
+      <>
+        <Head>
+          <title>Vierra | Client Panel</title>
+          <meta name="robots" content="noindex,nofollow" />
+        </Head>
+        <div className="fixed inset-0 bg-white flex items-center justify-center">
+          <p className={`text-[#111827] ${inter.className}`}>Loading...</p>
+        </div>
+      </>
     )
   }
 
   return (
     <>
       <Head>
-        <title>Vierra | Client Dashboard</title>
-        <meta name="robots" content="noindex, nofollow" />
+        <title>Vierra | Client Panel</title>
+        <meta name="robots" content="noindex,nofollow" />
       </Head>
-      <div className="relative min-h-screen bg-[#18042A] text-white flex">
-        {/* Logo top-left */}
-        <div className="absolute top-4 left-4 z-20">
-          <Link
-            href={dashboardHref}
-            aria-label="Go to homepage"
-            className="block"
-          >
-            <Image
-              src="/assets/vierra-logo.png"
-              alt="Vierra Logo"
-              width={120}
-              height={40}
-              className="cursor-pointer h-10 w-auto"
-            />
-          </Link>
-        </div>
-
-        {/* Sidebar */}
-        <div className="w-56 bg-[#2E0A4F] h-screen flex flex-col justify-between pt-20 pb-4 px-4">
-          <div className="flex flex-col space-y-2">
-            <button
-              onClick={() => router.push("/client")}
-              className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
-            >
-              <FiFileText className="w-5 h-5" />
-              <span className={`ml-3 text-sm font-medium ${inter.className}`}>
+      <div id="main-panel" className="fixed inset-0 w-full h-full bg-white flex flex-row overflow-hidden">
+        <div id="left-side" className={`relative flex flex-col h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
+          <div id="vierra-nameplate-body" className="w-full h-20 flex items-center justify-center mb-4">
+            <Link href="/">
+              <Image
+                src="/assets/vierra-logo.png"
+                alt="Vierra Go Home"
+                width={56}
+                height={32}
+                className="w-24 rounded-sm"
+              />
+            </Link>
+          </div>
+          <div id="panel-nav" className="w-full h-full flex flex-col gap-y-[5px] items-center text-[#EDF1F5]">
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(0); setShowSettings(false); setIsSidebarOpen(false) }} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 0 ? "bg-white text-black" : "hover:bg-white hover:text-black"}`}>
+              <AiOutlineAppstore />
+              <span className={`text-xs font-normal ${inter.className}`}>
                 Dashboard
               </span>
-            </button>
-            <button
-              onClick={() => router.push("/connect")}
-              className="flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200"
-            >
-              <FiLink className="w-5 h-5" />
-              <span className={`ml-3 text-sm font-medium ${inter.className}`}>
-                Connect
+            </div>
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false) }} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 1 ? "bg-white text-black" : "hover:bg-white hover:text-black"}`}>
+              <FiFolder />
+              <span className={`text-xs font-normal ${inter.className}`}>
+                Files
               </span>
-            </button>
+            </div>
           </div>
 
-          <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className={`flex items-center w-full p-2 rounded text-white/70 hover:text-white hover:bg-white/10 transition-colors duration-200`}
-          >
-            <FiLogOut className="w-5 h-5" />
-            <span className={`ml-3 text-sm font-medium ${inter.className}`}>
-              Logout
-            </span>
-          </button>
+          <div className="w-full flex justify-center absolute bottom-6 left-0">
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="group w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 justify-start rounded-xl text-white bg-transparent hover:bg-white hover:text-black transition"
+            >
+              <FiLogOut className="w-5 h-5 text-white group-hover:text-black transition-colors" />
+              <span className={`text-xs ${inter.className} ml-2`}>Logout</span>
+            </button>
+          </div>
         </div>
 
-        {/* Main content */}
-        <div className="flex-1 flex flex-col">
-          {/* Top bar */}
-          <div className="h-16 bg-[#2E0A4F] flex items-center pl-64 pr-8 justify-end relative">
-            <button
-              className="ml-4 flex items-center focus:outline-none absolute right-8 top-1/2 -translate-y-1/2"
-              aria-label="Open user settings"
-              onClick={() => setShowSettings((prev) => !prev)}
-            >
-              <Image
-                src={
-                  imageVersion > 0
-                    ? `/api/profile/getImage?v=${imageVersion}`
-                    : typeof session?.user?.image === "string" && session?.user?.image?.length > 0
-                    ? session.user.image
-                    : "/assets/vierra-logo.png"
-                }
-                alt="Profile"
-                width={48}
-                height={48}
-                className="object-cover w-full h-full"
-                priority
-                quality={100}
-              />
-            </button>
+        <div id="right-side" className="flex flex-col w-full h-full overflow-y-auto relative">
+          <div id="right-side-heading" className="flex w-full flex-row h-16 bg-[#F8F0FF]">
+            <div className="md:hidden flex items-center pl-2">
+              <button
+                onClick={() => {
+                  setIsSidebarOpen(!isSidebarOpen)
+                  setShowSettings(false)
+                }}
+                aria-label="Toggle sidebar"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-6 w-6 text-[#701CC0]"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            </div>
+            <div id="left-side-search-holder" className="flex w-1/2 h-full pl-4 items-center">
+              <div id="search-bar" className="w-full max-w-xs md:max-w-md z-40">
+                <label htmlFor="panel-search" className="sr-only">Search</label>
+                <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
+                  <CiSearch className="w-5 h-5 text-[#701CC0] flex-shrink-0" />
+                  <input
+                    id="panel-search"
+                    type="search"
+                    placeholder="Search"
+                    className={`flex-1 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none ${inter.className}`}
+                  />
+                </div>
+              </div>
+            </div>
+            <div id="right-side-info-holder" className="flex w-1/2 h-full items-center justify-end p-2 gap-x-4 md:gap-x-8 text-[#A6A9AC]">
+              <div id="user-holder" className="flex items-center w-auto h-auto">
+                <button
+                  className="flex items-center gap-x-2"
+                  aria-label="Open user settings"
+                  onClick={() => setShowSettings((prev) => !prev)}
+                >
+                  <ProfileImage
+                    src={imageVersion > 0 ? `/api/profile/getImage?v=${imageVersion}` : null}
+                    alt="Profile"
+                    name={currentUserName || session?.user?.name || "User"}
+                    size={32}
+                    className="shadow-md"
+                    priority
+                    quality={100}
+                  />
+                  <div id="name-holder" className="hidden w-auto h-auto text-[#111014] md:flex items-center font-semibold">
+                    <span>{currentUserName || session?.user?.name || "Client"}</span>
+                  </div>
+                  <div id="dropdowner" className="hidden md:flex">
+                    <RiArrowDropDownLine width={32} height={32} className="w-8 h-8" />
+                  </div>
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div className="flex-1 bg-[#18042A] overflow-auto p-6">
+          <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden relative">
             {showSettings ? (
               <UserSettingsPage
                 user={{
-                  name: session?.user?.name ?? "Test User",
-                  email: session?.user?.email ?? "test@vierra.com",
-                  image: imageVersion > 0 ? `/api/profile/getImage?v=${imageVersion}` : (typeof session?.user?.image === "string" && session?.user?.image ? session.user.image : null),
+                  name: currentUserName,
+                  email: session?.user?.email || "",
+                  image: imageVersion > 0 ? `/api/profile/getImage?v=${imageVersion}` : null,
                 }}
+                onNameUpdate={setCurrentUserName}
                 onImageUpdate={async () => {
                   const r = await fetch("/api/profile/getUser")
                   if (r.ok) {
@@ -148,14 +214,16 @@ export default function ClientsPage({ dashboardHref }: PageProps) {
                   }
                 }}
                 onClose={() => setShowSettings(false)}
-                variant="dark"
+                variant="panel"
               />
             ) : (
               <>
-                <div className="flex-1 bg-[#18042A] overflow-auto p-6">
-                  <h2 className="text-2xl font-bold mb-6">Dashboard</h2>
-                  <p>Welcome, {session?.user?.email}</p>
-                </div>
+                {currentSection === 0 && (
+                  <div className="w-full p-6">
+                    <h2 className={`text-2xl font-bold text-[#111827] mb-4 ${inter.className}`}>Dashboard</h2>
+                  </div>
+                )}
+                {currentSection === 1 && <FilesSection readOnly />}
               </>
             )}
           </div>
@@ -172,15 +240,15 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   }
   const role = (session.user as any).role
 
-  // Not logged in -> login
-  if (!session) {
-    return { redirect: { destination: "/login", permanent: false } }
-  }
-
-  // If not a "user" (client), send to admin panel
   if ((session.user as any).role !== "user") {
     return { redirect: { destination: "/panel", permanent: false } }
   }
 
-  return { props: { dashboardHref: role === "user" ? "/client" : "/panel" } }
+  return {
+    props: {
+      dashboardHref: role === "user" ? "/client" : "/panel",
+    },
+  }
 }
+
+export default ClientPage
