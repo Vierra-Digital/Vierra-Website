@@ -31,8 +31,6 @@ if (typeof process !== "undefined" && !process.env.EMAIL_PASS) {
 
 const recipients = ["alex@vierradev.com"];
 const fromEmail = "business@alexshick.com";
-const emailLogoUrl = "https://vierradev.com/assets/vierra-logo-black.png";
-const emailLogoStyle = "height: 108px; width: auto; max-width: 100%; display: inline-block;";
 
 export async function sendEmail(data: EmailData): Promise<void> {
   const formattedPhoneNumber = data.phoneNumber.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
@@ -203,6 +201,10 @@ export async function sendSignerCopyEmail(email: string, documentName: string, a
 }
 
 export async function sendStaffSetPasswordEmail(staffEmail: string, staffName: string, setPasswordLink: string): Promise<void> {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    const missing = [!process.env.EMAIL_USER && "EMAIL_USER", !process.env.EMAIL_PASS && "EMAIL_PASS"].filter(Boolean).join(", ");
+    throw new Error(`Email not configured: ${missing} missing. Add them in your deployment environment (e.g. Vercel → Settings → Environment Variables).`);
+  }
   const mailOptions = {
     from: fromEmail,
     to: staffEmail,
