@@ -15,17 +15,13 @@ interface EmailData {
 }
 
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
+  service: "gmail",
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
   pool: false,
-});
+} as nodemailer.TransportOptions);
 
 if (typeof process !== "undefined" && !process.env.EMAIL_USER) {
   console.warn("EMAIL_USER is not set. Email sending will fail.");
