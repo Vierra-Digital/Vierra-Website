@@ -67,16 +67,28 @@ const LoginPage = () => {
     }
   };
 
-  if (status === "loading") {
+  if (status === "loading" || status === "authenticated") {
     return (
-      <div className="relative min-h-screen bg-gradient-to-br from-[#4F1488] via-[#2E0A4F] to-[#18042A] flex items-center justify-center">
-        <p className="text-white text-xl">Loading...</p>
+      <div className="relative min-h-screen bg-gradient-to-br from-[#4F1488] via-[#2E0A4F] to-[#18042A] flex flex-col items-center justify-center gap-6">
+        <Image
+          src="/assets/vierra-logo.png"
+          alt="Vierra"
+          width={150}
+          height={50}
+          className="w-auto h-10 opacity-80"
+          priority
+        />
+        <div className="flex items-center gap-1.5">
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className="h-2 w-2 rounded-full bg-white/70 animate-bounce"
+              style={{ animationDelay: `${i * 150}ms` }}
+            />
+          ))}
+        </div>
       </div>
     );
-  }
-
-  if (status === "authenticated") {
-    return null;
   }
 
   return (
