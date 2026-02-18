@@ -234,8 +234,6 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   if (!session) {
     return { redirect: { destination: "/login", permanent: false } }
   }
-  const role = (session.user as any).role
-
   if ((session.user as any).role !== "user") {
     return { redirect: { destination: "/panel", permanent: false } }
   }
