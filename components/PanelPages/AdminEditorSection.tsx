@@ -1070,7 +1070,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
             const button = actionMenuButtonRefs.current[actionMenuOpen]
             if (button) {
                 const rect = button.getBoundingClientRect()
-                const dropdownHeight = 150 // Approximate height
+                const dropdownHeight = 150
                 const viewportHeight = window.innerHeight
                 const viewportMiddle = viewportHeight / 2
                 const showAbove = rect.top > viewportMiddle

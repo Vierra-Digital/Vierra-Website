@@ -500,7 +500,6 @@ const OutreachSection = () => {
                             </div>
                         </div>
                     ) : viewMode === "yearly" ? (
-                        /* Yearly Summary View */
                         <div className="pb-32">
                             <div className="bg-gradient-to-br from-[#701CC0] to-[#5f17a5] rounded-xl shadow-lg p-8 mb-6 text-white">
                                 <h2 className="text-2xl font-bold mb-2">{selectedYear} Year Summary</h2>
@@ -591,7 +590,6 @@ const OutreachSection = () => {
                             )}
                         </div>
                     ) : (
-                        /* Monthly View */
                         <div className="pb-32">
                             {!isEditable && (
                                 <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">

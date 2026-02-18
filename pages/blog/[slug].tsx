@@ -24,7 +24,7 @@ const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
 const inter = Inter({ subsets: ["latin"] });
 
 const formatDate = (dateString: string): string => {
-    const dateStr = dateString.split('T')[0]; // Get YYYY-MM-DD part
+    const dateStr = dateString.split('T')[0];
     const [year, month, day] = dateStr.split('-');
     const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
     return new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
@@ -346,7 +346,6 @@ export const getStaticPaths: GetStaticPaths = async () => {
 
     return { paths, fallback: 'blocking' };
     } catch (error) {
-        // Next.js will use fallback mode and generate pages at runtime
         console.warn('Database unavailable during static path generation, using fallback mode:', error);
         return { paths: [], fallback: 'blocking' };
     }
@@ -404,7 +403,6 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
         revalidate: 60,
     };
     } catch (error) {
-        // This allows the build to complete, and the page will be generated at runtime
         console.warn('Database unavailable during static props generation:', error);
         return { notFound: true };
     }

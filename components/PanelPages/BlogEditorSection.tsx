@@ -412,7 +412,6 @@ const RichTextEditor: React.FC<{
       }
       return _m
     })
-    // Skip img tags that already have rte-media class (those are inside embeds)
     out = out.replace(/<img([^>]*)>/gi, (match, attrs) => {
       if (attrs.includes('rte-media')) return match
       const srcMatch = attrs.match(/src="([^"]+)"/)
@@ -1380,7 +1379,6 @@ const RichTextEditor: React.FC<{
           #rte-visible .rte-embed iframe.rte-media { max-width: 640px !important; height: 360px !important; border: 0 !important; }
           #rte-visible .rte-embed video.rte-media { max-width: 640px !important; max-height: 360px !important; }
           #rte-visible .rte-embed img.rte-media { max-width: 100% !important; border-radius: 8px !important; }
-          /* Alignment styles */
           #rte-visible .rte-embed[data-align="left"] { text-align: left !important; }
           #rte-visible .rte-embed[data-align="center"] { text-align: center !important; }
           #rte-visible .rte-embed[data-align="right"] { text-align: right !important; }

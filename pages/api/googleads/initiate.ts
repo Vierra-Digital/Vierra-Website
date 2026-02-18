@@ -34,7 +34,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireSession(req, res);
   if (!session) { res.status(401).json({ message: "Not authenticated" }); return; }
 
-  const state = randomBytes(16).toString("hex"); // CSRF
+  const state = randomBytes(16).toString("hex");
   res.setHeader(
     "Set-Cookie",
     serializeCookie("ga_oauth_state", state, {

@@ -83,7 +83,7 @@ const DashboardSection = () => {
         const lastDay = new Date(year, monthIndex + 1, 0)
         const daysInMonth = lastDay.getDate()
         let startingDayOfWeek = firstDay.getDay()
-        startingDayOfWeek = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1 // Monday=0, Sunday=6
+        startingDayOfWeek = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1
         
         const days = []
         for (let i = 0; i < startingDayOfWeek; i++) {
@@ -105,7 +105,7 @@ const DashboardSection = () => {
             "July", "August", "September", "October", "November", "December"].indexOf(calendarMonth)
         
         if (selectedMonth !== calendarMonthIndex) {
-            return [] // Selected week is not in the current calendar month
+            return []
         }
         const highlightedDays = []
         for (let i = 0; i < 7; i++) {

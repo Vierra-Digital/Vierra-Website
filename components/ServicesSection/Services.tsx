@@ -142,7 +142,7 @@ const Model = React.memo(function Model({
       const context = canvas.getContext("2d")
       
       if (!context) return null
-      context.fillStyle = "#701CC0" // Vierra purple
+      context.fillStyle = "#701CC0"
       context.fillRect(0, 0, size, size)
       
       const texture = new THREE.CanvasTexture(canvas)
@@ -194,13 +194,13 @@ const Model = React.memo(function Model({
                     }
                   }
                   material.map = gradientTexture
-                  material.color = new THREE.Color(0x701CC0) // Vierra purple
-                  material.emissive = new THREE.Color(0x701CC0) // Vierra purple glow
+                  material.color = new THREE.Color(0x701CC0)
+                  material.emissive = new THREE.Color(0x701CC0)
                   material.emissiveIntensity = 0.05
                   material.metalness = 0.15
-                  material.roughness = 0.1 // Very smooth, highly reflective surface
-                  material.side = THREE.DoubleSide // Render both sides for smooth appearance
-                  material.flatShading = false // Always use smooth shading
+                  material.roughness = 0.1
+                  material.side = THREE.DoubleSide
+                  material.flatShading = false
                   material.map.needsUpdate = true
                 } else if (hasValidTexture) {
                   material.metalness = 0.1

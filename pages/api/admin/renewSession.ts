@@ -26,7 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ message: "Session not found" });
     }
     const now = new Date();
-    const newExpiresAt = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour from now
+    const newExpiresAt = new Date(now.getTime() + 60 * 60 * 1000);
 
     const updated = await prisma.onboardingSession.update({
       where: { id: token },

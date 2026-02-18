@@ -23,8 +23,6 @@ type ClientRow = {
 }
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
-    // completed (green) - session completed
-    
     let bgColor = "bg-red-100";
     let textColor = "text-red-700";
     let label = "Inactive";
@@ -117,7 +115,7 @@ const ClientActionsMenu: React.FC<{
     useEffect(() => {
         if (isOpen && buttonRef.current) {
             const rect = buttonRef.current.getBoundingClientRect()
-            const dropdownHeight = 150 // Approximate height
+            const dropdownHeight = 150
             const viewportHeight = window.innerHeight
             const viewportMiddle = viewportHeight / 2
             const showAbove = rect.top > viewportMiddle
@@ -269,7 +267,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                 const data = await r.json()
                 throw new Error(data.message || `HTTP ${r.status}`)
             }
-            // This ensures the status is calculated correctly based on session state
             await fetchClients()
         } catch (e: any) {
             setError(e?.message ?? "Failed to update client status")

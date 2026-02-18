@@ -23,13 +23,6 @@ const transporter = nodemailer.createTransport({
   pool: false,
 } as nodemailer.TransportOptions);
 
-if (typeof process !== "undefined" && !process.env.EMAIL_USER) {
-  console.warn("EMAIL_USER is not set. Email sending will fail.");
-}
-if (typeof process !== "undefined" && !process.env.EMAIL_PASS) {
-  console.warn("EMAIL_PASS is not set. Email sending will fail.");
-}
-
 const recipients = ["alex@vierradev.com"];
 const fromEmail = "business@alexshick.com";
 
@@ -202,10 +195,6 @@ export async function sendSignerCopyEmail(email: string, documentName: string, a
 }
 
 export async function sendStaffSetPasswordEmail(staffEmail: string, staffName: string, setPasswordLink: string): Promise<void> {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    const missing = [!process.env.EMAIL_USER && "EMAIL_USER", !process.env.EMAIL_PASS && "EMAIL_PASS"].filter(Boolean).join(", ");
-    throw new Error(`Email not configured: ${missing} missing. Add them in your deployment environment (e.g. Vercel → Settings → Environment Variables).`);
-  }
   const mailOptions = {
     from: fromEmail,
     to: staffEmail,

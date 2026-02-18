@@ -36,7 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
-      path: "/api/facebook/callback", // cookie only sent to callback
+      path: "/api/facebook/callback",
       maxAge: 10 * 60,
     })
   );

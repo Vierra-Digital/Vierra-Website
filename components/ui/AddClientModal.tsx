@@ -18,9 +18,6 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   const [origin, setOrigin] = useState<string>("");
   const [, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [emailSending, setEmailSending] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
-  const [emailError, setEmailError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const modalRef = useRef<HTMLDivElement>(null);
@@ -91,8 +88,6 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
 
   useEffect(() => {
     if (step === 2 && sessionLink && clientData.clientEmail) {
-      setEmailSending(true);
-      setEmailError(null);
       fetch("/api/sendSessionLinkEmail", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -102,25 +97,11 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
           clientName: clientData.clientName,
           businessName: clientData.businessName,
         }),
-      })
-        .then(async (res) => {
-          if (!res.ok) {
-            const j = await res.json().catch(() => ({}));
-            throw new Error(j?.message || "Failed to send email");
-          }
-          setEmailSent(true);
-        })
-        .catch((err) => {
-          setEmailError(err.message || "Failed to send email");
-        })
-        .finally(() => {
-          setEmailSending(false);
-        });
+      }).catch(() => {});
     }
   }, [step, sessionLink, clientData.clientEmail, origin, clientData.clientName, clientData.businessName]);
 
   const handleFinish = () => {
-    // by filling out the onboarding form via the link we sent them
     onClose();
   };
 
@@ -265,52 +246,6 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
               </button>
               <button
                 className="w-full rounded-lg bg-[#5B21B6] px-4 py-2 text-white text-sm font-medium hover:bg-[#4C1D95]"
-                onClick={handleFinish}
-              >
-                Done
-              </button>
-            </div>
-          </>
-        )}
-
-        {step === 3 && (
-          <>
-            <h3 className="mb-3 text-lg font-semibold">Session Link Generated</h3>
-            <div className="mt-6">
-              <p className={`mb-2 text-sm ${inter.className}`}>Share this link with {clientData.clientName}:</p>
-              <div className="mb-4 break-all rounded border border-[#701CC0]/50 bg-[#18042A]/50 p-3">
-                <p className={`text-sm text-blue-300 ${inter.className}`}>
-                  {sessionLink ? `${origin}${sessionLink}` : "Generating..."}
-                </p>
-              </div>
-              <button
-                className={`mb-4 w-full rounded-md bg-blue-500 px-4 py-2 text-white shadow transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60 ${inter.className}`}
-                onClick={() => {
-                  if (sessionLink) {
-                    navigator.clipboard.writeText(`${origin}${sessionLink}`);
-                    alert("Link copied to clipboard!");
-                  }
-                }}
-                disabled={!sessionLink}
-              >
-                Copy Link
-              </button>
-              
-              <div className="mb-2">
-                {emailSending && (
-                  <span className="text-yellow-200 text-sm">Sending session link to {clientData.clientEmail}...</span>
-                )}
-                {emailSent && (
-                  <span className="text-green-300 text-sm">Session link emailed to {clientData.clientEmail}!</span>
-                )}
-                {emailError && (
-                  <span className="text-red-300 text-sm">Failed to send email: {emailError}</span>
-                )}
-              </div>
-            </div>
-            <div className="mt-6 flex justify-end">
-              <button
-                className="rounded-md bg-green-500 px-4 py-2 text-white shadow transition-transform hover:scale-105"
                 onClick={handleFinish}
               >
                 Done

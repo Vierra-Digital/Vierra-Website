@@ -30,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const imageBuffer = Buffer.from(client.image);
     res.setHeader('Content-Type', client.imageMimeType || 'image/jpeg');
     res.setHeader('Content-Length', imageBuffer.length);
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // Prevent caching
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.end(imageBuffer);
   } catch (e) {
     console.error("admin/getClientImage", e);

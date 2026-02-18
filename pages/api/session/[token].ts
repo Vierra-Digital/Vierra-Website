@@ -73,7 +73,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.setHeader("Set-Cookie", cookiesToSet);
       return res.status(200).json(updated);
     }
-    // Only allow if the same browser presents the cookie; otherwise "already used"
     if (!hasCookie) {
       return res.status(410).json({ message: "Link already used" });
     }

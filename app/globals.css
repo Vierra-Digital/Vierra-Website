@@ -126,7 +126,6 @@ body {
   align-items: flex-start;
 }
 
-/* Style search input clear button (X) to be red and more visible */
 input[type="search"]::-webkit-search-cancel-button {
   -webkit-appearance: none;
   appearance: none;
@@ -146,7 +145,6 @@ input[type="search"]::-webkit-search-cancel-button:hover {
   transform: scale(1.1);
 }
 
-/* Firefox clear button */
 input[type="search"]::-moz-search-clear-button {
   cursor: pointer;
   color: #dc2626;
@@ -161,7 +159,6 @@ input[type="search"]::-moz-search-clear-button:hover {
   color: #b91c1c;
 }
 
-/* Microsoft Edge clear button */
 input[type="search"]::-ms-clear {
   color: #dc2626;
   height: 20px;

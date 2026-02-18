@@ -36,7 +36,7 @@ const StaffActionsMenu: React.FC<{
     useEffect(() => {
         if (isOpen && buttonRef.current) {
             const rect = buttonRef.current.getBoundingClientRect()
-            const dropdownHeight = 150 // Approximate height
+            const dropdownHeight = 150
             const viewportHeight = window.innerHeight
             const viewportMiddle = viewportHeight / 2
             const showAbove = rect.top > viewportMiddle
@@ -388,7 +388,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
     useEffect(() => {
         setFilteredRows(applyFiltersAndSort)
-        setCurrentPage(0) // Reset to first page when filters change
+        setCurrentPage(0)
     }, [applyFiltersAndSort])
 
     useEffect(() => {

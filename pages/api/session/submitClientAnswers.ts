@@ -58,7 +58,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!sess.client.userId || sess.client.userId !== user.id) {
         await tx.client.update({ where: { id: sess.client.id }, data: { userId: user.id } });
       }
-      // (We stored tokens encrypted already in onboarding; copy as-is)
       const tmpTokens = await tx.onboardingPlatformToken.findMany({
         where: { sessionId: token },
         select: { platform: true, accessToken: true, refreshToken: true, expiresAt: true },
@@ -66,7 +65,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       for (const t of tmpTokens) {
         await tx.userToken.upsert({
-          where: { userId_platform: { userId: user.id, platform: t.platform as any } }, // if enum, no cast needed
+          where: { userId_platform: { userId: user.id, platform: t.platform as any } },
           update: { accessToken: t.accessToken, refreshToken: t.refreshToken },
           create: {
             userId: user.id,

@@ -14,7 +14,7 @@ declare module "next-auth" {
 }
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma), // persist users/accounts/sessions in Postgres
+  adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   providers: [
     Google({
@@ -71,9 +71,9 @@ export const authOptions: NextAuthOptions = {
         const email = user.email?.toLowerCase() ?? "";
         const hd = (profile as any)?.hd as string | undefined;
         if (hd === "vierradev.com" || email.endsWith("@vierradev.com")) return true;
-        return false; // sends ?error=AccessDenied to pages.error
+        return false;
       }
-      return true; // credentials path already verified
+      return true;
     },
     async jwt({ token, user }) {
       if (user) {

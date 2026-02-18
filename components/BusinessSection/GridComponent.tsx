@@ -15,7 +15,7 @@ const gridLayout = [
 
 const animationSets = [
   {
-    source: "2-2", // Instagram
+    source: "2-2",
     targets: ["0-2", "3-3"],
     paths: [
       "M250,200 L250,60",
@@ -24,8 +24,8 @@ const animationSets = [
     colors: ["#9966ff", "#ff5996"],
   },
   {
-    source: "2-2", // Instagram
-    targets: ["3-0", "4-2"], // Facebook, LinkedIn
+    source: "2-2",
+    targets: ["3-0", "4-2"],
     paths: [
       "M240,290 L240,340 C240,348 232,355 224,355 L93,355",
       "M255,290 L255,425",
@@ -33,7 +33,7 @@ const animationSets = [
     colors: ["#F50478", "#1877F2"],
   },
   {
-    source: "1-0", // Snapchat
+    source: "1-0",
     targets: ["2-1", "1-3"],
     paths: [
       "M93,150 L138,150 C144,150 150,156 150,165 L150,210",
@@ -42,8 +42,8 @@ const animationSets = [
     colors: ["#F50478", "#1877F2"],
   },
   {
-    source: "4-4", // Email
-    targets: ["2-5", "1-4"], // SEO, Google Analytics
+    source: "4-4",
+    targets: ["2-5", "1-4"],
     paths: [
       "M460,426 L460,270 C460,262 468,255 476,255 L512,255",
       "M445,426 L445,175",
@@ -51,7 +51,7 @@ const animationSets = [
     colors: ["#E93948", "#FFC600"],
   },
   {
-    source: "4-4", // Email
+    source: "4-4",
     targets: ["2-3", "5-1"],
     paths: [
       "M455,426 L455,275 C455,255 450,250 440,250 L395,250",
@@ -531,8 +531,8 @@ function GridComponent() {
           background: getBackground(),
         }}
         variants={iconVariants}
-        initial={false} // Prevent re-initialization
-        animate={isActive ? "active" : "inactive"} // Only change when `isActive` changes
+        initial={false}
+        animate={isActive ? "active" : "inactive"}
       >
         {renderSVG(cellKey, isActive, cellIconMap)}
         
@@ -563,8 +563,8 @@ function GridComponent() {
                       stroke="white"
                       strokeWidth="5"
                       fill="none"
-                      strokeLinecap="round" // Smooth line ends
-                      strokeLinejoin="round" // Smooth corners
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                       variants={pathVariants}
                       initial="initial"
                       animate={animationPhase}
@@ -574,15 +574,15 @@ function GridComponent() {
                 })}
               </mask>
               {animationSets[activeSet].paths.map((path, index) => {
-                const isLastSet = activeSet === animationSets.length - 1 // Check if it's the last active set
-                const isFirstSet = activeSet === 0 // Check if it's the first active set
+                const isLastSet = activeSet === animationSets.length - 1
+                const isFirstSet = activeSet === 0
                 const gradientDirection = isFirstSet
                   ? index === 0
-                    ? { y1: "1", y2: "0" } // Bottom to top for the first path
-                    : { y1: "0", y2: "1" } // Top to bottom for the second path
+                    ? { y1: "1", y2: "0" }
+                    : { y1: "0", y2: "1" }
                   : isLastSet
-                  ? { y1: "1", y2: "0" } // Bottom to top for the last set
-                  : { y1: "0", y2: "1" } // Default top to bottom for other sets
+                  ? { y1: "1", y2: "0" }
+                  : { y1: "0", y2: "1" }
                 return (
                   <React.Fragment key={`${activeSet}-${index}`}>
                     <linearGradient

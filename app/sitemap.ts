@@ -100,7 +100,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.5,
     }));
   } catch (error) {
-    // Blog posts will be added at runtime when database is available
     console.warn('Database unavailable during sitemap generation, skipping blog posts:', error);
   }
 

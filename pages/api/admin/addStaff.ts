@@ -36,14 +36,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 name: name.trim(),
                 email: staffEmail,
                 passwordEnc: null,
-                role: "staff", // Staff role for panel access
+                role: "staff",
                 position: position.trim(),
                 country: country.trim(),
                 company_email: company_email?.trim() || null,
                 mentor: mentor?.trim() || null,
                 time_zone: time_zone.trim(),
-                strikes: "0/3", // Default strikes
-                status: "offline", // Default status
+                strikes: "0/3",
+                status: "offline",
                 emailNotifications: true,
                 twoFactorEnabled: false,
                 theme: "auto",
@@ -77,16 +77,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         try {
             await sendStaffSetPasswordEmail(staffEmail, name.trim(), setPasswordLink);
-        } catch (emailErr: unknown) {
-            const errMsg = emailErr instanceof Error ? emailErr.message : String(emailErr);
-            const errCode = emailErr && typeof emailErr === "object" && "code" in emailErr ? (emailErr as { code?: string }).code : undefined;
-            console.error("addStaff: Failed to send set-password email:", errMsg, errCode ?? "", emailErr);
+        } catch (emailErr) {
+            console.error("addStaff: Failed to send set-password email:", emailErr);
             await prisma.passwordResetToken.deleteMany({ where: { token } });
             await prisma.user.delete({ where: { id: newUser.id } });
-            return res.status(500).json({
-                message: "Failed to send welcome email. Please try again.",
-                debug: process.env.NODE_ENV === "development" ? errMsg : undefined,
-            });
+            return res.status(500).json({ message: "Failed to send welcome email. Please try again." });
         }
 
         return res.status(201).json({

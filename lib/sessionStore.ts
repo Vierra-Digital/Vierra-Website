@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
-export type PdfFieldType = "signature" | "date" | "text";
+type PdfFieldType = "signature" | "date" | "text";
 
 export interface PdfField {
   type: PdfFieldType;
@@ -13,7 +13,6 @@ export interface PdfField {
   id?: string;
 }
 
-/** @deprecated Use fields instead. Kept for backward compatibility. */
 export interface LegacyCoordinates {
   page: number;
   xRatio: number;
@@ -27,9 +26,7 @@ export interface SessionData {
   originalFilename: string;
   pdfPath: string;
   pdfBase64?: string;
-  /** @deprecated Use fields instead. */
   coordinates?: LegacyCoordinates;
-  /** Array of fields to place on the PDF. */
   fields?: PdfField[];
   status: "pending" | "signed" | "expired";
   createdAt: number;

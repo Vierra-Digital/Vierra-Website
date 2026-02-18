@@ -47,7 +47,6 @@ const LoginPage = () => {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
-    // localStorage.setItem("isAuthenticated", "true");
 
     try {
       const response = await signIn("credentials", { email, password, redirect: false });

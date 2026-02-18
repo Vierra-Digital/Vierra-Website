@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const position = role === "admin"
-    ? "Leadership" // Admins bypass board check; we treat as full access
+    ? "Leadership"
     : (await (async () => {
         const userId = (session.user as any)?.id;
         const user = userId

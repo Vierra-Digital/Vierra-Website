@@ -1,7 +1,7 @@
 import crypto from "crypto";
 
 const keyB64 = process.env.ENCRYPTION_SECRET || "";
-const key = Buffer.from(keyB64, "base64"); // must be 32 bytes
+const key = Buffer.from(keyB64, "base64");
 if (key.length !== 32) throw new Error("CREDENTIALS_ENCRYPTION_KEY must be 32 bytes base64");
 
 export function encrypt(plaintext: string) {

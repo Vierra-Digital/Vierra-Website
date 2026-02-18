@@ -67,22 +67,15 @@ const UserSettingsPage = dynamic(() => import("@/components/UserSettingsPage"), 
 
 const inter = Inter({ subsets: ["latin"] })
 
-type PageProps = { dashboardHref: string }
-
-const PanelPage = ({ dashboardHref }: PageProps) => {
+const PanelPage = () => {
   const [showSettings, setShowSettings] = useState(false)
-
   const [currentSection, setCurrentSection] = useState(0);
-
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-
   const { data: session } = useSession()
   const [isAddClientOpen, setIsAddClientOpen] = useState(false)
   const [clientRefreshTrigger, setClientRefreshTrigger] = useState(0)
   const [currentUserName, setCurrentUserName] = useState<string | null>(null)
   const [imageVersion, setImageVersion] = useState<number>(0)
-
-  void dashboardHref
 
   useEffect(() => {
     fetchCurrentUser()
@@ -382,7 +375,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   if ((session.user as any).role !== "staff" && (session.user as any).role !== "admin") {
     return { redirect: { destination: "/client", permanent: false } }
   }
-  return { props: { dashboardHref: role === "user" ? "/client" : "/panel" } }
+  return { props: {} }
 }
 
 export default PanelPage

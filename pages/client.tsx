@@ -23,17 +23,13 @@ const FilesSection = dynamic(() => import("@/components/PanelPages/FilesSection"
 
 const inter = Inter({ subsets: ["latin"] })
 
-type PageProps = { dashboardHref: string }
-
-const ClientPage = ({ dashboardHref }: PageProps) => {
+const ClientPage = () => {
   const [showSettings, setShowSettings] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [currentSection, setCurrentSection] = useState(0)
   const { data: session, status } = useSession()
   const [currentUserName, setCurrentUserName] = useState<string | null>(null)
   const [imageVersion, setImageVersion] = useState<number>(0)
-
-  void dashboardHref
 
   useEffect(() => {
     fetchCurrentUser()
@@ -244,11 +240,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     return { redirect: { destination: "/panel", permanent: false } }
   }
 
-  return {
-    props: {
-      dashboardHref: role === "user" ? "/client" : "/panel",
-    },
-  }
+  return { props: {} }
 }
 
 export default ClientPage

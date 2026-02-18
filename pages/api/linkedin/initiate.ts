@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       client_id: clientId,
       redirect_uri: redirectUri,
       scope: SCOPES.join(" "),
-      state: onboardingSessionId, // callback treats this as sessionId
+      state: onboardingSessionId,
     }).toString();
 
     res.redirect(authUrl);
@@ -40,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       path: "/api/linkedin/callback",
-      maxAge: 10 * 60, // 10 minutes
+      maxAge: 10 * 60,
     })
   );
 
