@@ -13,6 +13,9 @@ Disallow: /onboarding
 
 Disallow: /blog/%5B
 Disallow: /blog/[
+Disallow: /_next/
+Disallow: /favicon.ico
+Disallow: /blog/rss.xml
 
 # Allow blog and public pages
 Allow: /blog
