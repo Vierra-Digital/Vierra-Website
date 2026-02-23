@@ -4,10 +4,15 @@ import { prisma } from "@/lib/prisma";
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
 
-  const { clientName, clientEmail, businessName, industry } = req.body ?? {};
+  const { clientName, clientEmail, businessName, industry, monthlyRetainer } = req.body ?? {};
   if (!clientName || !clientEmail || !businessName) {
     return res.status(400).json({ message: "Missing required fields" });
   }
+  const monthlyRetainerAmount = Number(monthlyRetainer);
+  if (!Number.isFinite(monthlyRetainerAmount) || monthlyRetainerAmount <= 0) {
+    return res.status(400).json({ message: "Monthly retainer must be greater than 0." });
+  }
+  const monthlyRetainerCents = Math.round(monthlyRetainerAmount * 100);
 
   try {
     const email = String(clientEmail).toLowerCase();
@@ -15,9 +20,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const token = crypto.randomUUID();
     const client = await prisma.client.upsert({
       where: { email },
-      create: { name: clientName, email, businessName },
-      update: { name: clientName, businessName },
-      select: { id: true, name: true, email: true, businessName: true, createdAt: true },
+      create: { name: clientName, email, businessName, monthlyRetainerCents },
+      update: { name: clientName, businessName, monthlyRetainerCents },
+      select: { id: true, name: true, email: true, businessName: true, createdAt: true, monthlyRetainerCents: true },
     });
     const session = await prisma.onboardingSession.create({
       data: {
@@ -37,6 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         clientName: client.name,
         clientEmail: client.email,
         businessName: client.businessName,
+        monthlyRetainer: client.monthlyRetainerCents ? client.monthlyRetainerCents / 100 : null,
         createdAt: new Date(session.createdAt).getTime(),
         submittedAt: session.submittedAt ? new Date(session.submittedAt).getTime() : null,
         status: session.status ?? "pending",

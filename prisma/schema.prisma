@@ -12,6 +12,7 @@ model Client {
   name               String
   email              String              @unique
   businessName       String
+  monthlyRetainerCents Int?
   image              Bytes?
   imageMimeType      String?
   emailNotifications Boolean             @default(true)
@@ -21,6 +22,14 @@ model Client {
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   isActive           Boolean             @default(true)
+  stripeCustomerId   String?             @unique
+  stripeConnected    Boolean             @default(false)
+  stripePaymentMethodId String?
+  stripeSubscriptionId String?
+  stripeSubscriptionStatus String?
+  stripeCardBrand    String?
+  stripeCardLast4    String?
+  stripeConnectedAt  DateTime?
   userId             Int?                @unique
   user               User?               @relation("UserClient", fields: [userId], references: [id])
   onboardingSessions OnboardingSession[]

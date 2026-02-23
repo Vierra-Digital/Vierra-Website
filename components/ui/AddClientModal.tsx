@@ -13,7 +13,7 @@ interface AddClientModalProps {
 
 const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCreated }) => {
   const [step, setStep] = useState(1);
-  const [clientData, setClientData] = useState({ clientName: "", clientEmail: "", businessName: "", industry: "" });
+  const [clientData, setClientData] = useState({ clientName: "", clientEmail: "", businessName: "", industry: "", monthlyRetainer: "" });
   const [sessionLink, setSessionLink] = useState<string | null>(null);
   const [origin, setOrigin] = useState<string>("");
   const [, setSubmitting] = useState(false);
@@ -63,6 +63,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
         clientEmail: clientData.clientEmail.trim().toLowerCase(),
         businessName: clientData.businessName.trim(),
         industry: clientData.industry.trim(),
+        monthlyRetainer: Number(clientData.monthlyRetainer),
       };
       const response = await fetch("/api/session/generateClientSession", {
         method: "POST",
@@ -104,6 +105,12 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   const handleFinish = () => {
     onClose();
   };
+
+  const monthlyRetainerAmount = Number(clientData.monthlyRetainer);
+  const monthlyRetainerValid =
+    clientData.monthlyRetainer.trim() !== "" &&
+    Number.isFinite(monthlyRetainerAmount) &&
+    monthlyRetainerAmount > 0;
 
   if (!isOpen) return null;
 
@@ -191,6 +198,28 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
                   placeholder="Enter industry"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-[#374151] mb-2">Monthly Retainer (USD)</label>
+                <input
+                  id="monthlyRetainer"
+                  name="monthlyRetainer"
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  value={clientData.monthlyRetainer}
+                  onChange={handleChange}
+                  className={`w-full border rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
+                    clientData.monthlyRetainer && !monthlyRetainerValid
+                      ? "border-red-500 bg-red-50"
+                      : "border-[#E5E7EB]"
+                  }`}
+                  placeholder="Enter monthly amount (e.g. 2500)"
+                  required
+                />
+                {clientData.monthlyRetainer && !monthlyRetainerValid && (
+                  <p className="mt-1 text-xs text-red-600">Please enter a valid amount greater than 0.</p>
+                )}
+              </div>
             </div>
 
             <div className="flex justify-between items-center mt-6">
@@ -203,11 +232,10 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
               <button
                 onClick={async () => {
                   await handleSubmit();
-                  setStep(2);
                 }}
-                disabled={!clientData.clientName.trim() || !clientData.clientEmail.trim() || !emailValid || !clientData.businessName.trim() || !clientData.industry.trim()}
+                disabled={!clientData.clientName.trim() || !clientData.clientEmail.trim() || !emailValid || !clientData.businessName.trim() || !clientData.industry.trim() || !monthlyRetainerValid}
                 className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                  !clientData.clientName.trim() || !clientData.clientEmail.trim() || !emailValid || !clientData.businessName.trim() || !clientData.industry.trim()
+                  !clientData.clientName.trim() || !clientData.clientEmail.trim() || !emailValid || !clientData.businessName.trim() || !clientData.industry.trim() || !monthlyRetainerValid
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     : 'bg-[#701CC0] text-white hover:bg-[#5f17a5]'
                 }`}

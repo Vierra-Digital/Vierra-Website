@@ -17,6 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         name: true,
         email: true,
         businessName: true,
+        monthlyRetainerCents: true,
         image: true,
         createdAt: true,
         isActive: true,
@@ -40,6 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const website = answers.website ?? "";
       const targetAudience = answers.targetAudience ?? "";
       const adGoal = answers.socialMediaGoals ?? "N/A";
+      const clientGoal = "N/A";
       const brandTone = answers.brandTone ?? "N/A";
       const industry = answers.industry ?? "";
       let displayStatus: string = latest?.status ?? "pending";
@@ -59,8 +61,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         website,
         targetAudience,
         adGoal,
+        clientGoal,
         brandTone,
         industry,
+        monthlyRetainer: typeof c.monthlyRetainerCents === "number" ? c.monthlyRetainerCents / 100 : null,
         status: displayStatus,
         isActive: c.isActive,
         isExpired: isExpired || false,

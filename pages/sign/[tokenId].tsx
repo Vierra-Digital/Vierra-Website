@@ -108,6 +108,22 @@ const SignDocumentPage: React.FC = () => {
 
     if (isSubmitted) {
       setRedirectCountdown(5);
+      try {
+        window.opener?.postMessage("nda-signed", window.location.origin);
+      } catch {}
+
+      if (window.opener && !window.opener.closed) {
+        const closeWindow = () => {
+          try { window.close(); } catch {}
+        };
+        const quickClose = setTimeout(closeWindow, 200);
+        const retryClose = setTimeout(closeWindow, 1200);
+        return () => {
+          clearTimeout(quickClose);
+          clearTimeout(retryClose);
+        };
+      }
+
       interval = setInterval(() => {
         setRedirectCountdown((prevCountdown) => {
           if (prevCountdown <= 1) {

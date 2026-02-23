@@ -5,7 +5,6 @@ import { useRouter } from "next/router";
 import { Inter } from "next/font/google";
 import type { GetServerSideProps } from "next"; import { prisma } from "@/lib/prisma";
 import { serialize as serializeCookie } from "cookie";
-import ClientSessionSuccessModal from "@/components/ui/ClientSessionSuccessModal";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -13,6 +12,7 @@ interface ClientSessionData {
   clientName: string;
   clientEmail: string;
   businessName: string;
+  monthlyRetainer?: number | null;
   token: string;           
   createdAt: number;        
   answers?: Record<string, string>;
@@ -31,7 +31,7 @@ const questions: Question[] = [
   { label: "Signing Contracts And Paying Invoices", name: "Video3", type: "video", videoUrl: "/assets/onboarding/module3-contracts.mp4", duration: 5 },
   { label: "Connecting Social Media Accounts", name: "Social", type: "social", duration: 2 },
   { label: "About Your Business", name: "AboutYou", placeholder: "", type: "text", duration: 6 },
-  { label: "Strategy Meeting", name: "Video4", type: "video", videoUrl: "/assets/onboarding/module6-strategy.mp4", duration: 2 },
+  { label: "Strategy Meeting", name: "Video4", type: "video", videoUrl: "/assets/onboarding/module6-strategy.mp4", duration: 3 },
   { label: "Final Words", name: "Video5", type: "video", videoUrl: "/assets/onboarding/module7-final.mp4", duration: 2 },
 ];
 
@@ -48,21 +48,20 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
   const [gaConnected, setGa] = useState(false);
   const [socialLoading, setSocialLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [redirectCountdown, setRedirectCountdown] = useState<number>(5);
+  const [stripeConnected, setStripeConnected] = useState(false);
+  const [stripeLoading, setStripeLoading] = useState(false);
   const [video3SubStep, setVideo3SubStep] = useState<0 | 1 | 2>(() => {
     const saved = initialSession?.answers?.video3SubStep;
-    if (String(saved) === "1") return 1;
-    if (String(saved) === "2") return 2;
-    return 0;
+    const savedNdaSigned = !!initialSession?.answers?.ndaSigned;
+    return String(saved) === "2" || savedNdaSigned ? 2 : 0;
   });
   const [ndaSigned, setNdaSigned] = useState(!!initialSession?.answers?.ndaSigned);
-  const [aboutYouSubStep, setAboutYouSubStep] = useState<0 | 1>(() => {
-    const saved = initialSession?.answers?.aboutYouSubStep;
-    return String(saved) === "1" ? 1 : 0;
-  });
-  const [video4SubStep, setVideo4SubStep] = useState<0 | 1>(() => {
-    const saved = initialSession?.answers?.video4SubStep;
-    return String(saved) === "1" ? 1 : 0;
-  });
+  const [ndaLoading, setNdaLoading] = useState(false);
+  const ndaSignWindowRef = useRef<Window | null>(null);
+  const ndaPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [aboutYouSubStep, setAboutYouSubStep] = useState<0 | 1>(0);
+  const [video4SubStep, setVideo4SubStep] = useState<0 | 1>(0);
   const [maxStepReached, setMaxStepReached] = useState(0);
 
   const token =
@@ -94,6 +93,151 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
     }
   }, [sessionIdForOauth]);
 
+  const handleNdaSign = useCallback(async () => {
+    if (!token || ndaLoading) return;
+    setNdaLoading(true);
+    try {
+      const resp = await fetch("/api/onboarding/generateNdaLink", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ onboardingToken: token }),
+      });
+      if (!resp.ok) throw new Error("Failed to generate NDA link");
+      const { link, tokenId } = await resp.json();
+
+      const signWindow = window.open(link, "_blank");
+      ndaSignWindowRef.current = signWindow;
+
+      if (ndaPollRef.current) clearInterval(ndaPollRef.current);
+      ndaPollRef.current = setInterval(async () => {
+        try {
+          const statusResp = await fetch(`/api/onboarding/ndaStatus?tokenId=${encodeURIComponent(tokenId)}`);
+          if (!statusResp.ok) return;
+          const { signed } = await statusResp.json();
+          if (signed) {
+            if (ndaPollRef.current) clearInterval(ndaPollRef.current);
+            ndaPollRef.current = null;
+            setNdaSigned(true);
+            setVideo3SubStep(2);
+            setNdaLoading(false);
+            try { ndaSignWindowRef.current?.close(); } catch {}
+            ndaSignWindowRef.current = null;
+          }
+        } catch {}
+      }, 3000);
+    } catch {
+      setNdaLoading(false);
+    }
+  }, [token, ndaLoading]);
+
+  useEffect(() => {
+    return () => {
+      if (ndaPollRef.current) clearInterval(ndaPollRef.current);
+      try { ndaSignWindowRef.current?.close(); } catch {}
+      ndaSignWindowRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onNdaSigned = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data !== "nda-signed") return;
+      if (ndaPollRef.current) clearInterval(ndaPollRef.current);
+      ndaPollRef.current = null;
+      setNdaSigned(true);
+      setVideo3SubStep(2);
+      setNdaLoading(false);
+      try {
+        const src = event.source as Window | null;
+        src?.close();
+      } catch {}
+      try { ndaSignWindowRef.current?.close(); } catch {}
+      ndaSignWindowRef.current = null;
+    };
+
+    window.addEventListener("message", onNdaSigned);
+    return () => window.removeEventListener("message", onNdaSigned);
+  }, []);
+
+  const stripePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stripeWindowRef = useRef<Window | null>(null);
+
+  const checkStripeStatus = useCallback(async () => {
+    if (!sessionIdForOauth) return false;
+    try {
+      const resp = await fetch(`/api/stripe/status?session=${encodeURIComponent(sessionIdForOauth)}`);
+      if (resp.ok) {
+        const { connected } = await resp.json();
+        setStripeConnected(connected);
+        return connected;
+      }
+    } catch {}
+    return false;
+  }, [sessionIdForOauth]);
+
+  const handleStripeConnect = useCallback(async () => {
+    if (!token || stripeLoading) return;
+    setStripeLoading(true);
+    try {
+      const resp = await fetch("/api/stripe/create-checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ onboardingToken: token }),
+      });
+      if (!resp.ok) throw new Error("Failed to create checkout session");
+      const { url } = await resp.json();
+      if (!url) return;
+
+      const stripeWindow = window.open(url, "_blank");
+      stripeWindowRef.current = stripeWindow;
+
+      if (stripePollRef.current) clearInterval(stripePollRef.current);
+      stripePollRef.current = setInterval(async () => {
+        const connected = await checkStripeStatus();
+        if (connected) {
+          if (stripePollRef.current) clearInterval(stripePollRef.current);
+          stripePollRef.current = null;
+          setStripeLoading(false);
+          try { stripeWindowRef.current?.close(); } catch {}
+          stripeWindowRef.current = null;
+        }
+      }, 3000);
+    } catch {
+      setStripeLoading(false);
+    }
+  }, [token, stripeLoading, checkStripeStatus]);
+
+  useEffect(() => {
+    if (video3SubStep === 2) checkStripeStatus();
+  }, [video3SubStep, checkStripeStatus]);
+
+  useEffect(() => {
+    return () => {
+      if (stripePollRef.current) clearInterval(stripePollRef.current);
+      try { stripeWindowRef.current?.close(); } catch {}
+      stripeWindowRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const onStripeConnected = (event: MessageEvent) => {
+      if (event.data !== "stripe-connected") return;
+      if (stripePollRef.current) clearInterval(stripePollRef.current);
+      stripePollRef.current = null;
+      setStripeConnected(true);
+      setStripeLoading(false);
+      try {
+        const src = event.source as Window | null;
+        src?.close();
+      } catch {}
+      try { stripeWindowRef.current?.close(); } catch {}
+      stripeWindowRef.current = null;
+    };
+
+    window.addEventListener("message", onStripeConnected);
+    return () => window.removeEventListener("message", onStripeConnected);
+  }, []);
+
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -104,6 +248,24 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
     const cur = questions[step];
     if (cur?.type === "social") refreshSocial();
   }, [step, refreshSocial]);
+
+  useEffect(() => {
+    if (!showSuccessModal) return;
+
+    setRedirectCountdown(5);
+    const interval = setInterval(() => {
+      setRedirectCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          router.push("/");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [showSuccessModal, router]);
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -122,6 +284,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
           clientName: data.client.name,
           clientEmail: data.client.email,
           businessName: data.client.businessName,
+          monthlyRetainer: typeof data.client.monthlyRetainerCents === "number" ? data.client.monthlyRetainerCents / 100 : null,
           token: data.id,
           createdAt: new Date(data.createdAt).getTime(),
           answers: data.answers || {},
@@ -130,20 +293,19 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
         });
         setAnswers(data.answers || {});
         const saved = data.answers?.video3SubStep;
-        if (String(saved) === "1") setVideo3SubStep(1);
-        else if (String(saved) === "2") setVideo3SubStep(2);
-        setNdaSigned(!!data.answers?.ndaSigned);
-        if (String(data.answers?.aboutYouSubStep) === "1") setAboutYouSubStep(1);
-        if (String(data.answers?.video4SubStep) === "1") setVideo4SubStep(1);
+        const savedNdaSigned = !!data.answers?.ndaSigned;
+        setNdaSigned(savedNdaSigned);
+        setVideo3SubStep(String(saved) === "2" || savedNdaSigned ? 2 : 0);
+        setAboutYouSubStep(0);
+        setVideo4SubStep(0);
         const ans = data.answers || {};
         const aboutYouFields = ["website", "brandTone", "productService", "valueProposition", "targetAudience", "socialMediaGoals", "leadGeneration"];
         const hasAboutYou = aboutYouFields.some((f: string) => (ans[f] || "").trim());
-        const hasOperations = !!(ans.avoidMentions || ans.additionalInfo || ans.meetingTime1Day);
+        const hasOperations = !!(ans.avoidMentions || ans.additionalInfo || ans.meetingAvailability);
         let inferredMax = 0;
         if (String(ans.video4SubStep) === "1" || hasOperations) inferredMax = 5;
         else if (hasAboutYou || String(ans.aboutYouSubStep) === "1") inferredMax = 4;
-        else if (String(ans.video3SubStep) === "2") inferredMax = 3;
-        else if (String(ans.video3SubStep) === "1") inferredMax = 2;
+        else if (String(ans.video3SubStep) === "2" || savedNdaSigned) inferredMax = 3;
         setMaxStepReached((prev) => Math.max(prev, inferredMax));
       } catch {
         setSessionData(initialSession);
@@ -239,11 +401,25 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-4 border-[#7A13D0] border-t-transparent rounded-full animate-spin" />
-          <p className={`text-[#6B7280] text-sm ${inter.className}`}>Loading your session...</p>
+      <div className="relative min-h-screen bg-gradient-to-br from-[#4F1488] via-[#2E0A4F] to-[#18042A] flex flex-col items-center justify-center gap-6">
+        <Image
+          src="/assets/vierra-logo.png"
+          alt="Vierra"
+          width={150}
+          height={50}
+          className="w-auto h-10 opacity-80"
+          priority
+        />
+        <div className="flex items-center gap-1.5">
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className="h-2 w-2 rounded-full bg-white/70 animate-bounce"
+              style={{ animationDelay: `${i * 150}ms` }}
+            />
+          ))}
         </div>
+        <p className={`text-white/80 text-sm ${inter.className}`}>Loading Your Session...</p>
       </div>
     );
   }
@@ -256,9 +432,39 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
     );
   }
 
+  if (showSuccessModal) {
+    return (
+      <>
+        <Head>
+          <title>Vierra | Modules Completed</title>
+          <meta name="robots" content="noindex, nofollow" />
+        </Head>
+        <div className={`min-h-screen bg-[#FAFAFA] flex items-center justify-center p-4 ${inter.className}`}>
+          <div className="rounded-2xl border border-[#E5E7EB] bg-white shadow-sm p-6 lg:p-10 text-center max-w-xl w-full">
+            <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center mx-auto">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
+              <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </span>
+              </span>
+            </div>
+            <h2 className="text-xl font-semibold text-[#111827] mb-2">Modules Completed Successfully!</h2>
+            <p className="text-sm text-[#6B7280]">You&apos;ve completed all modules. Thank you for your time.</p>
+            <p className="text-sm text-[#6B7280] mt-4">
+              Redirecting in {redirectCountdown} second{redirectCountdown !== 1 ? "s" : ""}...
+            </p>
+          </div>
+        </div>
+      </>
+    );
+  }
+
   const q = questions[step];
   const aboutYouFields = ["website", "brandTone", "productService", "valueProposition", "targetAudience", "socialMediaGoals", "leadGeneration"];
-  const operationsFields = ["avoidMentions", "additionalInfo", "meetingTime1Day", "meetingTime1Time", "meetingTime2Day", "meetingTime2Time", "meetingTime3Day", "meetingTime3Time", "meetingTime4Day", "meetingTime4Time"];
+  const operationsFields = ["avoidMentions", "additionalInfo", "meetingAvailability", "meetingTime1Day", "meetingTime1Time", "meetingTime2Day", "meetingTime2Time", "meetingTime3Day", "meetingTime3Time", "meetingTime4Day", "meetingTime4Time"];
   const brandFields = ["website", "brandTone", "productService", "valueProposition"];
   const audienceFields = ["targetAudience", "socialMediaGoals", "leadGeneration"];
   const aboutYouComplete = aboutYouFields.every((f) => (answers[f] || "").trim());
@@ -266,9 +472,9 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
     ? (aboutYouSubStep === 0 ? brandFields.every((f) => (answers[f] || "").trim()) : audienceFields.every((f) => (answers[f] || "").trim()))
     : aboutYouComplete;
   const disableNext = q.type === "text" ? (questions[step]?.name === "AboutYou" ? !currentSectionComplete : !answers[(q as { name: string }).name]) : false;
-  const meetingTimesComplete = [1, 2, 3, 4].some((i) => (answers[`meetingTime${i}Day`] || "").trim() && (answers[`meetingTime${i}Time`] || "").trim());
+  const meetingAvailabilityComplete = (answers.meetingAvailability || "").trim().length > 0;
   const showContinueInNav = !isVideo3 || video3SubStep !== 1 || ndaSigned;
-  const isNextDisabled = disableNext || (isVideo3 && video3SubStep === 1 && !ndaSigned) || (isVideo4 && video4SubStep === 1 && !meetingTimesComplete);
+  const isNextDisabled = disableNext || (isVideo3 && video3SubStep === 1 && !ndaSigned) || (isVideo4 && video4SubStep === 1 && !meetingAvailabilityComplete);
   const TOTAL_SLIDES = 11;
   const getCompletedSlides = () => {
     const effectiveStep = step < maxStepReached ? maxStepReached : step;
@@ -399,10 +605,11 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                       ) : (
                         <button
                           type="button"
-                          onClick={() => { setNdaSigned(true); setVideo3SubStep(2); }}
-                          className="px-5 py-2.5 bg-[#7A13D0] text-white rounded-xl text-sm font-semibold hover:bg-[#6B11B8] transition"
+                          onClick={handleNdaSign}
+                          disabled={ndaLoading}
+                          className="px-5 py-2.5 bg-[#7A13D0] text-white rounded-xl text-sm font-semibold hover:bg-[#6B11B8] transition disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          Sign
+                          {ndaLoading ? "Waiting..." : "Sign"}
                         </button>
                       )}
                     </div>
@@ -415,13 +622,28 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                   </p>
                   <div className="flex flex-col items-center justify-center py-10 px-6 bg-[#FAFAFA] rounded-xl border border-[#E5E7EB]">
                     <div className="text-[#6772E5] text-3xl lg:text-4xl font-bold mb-2" style={{ fontFamily: 'system-ui, sans-serif' }}>stripe</div>
-                    <p className={`text-[#9CA3AF] mb-6 text-sm ${inter.className}`}>Stripe Not Connected</p>
-                    <button
-                      type="button"
-                      className="px-6 py-3 bg-[#6772E5] text-white rounded-xl font-semibold hover:bg-[#5a64d4] transition text-sm"
-                    >
-                      Connect to Stripe
-                    </button>
+                    {stripeConnected ? (
+                      <>
+                        <p className={`text-green-600 mb-4 text-sm font-semibold ${inter.className}`}>Payment Method Connected</p>
+                        <span className="flex items-center gap-1.5 px-4 py-2.5 bg-green-100 text-green-700 rounded-xl text-sm font-semibold">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          Connected
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleStripeConnect}
+                          disabled={stripeLoading}
+                          className="px-6 py-3 bg-[#6772E5] text-white rounded-xl font-semibold hover:bg-[#5a64d4] transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {stripeLoading ? "Waiting..." : "Connect to Stripe"}
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ) : isVideo4 && video4SubStep === 1 ? (
@@ -447,47 +669,20 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                     </div>
                     <div>
                       <label className={`block text-sm font-medium text-[#374151] mb-2 ${inter.className}`}>
-                        Please list several days/times of the week that work for weekly update meetings.
+                        Please list several days/times (with timezone) of the week that work for weekly update meetings.
                       </label>
                       <p className={`text-xs text-[#9CA3AF] mb-3 ${inter.className}`}>
                         A meeting link will be generated once the onboarding is complete.
                       </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {[1, 2, 3, 4].map((i) => (
-                          <div key={i} className="flex flex-col sm:flex-row gap-3 p-4 border border-[#E5E7EB] rounded-xl bg-[#FAFAFA]">
-                            <div className="flex-1">
-                              <label className={`block text-xs font-medium text-[#6B7280] mb-1.5 ${inter.className}`}>Day</label>
-                              <select
-                                value={answers[`meetingTime${i}Day`] || ""}
-                                onChange={(e) => setAnswers(prev => ({ ...prev, [`meetingTime${i}Day`]: e.target.value }))}
-                                className={`w-full p-3 bg-white border border-[#E5E7EB] rounded-lg text-[#111827] focus:ring-2 focus:ring-[#7A13D0]/20 focus:border-[#7A13D0] outline-none text-sm ${inter.className}`}
-                              >
-                                <option value="">Select day</option>
-                                {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map((d) => (
-                                  <option key={d} value={d}>{d}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <div className="flex-1">
-                              <label className={`block text-xs font-medium text-[#6B7280] mb-1.5 ${inter.className}`}>Time</label>
-                              <select
-                                value={answers[`meetingTime${i}Time`] || ""}
-                                onChange={(e) => setAnswers(prev => ({ ...prev, [`meetingTime${i}Time`]: e.target.value }))}
-                                className={`w-full p-3 bg-white border border-[#E5E7EB] rounded-lg text-[#111827] focus:ring-2 focus:ring-[#7A13D0]/20 focus:border-[#7A13D0] outline-none text-sm ${inter.className}`}
-                              >
-                                <option value="">Select time</option>
-                                {["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00"].map((t) => {
-                                  const [h, m] = t.split(":");
-                                  const hour = parseInt(h, 10);
-                                  const ampm = hour >= 12 ? "PM" : "AM";
-                                  const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-                                  return <option key={t} value={t}>{displayHour}:{m} {ampm}</option>;
-                                })}
-                              </select>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      <textarea
+                        name="meetingAvailability"
+                        value={answers.meetingAvailability || ""}
+                        onChange={(e) => setAnswers(prev => ({ ...prev, [e.target.name]: e.target.value }))}
+                        placeholder="Example: Tuesdays 2:00 PM EST, Thursdays 11:30 AM EST, Fridays 9:00 AM PST"
+                        rows={4}
+                        className={`w-full p-3 bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl text-[#111827] placeholder-[#9CA3AF] focus:ring-2 focus:ring-[#7A13D0]/20 focus:border-[#7A13D0] outline-none resize-none ${inter.className}`}
+                        autoComplete="off"
+                      />
                     </div>
                     <div>
                       <label className={`block text-sm font-medium text-[#374151] mb-2 ${inter.className}`}>
@@ -700,7 +895,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                         setShowSuccessModal(true);
                       } catch (err) {
                         console.error("Error completing questionnaire:", err);
-                        setShowSuccessModal(true);
+                        alert("Failed to complete modules. Please try again.");
                       }
                     }}
                   >
@@ -777,7 +972,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                       <div className={`text-xs mt-0.5 ${inter.className} ${
                         isCurrent ? "text-[#7A13D0]" : isPending ? "text-[#92400E]" : "text-[#9CA3AF]"
                       }`}>
-                        {question.name === "Video3" ? "5 min · Video and Action" : question.name === "Video4" ? `${question.duration} min · Video And Response` : `${question.duration} min · ${question.type === "video" ? "Video" : question.type === "social" ? "Action" : "Response"}`}
+                        {question.name === "Video3" ? "5 min · Video And Action" : question.name === "Video4" ? `${question.duration} min · Video And Response` : `${question.duration} min · ${question.type === "video" ? "Video" : question.type === "social" ? "Action" : "Response"}`}
                       </div>
                     </div>
                   </button>
@@ -802,11 +997,6 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
         </div>
       </div>
 
-      <ClientSessionSuccessModal
-        isOpen={showSuccessModal}
-        onClose={() => setShowSuccessModal(false)}
-        token={token || ""}
-      />
     </>
   );
 }
@@ -838,6 +1028,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
         clientName: sess.client.name,
         clientEmail: sess.client.email,
         businessName: sess.client.businessName,
+        monthlyRetainer: typeof sess.client.monthlyRetainerCents === "number" ? sess.client.monthlyRetainerCents / 100 : null,
         token: sess.id,
         createdAt: new Date(sess.createdAt).getTime(),
         answers: (sess.answers as any) || {},
