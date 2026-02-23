@@ -59,6 +59,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       },
     });
     const filteredPosts = blogPosts.filter((post) => {
+      if (!post.slug || !post.slug.trim()) return false;
+      if (/[\[\]{}]/.test(post.slug)) return false;
       const slugLower = post.slug.toLowerCase();
       const titleLower = post.title.toLowerCase();
       return !slugLower.includes('test') && !titleLower.includes('test');

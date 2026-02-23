@@ -121,35 +121,53 @@ export default function TagPage({ tag, posts }: TagPageProps) {
 }
 
 export const getStaticPaths: GetStaticPaths = async () => {
-  const posts = await prisma.blogPost.findMany({ select: { tag: true } })
-  const tagSet = new Set<string>()
-  posts.forEach((p) => {
-    if (!p.tag) return
-    p.tag.split(",").map(t => t.trim()).filter(Boolean).forEach(t => tagSet.add(t))
-  })
-  const paths = Array.from(tagSet).map((t) => ({ params: { tag: t } }))
-  return { paths, fallback: "blocking" }
+  try {
+    const posts = await prisma.blogPost.findMany({ select: { tag: true } })
+    const tagSet = new Set<string>()
+    posts.forEach((p) => {
+      if (!p.tag) return
+      p.tag.split(",").map(t => t.trim()).filter(Boolean).forEach(t => tagSet.add(t))
+    })
+    const paths = Array.from(tagSet).map((t) => ({ params: { tag: t } }))
+    return { paths, fallback: "blocking" }
+  } catch {
+    return { paths: [], fallback: "blocking" }
+  }
 }
 
 export const getStaticProps: GetStaticProps = async ({ params }) => {
   const tag = params?.tag as string
-  const posts = await prisma.blogPost.findMany({
-    where: { tag: { contains: tag, mode: "insensitive" } },
-    include: { author: true },
-    orderBy: { published_date: "desc" },
-    take: 50,
-  })
-  return {
-    props: {
-      tag,
-      posts: posts.map(p => ({
-        title: p.title,
-        slug: p.slug,
-        publishedDate: p.published_date.toISOString(),
-        author: { name: p.author.name },
-        description: (p as any).description ?? null,
-      }))
-    },
-    revalidate: 60,
+
+  if (!tag || /[\[\]{}]/.test(tag)) {
+    return { notFound: true }
+  }
+
+  try {
+    const posts = await prisma.blogPost.findMany({
+      where: { tag: { contains: tag, mode: "insensitive" } },
+      include: { author: true },
+      orderBy: { published_date: "desc" },
+      take: 50,
+    })
+
+    if (posts.length === 0) {
+      return { notFound: true }
+    }
+
+    return {
+      props: {
+        tag,
+        posts: posts.map(p => ({
+          title: p.title,
+          slug: p.slug,
+          publishedDate: p.published_date.toISOString(),
+          author: { name: p.author.name },
+          description: (p as any).description ?? null,
+        }))
+      },
+      revalidate: 60,
+    }
+  } catch {
+    return { notFound: true }
   }
 }

@@ -119,29 +119,47 @@ export default function AuthorPage({ authorName, posts }: AuthorPageProps) {
 }
 
 export const getStaticPaths: GetStaticPaths = async () => {
-  const authors = await prisma.author.findMany({ select: { name: true } })
-  const paths = authors.map((a) => ({ params: { name: a.name } }))
-  return { paths, fallback: "blocking" }
+  try {
+    const authors = await prisma.author.findMany({ select: { name: true } })
+    const paths = authors.map((a) => ({ params: { name: a.name } }))
+    return { paths, fallback: "blocking" }
+  } catch {
+    return { paths: [], fallback: "blocking" }
+  }
 }
 
 export const getStaticProps: GetStaticProps = async ({ params }) => {
   const authorName = params?.name as string
-  const posts = await prisma.blogPost.findMany({
-    where: { author: { name: authorName } },
-    include: { author: true },
-    orderBy: { published_date: "desc" },
-    take: 50,
-  })
-  return {
-    props: {
-      authorName,
-      posts: posts.map(p => ({
-        title: p.title,
-        slug: p.slug,
-        publishedDate: p.published_date.toISOString(),
-        description: (p as any).description ?? null,
-      })),
-    },
-    revalidate: 60,
+
+  if (!authorName || /[\[\]{}]/.test(authorName)) {
+    return { notFound: true }
+  }
+
+  try {
+    const posts = await prisma.blogPost.findMany({
+      where: { author: { name: authorName } },
+      include: { author: true },
+      orderBy: { published_date: "desc" },
+      take: 50,
+    })
+
+    if (posts.length === 0) {
+      return { notFound: true }
+    }
+
+    return {
+      props: {
+        authorName,
+        posts: posts.map(p => ({
+          title: p.title,
+          slug: p.slug,
+          publishedDate: p.published_date.toISOString(),
+          description: (p as any).description ?? null,
+        })),
+      },
+      revalidate: 60,
+    }
+  } catch {
+    return { notFound: true }
   }
 }
