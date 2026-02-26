@@ -24,7 +24,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           email: sess.client.email.toLowerCase(),
           passwordEnc: await bcrypt.hash(password, 10),
           role: "user",
+          name: sess.client.name,
         },
+      });
+    } else if (!user.name && sess.client.name) {
+      user = await tx.user.update({
+        where: { id: user.id },
+        data: { name: sess.client.name },
       });
     }
     await tx.client.update({
