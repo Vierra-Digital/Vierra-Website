@@ -72,7 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             },
         });
 
-        const baseUrl = process.env.NEXTAUTH_URL || `https://${req.headers.host || "vierradev.com"}`;
+        const baseUrl = (process.env.NEXTAUTH_URL || `https://${req.headers.host || "vierradev.com"}`).replace(/\/+$/, "");
         const setPasswordLink = `${baseUrl}/set-password/${token}`;
 
         try {
