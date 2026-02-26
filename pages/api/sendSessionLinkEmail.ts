@@ -26,9 +26,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return link;
     }
   })();
+  const fromEmail = process.env.FROM_EMAIL || "business@alexshick.com";
+  const fromName = process.env.FROM_NAME || "Vierra";
+  const fromAddress = `"${fromName}" <${fromEmail}>`;
 
   const mailOptions = {
-    from: process.env.EMAIL_USER,
+    from: fromAddress,
     to: email,
     subject: "Vierra | Onboarding Link",
     html: `
