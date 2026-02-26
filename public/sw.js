@@ -1,6 +1,6 @@
-const CACHE_NAME = 'vierra-v2';
+const CACHE_NAME = 'vierra-v3';
 const START_URL = '/';
-const RUNTIME_CACHE = 'vierra-runtime-v2';
+const RUNTIME_CACHE = 'vierra-runtime-v3';
 
 // Install event - cache essential resources
 self.addEventListener('install', (event) => {
@@ -51,6 +51,7 @@ self.addEventListener('fetch', (event) => {
   const isStartUrl = url.pathname === '/' || url.pathname === '/index.html';
   const isNextAsset = url.pathname.startsWith('/_next/');
   const isApiRoute = url.pathname.startsWith('/api/');
+  const isDocumentRequest = event.request.mode === 'navigate' || event.request.destination === 'document';
 
   // Never cache Next.js build assets or API responses to avoid stale chunk errors
   if (isNextAsset || isApiRoute) {
@@ -97,9 +98,85 @@ self.addEventListener('fetch', (event) => {
           if (cachedResponse) {
             return cachedResponse;
           }
-          // For navigation requests, try to return start_url from cache
-          if (event.request.mode === 'navigate' || event.request.destination === 'document') {
-            return caches.match(START_URL);
+          // Only fallback to start_url for the homepage itself.
+          // Avoid forcing deep links (e.g. /set-password/:token) to "/".
+          if (isDocumentRequest) {
+            if (isStartUrl) {
+              return caches.match(START_URL);
+            }
+            // Show a retry preloader for deep-link document requests
+            // instead of a hard browser ERR_FAILED page.
+            return new Response(`
+              <!doctype html>
+              <html lang="en">
+                <head>
+                  <meta charset="utf-8" />
+                  <meta name="viewport" content="width=device-width, initial-scale=1" />
+                  <title>Vierra | Loading</title>
+                  <style>
+                    body {
+                      margin: 0;
+                      font-family: Arial, sans-serif;
+                      background: linear-gradient(135deg, #4F1488 0%, #2E0A4F 50%, #18042A 100%);
+                    }
+                    .wrap {
+                      min-height: 100vh;
+                      display: flex;
+                      flex-direction: column;
+                      align-items: center;
+                      justify-content: center;
+                      gap: 24px;
+                      padding: 24px;
+                    }
+                    .logo {
+                      width: auto;
+                      height: 40px;
+                      opacity: 0.8;
+                    }
+                    .dots {
+                      display: flex;
+                      align-items: center;
+                      gap: 6px;
+                    }
+                    .dot {
+                      width: 8px;
+                      height: 8px;
+                      border-radius: 999px;
+                      background: rgba(255, 255, 255, 0.7);
+                      animation: bounce 1s infinite;
+                    }
+                    .dot:nth-child(1) { animation-delay: 0ms; }
+                    .dot:nth-child(2) { animation-delay: 150ms; }
+                    .dot:nth-child(3) { animation-delay: 300ms; }
+                    @keyframes bounce {
+                      0%, 80%, 100% { transform: translateY(0); opacity: 0.7; }
+                      40% { transform: translateY(-6px); opacity: 1; }
+                    }
+                  </style>
+                </head>
+                <body>
+                  <div class="wrap">
+                    <img class="logo" src="/assets/vierra-logo.png" alt="Vierra" />
+                    <div class="dots">
+                      <span class="dot"></span>
+                      <span class="dot"></span>
+                      <span class="dot"></span>
+                    </div>
+                  </div>
+                  <script>
+                    setTimeout(function () {
+                      window.location.replace(${JSON.stringify(url.pathname + url.search + url.hash)});
+                    }, 1200);
+                  </script>
+                </body>
+              </html>
+            `, {
+              status: 200,
+              headers: {
+                'Content-Type': 'text/html; charset=UTF-8',
+                'Cache-Control': 'no-store',
+              },
+            });
           }
         });
     })
