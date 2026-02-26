@@ -24,13 +24,15 @@ const transporter = nodemailer.createTransport({
 } as nodemailer.TransportOptions);
 
 const recipients = ["alex@vierradev.com"];
-const fromEmail = "business@alexshick.com";
+const fromEmail = process.env.FROM_EMAIL || "business@alexshick.com";
+const fromName = process.env.FROM_NAME || "Vierra";
+const fromAddress = `"${fromName}" <${fromEmail}>`;
 
 export async function sendEmail(data: EmailData): Promise<void> {
   const formattedPhoneNumber = data.phoneNumber.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
 
   const mailOptions = {
-    from: fromEmail,
+    from: fromAddress,
     to: recipients.join(","),
     subject: "New Client Form Submission",
     html: `
@@ -96,7 +98,7 @@ const signedEmailFooterHtml = `
 export async function sendSignedDocumentEmail(documentName: string, attachment: Buffer): Promise<void> {
   const pdfFilename = ensurePdfExtension(documentName);
   const mailOptions = {
-    from: fromEmail,
+    from: fromAddress,
     to: recipients.join(","),
     subject: `Vierra | Signed Document: ${stripPdfExtension(documentName)}`,
     html: `
@@ -146,7 +148,7 @@ export async function sendSignedDocumentEmail(documentName: string, attachment: 
 export async function sendSignerCopyEmail(email: string, documentName: string, attachment: Buffer): Promise<void> {
   const pdfFilename = ensurePdfExtension(documentName);
   const mailOptions = {
-    from: fromEmail,
+    from: fromAddress,
     to: email,
     subject: `Vierra | Signed Document: ${stripPdfExtension(documentName)}`,
     html: `
@@ -196,7 +198,7 @@ export async function sendSignerCopyEmail(email: string, documentName: string, a
 
 export async function sendStaffSetPasswordEmail(staffEmail: string, staffName: string, setPasswordLink: string): Promise<void> {
   const mailOptions = {
-    from: fromEmail,
+    from: fromAddress,
     to: staffEmail,
     subject: "Vierra | Set Your Password",
     html: `
@@ -232,6 +234,58 @@ export async function sendStaffSetPasswordEmail(staffEmail: string, staffName: s
     console.log(`Set password email sent to ${staffEmail}:`, info.response);
   } catch (error) {
     console.error(`Error sending set password email to ${staffEmail}:`, error);
+    throw error;
+  }
+}
+
+export async function sendClientOnboardingCompletedEmail(
+  clientEmail: string,
+  clientName: string,
+  businessName: string,
+  setPasswordLink: string
+): Promise<void> {
+  const mailOptions = {
+    from: fromAddress,
+    to: clientEmail,
+    subject: "Vierra | Onboarding Complete",
+    html: `
+      <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
+        <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
+              <img src="https://vierradev.com/assets/vierra-logo.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:50px 40px;text-align:left;vertical-align:top;">
+              <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">Onboarding Complete</h2>
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 16px;">
+                Hi ${clientName || "there"}, your onboarding modules are complete. The Vierra team will process your information shortly. The next step in the process is to log onto your account! Click on the reset password button to set your password.
+              </p>
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 24px;">
+                <strong>Client Name:</strong> ${clientName || "N/A"}<br/>
+                <strong>Business Name:</strong> ${businessName || "N/A"}<br/>
+                <strong>Account Email:</strong> ${clientEmail}
+              </p>
+              <div style="margin-bottom:40px;text-align:center;">
+                <a href="${setPasswordLink}" style="display:inline-block;background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);color:#fff;font-weight:600;text-decoration:none;padding:10px 24px;border-radius:10px;font-size:14px;box-shadow:0 4px 15px rgba(122,19,208,0.3);">
+                  Reset Password
+                </a>
+              </div>
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">Best Wishes,<br/>- The Vierra Team</p>
+              ${signedEmailFooterHtml}
+            </td>
+          </tr>
+        </table>
+      </div>
+    `,
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`Onboarding completion email sent to ${clientEmail}:`, info.response);
+  } catch (error) {
+    console.error(`Error sending onboarding completion email to ${clientEmail}:`, error);
     throw error;
   }
 }
