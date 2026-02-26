@@ -888,22 +888,6 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                         return;
                       }
                       try {
-                        const finalOrderedAnswers = Object.entries(answers)
-                          .filter(([, value]) => value && (typeof value === 'string' ? value.trim() : true))
-                          .filter(([key]) => !["video3SubStep", "ndaSigned", "aboutYouSubStep", "video4SubStep"].includes(key))
-                          .map(([key, value]) => {
-                            const stepIdx = aboutYouFields.includes(key) ? 4 : operationsFields.includes(key) ? 5 : questions.findIndex(qu => qu.name === key);
-                            const label = aboutYouFields.includes(key) || operationsFields.includes(key) ? key : (questions.find(qu => qu.name === key)?.label || key);
-                            return {
-                              questionKey: key,
-                              answer: typeof value === 'string' ? value : String(value),
-                              timestamp: new Date().toISOString(),
-                              stepIndex: stepIdx >= 0 ? stepIdx : 4,
-                              questionLabel: label
-                            };
-                          })
-                          .sort((a, b) => a.stepIndex - b.stepIndex);
-
                         const completeResp = await fetch('/api/session/submitClientAnswers', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
