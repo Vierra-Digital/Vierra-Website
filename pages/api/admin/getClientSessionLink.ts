@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       
       if (!isExpired) {
         return res.status(200).json({
-          link: `/session/${latestSession.id}`,
+          link: `/onboarding/${latestSession.id}`,
           token: latestSession.id,
           status: latestSession.status,
         });
@@ -59,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     return res.status(200).json({
-      link: `/session/${token}`,
+      link: `/onboarding/${token}`,
       token: token,
       status: "pending",
       regenerated: true,

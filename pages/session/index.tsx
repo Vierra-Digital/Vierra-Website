@@ -8,7 +8,7 @@ export default function SessionIndex() {
   useEffect(() => {
     const token = router.query.token;
     if (token) {
-      router.replace(`/session/onboarding/${token}`);
+      router.replace(`/onboarding/${token}`);
     }
   }, [router]);
 

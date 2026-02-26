@@ -85,5 +85,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     maxAge: 60 * 60 * 24,
   }));
 
-  res.redirect(`/session/onboarding/${state}?linked=linkedin`);
+  res.redirect(`/onboarding/${state}?linked=linkedin`);
 }

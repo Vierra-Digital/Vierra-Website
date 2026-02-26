@@ -52,7 +52,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const baseUrl = process.env.NEXTAUTH_URL || `https://${req.headers.host}`
   const successUrl = `${baseUrl}/stripe/success`
-  const cancelUrl = `${baseUrl}/session/onboarding/${onboardingToken}`
+  const cancelUrl = `${baseUrl}/onboarding/${onboardingToken}`
 
   const checkoutSession = await stripe.checkout.sessions.create({
     customer: stripeCustomerId,

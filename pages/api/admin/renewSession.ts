@@ -41,7 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       message: "Session renewed successfully",
       token: updated.id,
       status: updated.status,
-      link: `/session/${updated.id}`,
+      link: `/onboarding/${updated.id}`,
     });
   } catch (err) {
     console.error("/api/admin/renewSession error", err);

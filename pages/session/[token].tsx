@@ -8,7 +8,7 @@ export default function SessionRedirect() {
   useEffect(() => {
     const { token } = router.query;
     if (token && typeof token === 'string') {
-      router.replace(`/session/onboarding/${token}`);
+      router.replace(`/onboarding/${token}`);
     }
   }, [router]);
 
