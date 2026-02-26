@@ -237,40 +237,77 @@ export default function Page() {
                   />
                 </a>
                 <a
-                  href="https://www.athenahealth.com/"
+                  href="https://ironandwaterco.com"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Image
-                    src="/assets/Partners/Athena.png"
-                    alt="Partner Logo"
-                    width={175}
-                    height={24}
-                  />
+                  <div className="flex items-center gap-2 text-white">
+                    <svg
+                      width="24"
+                      height="24"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                      aria-hidden="true"
+                    >
+                      <path d="M18 20V6.5C18 4.01472 15.9853 2 13.5 2H10.5C8.01472 2 6 4.01472 6 6.5V20" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                      <path d="M9 9.25C11.7 9.25 13.5 11.05 13.5 13.75C13.5 16.45 11.7 18.25 9 18.25" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                      <circle cx="14.75" cy="11.25" r="0.95" fill="currentColor"/>
+                    </svg>
+                    <span className="text-[11px] md:text-xs font-semibold tracking-[0.2em] whitespace-nowrap">
+                      IRON &amp; WATER CO.
+                    </span>
+                  </div>
                 </a>
                 <a
-                  href="https://www.harvardpilgrim.org/public/home"
+                  href="https://happystack.com"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Image
-                    src="/assets/Partners/Harvard.png"
-                    alt="Partner Logo"
-                    width={109}
-                    height={32}
-                  />
+                  <div className="flex items-center gap-2">
+                    <Image
+                      src="/assets/Partners/HappyStack.png"
+                      alt="HappyStack mascot"
+                      width={30}
+                      height={30}
+                      className="w-6 h-6 object-contain"
+                    />
+                    <Image
+                      src="/assets/Partners/HappyStack.svg"
+                      alt="HappyStack"
+                      width={117}
+                      height={19}
+                      className="w-auto h-3.5 md:h-4"
+                    />
+                  </div>
                 </a>
                 <a
-                  href="https://www.futuredocs.com/"
+                  href="https://somervilledentalassociates.com/"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  <Image
-                    src="/assets/Partners/NationalAcademy.png"
-                    alt="Partner Logo"
-                    width={123}
-                    height={48}
-                  />
+                  <div className="flex items-center gap-2 text-white whitespace-nowrap">
+                    <svg
+                      width="20"
+                      height="24"
+                      viewBox="0 0 20 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M10 22C6.6 22 3.5 19.4 2.9 15.9L1.3 6.2C1.1 4.6 2.3 3.2 3.9 3.2C5 3.2 6 3.8 6.5 4.8L7.3 6.3C8 7.6 9.9 7.6 10.6 6.3L11.4 4.8C11.9 3.8 12.9 3.2 14 3.2C15.6 3.2 16.8 4.6 16.6 6.2L15 15.9C14.4 19.4 13.4 22 10 22Z"
+                        stroke="currentColor"
+                        strokeWidth="1.6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <span className="text-[12px] md:text-sm tracking-[0.01em]">
+                      <span className="font-bold">Somerville</span>{" "}
+                      <span className="font-normal text-white/85">Dental</span>
+                    </span>
+                  </div>
                 </a>
               </div>
             </div>
