@@ -50,6 +50,13 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
     setClientData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
+  const handleNumericChange = (name: "monthlyRetainer" | "clientGoal", value: string) => {
+    const isMonthlyRetainer = name === "monthlyRetainer";
+    const pattern = isMonthlyRetainer ? /^\d*\.?\d{0,2}$/ : /^\d*$/;
+    if (!pattern.test(value)) return;
+    setClientData((prev) => ({ ...prev, [name]: value }));
+  };
+
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientData.clientEmail.trim());
 
   const nextStep = () => setStep((s) => s + 1);
@@ -282,7 +289,10 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
                   min="1"
                   step="0.01"
                   value={clientData.monthlyRetainer}
-                  onChange={handleChange}
+                  onChange={(e) => handleNumericChange("monthlyRetainer", e.target.value)}
+                  onKeyDown={(e) => {
+                    if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
+                  }}
                   className={`w-full border rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
                     clientData.monthlyRetainer && !monthlyRetainerValid
                       ? "border-red-500 bg-red-50"
@@ -304,7 +314,10 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
                   min="0"
                   step="1"
                   value={clientData.clientGoal}
-                  onChange={handleChange}
+                  onChange={(e) => handleNumericChange("clientGoal", e.target.value)}
+                  onKeyDown={(e) => {
+                    if (["e", "E", "+", "-", "."].includes(e.key)) e.preventDefault();
+                  }}
                   className={`w-full border rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
                     clientData.clientGoal && !clientGoalValid
                       ? "border-red-500 bg-red-50"
