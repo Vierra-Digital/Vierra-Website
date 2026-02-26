@@ -15,7 +15,7 @@ type ClientRow = {
     brandTone: string
     industry?: string
     monthlyRetainer?: number
-    clientGoal?: string
+    clientGoal?: number | null
     status: string
     isActive: boolean
     isExpired: boolean
@@ -537,7 +537,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{r.businessName || "—"}</td>
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{r.industry || r.targetAudience || "—"}</td>
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{typeof r.monthlyRetainer === 'number' ? `$${r.monthlyRetainer.toLocaleString()}` : "—"}</td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{r.clientGoal || r.adGoal || "—"}</td>
+                                                    <td className="px-4 py-4 text-sm text-[#111827]">{typeof r.clientGoal === "number" ? `${r.clientGoal.toLocaleString()} Leads` : "N/A"}</td>
                                                     <td className="px-4 py-4 text-sm"><StatusBadge status={r.status} /></td>
                                                     <td className="px-4 py-4 text-sm text-[#6B7280]">
                                                         <ClientActionsMenu

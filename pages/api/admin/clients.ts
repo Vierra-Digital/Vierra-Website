@@ -18,6 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         email: true,
         businessName: true,
         monthlyRetainerCents: true,
+        clientGoal: true,
         image: true,
         createdAt: true,
         isActive: true,
@@ -41,7 +42,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const website = answers.website ?? "";
       const targetAudience = answers.targetAudience ?? "";
       const adGoal = answers.socialMediaGoals ?? "N/A";
-      const clientGoal = "N/A";
       const brandTone = answers.brandTone ?? "N/A";
       const industry = answers.industry ?? "";
       let displayStatus: string = latest?.status ?? "pending";
@@ -61,7 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         website,
         targetAudience,
         adGoal,
-        clientGoal,
+        clientGoal: typeof c.clientGoal === "number" ? c.clientGoal : null,
         brandTone,
         industry,
         monthlyRetainer: typeof c.monthlyRetainerCents === "number" ? c.monthlyRetainerCents / 100 : null,
