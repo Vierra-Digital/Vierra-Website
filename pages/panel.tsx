@@ -188,18 +188,16 @@ const PanelPage = () => {
                 </span>
               </div>
             )}
-            {session?.user?.role !== "staff" && (
-              <div
-                id="panel-nav-item"
-                onClick={() => { setCurrentSection(4); setShowSettings(false); setIsSidebarOpen(false)}}
-                className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 4 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
-              >
-                <PiCalculator />
-                <span className={`text-xs ${inter.className}`}>
-                  LTV Calculator
-                </span>
-              </div>
-            )}
+            <div
+              id="panel-nav-item"
+              onClick={() => { setCurrentSection(4); setShowSettings(false); setIsSidebarOpen(false)}}
+              className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 4 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+            >
+              <PiCalculator />
+              <span className={`text-xs ${inter.className}`}>
+                LTV Calculator
+              </span>
+            </div>
             <div
               id="panel-nav-item"
               onClick={() => { setCurrentSection(7); setShowSettings(false); setIsSidebarOpen(false)}}
@@ -331,7 +329,7 @@ const PanelPage = () => {
                   {currentSection === 0 && <DashboardSection />}
                   {currentSection === 1 && session?.user?.role !== "staff" && <ClientsSection onAddClient={() => setIsAddClientOpen(true)} refreshTrigger={clientRefreshTrigger} />}
                   {currentSection === 2 && <TeamPanelSection userRole={session?.user?.role} />}
-                  {currentSection === 4 && session?.user?.role !== "staff" && <LtvCalculatorSection />}
+                  {currentSection === 4 && <LtvCalculatorSection />}
                   {currentSection === 5 && <OutreachSection />}
                   {currentSection === 6 && <ProjectManagement />}
                   {currentSection === 7 && (
