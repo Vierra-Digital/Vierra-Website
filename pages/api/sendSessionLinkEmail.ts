@@ -30,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const mailOptions = {
     from: process.env.EMAIL_USER,
     to: email,
-    subject: "Your Vierra Onboarding Session Link",
+    subject: "Vierra | Onboarding Link",
     html: `
       <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
         <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
@@ -45,14 +45,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 <img src="https://vierradev.com/assets/Onboarding/Dove.png" alt="Dove" style="width:85px;height:85px;border-radius:50%;border:4px solid #0E0A2D;background:#6D5DD3;padding:20px;">
               </div>
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">
-                Hi ${clientName || "there"}, Welcome To Vierra.<br/>Begin Your Modules
+                Welcome To Vierra ${clientName || "there"}!
               </h2>
               <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;max-width:480px;margin-left:auto;margin-right:auto;">
-                We're excited to kick off our partnership! Click below to get started with your video modules.
+                We're excited to kick off our partnership! Click below to get started with your onboarding and video modules.
               </p>
               <div style="margin-bottom:40px;">
-                <a href="${fullLink.replace('/session/', '/session/onboarding/')}" style="display:inline-block;background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);color:#fff;font-weight:600;text-decoration:none;padding:16px 40px;border-radius:12px;font-size:18px;box-shadow:0 4px 15px rgba(122,19,208,0.3);transition:all 0.3s ease;">
-                  Begin Video Modules
+                <a href="${fullLink}" style="display:inline-block;background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);color:#fff;font-weight:600;text-decoration:none;padding:16px 40px;border-radius:12px;font-size:18px;box-shadow:0 4px 15px rgba(122,19,208,0.3);transition:all 0.3s ease;">
+                  Begin Onboarding
                 </a>
               </div>
               <div style="margin:40px 0 30px;">
@@ -63,11 +63,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                   <img src="https://vierradev.com/assets/Socials/Instagram.png" alt="Instagram" style="width:32px;height:32px;">
                 </a>
                 <a href="https://www.facebook.com/share/1GXE6s4NSX/?mibextid=wwXIfr" style="margin:0 12px;display:inline-block;transition:transform 0.3s ease;">
-                  <img src="https://vierradev.com/assets/Socials/Facebook.png" alt="Twitter" style="width:32px;height:32px;">
+                  <img src="https://vierradev.com/assets/Socials/Facebook.png" alt="Facebook" style="width:32px;height:32px;">
                 </a>
               </div>
-              <div style="color:#999;font-size:14px;margin-top:30px;padding-top:20px;border-top:1px solid #eee;">
-                Copyright &copy; 2025 Vierra Digital. All rights reserved.
+              <div style="color:#999;font-size:14px;margin-top:30px;padding-top:20px;border-top:1px solid #eee;text-align:center;">
+                Copyright &copy; ${new Date().getFullYear()} <a href="https://vierradev.com" style="color:#7A13D0;text-decoration:none;font-weight:600;">Vierra Digital</a>. All rights reserved.<br/>
+                Contact: <a href="mailto:alex@vierradev.com" style="color:#999;text-decoration:none;">alex@vierradev.com</a>
               </div>
             </td>
           </tr>
