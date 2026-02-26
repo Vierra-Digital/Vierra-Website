@@ -13,6 +13,11 @@ export default function TeamSection() {
       image: "/assets/Team/Vilhjalmur.png",
     },
     {
+      name: "Nicholas Stan",
+      role: "Sales Lead",
+      image: "/assets/Team/Nick.jpeg",
+    },
+    {
       name: "Stefan Jian",
       role: "Business Advisor",
       image: "/assets/Team/Stefan.jpeg",
@@ -35,7 +40,7 @@ export default function TeamSection() {
         >
           Our Leadership Team<span className="text-[#7A13D0]">.</span>
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-8 md:gap-4 lg:gap-6 justify-items-center max-w-5xl mx-auto">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-x-4 gap-y-8 md:gap-4 lg:gap-5 justify-items-center max-w-6xl mx-auto">
           {team.map(({ name, role, image }) => (
             <div key={name} className="flex flex-col items-center">
               <div className="relative w-[140px] h-[140px] sm:w-[150px] sm:h-[150px] md:w-[170px] md:h-[170px] group">
