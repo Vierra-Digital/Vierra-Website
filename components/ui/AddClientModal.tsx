@@ -13,7 +13,7 @@ interface AddClientModalProps {
 
 const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCreated }) => {
   const [step, setStep] = useState(1);
-  const [clientData, setClientData] = useState({ clientName: "", clientEmail: "", businessName: "", industry: "", monthlyRetainer: "" });
+  const [clientData, setClientData] = useState({ clientName: "", clientEmail: "", businessName: "", industry: "", monthlyRetainer: "", clientGoal: "" });
   const [sessionLink, setSessionLink] = useState<string | null>(null);
   const [origin, setOrigin] = useState<string>("");
   const [, setSubmitting] = useState(false);
@@ -53,6 +53,11 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientData.clientEmail.trim());
 
   const nextStep = () => setStep((s) => s + 1);
+  const prevStep = () => setStep((s) => Math.max(1, s - 1));
+  const steps = [
+    { number: 1, title: "Basic Information" },
+    { number: 2, title: "Business & Targets" },
+  ];
 
   const handleSubmit = async () => {
     setErr(null);
@@ -64,6 +69,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
         businessName: clientData.businessName.trim(),
         industry: clientData.industry.trim(),
         monthlyRetainer: Number(clientData.monthlyRetainer),
+        clientGoal: Number(clientData.clientGoal),
       };
       const response = await fetch("/api/session/generateClientSession", {
         method: "POST",
@@ -88,7 +94,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   };
 
   useEffect(() => {
-    if (step === 2 && sessionLink && clientData.clientEmail) {
+    if (step === 3 && sessionLink && clientData.clientEmail) {
       fetch("/api/sendSessionLinkEmail", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -111,6 +117,22 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
     clientData.monthlyRetainer.trim() !== "" &&
     Number.isFinite(monthlyRetainerAmount) &&
     monthlyRetainerAmount > 0;
+  const clientGoalAmount = Number(clientData.clientGoal);
+  const clientGoalValid =
+    clientData.clientGoal.trim() !== "" &&
+    Number.isInteger(clientGoalAmount) &&
+    clientGoalAmount >= 0;
+
+  const basicInfoValid =
+    !!clientData.clientName.trim() &&
+    !!clientData.clientEmail.trim() &&
+    emailValid &&
+    !!clientData.businessName.trim();
+
+  const businessInfoValid =
+    !!clientData.industry.trim() &&
+    monthlyRetainerValid &&
+    clientGoalValid;
 
   if (!isOpen) return null;
 
@@ -126,7 +148,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
       >
 
         <div className="flex items-center gap-3 mb-6">
-          {step === 1 && (
+          {(step === 1 || step === 2) && (
             <>
               <div className="w-12 h-12 rounded-full bg-[#701CC0]/10 flex items-center justify-center">
                 <FiUser className="w-6 h-6 text-[#701CC0]" />
@@ -136,7 +158,33 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
           )}
         </div>
 
-        {err && <div className="mb-4 rounded bg-red-500/20 p-2 text-sm text-red-100">{err}</div>}
+        {(step === 1 || step === 2) && (
+          <div className="mb-6">
+            <div className="flex items-center justify-center">
+              {steps.map((s, index) => (
+                <div key={s.number} className="flex items-center">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                    step >= s.number ? "bg-[#701CC0] text-white" : "bg-gray-200 text-gray-600"
+                  }`}>
+                    {s.number}
+                  </div>
+                  <span className={`ml-2 text-sm ${
+                    step >= s.number ? "text-[#701CC0] font-medium" : "text-gray-600"
+                  }`}>
+                    {s.title}
+                  </span>
+                  {index < steps.length - 1 && (
+                    <div className={`w-24 h-0.5 mx-4 ${
+                      step > s.number ? "bg-[#701CC0]" : "bg-gray-200"
+                    }`} />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {err && <div className="mb-4 text-sm text-red-600">{err}</div>}
 
         {step === 1 && (
           <>
@@ -186,6 +234,33 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
                   placeholder="Enter business name"
                 />
               </div>
+            </div>
+
+            <div className="flex justify-between items-center mt-6">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={nextStep}
+                disabled={!basicInfoValid}
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  !basicInfoValid
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-[#701CC0] text-white hover:bg-[#5f17a5]'
+                }`}
+              >
+                Next
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-2">Industry</label>
                 <input
@@ -220,22 +295,44 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
                   <p className="mt-1 text-xs text-red-600">Please enter a valid amount greater than 0.</p>
                 )}
               </div>
+              <div>
+                <label className="block text-sm font-medium text-[#374151] mb-2">Client Goal (Leads)</label>
+                <input
+                  id="clientGoal"
+                  name="clientGoal"
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={clientData.clientGoal}
+                  onChange={handleChange}
+                  className={`w-full border rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
+                    clientData.clientGoal && !clientGoalValid
+                      ? "border-red-500 bg-red-50"
+                      : "border-[#E5E7EB]"
+                  }`}
+                  placeholder="Enter lead goal (number only)"
+                  required
+                />
+                {clientData.clientGoal && !clientGoalValid && (
+                  <p className="mt-1 text-xs text-red-600">Please enter a whole number (0 or higher).</p>
+                )}
+              </div>
             </div>
 
             <div className="flex justify-between items-center mt-6">
               <button
-                onClick={onClose}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+                onClick={prevStep}
+                className="px-4 py-2 border border-[#E5E7EB] text-[#374151] rounded-lg hover:bg-gray-50 text-sm font-medium"
               >
-                Cancel
+                Back
               </button>
               <button
                 onClick={async () => {
                   await handleSubmit();
                 }}
-                disabled={!clientData.clientName.trim() || !clientData.clientEmail.trim() || !emailValid || !clientData.businessName.trim() || !clientData.industry.trim() || !monthlyRetainerValid}
+                disabled={!businessInfoValid}
                 className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                  !clientData.clientName.trim() || !clientData.clientEmail.trim() || !emailValid || !clientData.businessName.trim() || !clientData.industry.trim() || !monthlyRetainerValid
+                  !businessInfoValid
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     : 'bg-[#701CC0] text-white hover:bg-[#5f17a5]'
                 }`}
@@ -246,7 +343,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
           </>
         )}
 
-        {step === 2 && (
+        {step === 3 && (
           <>
             <div className="flex flex-col items-center text-center p-6">
               <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
