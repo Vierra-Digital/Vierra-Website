@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react"
-import { Users, FileText, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, Eye, X, MoreVertical, Trash2, RotateCw, Link as LinkIcon } from "lucide-react"
+import { Users, FileText, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, X, MoreVertical, Trash2, RotateCw, Link as LinkIcon } from "lucide-react"
 import { FiCheck } from "react-icons/fi"
 import { FiSearch, FiFilter, FiPlus, FiTrash2 } from "react-icons/fi"
 import { Inter } from "next/font/google"
@@ -941,8 +941,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
         }
     }
 
-    const [showAnswers, setShowAnswers] = useState<{ open: boolean; json: any; client?: { name: string; email: string; businessName: string } } | null>(null)
-
     const expireSessions = useCallback(async () => {
         try {
             setExpiring(true)
@@ -1085,17 +1083,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
             setActionMenuPosition(null)
         }
     }, [actionMenuOpen])
-
-    const openAnswers = async (token: string) => {
-        try {
-            const r = await fetch(`/api/admin/sessionAnswers?token=${encodeURIComponent(token)}`)
-            if (!r.ok) throw new Error("Failed to fetch answers")
-            const data = await r.json()
-            setShowAnswers({ open: true, json: data?.answers ?? {}, client: data?.client })
-        } catch {
-            setShowAnswers({ open: true, json: { error: "Could not load answers" } })
-        }
-    }
 
     const filteredSessions = useMemo(() => {
         let filtered = sorted
@@ -1383,15 +1370,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{formatDate(s.lastUpdatedAt)}</td>
                                                     <td className="px-4 py-4">
                                     <div className="flex items-center gap-2">
-                                        {s.status === "completed" && (
-                                            <button
-                                                onClick={() => openAnswers(s.token)}
-                                                className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs bg-[#701CC0] text-white hover:bg-[#5a1799] transition-colors"
-                                            >
-                                                <Eye size={14} /> View
-                                            </button>
-                                        )}
-                                        
                                         <div className="relative" ref={(el) => { actionMenuRefs.current[s.token] = el }}>
                                             <button
                                                 ref={(el) => { actionMenuButtonRefs.current[s.token] = el }}
@@ -1482,25 +1460,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
             )}
 
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
-
-            {showAnswers?.open && (
-                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true">
-                    <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[80vh] overflow-auto text-gray-900">
-                        <div className="flex items-center justify-between px-5 py-3 border-b">
-                            <div>
-                                <div className="text-lg font-semibold">Client Responses</div>
-                                {showAnswers?.client && (
-                                    <div className="text-sm text-gray-500">{showAnswers.client.name} • {showAnswers.client.email} • {showAnswers.client.businessName}</div>
-                                )}
-                            </div>
-                            <button className="text-gray-600 hover:text-black" onClick={() => setShowAnswers(null)}>Close</button>
-                        </div>
-                        <div className="p-5">
-                            <pre className="text-sm font-mono text-gray-800 whitespace-pre-wrap break-words bg-gray-50 p-4 rounded border border-gray-200">{JSON.stringify(showAnswers.json, null, 2)}</pre>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {showUpdateSessionsModal && (
                 <div 
