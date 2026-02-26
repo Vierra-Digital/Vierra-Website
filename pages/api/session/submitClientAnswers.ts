@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 import { encrypt } from "@/lib/crypto";
+import { sendClientOnboardingCompletedEmail } from "@/lib/emailSender";
 
 function generatePassword(len = 14) {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@$%^*_-";
@@ -25,6 +26,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     let initialPassword: string | null = null;
     let userEmail: string | null = null;
+    let clientName: string | null = null;
+    let businessName: string | null = null;
+    let userId: number | null = null;
 
     await prisma.$transaction(async (tx) => {
       const sess = await tx.onboardingSession.findUnique({
@@ -46,15 +50,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!completed) return;
       const email = sess.client.email.toLowerCase();
       userEmail = email;
+      clientName = sess.client.name;
+      businessName = sess.client.businessName;
 
       let user = await tx.user.findUnique({ where: { email } });
       if (!user) {
         initialPassword = generatePassword(14);
         const passwordEnc = encrypt(initialPassword);
         user = await tx.user.create({
-          data: { email, passwordEnc, role: "user" },
+          data: { email, passwordEnc, role: "user", name: sess.client.name },
+        });
+      } else if (!user.name && sess.client.name) {
+        user = await tx.user.update({
+          where: { id: user.id },
+          data: { name: sess.client.name },
         });
       }
+      userId = user.id;
       if (!sess.client.userId || sess.client.userId !== user.id) {
         await tx.client.update({ where: { id: sess.client.id }, data: { userId: user.id } });
       }
@@ -84,6 +96,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         data: { consumedAt: new Date() },
       });
     });
+
+    if (completed && userId && userEmail) {
+      try {
+        const resetToken = crypto.randomBytes(32).toString("hex");
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        await prisma.passwordResetToken.create({
+          data: {
+            token: resetToken,
+            userId,
+            expiresAt,
+          },
+        });
+        const baseUrl = (process.env.NEXTAUTH_URL || `https://${req.headers.host || "vierradev.com"}`).replace(/\/+$/, "");
+        const setPasswordLink = `${baseUrl}/set-password/${resetToken}`;
+        await sendClientOnboardingCompletedEmail(
+          userEmail,
+          clientName || "there",
+          businessName || "",
+          setPasswordLink
+        );
+      } catch (emailErr) {
+        console.error("submitClientAnswers: failed to send onboarding completion email:", emailErr);
+      }
+    }
 
     return res.status(200).json({
       ok: true,

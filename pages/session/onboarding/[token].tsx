@@ -439,23 +439,46 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
           <title>Vierra | Modules Completed</title>
           <meta name="robots" content="noindex, nofollow" />
         </Head>
-        <div className={`min-h-screen bg-[#FAFAFA] flex items-center justify-center p-4 ${inter.className}`}>
-          <div className="rounded-2xl border border-[#E5E7EB] bg-white shadow-sm p-6 lg:p-10 text-center max-w-xl w-full">
-            <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center mx-auto">
-              <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
-              <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
-                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                </span>
-              </span>
+        <div className={`min-h-screen bg-[#FAFAFA] ${inter.className}`}>
+          <header className="bg-white border-b border-[#E5E7EB] px-4 lg:px-6 py-2 flex items-center justify-between">
+            <div className="h-12 lg:h-14 w-32 lg:w-36 overflow-hidden flex items-center shrink-0">
+              <Image
+                src="/assets/vierra-logo-black.png"
+                alt="Vierra"
+                width={320}
+                height={96}
+                className="h-full w-full object-cover object-center"
+                priority
+              />
             </div>
-            <h2 className="text-xl font-semibold text-[#111827] mb-2">Modules Completed Successfully!</h2>
-            <p className="text-sm text-[#6B7280]">You&apos;ve completed all modules. Thank you for your time.</p>
-            <p className="text-sm text-[#6B7280] mt-4">
-              Redirecting in {redirectCountdown} second{redirectCountdown !== 1 ? "s" : ""}...
-            </p>
+            <div className={`hidden sm:flex items-center gap-3 text-sm ${inter.className}`}>
+              {isSaving && (
+                <span className="flex items-center gap-1.5 text-[#6B7280]">
+                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                  Saving...
+                </span>
+              )}
+            </div>
+          </header>
+
+          <div className="flex items-center justify-center p-4 lg:p-8 min-h-[calc(100vh-3.5rem)]">
+            <div className="rounded-2xl border border-[#E5E7EB] bg-white shadow-sm p-6 lg:p-10 text-center max-w-xl w-full">
+              <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center mx-auto">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
+                <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
+                    <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                </span>
+              </div>
+              <h2 className="text-xl font-semibold text-[#111827] mb-2">Modules Completed Successfully!</h2>
+              <p className="text-sm text-[#6B7280]">You&apos;ve completed all modules. Thank you for your time.</p>
+              <p className="text-sm text-[#6B7280] mt-4">
+                Redirecting in {redirectCountdown} second{redirectCountdown !== 1 ? "s" : ""}...
+              </p>
+            </div>
           </div>
         </div>
       </>
@@ -881,17 +904,19 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                           })
                           .sort((a, b) => a.stepIndex - b.stepIndex);
 
-                        await fetch('/api/onboarding/saveAnswers', {
+                        const completeResp = await fetch('/api/session/submitClientAnswers', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
                             token: sessionId,
                             answers,
-                            orderedAnswers: finalOrderedAnswers,
-                            clientAnswers: true,
                             completed: true
                           }),
                         });
+                        if (!completeResp.ok) {
+                          const errData = await completeResp.json().catch(() => ({}));
+                          throw new Error(errData?.message || "Failed to complete modules");
+                        }
                         setShowSuccessModal(true);
                       } catch (err) {
                         console.error("Error completing questionnaire:", err);
