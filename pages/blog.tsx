@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Search } from "lucide-react";
 import Footer from "@/components/FooterSection/Footer";
-import { GetStaticProps } from "next";
+import { GetServerSideProps } from "next";
 import Link from "next/link";
 
 type BlogPostType = {
@@ -28,7 +28,7 @@ type Props = {
     latestPosts: BlogPostType[];
 };
 
-export const getStaticProps: GetStaticProps<Props> = async () => {
+export const getServerSideProps: GetServerSideProps<Props> = async () => {
     try {
     const latestPosts = await prisma.blogPost.findMany({
         orderBy: { published_date: "desc" },
@@ -44,15 +44,13 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
                 author: { name: post.author.name },
             })),
         },
-        revalidate: 60,
     };
     } catch (error) {
-        console.warn('Database unavailable during static props generation, using empty data:', error);
+        console.warn('Database unavailable during blog page request, using empty data:', error);
         return {
             props: {
                 latestPosts: [],
             },
-            revalidate: 60,
         };
     }
 };
