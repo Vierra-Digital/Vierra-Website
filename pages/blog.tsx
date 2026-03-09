@@ -26,9 +26,10 @@ type BlogPostType = {
 
 type Props = {
     latestPosts: BlogPostType[];
+    hasFetchError?: boolean;
 };
 
-export const getServerSideProps: GetServerSideProps<Props> = async () => {
+export const getServerSideProps: GetServerSideProps<Props> = async ({ res }) => {
     try {
     const latestPosts = await prisma.blogPost.findMany({
         orderBy: { published_date: "desc" },
@@ -43,13 +44,17 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
                 published_date: post.published_date.toISOString(),
                 author: { name: post.author.name },
             })),
+            hasFetchError: false,
         },
     };
     } catch (error) {
         console.warn('Database unavailable during blog page request, using empty data:', error);
+        res.statusCode = 503;
+        res.setHeader("Retry-After", "3600");
         return {
             props: {
                 latestPosts: [],
+                hasFetchError: true,
             },
         };
     }
@@ -78,7 +83,7 @@ const inter = Inter({ subsets: ["latin"] });
 const tags: string[] = ["All Blog Posts", "Case Studies", "Technology", "AI & Automation", "Finance", "Marketing", "Sales", "Management", "Leadership"]
 
 
-const BlogPage = ({ latestPosts }: Props) => {
+const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
 
     const [tagSelected, setTagSelected] = useState(0);
     const [tagSelectedName, setTagSelectedName] = useState("All Blog Posts");
@@ -149,6 +154,7 @@ const BlogPage = ({ latestPosts }: Props) => {
                 <title>Vierra | Blog</title>
                 <meta name="description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients. Learn about marketing, lead generation, business growth, and digital optimization." />
                 <meta name="keywords" content="marketing blog, business growth strategies, lead generation tips, digital marketing insights, case studies, business scaling, marketing automation" />
+                {hasFetchError && <meta name="robots" content="noindex, nofollow" />}
                 <link rel="canonical" href={canonicalUrl} />
                 {prevUrl && <link rel="prev" href={prevUrl} />}
                 {nextUrl && <link rel="next" href={nextUrl} />}
