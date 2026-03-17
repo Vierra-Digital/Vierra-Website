@@ -1,58 +1,14 @@
 import React, { useState, useMemo, useEffect } from "react"
 import { Inter } from "next/font/google"
-import { FiFolder, FiSearch, FiTrash2, FiDownload } from "react-icons/fi"
+import { FiFolder, FiTrash2, FiDownload } from "react-icons/fi"
+import PanelSearchInput from "@/components/ui/PanelSearchInput"
+import PanelSectionHeader from "@/components/ui/PanelSectionHeader"
+import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 
 const inter = Inter({ subsets: ["latin"] })
 
 const getNameWithoutExtension = (name: string) =>
   name.replace(/\.[^/.]+$/, "") || name
-
-const ConfirmDeleteFileModal: React.FC<{
-  isOpen: boolean
-  fileName: string
-  onConfirm: () => void
-  onCancel: () => void
-}> = ({ isOpen, fileName, onConfirm, onCancel }) => {
-  if (!isOpen) return null
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      onClick={onCancel}
-    >
-      <div
-        className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-            <FiTrash2 className="w-6 h-6 text-red-600" />
-          </div>
-          <h3 className="text-xl font-semibold text-[#111827]">Delete File</h3>
-        </div>
-        <p className="text-sm text-[#6B7280] mb-6">
-          Are you sure you want to delete{" "}
-          <span className="font-semibold text-[#111827]">{fileName}</span>? This
-          action is permanent and cannot be undone.
-        </p>
-        <div className="flex gap-3 justify-end">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm font-medium"
-          >
-            Delete File
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 interface FileItem {
   id: string
@@ -121,27 +77,18 @@ const FilesSection: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) =>
     <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
       <div className="flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
         <div className="w-full max-w-6xl flex flex-col h-full">
-          <div className="w-full flex justify-between items-center mb-2">
-            <div>
-              <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">
-                Files
-              </h1>
-            </div>
-            <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
-              <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
-              <label htmlFor="files-search" className="sr-only">
-                Search files
-              </label>
-              <input
+          <PanelSectionHeader
+            title="Files"
+            actions={
+              <PanelSearchInput
                 id="files-search"
-                type="search"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={setSearch}
                 placeholder="Search by name"
-                className="w-64 md:w-80 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none"
+                label="Search files"
               />
-            </div>
-          </div>
+            }
+          />
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -249,9 +196,19 @@ const FilesSection: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) =>
           )}
 
           {!readOnly && (
-            <ConfirmDeleteFileModal
+            <ConfirmActionModal
               isOpen={!!fileToDelete}
-              fileName={fileToDelete ? getNameWithoutExtension(fileToDelete.name) : ""}
+              title="Delete File"
+              message={
+                <>
+                  Are you sure you want to delete{" "}
+                  <span className="font-semibold text-[#111827]">
+                    {fileToDelete ? getNameWithoutExtension(fileToDelete.name) : ""}
+                  </span>
+                  ? This action is permanent and cannot be undone.
+                </>
+              }
+              confirmLabel="Delete File"
               onConfirm={handleConfirmDelete}
               onCancel={() => setFileToDelete(null)}
             />

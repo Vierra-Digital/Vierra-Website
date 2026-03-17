@@ -1,8 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-import { canAccessBoard } from "@/lib/projectBoards";
-import type { ProjectBoard } from "@prisma/client";
+import { getSessionPosition, parseProjectBoard, requireBoardAccessOrRespond403 } from "@/lib/api/projectAccess";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireSession(req, res);
@@ -13,30 +12,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(403).json({ message: "Forbidden" });
   }
 
-  const position = role === "admin"
-    ? "Leadership"
-    : (await (async () => {
-        const userId = (session.user as any)?.id;
-        const user = userId
-          ? await prisma.user.findUnique({
-              where: { id: parseInt(String(userId), 10) },
-              select: { position: true },
-            })
-          : await prisma.user.findUnique({
-              where: { email: (session.user as any)?.email },
-              select: { position: true },
-            });
-        return user?.position ?? null;
-      })());
+  const position = await getSessionPosition(session);
 
   if (req.method === "GET") {
-    const board = req.query.board as ProjectBoard | undefined;
-    if (!board || !["Design", "Development", "Outreach", "Leadership"].includes(board)) {
+    const board = parseProjectBoard(req.query.board);
+    if (!board) {
       return res.status(400).json({ message: "Invalid or missing board" });
     }
-    if (!canAccessBoard(position, board)) {
-      return res.status(403).json({ message: "You do not have access to this board" });
-    }
+    requireBoardAccessOrRespond403(res, position, board);
 
     try {
       const tasks = await prisma.projectTask.findMany({
@@ -59,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!board || !name || typeof description !== "string") {
       return res.status(400).json({ message: "board, name, and description are required" });
     }
-    if (!["Design", "Development", "Outreach", "Leadership"].includes(board)) {
+    if (!parseProjectBoard(board)) {
       return res.status(400).json({ message: "Invalid board" });
     }
 

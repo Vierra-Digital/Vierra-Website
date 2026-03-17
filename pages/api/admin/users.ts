@@ -1,12 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
 import { encrypt } from "@/lib/crypto";
+import { getSessionRole, requireSessionOrRespond401 } from "@/lib/api/guards";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireSession(req, res);
-  if (!session) return res.status(401).json({ message: "Not authenticated" });
-  const role = (session.user as any)?.role;
+  let session;
+  try {
+    session = await requireSessionOrRespond401(req, res);
+  } catch {
+    return;
+  }
+  const role = getSessionRole(session);
   if (req.method === "GET") {
     if (role !== "admin" && role !== "staff") return res.status(403).json({ message: "Forbidden" });
   } else {

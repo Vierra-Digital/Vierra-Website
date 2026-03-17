@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next"
 import { parse as parseCookie } from "cookie"
 import { prisma } from "@/lib/prisma"
 import { stripe } from "@/lib/stripe"
+import { resolveBaseUrl } from "@/lib/api/url"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
@@ -50,7 +51,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
   }
 
-  const baseUrl = process.env.NEXTAUTH_URL || `https://${req.headers.host}`
+  const baseUrl = resolveBaseUrl(req)
   const successUrl = `${baseUrl}/stripe/success`
   const cancelUrl = `${baseUrl}/onboarding/${onboardingToken}`
 

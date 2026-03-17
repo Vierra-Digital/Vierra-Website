@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
+import { decodeBase64Image } from "@/lib/api/image";
 
 export const config = {
   api: {
@@ -26,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!userId || !imageData || !mimeType) {
       return res.status(400).json({ message: "User ID, image data and mime type are required" });
     }
-    const imageBuffer = Buffer.from(imageData, 'base64');
+    const imageBuffer = decodeBase64Image(imageData);
     const updated = await prisma.user.update({
       where: { id: Number(userId) },
       data: { 

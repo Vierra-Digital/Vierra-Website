@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { sendStaffSetPasswordEmail } from "@/lib/emailSender";
+import { resolveBaseUrl } from "@/lib/api/url";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     const session = await requireSession(req, res);
@@ -72,7 +73,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             },
         });
 
-        const baseUrl = (process.env.NEXTAUTH_URL || `https://${req.headers.host || "vierradev.com"}`).replace(/\/+$/, "");
+        const baseUrl = resolveBaseUrl(req);
         const setPasswordLink = `${baseUrl}/set-password/${token}`;
 
         try {

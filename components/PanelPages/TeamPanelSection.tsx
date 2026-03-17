@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { FiSearch, FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck } from "react-icons/fi";
-import { MoreVertical } from "lucide-react";
 import Image from "next/image";
 import ProfileImage from "../ProfileImage";
 import { Inter } from "next/font/google";
+import RowActionMenu from "@/components/ui/RowActionMenu";
+import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -13,66 +14,10 @@ const StaffActionsMenu: React.FC<{
     onEdit: () => void
     onDelete: () => void
 }> = ({ staffName, onEdit, onDelete }) => {
-    const [isOpen, setIsOpen] = useState(false)
-    const [position, setPosition] = useState<{ top: number; right: number } | null>(null)
-    const buttonRef = useRef<HTMLButtonElement>(null)
-    const menuRef = useRef<HTMLDivElement>(null)
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(event.target as Node) && 
-                buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
-                setIsOpen(false)
-                setPosition(null)
-            }
-        }
-
-        if (isOpen) {
-            document.addEventListener('mousedown', handleClickOutside)
-            return () => document.removeEventListener('mousedown', handleClickOutside)
-        }
-    }, [isOpen])
-
-    useEffect(() => {
-        if (isOpen && buttonRef.current) {
-            const rect = buttonRef.current.getBoundingClientRect()
-            const dropdownHeight = 150
-            const viewportHeight = window.innerHeight
-            const viewportMiddle = viewportHeight / 2
-            const showAbove = rect.top > viewportMiddle
-            
-            setPosition({
-                top: showAbove ? rect.top - dropdownHeight - 2 : rect.bottom + 2,
-                right: window.innerWidth - rect.right,
-            })
-        } else {
-            setPosition(null)
-        }
-    }, [isOpen])
-
     return (
-        <div className="relative">
-            <button
-                ref={buttonRef}
-                onClick={() => setIsOpen(!isOpen)}
-                aria-label={`Manage ${staffName}`}
-                className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
-            >
-                <MoreVertical className="w-4 h-4 text-[#6B7280]" />
-            </button>
-            {isOpen && position && (
-                <div 
-                    ref={menuRef}
-                    className="fixed w-48 bg-white rounded-lg shadow-xl border border-[#E5E7EB] py-1 z-[100]"
-                    style={{
-                        top: `${position.top}px`,
-                        right: `${position.right}px`
-                    }}
-                >
+        <RowActionMenu label={`Manage ${staffName}`}>
                     <button
                         onClick={() => {
-                            setIsOpen(false)
-                            setPosition(null)
                             onEdit()
                         }}
                         className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-blue-600"
@@ -82,8 +27,6 @@ const StaffActionsMenu: React.FC<{
                     </button>
                     <button
                         onClick={() => {
-                            setIsOpen(false)
-                            setPosition(null)
                             onDelete()
                         }}
                         className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
@@ -91,64 +34,7 @@ const StaffActionsMenu: React.FC<{
                         <FiTrash2 className="w-4 h-4" />
                         Remove Staff
                     </button>
-                </div>
-            )}
-        </div>
-    )
-}
-
-const DeleteStaffModal: React.FC<{
-    isOpen: boolean
-    onClose: () => void
-    onConfirm: () => void
-    staffName: string
-}> = ({ isOpen, onClose, onConfirm, staffName }) => {
-    const modalRef = useRef<HTMLDivElement>(null)
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
-                onClose()
-            }
-        }
-
-        if (isOpen) {
-            document.addEventListener('mousedown', handleClickOutside)
-            return () => document.removeEventListener('mousedown', handleClickOutside)
-        }
-    }, [isOpen, onClose])
-
-    if (!isOpen) return null
-
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4" ref={modalRef}>
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-                        <FiTrash2 className="w-6 h-6 text-red-600" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-[#111827]">Remove Staff Member</h3>
-                </div>
-                <p className="text-sm text-[#6B7280] mb-6">
-                    Are you sure you want to remove <span className="font-semibold text-[#111827]">{staffName}</span>? 
-                    This action is permanent and cannot be undone. All associated data will be removed.
-                </p>
-                <div className="flex gap-3 justify-end">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={onConfirm}
-                        className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm font-medium"
-                    >
-                        Remove Staff
-                    </button>
-                </div>
-            </div>
-        </div>
+        </RowActionMenu>
     )
 }
 
@@ -718,14 +604,22 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             )}
 
             {userRole === "admin" && (
-                <DeleteStaffModal
+                <ConfirmActionModal
                     isOpen={showDeleteModal}
-                    onClose={() => {
+                    title="Remove Staff Member"
+                    message={
+                        <>
+                            Are you sure you want to remove{" "}
+                            <span className="font-semibold text-[#111827]">{staffToDelete?.name || ""}</span>? This action
+                            is permanent and cannot be undone. All associated data will be removed.
+                        </>
+                    }
+                    confirmLabel="Remove Staff"
+                    onCancel={() => {
                         setShowDeleteModal(false)
                         setStaffToDelete(null)
                     }}
                     onConfirm={confirmDeleteStaff}
-                    staffName={staffToDelete?.name || ""}
                 />
             )}
         </div>

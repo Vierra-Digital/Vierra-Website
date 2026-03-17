@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Inter } from "next/font/google"
-import { FiPlus, FiTrash2, FiFileText, FiFilter, FiSearch, FiBold, FiItalic, FiLink, FiUnderline, FiImage, FiVideo, FiCornerUpLeft, FiCornerUpRight, FiList, FiMoreVertical, FiAlignLeft, FiAlignCenter, FiAlignRight } from "react-icons/fi"
+import { FiPlus, FiFileText, FiFilter, FiSearch, FiBold, FiItalic, FiLink, FiUnderline, FiImage, FiVideo, FiCornerUpLeft, FiCornerUpRight, FiList, FiMoreVertical, FiAlignLeft, FiAlignCenter, FiAlignRight } from "react-icons/fi"
 import { RiArrowDropDownLine } from "react-icons/ri"
+import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -1507,45 +1508,6 @@ const RichTextEditor: React.FC<{
   )
 }
 
-const ConfirmDeleteModal: React.FC<{
-  isOpen: boolean
-  postTitle: string
-  onConfirm: () => void
-  onCancel: () => void
-}> = ({ isOpen, postTitle, onConfirm, onCancel }) => {
-  if (!isOpen) return null
-
-    return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onCancel}>
-      <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-            <FiTrash2 className="w-6 h-6 text-red-600" />
-          </div>
-          <h3 className="text-xl font-semibold text-[#111827]">Delete Blog Post</h3>
-        </div>
-        <p className="text-sm text-[#6B7280] mb-6">
-          Are you sure you want to delete <span className="font-semibold text-[#111827]">&ldquo;{postTitle}&rdquo;</span>? 
-          This action is permanent and cannot be undone. All associated data will be removed.
-        </p>
-        <div className="flex gap-3 justify-end">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm font-medium"
-          >
-            Delete Post
-          </button>
-        </div>
-      </div>
-        </div>
-    )
-}
 const InsertLinkModal: React.FC<{
   isOpen: boolean
   linkText: string
@@ -2314,9 +2276,17 @@ export default function BlogEditorSection() {
       </div>
       </div>
 
-      <ConfirmDeleteModal
+      <ConfirmActionModal
         isOpen={deleteModalOpen}
-        postTitle={postToDelete?.title || ""}
+        title="Delete Blog Post"
+        message={
+          <>
+            Are you sure you want to delete{" "}
+            <span className="font-semibold text-[#111827]">&ldquo;{postToDelete?.title || ""}&rdquo;</span>? This action is
+            permanent and cannot be undone. All associated data will be removed.
+          </>
+        }
+        confirmLabel="Delete Post"
         onConfirm={() => postToDelete && deletePost(postToDelete.id)}
         onCancel={() => {
           setDeleteModalOpen(false)

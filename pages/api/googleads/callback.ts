@@ -1,11 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { parse as parseCookie, serialize as serializeCookie } from "cookie";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
-
-const asStr = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+import { asStr, clearOauthStateCookie, readCookies, setOnboardingSessionCookie } from "@/lib/api/oauth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") { res.status(405).end(); return; }
@@ -41,15 +39,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const encRefresh = refresh_token ? encrypt(refresh_token) : undefined;
   const expiresAt  = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
 
-  const cookies = parseCookie(req.headers.cookie || "");
+  const cookies = readCookies(req.headers.cookie);
   const hasStateCookie = !!cookies.ga_oauth_state;
 
   if (hasStateCookie) {
     if (!state || cookies.ga_oauth_state !== state) { res.status(400).send("Invalid state"); return; }
-    res.setHeader("Set-Cookie", serializeCookie("ga_oauth_state", "", {
-      path: "/api/googleads/callback",
-      maxAge: 0,
-    }));
+    clearOauthStateCookie(res, "ga_oauth_state", "/api/googleads/callback");
 
     const session = await getServerSession(req, res, authOptions);
     if (!session) { res.redirect("/login"); return; }
@@ -74,13 +69,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     update: { accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
     create: { sessionId: state, platform: "googleads", accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
   });
-  res.setHeader("Set-Cookie", serializeCookie("ob_session", state, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24,
-  }));
+  setOnboardingSessionCookie(res, state);
 
   res.redirect(`/onboarding/${state}?linked=googleads`);
 }

@@ -1,10 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { randomBytes } from "crypto";
-import { serialize as serializeCookie } from "cookie";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-
-const asStr = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+import { asStr, issueOauthStateCookie } from "@/lib/api/oauth";
 
 const SCOPES = ["openid", "profile", "email", "w_member_social"];
 
@@ -32,17 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireSession(req, res);
   if (!session) { res.status(401).json({ message: "Not authenticated" }); return; }
 
-  const state = randomBytes(16).toString("hex");
-  res.setHeader(
-    "Set-Cookie",
-    serializeCookie("li_oauth_state", state, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/api/linkedin/callback",
-      maxAge: 10 * 60,
-    })
-  );
+  const state = issueOauthStateCookie(res, "li_oauth_state", "/api/linkedin/callback");
 
   const authUrl = "https://www.linkedin.com/oauth/v2/authorization?" + new URLSearchParams({
     response_type: "code",

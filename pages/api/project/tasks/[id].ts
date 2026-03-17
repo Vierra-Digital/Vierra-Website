@@ -1,8 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-import { canAccessBoard } from "@/lib/projectBoards";
 import type { ProjectTaskStatus } from "@prisma/client";
+import { getSessionPosition, requireBoardAccessOrRespond403 } from "@/lib/api/projectAccess";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireSession(req, res);
@@ -16,24 +16,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const id = req.query.id as string;
   if (!id) return res.status(400).json({ message: "Task id required" });
 
-  const userId = (session.user as any)?.id;
-  const user = userId
-    ? await prisma.user.findUnique({
-        where: { id: parseInt(String(userId), 10) },
-        select: { position: true },
-      })
-    : await prisma.user.findUnique({
-        where: { email: (session.user as any)?.email },
-        select: { position: true },
-      });
-  const position = user?.position ?? null;
+  const position = await getSessionPosition(session);
 
   const existing = await prisma.projectTask.findUnique({ where: { id } });
   if (!existing) return res.status(404).json({ message: "Task not found" });
 
-  if (!canAccessBoard(position, existing.board)) {
-    return res.status(403).json({ message: "You do not have access to this task's board" });
-  }
+  requireBoardAccessOrRespond403(res, position, existing.board, "You do not have access to this task's board");
 
   if (req.method === "PATCH") {
     const { name, description, checklist, status, assignedTo, deadline } = req.body;

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
+import { sendImageBuffer } from "@/lib/api/image";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireSession(req, res);
@@ -24,11 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!user || !user.image) {
       return res.status(404).json({ message: "No image found" });
     }
-    const imageBuffer = Buffer.from(user.image);
-    res.setHeader('Content-Type', user.imageMimeType || 'image/jpeg');
-    res.setHeader('Content-Length', imageBuffer.length);
-    res.setHeader('Cache-Control', 'private, max-age=3600, stale-while-revalidate=86400');
-    res.end(imageBuffer);
+    sendImageBuffer(res, user.image, user.imageMimeType, "private, max-age=3600, stale-while-revalidate=86400");
   } catch (e) {
     console.error("profile/getImage", e);
     return res.status(500).json({ message: "Internal Server Error" });

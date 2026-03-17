@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { canAccessBoard } from "@/lib/projectBoards";
-import type { ProjectBoard } from "@prisma/client";
+import { parseProjectBoard } from "@/lib/api/projectAccess";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireSession(req, res);
@@ -17,8 +17,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ message: "Method Not Allowed" });
   }
 
-  const board = req.query.board as ProjectBoard | undefined;
-  if (!board || !["Design", "Development", "Outreach", "Leadership"].includes(board)) {
+  const board = parseProjectBoard(req.query.board);
+  if (!board) {
     return res.status(400).json({ message: "Invalid or missing board" });
   }
 

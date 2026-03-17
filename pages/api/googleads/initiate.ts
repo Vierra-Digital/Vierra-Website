@@ -1,11 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { randomBytes } from "crypto";
-import { serialize as serializeCookie } from "cookie";
 import { prisma } from "@/lib/prisma"; 
 import { requireSession } from "@/lib/auth";
+import { asStr, issueOauthStateCookie } from "@/lib/api/oauth";
 
 const SCOPES = ["https://www.googleapis.com/auth/adwords"];
-const asStr = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") { res.status(405).end(); return; }
@@ -34,17 +32,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireSession(req, res);
   if (!session) { res.status(401).json({ message: "Not authenticated" }); return; }
 
-  const state = randomBytes(16).toString("hex");
-  res.setHeader(
-    "Set-Cookie",
-    serializeCookie("ga_oauth_state", state, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/api/googleads/callback",
-      maxAge: 10 * 60,
-    })
-  );
+  const state = issueOauthStateCookie(res, "ga_oauth_state", "/api/googleads/callback");
 
   const authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" + new URLSearchParams({
     client_id: clientId,

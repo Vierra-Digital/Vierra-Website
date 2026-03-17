@@ -1,12 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { parse as parseCookie, serialize as serializeCookie } from "cookie";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import { Platform } from "@prisma/client";
-
-const asStr = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+import { asStr, clearOauthStateCookie, readCookies } from "@/lib/api/oauth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") return res.status(405).end();
@@ -14,20 +12,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const code = asStr(req.query.code);
   const state = asStr(req.query.state);
   if (!code || !state) return res.status(400).send("Missing code/state");
-  const cookies = parseCookie(req.headers.cookie || "");
+  const cookies = readCookies(req.headers.cookie);
   const hasStateCookie = !!cookies.fb_oauth_state;
   if (hasStateCookie) {
     if (cookies.fb_oauth_state !== state) return res.status(400).send("Invalid state");
-    res.setHeader(
-      "Set-Cookie",
-      serializeCookie("fb_oauth_state", "", {
-        path: "/api/facebook/callback",
-        maxAge: 0,
-        httpOnly: true,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-      })
-    );
+    clearOauthStateCookie(res, "fb_oauth_state", "/api/facebook/callback");
   } else {
     const sess = await prisma.onboardingSession.findUnique({ where: { id: state } });
     if (!sess) return res.status(400).send("Invalid onboarding session");

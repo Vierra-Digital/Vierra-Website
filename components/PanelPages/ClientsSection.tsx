@@ -1,8 +1,12 @@
-import React, { useEffect, useMemo, useState, useRef } from "react"
+import React, { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import ProfileImage from "../ProfileImage"
-import { FiPlus, FiSearch, FiFilter, FiTrash2, FiCheckCircle, FiXCircle } from 'react-icons/fi'
-import { MoreVertical } from "lucide-react"
+import { FiPlus, FiFilter, FiTrash2, FiCheckCircle, FiXCircle } from 'react-icons/fi'
+import PanelSearchInput from "@/components/ui/PanelSearchInput"
+import PanelSectionHeader from "@/components/ui/PanelSectionHeader"
+import PaginationControls from "@/components/ui/PaginationControls"
+import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
+import RowActionMenu from "@/components/ui/RowActionMenu"
 
 type ClientRow = {
     id: string
@@ -44,46 +48,6 @@ const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
     )
 }
 
-const ConfirmDeleteModal: React.FC<{
-    isOpen: boolean
-    clientName: string
-    onConfirm: () => void
-    onCancel: () => void
-}> = ({ isOpen, clientName, onConfirm, onCancel }) => {
-    if (!isOpen) return null
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onCancel}>
-            <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
-                        <FiTrash2 className="w-6 h-6 text-red-600" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-[#111827]">Remove Client</h3>
-                </div>
-                <p className="text-sm text-[#6B7280] mb-6">
-                    Are you sure you want to remove <span className="font-semibold text-[#111827]">{clientName}</span>? 
-                    This action is permanent and cannot be undone. All associated data will be removed.
-                </p>
-                <div className="flex gap-3 justify-end">
-                    <button
-                        onClick={onCancel}
-                        className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={onConfirm}
-                        className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 text-sm font-medium"
-                    >
-                        Remove Client
-                    </button>
-                </div>
-            </div>
-        </div>
-    )
-}
-
 const ClientActionsMenu: React.FC<{
     clientId: string
     clientName: string
@@ -92,66 +56,10 @@ const ClientActionsMenu: React.FC<{
     onDelete: () => void
     onToggleStatus: (isActive: boolean) => void
 }> = ({ clientName, isActive, onDelete, onToggleStatus }) => {
-    const [isOpen, setIsOpen] = useState(false)
-    const [position, setPosition] = useState<{ top: number; right: number } | null>(null)
-    const buttonRef = useRef<HTMLButtonElement>(null)
-    const menuRef = useRef<HTMLDivElement>(null)
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (menuRef.current && !menuRef.current.contains(event.target as Node) && 
-                buttonRef.current && !buttonRef.current.contains(event.target as Node)) {
-                setIsOpen(false)
-                setPosition(null)
-            }
-        }
-
-        if (isOpen) {
-            document.addEventListener('mousedown', handleClickOutside)
-            return () => document.removeEventListener('mousedown', handleClickOutside)
-        }
-    }, [isOpen])
-
-    useEffect(() => {
-        if (isOpen && buttonRef.current) {
-            const rect = buttonRef.current.getBoundingClientRect()
-            const dropdownHeight = 150
-            const viewportHeight = window.innerHeight
-            const viewportMiddle = viewportHeight / 2
-            const showAbove = rect.top > viewportMiddle
-            
-            setPosition({
-                top: showAbove ? rect.top - dropdownHeight - 2 : rect.bottom + 2,
-                right: window.innerWidth - rect.right,
-            })
-        } else {
-            setPosition(null)
-        }
-    }, [isOpen])
-
     return (
-        <div className="relative">
-            <button
-                ref={buttonRef}
-                onClick={() => setIsOpen(!isOpen)}
-                aria-label={`Manage ${clientName}`}
-                className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
-            >
-                <MoreVertical className="w-4 h-4 text-[#6B7280]" />
-            </button>
-            {isOpen && position && (
-                <div 
-                    ref={menuRef}
-                    className="fixed w-48 bg-white rounded-lg shadow-xl border border-[#E5E7EB] py-1 z-[100]"
-                    style={{
-                        top: `${position.top}px`,
-                        right: `${position.right}px`
-                    }}
-                >
+        <RowActionMenu label={`Manage ${clientName}`}>
                     <button
                         onClick={() => {
-                            setIsOpen(false)
-                            setPosition(null)
                             onToggleStatus(!isActive)
                         }}
                         className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
@@ -172,8 +80,6 @@ const ClientActionsMenu: React.FC<{
                     </button>
                     <button
                         onClick={() => {
-                            setIsOpen(false)
-                            setPosition(null)
                             onDelete()
                         }}
                         className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
@@ -181,9 +87,7 @@ const ClientActionsMenu: React.FC<{
                         <FiTrash2 className="w-4 h-4" />
                         Remove Client
                     </button>
-                </div>
-            )}
-        </div>
+        </RowActionMenu>
     )
 }
 
@@ -337,23 +241,17 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
         <>
         <div className="flex-1 flex justify-center px-6 pt-2">
             <div className="w-full max-w-6xl flex flex-col h-full">
-                <div className="w-full flex justify-between items-center mb-2">
-                    <div>
-                        <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Clients</h1>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
-                            <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
-                            <label htmlFor="clients-search" className="sr-only">Search Clients</label>
-                            <input
-                                id="clients-search"
-                                type="search"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search Clients"
-                                className="w-64 md:w-80 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none"
-                            />
-                        </div>
+                <PanelSectionHeader
+                    title="Clients"
+                    actions={
+                      <>
+                        <PanelSearchInput
+                          id="clients-search"
+                          value={searchQuery}
+                          onChange={setSearchQuery}
+                          placeholder="Search Clients"
+                          label="Search Clients"
+                        />
                         <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsFilterOpen(false) }} tabIndex={-1}>
                             <button
                                 type="button"
@@ -469,7 +367,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                     </div>
                                 </div>
                             )}
-                    </div>
+                        </div>
                         <button
                             onClick={onAddClient}
                             className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium"
@@ -477,8 +375,9 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                             <FiPlus className="w-4 h-4" />
                             Add Client
                         </button>
-                </div>
-            </div>
+                      </>
+                    }
+                />
                 {loading ? (
                     <div className="flex items-center justify-center py-12">
                         <div className="text-center">
@@ -565,42 +464,35 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
 
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
                 {!loading && filteredRows.length > 0 && (
-                    <div className="mt-4 pt-4 text-xs text-[#677489]">
-                        <div className="w-full flex items-center justify-center">
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
-                                    disabled={currentPage === 0}
-                                    className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    Previous
-                                </button>
-                                <span className="text-xs text-[#6B7280]">
-                                    Page {currentPage + 1} of {Math.max(1, Math.ceil(filteredRows.length / pageSize))}
-                                </span>
-                                <button
-                                    onClick={() => setCurrentPage(Math.min(Math.ceil(filteredRows.length / pageSize) - 1, currentPage + 1))}
-                                    disabled={currentPage >= Math.ceil(filteredRows.length / pageSize) - 1}
-                                    className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    Next
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                    <PaginationControls
+                      currentPage={currentPage}
+                      totalPages={Math.ceil(filteredRows.length / pageSize)}
+                      onPrevious={() => setCurrentPage(Math.max(0, currentPage - 1))}
+                      onNext={() =>
+                        setCurrentPage(Math.min(Math.ceil(filteredRows.length / pageSize) - 1, currentPage + 1))
+                      }
+                    />
                 )}
             </div>
         </div>
 
-        <ConfirmDeleteModal
-                isOpen={deleteModalOpen}
-                clientName={clientToDelete?.name || ""}
-                onConfirm={handleDeleteClient}
-                onCancel={() => {
-                    setDeleteModalOpen(false)
-                    setClientToDelete(null)
-                }}
-            />
+        <ConfirmActionModal
+          isOpen={deleteModalOpen}
+          title="Remove Client"
+          message={
+            <>
+              Are you sure you want to remove{" "}
+              <span className="font-semibold text-[#111827]">{clientToDelete?.name || ""}</span>? This action is permanent
+              and cannot be undone. All associated data will be removed.
+            </>
+          }
+          confirmLabel="Remove Client"
+          onConfirm={handleDeleteClient}
+          onCancel={() => {
+            setDeleteModalOpen(false)
+            setClientToDelete(null)
+          }}
+        />
         </>
     )
 }

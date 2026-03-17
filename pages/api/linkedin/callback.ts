@@ -1,15 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { parse as parseCookie, serialize as serializeCookie } from "cookie";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
 import { requireSession } from "@/lib/auth";
-
-const asStr = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+import { asStr, clearOauthStateCookie, readCookies, setOnboardingSessionCookie } from "@/lib/api/oauth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") { res.status(405).end(); return; }
-
-  console.log("[LI] start", { url: req.url, query: req.query });
 
   const code = asStr(req.query.code);
   const state = asStr(req.query.state);
@@ -42,18 +38,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const encAccess = encrypt(access_token);
   const encRefresh = refresh_token ? encrypt(refresh_token) : undefined;
   const expiresAt = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
-  const cookies = parseCookie(req.headers.cookie || "");
+  const cookies = readCookies(req.headers.cookie);
   const hasStateCookie = !!cookies.li_oauth_state;
-  console.log("[LI] cookies", Object.keys(cookies));
-  console.log("[LI] env.redirect_uri", process.env.LINKEDIN_REDIRECT_URI);
-  console.log("[LI] hasStateCookie", !!cookies.li_oauth_state);
 
   if (hasStateCookie) {
     if (!state || cookies.li_oauth_state !== state) { res.status(400).send("Invalid state"); return; }
-    res.setHeader("Set-Cookie", serializeCookie("li_oauth_state", "", {
-      path: "/api/linkedin/callback",
-      maxAge: 0,
-    }));
+    clearOauthStateCookie(res, "li_oauth_state", "/api/linkedin/callback");
 
     const session = await requireSession(req, res);
     if (!session) { res.redirect("/login"); return; }
@@ -77,13 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     update: { accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
     create: { sessionId: state, platform: "linkedin", accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
   });
-  res.setHeader("Set-Cookie", serializeCookie("ob_session", state, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24,
-  }));
+  setOnboardingSessionCookie(res, state);
 
   res.redirect(`/onboarding/${state}?linked=linkedin`);
 }

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import crypto from "crypto";
 import { encrypt } from "@/lib/crypto";
 import { sendClientOnboardingCompletedEmail } from "@/lib/emailSender";
+import { resolveBaseUrl } from "@/lib/api/url";
 
 function generatePassword(len = 14) {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@$%^*_-";
@@ -108,7 +109,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             expiresAt,
           },
         });
-        const baseUrl = (process.env.NEXTAUTH_URL || `https://${req.headers.host || "vierradev.com"}`).replace(/\/+$/, "");
+        const baseUrl = resolveBaseUrl(req);
         const setPasswordLink = `${baseUrl}/set-password/${resetToken}`;
         await sendClientOnboardingCompletedEmail(
           userEmail,

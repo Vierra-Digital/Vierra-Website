@@ -1,16 +1,20 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import {
+  getSessionRole,
+  handleApiError,
+  requireMethodOrRespond405,
+  requireRolesOrRespond403,
+  requireSessionOrRespond401,
+} from "@/lib/api/guards";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "GET") return res.status(405).end();
-
-  const session = await requireSession(req, res);
-  if (!session) return res.status(401).json({ message: "Not authenticated" });
-  const role = (session.user as any)?.role;
-  if (role !== "admin") return res.status(403).json({ message: "Forbidden" });
-
   try {
+    requireMethodOrRespond405(req, res, ["GET"]);
+    const session = await requireSessionOrRespond401(req, res);
+    const role = getSessionRole(session);
+    requireRolesOrRespond403(res, role, ["admin"]);
+
     const clients = await prisma.client.findMany({
       select: {
         id: true,
@@ -74,8 +78,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     res.json(rows);
   } catch (err) {
-    console.error("/api/admin/clients error", err);
-    res.status(500).json({ message: "Failed to load clients" });
+    handleApiError(res, "/api/admin/clients error", err, "Failed to load clients");
   }
 }
 

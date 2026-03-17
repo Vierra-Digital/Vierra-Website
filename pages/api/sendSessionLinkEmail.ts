@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import nodemailer from "nodemailer";
+import { resolveBaseUrl } from "@/lib/api/url";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
@@ -20,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const fullLink = (() => {
     try {
-      const base = process.env.NEXT_PUBLIC_APP_URL || `${req.headers['x-forwarded-proto'] || 'https'}://${req.headers.host}`;
+      const base = resolveBaseUrl(req);
       return new URL(link, base).toString();
     } catch {
       return link;

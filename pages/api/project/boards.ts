@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { canAccessBoard, BOARDS } from "@/lib/projectBoards";
+import { getSessionPosition } from "@/lib/api/projectAccess";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireSession(req, res);
@@ -20,17 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ boards: ["Design", "Development", "Outreach", "Leadership"] });
   }
 
-  const userId = (session.user as any)?.id;
-  const user = userId
-    ? await prisma.user.findUnique({
-        where: { id: parseInt(String(userId), 10) },
-        select: { position: true },
-      })
-    : await prisma.user.findUnique({
-        where: { email: (session.user as any)?.email },
-        select: { position: true },
-      });
-  const position = user?.position ?? null;
+  const position = await getSessionPosition(session);
 
   const allowedBoards = BOARDS.filter((b) => canAccessBoard(position, b));
   return res.status(200).json({ boards: allowedBoards });
