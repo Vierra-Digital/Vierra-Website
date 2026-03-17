@@ -79,19 +79,26 @@ export default function RootLayoutClient({
     return () => clearInterval(intervalId);
   }, []);
   useEffect(() => {
-    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-      navigator.serviceWorker
-        .register("/sw.js", { scope: "/" })
-        .then((registration) => {
-          console.log("Service Worker registered:", registration.scope);
-          if (navigator.serviceWorker.controller) {
-            console.log("Service Worker is controlling the page");
-          }
-        })
-        .catch((error) => {
-          console.error("Service Worker registration failed:", error);
-        });
-    }
+    const cleanupServiceWorkerCache = async () => {
+      if (typeof window === "undefined") return;
+      const cleanupKey = "__vierra_sw_cleanup_v1";
+      if (window.localStorage.getItem(cleanupKey) === "done") return;
+      try {
+        if ("serviceWorker" in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map((registration) => registration.unregister()));
+        }
+        if ("caches" in window) {
+          const cacheNames = await caches.keys();
+          const appCaches = cacheNames.filter((name) => name.startsWith("vierra-"));
+          await Promise.all(appCaches.map((name) => caches.delete(name)));
+        }
+        window.localStorage.setItem(cleanupKey, "done");
+      } catch (error) {
+        console.error("Service worker cleanup failed:", error);
+      }
+    };
+    cleanupServiceWorkerCache();
   }, []);
 
   return (
