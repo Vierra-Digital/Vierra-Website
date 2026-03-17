@@ -157,10 +157,10 @@ const DashboardSection = () => {
     ]
 
     return (
-        <div className="w-full h-full bg-white text-[#111014] flex flex-col p-6 pb-16">
+        <div className="w-full h-full bg-white text-[#111014] flex flex-col px-6 pt-2 pb-16">
             
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold text-[#111827]">Dashboard</h1>
+            <div className="w-full flex justify-between items-center mb-2">
+                <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Dashboard</h1>
                 <div className="flex items-center gap-4">
                     <div className="relative">
                         <select 
