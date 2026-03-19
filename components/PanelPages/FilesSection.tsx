@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react"
 import { Inter } from "next/font/google"
-import { FiFolder, FiTrash2, FiDownload } from "react-icons/fi"
+import { FiFolder, FiTrash2, FiDownload, FiLock } from "react-icons/fi"
 import PanelSearchInput from "@/components/ui/PanelSearchInput"
 import PanelSectionHeader from "@/components/ui/PanelSectionHeader"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
@@ -17,9 +17,20 @@ interface FileItem {
   fileType: string
   signingTokenId?: string
   owner?: string
+  isDeletionProtected?: boolean
 }
 
-const FilesSection: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) => {
+const FilesSection: React.FC<{
+  readOnly?: boolean
+  fileFilter?: string
+  allowDelete?: boolean
+  showOwnerInReadOnly?: boolean
+}> = ({
+  readOnly = false,
+  fileFilter,
+  allowDelete = false,
+  showOwnerInReadOnly = false,
+}) => {
   const [search, setSearch] = useState("")
   const [files, setFiles] = useState<FileItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -28,7 +39,8 @@ const FilesSection: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) =>
   useEffect(() => {
     const fetchFiles = async () => {
       try {
-        const r = await fetch("/api/admin/files")
+        const url = fileFilter ? `/api/admin/files?filter=${encodeURIComponent(fileFilter)}` : "/api/admin/files"
+        const r = await fetch(url)
         if (r.ok) {
           const data = await r.json()
           setFiles(data || [])
@@ -40,7 +52,7 @@ const FilesSection: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) =>
       }
     }
     fetchFiles()
-  }, [])
+  }, [fileFilter])
 
   const filteredFiles = useMemo(() => {
     if (!search.trim()) return files
@@ -73,6 +85,9 @@ const FilesSection: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) =>
     }
   }
 
+  const canDelete = !readOnly || allowDelete
+  const showOwnerColumn = !readOnly || showOwnerInReadOnly
+
   return (
     <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
       <div className="flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
@@ -84,7 +99,7 @@ const FilesSection: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) =>
                 id="files-search"
                 value={search}
                 onChange={setSearch}
-                placeholder="Search by name"
+                placeholder="Search By Name"
                 label="Search files"
               />
             }
@@ -124,13 +139,13 @@ const FilesSection: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) =>
                       <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
                         File Type
                       </th>
-                      {!readOnly && (
+                      {showOwnerColumn && (
                         <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
                           Owner
                         </th>
                       )}
                       <th className="px-4 py-3 text-right text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                        {readOnly ? "Actions" : "Manage"}
+                        {canDelete ? "Manage" : "Actions"}
                       </th>
                     </tr>
                   </thead>
@@ -159,7 +174,7 @@ const FilesSection: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) =>
                         <td className="px-4 py-4 text-sm text-[#374151]">
                           {file.fileType}
                         </td>
-                        {!readOnly && (
+                        {showOwnerColumn && (
                           <td className="px-4 py-4 text-sm text-[#374151]">
                             {file.owner ?? "—"}
                           </td>
@@ -175,7 +190,7 @@ const FilesSection: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) =>
                             >
                               <FiDownload className="w-4 h-4" />
                             </button>
-                            {!readOnly && (
+                            {canDelete && !file.isDeletionProtected && (
                               <button
                                 type="button"
                                 onClick={() => setFileToDelete(file)}
@@ -184,6 +199,15 @@ const FilesSection: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) =>
                               >
                                 <FiTrash2 className="w-4 h-4" />
                               </button>
+                            )}
+                            {canDelete && file.isDeletionProtected && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-md border border-[#E5E7EB] px-2 py-1 text-[11px] text-[#6B7280]"
+                                title="This file is protected and cannot be deleted."
+                              >
+                                <FiLock className="w-3 h-3" />
+                                Protected
+                              </span>
                             )}
                           </div>
                         </td>
@@ -195,7 +219,7 @@ const FilesSection: React.FC<{ readOnly?: boolean }> = ({ readOnly = false }) =>
             </div>
           )}
 
-          {!readOnly && (
+          {canDelete && (
             <ConfirmActionModal
               isOpen={!!fileToDelete}
               title="Delete File"

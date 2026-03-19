@@ -157,8 +157,9 @@ const DashboardSection = () => {
     ]
 
     return (
-        <div className="w-full h-full bg-white text-[#111014] flex flex-col px-6 pt-2 pb-16">
-            
+        <div className="w-full h-full bg-white text-[#111014] flex flex-col">
+            <div className="flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
+                <div className="w-full max-w-6xl flex flex-col h-full pb-16">
             <div className="w-full flex justify-between items-center mb-2">
                 <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Dashboard</h1>
                 <div className="flex items-center gap-4">
@@ -446,7 +447,9 @@ const DashboardSection = () => {
                         </div>
                     </div>
                 </div>
+                </div>
             </div>
+        </div>
         </div>
     )
 }

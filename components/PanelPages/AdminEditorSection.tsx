@@ -1,13 +1,14 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react"
-import { Users, FileText, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, X, MoreVertical, Trash2, RotateCw, Link as LinkIcon } from "lucide-react"
+import { Users, FileText, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, X, Trash2, RotateCw, Link as LinkIcon } from "lucide-react"
 import { FiCheck } from "react-icons/fi"
 import { FiSearch, FiFilter, FiPlus, FiTrash2 } from "react-icons/fi"
 import { Inter } from "next/font/google"
 import Image from "next/image"
 import { motion } from "framer-motion"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
+import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -787,8 +788,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
     const [updatedCount, setUpdatedCount] = useState<number>(0)
     const [statusFilter, setStatusFilter] = useState<'all' | SessionStatus>('all')
     const [isStatusFilterOpen, setIsStatusFilterOpen] = useState<boolean>(false)
-    const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null)
-    const [actionMenuPosition, setActionMenuPosition] = useState<{ top: number; right: number; showAbove: boolean } | null>(null)
     const [deletingSession, setDeletingSession] = useState<string | null>(null)
     const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
     const [sessionToDelete, setSessionToDelete] = useState<{ token: string; clientName: string } | null>(null)
@@ -798,8 +797,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
     const [renewModalOpen, setRenewModalOpen] = useState<boolean>(false)
     const [renewSuccess, setRenewSuccess] = useState<boolean>(false)
     const statusFilterRef = useRef<HTMLDivElement>(null)
-    const actionMenuRefs = useRef<Record<string, HTMLDivElement | null>>({})
-    const actionMenuButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
     const updateSessionsModalRef = useRef<HTMLDivElement>(null)
     const [sessionLinks, setSessionLinks] = useState<Record<string, { link: string; loading: boolean }>>({})
     const pageSize = 10
@@ -960,7 +957,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
             setCopiedLink(null)
             setGetLinkModalOpen(true)
         }
-        setActionMenuOpen(null)
     }
 
     const handleRenewSession = async (token: string) => {
@@ -983,7 +979,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
             setRenewModalOpen(true)
         } finally {
             setRenewingSession(null)
-            setActionMenuOpen(null)
         }
     }
 
@@ -1006,51 +1001,13 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
             console.error("Failed to delete session:", e?.message || "Unknown Error")
         } finally {
             setDeletingSession(null)
-            setActionMenuOpen(null)
         }
     }
 
     const openDeleteModal = (token: string, clientName: string) => {
         setSessionToDelete({ token, clientName })
         setDeleteModalOpen(true)
-        setActionMenuOpen(null)
     }
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            Object.entries(actionMenuRefs.current).forEach(([token, ref]) => {
-                if (ref && !ref.contains(event.target as Node)) {
-                    if (actionMenuOpen === token) {
-                        setActionMenuOpen(null)
-                        setActionMenuPosition(null)
-                    }
-                }
-            })
-        }
-        document.addEventListener("mousedown", handleClickOutside)
-        return () => document.removeEventListener("mousedown", handleClickOutside)
-    }, [actionMenuOpen])
-
-    useEffect(() => {
-        if (actionMenuOpen) {
-            const button = actionMenuButtonRefs.current[actionMenuOpen]
-            if (button) {
-                const rect = button.getBoundingClientRect()
-                const dropdownHeight = 150
-                const viewportHeight = window.innerHeight
-                const viewportMiddle = viewportHeight / 2
-                const showAbove = rect.top > viewportMiddle
-                
-                setActionMenuPosition({
-                    top: showAbove ? rect.top - dropdownHeight - 2 : rect.bottom + 2,
-                    right: window.innerWidth - rect.right,
-                    showAbove
-                })
-            }
-        } else {
-            setActionMenuPosition(null)
-        }
-    }, [actionMenuOpen])
 
     const filteredSessions = useMemo(() => {
         let filtered = sorted
@@ -1337,58 +1294,34 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{formatDate(s.createdAt)}</td>
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{formatDate(s.lastUpdatedAt)}</td>
                                                     <td className="px-4 py-4">
-                                    <div className="flex items-center gap-2">
-                                        <div className="relative" ref={(el) => { actionMenuRefs.current[s.token] = el }}>
-                                            <button
-                                                ref={(el) => { actionMenuButtonRefs.current[s.token] = el }}
-                                                onClick={() => setActionMenuOpen(actionMenuOpen === s.token ? null : s.token)}
-                                                className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
-                                                aria-label="Session actions"
-                                            >
-                                                <MoreVertical className="w-4 h-4 text-[#6B7280]" />
-                                            </button>
-                                            
-                                            {actionMenuOpen === s.token && actionMenuPosition && (
-                                                <div 
-                                                    className="fixed w-48 bg-white rounded-lg shadow-xl border border-[#E5E7EB] py-1 z-[100]"
-                                                    style={{
-                                                        top: `${actionMenuPosition.top}px`,
-                                                        right: `${actionMenuPosition.right}px`
-                                                    }}
-                                                >
-                                                    {s.status !== "expired" && (
-                                                        <button
-                                                            onClick={() => handleGetLink(s.token, s.clientEmail)}
-                                                            disabled={sessionLink?.loading}
-                                                            className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-[#374151] disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        >
-                                                            <LinkIcon className="w-4 h-4" />
-                                                            {sessionLink?.loading ? "Loading..." : "Get Link"}
-                                                        </button>
-                                                    )}
-                                                    
-                                                    <button
-                                                        onClick={() => handleRenewSession(s.token)}
-                                                        disabled={renewingSession === s.token}
-                                                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-[#374151] disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        <RotateCw className={`w-4 h-4 ${renewingSession === s.token ? "animate-spin" : ""}`} />
-                                                        Renew Session
-                                                    </button>
-                                                    
-                                                    <div className="border-t border-[#E5E7EB] my-1" />
-                                                    
-                                                    <button
-                                                        onClick={() => openDeleteModal(s.token, s.clientName)}
-                                                        className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                        Delete Session
-                                                    </button>
-                                        </div>
-                                    )}
-                                        </div>
-                                    </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <RowActionMenu label="Session actions">
+                                                                {s.status !== "expired" && (
+                                                                    <RowActionMenuItem
+                                                                        onClick={() => handleGetLink(s.token, s.clientEmail)}
+                                                                        disabled={sessionLink?.loading}
+                                                                        icon={<LinkIcon className="w-4 h-4" />}
+                                                                        tone="accent"
+                                                                    >
+                                                                        {sessionLink?.loading ? "Loading..." : "Get Link"}
+                                                                    </RowActionMenuItem>
+                                                                )}
+                                                                <RowActionMenuItem
+                                                                    onClick={() => handleRenewSession(s.token)}
+                                                                    disabled={renewingSession === s.token}
+                                                                    icon={<RotateCw className={`w-4 h-4 ${renewingSession === s.token ? "animate-spin" : ""}`} />}
+                                                                >
+                                                                    Renew Session
+                                                                </RowActionMenuItem>
+                                                                <RowActionMenuItem
+                                                                    onClick={() => openDeleteModal(s.token, s.clientName)}
+                                                                    icon={<Trash2 className="w-4 h-4" />}
+                                                                    tone="danger"
+                                                                >
+                                                                    Delete Session
+                                                                </RowActionMenuItem>
+                                                            </RowActionMenu>
+                                                        </div>
                                 </td>
                             </tr>
                                             )

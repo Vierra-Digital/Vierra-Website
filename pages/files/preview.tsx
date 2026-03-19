@@ -11,7 +11,7 @@ type Props = {
 
 export default function FilePreviewPage({ tokenId, name }: Props) {
   const displayName = name.replace(/\.[^/.]+$/, "") || name
-  const pdfUrl = `/api/admin/file/${encodeURIComponent(name)}?tokenId=${encodeURIComponent(tokenId)}&preview=1`
+  const fileUrl = `/api/admin/file/${encodeURIComponent(name)}?tokenId=${encodeURIComponent(tokenId)}&preview=1`
 
   return (
     <>
@@ -19,11 +19,7 @@ export default function FilePreviewPage({ tokenId, name }: Props) {
         <title>{displayName}</title>
       </Head>
       <div className="fixed inset-0 bg-[#1a1a1a] flex flex-col">
-        <iframe
-          title={displayName}
-          src={pdfUrl}
-          className="flex-1 w-full border-0"
-        />
+        <iframe title={displayName} src={fileUrl} className="flex-1 w-full border-0" />
       </div>
     </>
   )

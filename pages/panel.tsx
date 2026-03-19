@@ -5,7 +5,8 @@ import Image from "next/image"
 import ProfileImage from "@/components/ProfileImage"
 import dynamic from "next/dynamic"
 import Link from "next/link"
-import { FiLogOut, FiShield, FiFolder } from "react-icons/fi"
+import { useRouter } from "next/router"
+import { FiLogOut, FiShield, FiFolder, FiArrowLeft, FiMail } from "react-icons/fi"
 import { AiOutlineAppstore } from "react-icons/ai";
 import { PiUsersThree, PiCalculator } from "react-icons/pi";
 import { BsPeople } from "react-icons/bs";
@@ -61,6 +62,18 @@ const FilesSection = dynamic(
   () => import("@/components/PanelPages/FilesSection"),
   { ssr: false }
 )
+const ClientViewOutreachSection = dynamic(
+  () => import("@/components/PanelPages/ClientViewOutreachSection"),
+  { ssr: false }
+)
+const LinkedInContextSection = dynamic(
+  () => import("@/components/PanelPages/LinkedInContextSection"),
+  { ssr: false }
+)
+const EmailingPlatformSection = dynamic(
+  () => import("@/components/PanelPages/EmailingPlatformSection"),
+  { ssr: false }
+)
 const UserSettingsPage = dynamic(() => import("@/components/UserSettingsPage"), {
   ssr: false,
 })
@@ -68,6 +81,7 @@ const UserSettingsPage = dynamic(() => import("@/components/UserSettingsPage"), 
 const inter = Inter({ subsets: ["latin"] })
 
 const PanelPage = () => {
+  const router = useRouter()
   const [showSettings, setShowSettings] = useState(false)
   const [currentSection, setCurrentSection] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -76,10 +90,20 @@ const PanelPage = () => {
   const [clientRefreshTrigger, setClientRefreshTrigger] = useState(0)
   const [currentUserName, setCurrentUserName] = useState<string | null>(null)
   const [imageVersion, setImageVersion] = useState<number>(0)
+  const [isClientViewMode, setIsClientViewMode] = useState(false)
+  const [viewModeSection, setViewModeSection] = useState<0 | 1 | 2 | 3>(0)
+  const [viewClient, setViewClient] = useState<{ id: string; name: string; email: string } | null>(null)
 
   useEffect(() => {
     fetchCurrentUser()
   }, [])
+
+  useEffect(() => {
+    if (!router.isReady) return;
+    if (router.query.settings === "1") {
+      setShowSettings(true);
+    }
+  }, [router.isReady, router.query.settings]);
 
   useEffect(() => {
     const updateActivity = async () => {
@@ -122,6 +146,23 @@ const PanelPage = () => {
     }
   }
 
+  const enterClientViewMode = (client: { id: string; name: string; email: string }) => {
+    setViewClient(client)
+    setIsClientViewMode(true)
+    setViewModeSection(0)
+    setCurrentSection(1)
+    setShowSettings(false)
+    setIsSidebarOpen(false)
+  }
+
+  const exitClientViewMode = () => {
+    setIsClientViewMode(false)
+    setViewClient(null)
+    setViewModeSection(0)
+    setCurrentSection(1)
+    setShowSettings(false)
+  }
+
 
   return (
     <>
@@ -143,103 +184,152 @@ const PanelPage = () => {
             </Link>
           </div>
           <div id="panel-nav" className="w-full h-full flex flex-col gap-y-[5px] items-center text-[#EDF1F5]">
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 0 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-              <AiOutlineAppstore />
-              <span className={`text-xs font-normal ${inter.className}`}>
-                Dashboard
-              </span>
-            </div>
-            {session?.user?.role !== "staff" && (
-              <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 1 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-                <PiUsersThree />
-                <span className={`text-xs ${inter.className}`}>
-                  Clients
-                </span>
-              </div>
-            )}
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 2 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-              <BsPeople />
-              <span className={`text-xs ${inter.className}`}>
-                Staff Orbital
-              </span>
-            </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(5); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 5 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-              <HiGlobeAlt />
-              <span className={`text-xs ${inter.className}`}>
-                Marketing Tracker
-              </span>
-            </div>
-            <div id="panel-nav-item" onClick={() => { setCurrentSection(6); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 6 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-              <RiFolder3Line />
-              <span className={`text-xs ${inter.className}`}>
-                Project Tasks
-              </span>
-            </div>
-            
-            {session?.user?.role !== "staff" && (
-              <div
-                id="panel-nav-item"
-                onClick={() => { setCurrentSection(9); setShowSettings(false); setIsSidebarOpen(false); }}
-                className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 9 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
-              >
-                <FaRegFilePdf />
-                <span className={`text-xs ${inter.className}`}>
-                  PDF Signer
-                </span>
-              </div>
-            )}
-            <div
-              id="panel-nav-item"
-              onClick={() => { setCurrentSection(4); setShowSettings(false); setIsSidebarOpen(false)}}
-              className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 4 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
-            >
-              <PiCalculator />
-              <span className={`text-xs ${inter.className}`}>
-                LTV Calculator
-              </span>
-            </div>
-            <div
-              id="panel-nav-item"
-              onClick={() => { setCurrentSection(7); setShowSettings(false); setIsSidebarOpen(false)}}
-              className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 7 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
-            >
-              <HiOutlineDocumentText />
-              <span className={`text-xs ${inter.className}`}>
-                Blog Editor
-              </span>
-            </div>
-            <div
-              id="panel-nav-item"
-              onClick={() => { setCurrentSection(10); setShowSettings(false); setIsSidebarOpen(false)}}
-              className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 10 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
-            >
-              <FiFolder />
-              <span className={`text-xs ${inter.className}`}>
-                Files
-              </span>
-            </div>
-            {session?.user?.role !== "staff" && (
-              <div
-                id="panel-nav-item"
-                onClick={() => { setCurrentSection(8); setShowSettings(false); setIsSidebarOpen(false)}}
-                className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 8 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
-              >
-                <FiShield />
-                <span className={`text-xs ${inter.className}`}>
-                  User Management
-                </span>
-              </div>
+            {isClientViewMode ? (
+              <>
+                <div id="panel-nav-item" onClick={() => { setViewModeSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${viewModeSection === 0 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
+                  <AiOutlineAppstore />
+                  <span className={`text-xs font-normal ${inter.className}`}>
+                    Dashboard
+                  </span>
+                </div>
+                <div id="panel-nav-item" onClick={() => { setViewModeSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${viewModeSection === 2 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
+                  <HiGlobeAlt />
+                  <span className={`text-xs ${inter.className}`}>
+                    Outreach
+                  </span>
+                </div>
+                <div id="panel-nav-item" onClick={() => { setViewModeSection(3); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${viewModeSection === 3 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
+                  <HiOutlineDocumentText />
+                  <span className={`text-xs ${inter.className}`}>
+                    Context
+                  </span>
+                </div>
+                <div id="panel-nav-item" onClick={() => { setViewModeSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${viewModeSection === 1 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
+                  <FiFolder />
+                  <span className={`text-xs ${inter.className}`}>
+                    Files
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div id="panel-nav-item" onClick={() => { setCurrentSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 0 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
+                  <AiOutlineAppstore />
+                  <span className={`text-xs font-normal ${inter.className}`}>
+                    Dashboard
+                  </span>
+                </div>
+                {session?.user?.role !== "staff" && (
+                  <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 1 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
+                    <PiUsersThree />
+                    <span className={`text-xs ${inter.className}`}>
+                      Clients
+                    </span>
+                  </div>
+                )}
+                <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 2 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
+                  <BsPeople />
+                  <span className={`text-xs ${inter.className}`}>
+                    Staff Orbital
+                  </span>
+                </div>
+                {session?.user?.role === "admin" && (
+                  <div id="panel-nav-item" onClick={() => { setCurrentSection(11); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 11 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
+                    <FiMail />
+                    <span className={`text-xs ${inter.className}`}>
+                      Email Panel
+                    </span>
+                  </div>
+                )}
+                <div id="panel-nav-item" onClick={() => { setCurrentSection(5); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 5 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
+                  <HiGlobeAlt />
+                  <span className={`text-xs ${inter.className}`}>
+                    Marketing Tracker
+                  </span>
+                </div>
+                <div id="panel-nav-item" onClick={() => { setCurrentSection(6); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 6 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
+                  <RiFolder3Line />
+                  <span className={`text-xs ${inter.className}`}>
+                    Project Tasks
+                  </span>
+                </div>
+                
+                {session?.user?.role !== "staff" && (
+                  <div
+                    id="panel-nav-item"
+                    onClick={() => { setCurrentSection(9); setShowSettings(false); setIsSidebarOpen(false); }}
+                    className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 9 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+                  >
+                    <FaRegFilePdf />
+                    <span className={`text-xs ${inter.className}`}>
+                      PDF Signer
+                    </span>
+                  </div>
+                )}
+                <div
+                  id="panel-nav-item"
+                  onClick={() => { setCurrentSection(4); setShowSettings(false); setIsSidebarOpen(false)}}
+                  className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 4 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+                >
+                  <PiCalculator />
+                  <span className={`text-xs ${inter.className}`}>
+                    LTV Calculator
+                  </span>
+                </div>
+                <div
+                  id="panel-nav-item"
+                  onClick={() => { setCurrentSection(7); setShowSettings(false); setIsSidebarOpen(false)}}
+                  className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 7 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+                >
+                  <HiOutlineDocumentText />
+                  <span className={`text-xs ${inter.className}`}>
+                    Blog Editor
+                  </span>
+                </div>
+                <div
+                  id="panel-nav-item"
+                  onClick={() => { setCurrentSection(10); setShowSettings(false); setIsSidebarOpen(false)}}
+                  className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 10 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+                >
+                  <FiFolder />
+                  <span className={`text-xs ${inter.className}`}>
+                    Files
+                  </span>
+                </div>
+                {session?.user?.role !== "staff" && (
+                  <div
+                    id="panel-nav-item"
+                    onClick={() => { setCurrentSection(8); setShowSettings(false); setIsSidebarOpen(false)}}
+                    className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 8 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+                  >
+                    <FiShield />
+                    <span className={`text-xs ${inter.className}`}>
+                      User Management
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
           <div className="w-full flex justify-center absolute bottom-6 left-0">
-            <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
-              className="group w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 justify-start rounded-xl text-white bg-transparent hover:bg-white hover:text-black transition"
-            >
-              <FiLogOut className="w-5 h-5 text-white group-hover:text-black transition-colors" />
-              <span className={`text-xs ${inter.className} ml-2`}>Logout</span>
-            </button>
+            {isClientViewMode ? (
+              <button
+                onClick={exitClientViewMode}
+                className="group w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 justify-start rounded-xl text-white bg-transparent hover:bg-white hover:text-black transition"
+              >
+                <FiArrowLeft className="w-5 h-5 text-white group-hover:text-black transition-colors" />
+                <span className={`text-xs ${inter.className} ml-2`}>Back</span>
+              </button>
+            ) : session?.user?.role === "admin" ? null : (
+              <button
+                onClick={() => signOut({ callbackUrl: "/login" })}
+                className="group w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 justify-start rounded-xl text-white bg-transparent hover:bg-white hover:text-black transition"
+              >
+                <FiLogOut className="w-5 h-5 text-white group-hover:text-black transition-colors" />
+                <span className={`text-xs ${inter.className} ml-2`}>Logout</span>
+              </button>
+            )}
           </div>
         </div>
           <div id="right-side" className="flex flex-col w-full h-full overflow-y-auto relative">
@@ -326,20 +416,42 @@ const PanelPage = () => {
             </>)
               : (
                 <>
-                  {currentSection === 0 && <DashboardSection />}
-                  {currentSection === 1 && session?.user?.role !== "staff" && <ClientsSection onAddClient={() => setIsAddClientOpen(true)} refreshTrigger={clientRefreshTrigger} />}
-                  {currentSection === 2 && <TeamPanelSection userRole={session?.user?.role} />}
-                  {currentSection === 4 && <LtvCalculatorSection />}
-                  {currentSection === 5 && <OutreachSection />}
-                  {currentSection === 6 && <ProjectManagement />}
-                  {currentSection === 7 && (
-                    <div className="w-full pb-24">
-                      <BlogEditorSection />
-                    </div>
+                  {isClientViewMode ? (
+                    <>
+                      {viewModeSection === 0 && <DashboardSection />}
+                      {viewModeSection === 1 && (
+                        <FilesSection readOnly allowDelete showOwnerInReadOnly fileFilter={viewClient?.id} />
+                      )}
+                      {viewModeSection === 2 && <ClientViewOutreachSection clientId={viewClient?.id || null} />}
+                      {viewModeSection === 3 && <LinkedInContextSection title="Context" clientId={viewClient?.id || null} />}
+                    </>
+                  ) : (
+                    <>
+                      {currentSection === 0 && <DashboardSection />}
+                      {currentSection === 1 && session?.user?.role !== "staff" && (
+                        <ClientsSection
+                          onAddClient={() => setIsAddClientOpen(true)}
+                          refreshTrigger={clientRefreshTrigger}
+                          onViewClient={enterClientViewMode}
+                        />
+                      )}
+                      {currentSection === 2 && <TeamPanelSection userRole={session?.user?.role} />}
+                      {currentSection === 4 && <LtvCalculatorSection />}
+                      {currentSection === 5 && <OutreachSection />}
+                      {currentSection === 11 && session?.user?.role === "admin" && (
+                        <EmailingPlatformSection launchStandaloneOnContinue />
+                      )}
+                      {currentSection === 6 && <ProjectManagement />}
+                      {currentSection === 7 && (
+                        <div className="w-full pb-24">
+                          <BlogEditorSection />
+                        </div>
+                      )}
+                      {currentSection === 8 && session?.user?.role !== "staff" && <AdminEditorSection />}
+                      {currentSection === 9 && session?.user?.role !== "staff" && <SignPdfSection />}
+                      {currentSection === 10 && <FilesSection />}
+                    </>
                   )}
-                  {currentSection === 8 && session?.user?.role !== "staff" && <AdminEditorSection />}
-                  {currentSection === 9 && session?.user?.role !== "staff" && <SignPdfSection />}
-                  {currentSection === 10 && <FilesSection />}
                 </>
               )}
 

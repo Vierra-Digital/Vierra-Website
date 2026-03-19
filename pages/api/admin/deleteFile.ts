@@ -26,13 +26,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const file = await prisma.storedFile.findUnique({
       where: { id: fileId },
-      select: { userId: true, clientId: true },
+      select: { userId: true, clientId: true, isDeletionProtected: true },
     })
     if (!file) {
       return res.status(404).json({ message: "File not found." })
     }
+    if (file.isDeletionProtected) {
+      return res.status(403).json({ message: "This file is protected and cannot be deleted." })
+    }
     const isOwner = file.userId != null && uid != null && file.userId === uid
-    if (!isOwner) {
+    const canManageClientFile = (role === "admin" || role === "staff") && file.clientId != null
+    const canDelete = role === "admin" || isOwner || canManageClientFile
+    if (!canDelete) {
       return res.status(403).json({ message: "You can only delete files saved to you." })
     }
     await prisma.storedFile.delete({ where: { id: fileId } })

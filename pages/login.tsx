@@ -20,10 +20,29 @@ declare global {
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] }, );
 const inter = Inter({ subsets: ["latin"] });
 
+function resolveCredentialErrorMessage(rawError?: string | null) {
+  const normalized = (rawError || "").toLowerCase();
+  if (!normalized) return "We couldn't sign you in. Check your email and password, then try again.";
+  if (normalized.includes("credentialssignin")) {
+    return "We couldn't sign you in. Check your email and password, then try again.";
+  }
+  if (normalized.includes("invalid")) {
+    return "We couldn't sign you in. Check your email and password, then try again.";
+  }
+  if (normalized.includes("password")) {
+    return "We couldn't sign you in. Check your email and password, then try again.";
+  }
+  if (normalized.includes("email")) {
+    return "We couldn't sign you in. Check your email and password, then try again.";
+  }
+  return "Sign-in is temporarily unavailable. Please try again in a moment.";
+}
+
 const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -46,10 +65,16 @@ const LoginPage = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (isSubmitting) return;
     setError("");
+    setIsSubmitting(true);
 
     try {
-      const response = await signIn("credentials", { email, password, redirect: false });
+      const response = await signIn("credentials", {
+        email: email.trim().toLowerCase(),
+        password,
+        redirect: false,
+      });
 
       if (response?.ok) {
         const session = await getSession();
@@ -60,10 +85,12 @@ const LoginPage = () => {
           router.replace("/client");
         }
       } else {
-        setError(response?.error ?? "Invalid credentials");
+        setError(resolveCredentialErrorMessage(response?.error));
       }
     } catch {
-      setError("Invalid credentials");
+      setError("Sign-in is temporarily unavailable. Please try again in a moment.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -133,10 +160,14 @@ const LoginPage = () => {
                 type="text"
                 id="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (error) setError("");
+                }}
                 className="w-full border border-gray-300 rounded-md p-2 bg-[#18042A] text-white placeholder-gray-400"
                 placeholder="Enter your username"
                 required
+                disabled={isSubmitting}
               />
             </div>
             <div>
@@ -151,22 +182,35 @@ const LoginPage = () => {
                   type={showPassword ? "text" : "password"}
                   id="password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError("");
+                  }}
                   className="w-full border border-gray-300 rounded-md p-2 pr-10 bg-[#18042A] text-white placeholder-gray-400"
                   placeholder="Enter your password"
                   required
+                  disabled={isSubmitting}
                 />
                 <button
                   type="button"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   className="absolute top-1/2 right-3 -translate-y-1/2 text-gray-400 hover:text-white"
                   onClick={() => setShowPassword(!showPassword)}
+                  disabled={isSubmitting}
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
             </div>
-            {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+            {error && (
+              <div
+                role="alert"
+                aria-live="polite"
+                className="rounded-md border border-red-300 bg-red-500/10 px-3 py-2 text-red-300 text-sm text-center"
+              >
+                {error}
+              </div>
+            )}
             {googleError === "AccessDenied" && (
               <p className="text-red-500 text-sm text-center">
                 Google Sign-In Failed: Use a vierradev.com account.
@@ -179,9 +223,10 @@ const LoginPage = () => {
             )}
             <button
               type="submit"
-              className={`w-full px-4 py-2 bg-[#701CC0] text-white rounded-md shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-transform duration-300 hover:scale-105 ${inter.className}`}
+              disabled={isSubmitting}
+              className={`w-full px-4 py-2 bg-[#701CC0] text-white rounded-md shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-transform duration-300 hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed ${inter.className}`}
             >
-              Login
+              {isSubmitting ? "Signing In..." : "Login"}
             </button>
             <div className="flex items-center my-4">
               <hr className="flex-grow border-t border-white/30" />

@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { signOut } from "next-auth/react";
 import ProfileImage from "./ProfileImage";
 import ImageCropModal from "./ImageCropModal";
-import { FiEdit3, FiUpload, FiRotateCcw, FiLock, FiLogOut, FiUser, FiMail, FiShield, FiSettings, FiCheck } from "react-icons/fi";
+import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
+import { FiEdit3, FiUpload, FiRotateCcw, FiLock, FiLogOut, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2 } from "react-icons/fi";
+import { FaFacebookF, FaLinkedinIn, FaGoogle } from "react-icons/fa";
 import { X } from "lucide-react";
 
 interface UserSettingsPageProps {
@@ -16,6 +18,12 @@ interface UserSettingsPageProps {
   onClose?: () => void;
   variant?: "panel" | "dark";
 }
+
+type GmailAccountConnection = {
+  email: string;
+  connected: boolean;
+  expiresAt: string | null;
+};
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
@@ -61,6 +69,18 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   });
   const [passwordFieldErrors, setPasswordFieldErrors] = useState<Record<string, string>>({});
   const [isPasswordChangeSuccess, setIsPasswordChangeSuccess] = useState(false);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [socialConnections, setSocialConnections] = useState({
+    facebook: false,
+    linkedin: false,
+    googleads: false,
+  });
+  const [socialLoading, setSocialLoading] = useState(false);
+  const [gmailAccounts, setGmailAccounts] = useState<GmailAccountConnection[]>([]);
+  const [gmailLoading, setGmailLoading] = useState(false);
+  const [showDeleteGmailModal, setShowDeleteGmailModal] = useState(false);
+  const [gmailToDelete, setGmailToDelete] = useState<string | null>(null);
+  const [isDeletingGmail, setIsDeletingGmail] = useState(false);
 
   const avatarMenuRef = useRef<HTMLDivElement>(null);
   const displayName = name && name.trim().length > 0 ? name : (user.email ? user.email.split("@")[0] : "User");
@@ -84,6 +104,70 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       }
     };
     loadSettings();
+  }, []);
+
+  const loadSocialConnections = async () => {
+    setSocialLoading(true);
+    try {
+      const [userRes, fbRes, liRes, gaRes] = await Promise.all([
+        fetch("/api/profile/getUser"),
+        fetch("/api/facebook/status"),
+        fetch("/api/linkedin/status"),
+        fetch("/api/googleads/status"),
+      ]);
+
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        setUserRole(userData?.role || null);
+      }
+
+      const [fb, li, ga] = await Promise.all([
+        fbRes.ok ? fbRes.json() : Promise.resolve({ connected: false }),
+        liRes.ok ? liRes.json() : Promise.resolve({ connected: false }),
+        gaRes.ok ? gaRes.json() : Promise.resolve({ connected: false }),
+      ]);
+
+      setSocialConnections({
+        facebook: !!fb.connected,
+        linkedin: !!li.connected,
+        googleads: !!ga.connected,
+      });
+    } catch (error) {
+      console.error("Failed to load social connection statuses:", error);
+    } finally {
+      setSocialLoading(false);
+    }
+  };
+
+  const loadGmailConnections = async () => {
+    setGmailLoading(true);
+    try {
+      const response = await fetch("/api/gmail/status");
+      if (!response.ok) {
+        setGmailAccounts([]);
+        return;
+      }
+
+      const data = await response.json();
+      const accounts = Array.isArray(data?.accounts) ? data.accounts : [];
+      setGmailAccounts(
+        accounts.map((account: any) => ({
+          email: typeof account?.email === "string" ? account.email : "",
+          connected: !!account?.connected,
+          expiresAt: typeof account?.expiresAt === "string" ? account.expiresAt : null,
+        })).filter((account: GmailAccountConnection) => account.email.length > 0)
+      );
+    } catch (error) {
+      console.error("Failed to load Gmail connections:", error);
+      setGmailAccounts([]);
+    } finally {
+      setGmailLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSocialConnections();
+    loadGmailConnections();
   }, []);
 
   useEffect(() => {
@@ -366,6 +450,45 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     setPasswordFieldErrors({});
   };
 
+  const openDeleteGmailModal = (email: string) => {
+    setGmailToDelete(email);
+    setShowDeleteGmailModal(true);
+  };
+
+  const closeDeleteGmailModal = () => {
+    if (isDeletingGmail) return;
+    setShowDeleteGmailModal(false);
+    setGmailToDelete(null);
+  };
+
+  const handleDeleteGmailAccount = async () => {
+    if (!gmailToDelete) return;
+    if (isDeletingGmail) return;
+    setIsDeletingGmail(true);
+    try {
+      const response = await fetch("/api/gmail/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: gmailToDelete }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.message || "Failed to delete Gmail account.");
+      }
+      setUpdateMessage({ type: "success", text: "Gmail account removed successfully." });
+      setShowDeleteGmailModal(false);
+      setGmailToDelete(null);
+      await loadGmailConnections();
+    } catch (error) {
+      setUpdateMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to delete Gmail account.",
+      });
+    } finally {
+      setIsDeletingGmail(false);
+    }
+  };
+
   const isDark = variant === "dark";
   const isPanel = variant === "panel";
   const cardBg = isDark ? "bg-[#2E0A4F]/90 border-white/10" : "bg-white border-gray-100";
@@ -373,6 +496,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const textSecondary = isDark ? "text-white/70" : "text-[#6B7280]";
   const inputBg = isDark ? "bg-white/10 border-white/20 text-white placeholder-white/50" : "bg-white border-[#E5E7EB]";
   const pageBg = isDark ? "bg-transparent" : "bg-white";
+  const canManageGmailAccounts = ["user", "admin", "staff"].includes(userRole || "");
+  const gmailSettingsSource = userRole === "admin" || userRole === "staff" ? "panel-settings" : "settings";
 
   const cardsContent = (
     <div className="space-y-6">
@@ -592,6 +717,193 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         </div>
       </div>
 
+      {userRole === "user" && (
+        <>
+          <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-[#701CC0]/10">
+                  <FiRefreshCw className="w-4 h-4 text-[#701CC0]" />
+                </div>
+                <h3 className={`font-semibold ${textPrimary}`}>Social Connections</h3>
+              </div>
+              <button
+                type="button"
+                onClick={loadSocialConnections}
+                disabled={socialLoading}
+                className="text-sm px-3 py-1.5 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 disabled:opacity-50"
+              >
+                {socialLoading ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
+            <p className={`text-sm ${textSecondary} mb-4`}>
+              Reconnect your social media accounts if tokens expire or posting access changes.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {[
+                {
+                  key: "linkedin",
+                  label: "LinkedIn",
+                  path: "/api/linkedin/initiate?from=settings",
+                  connected: socialConnections.linkedin,
+                  icon: <FaLinkedinIn className="w-3.5 h-3.5 text-white" />,
+                  iconBg: "bg-[#0A66C2]",
+                  disabled: false,
+                },
+                {
+                  key: "facebook",
+                  label: "Facebook",
+                  path: "/api/facebook/initiate",
+                  connected: socialConnections.facebook,
+                  icon: <FaFacebookF className="w-3.5 h-3.5 text-white" />,
+                  iconBg: "bg-[#1877F2]",
+                  disabled: true,
+                },
+                {
+                  key: "googleads",
+                  label: "Google Ads",
+                  path: "/api/googleads/initiate",
+                  connected: socialConnections.googleads,
+                  icon: <FaGoogle className="w-3.5 h-3.5 text-white" />,
+                  iconBg: "bg-[#EA4335]",
+                  disabled: true,
+                },
+              ].map((item) => (
+                <div
+                  key={item.key}
+                  className={`rounded-xl border p-4 ${
+                    item.disabled
+                      ? "border-[#E5E7EB] bg-[#F3F4F6] opacity-70"
+                      : isDark
+                        ? "border-white/10 bg-white/5"
+                        : "border-[#E5E7EB] bg-[#FAFAFA]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-6 h-6 rounded-md inline-flex items-center justify-center ${item.iconBg}`}>
+                        {item.icon}
+                      </span>
+                      <span className={`text-sm font-medium ${textPrimary}`}>{item.label}</span>
+                    </div>
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full ${
+                        item.disabled
+                          ? "bg-gray-200 text-gray-700"
+                          : item.connected
+                            ? "bg-green-100 text-green-700"
+                            : "bg-yellow-100 text-yellow-700"
+                      }`}
+                    >
+                      {item.disabled ? "Disabled" : item.connected ? "Connected" : "Not Connected"}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={item.disabled}
+                    onClick={() => window.open(item.path, "_blank", "noopener,noreferrer")}
+                    className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                      item.disabled
+                        ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                        : "bg-[#701CC0] text-white hover:bg-[#5f17a5]"
+                    }`}
+                  >
+                    {item.disabled ? "Disabled" : "Reconnect"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </>
+      )}
+
+      {canManageGmailAccounts && (
+        <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 rounded-lg bg-[#701CC0]/10">
+                <FaGoogle className="w-3.5 h-3.5 text-[#EA4335]" />
+              </div>
+              <h3 className={`font-semibold ${textPrimary}`}>Google Gmail Accounts</h3>
+            </div>
+            <button
+              type="button"
+              onClick={loadGmailConnections}
+              disabled={gmailLoading}
+              className="text-sm px-3 py-1.5 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 disabled:opacity-50"
+            >
+              {gmailLoading ? "Refreshing..." : "Refresh"}
+            </button>
+          </div>
+          <p className={`text-sm ${textSecondary} mb-4`}>
+            Connect one or more Gmail accounts.
+          </p>
+
+          <div className="flex flex-wrap gap-2 mb-4">
+            <button
+              type="button"
+              onClick={() => window.open(`/api/gmail/initiate?from=${encodeURIComponent(gmailSettingsSource)}`, "_self")}
+              className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium bg-[#701CC0] text-white hover:bg-[#5f17a5] transition-colors"
+            >
+              <FiPlus className="w-4 h-4" />
+              {gmailAccounts.length > 0 ? "Add Gmail Account" : "Connect Gmail Account"}
+            </button>
+          </div>
+
+          {gmailAccounts.length === 0 ? (
+            <div className={`rounded-xl border p-4 text-sm ${isDark ? "border-white/10 text-white/70" : "border-[#E5E7EB] text-[#6B7280]"}`}>
+              No Gmail accounts connected yet.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {gmailAccounts.map((account) => (
+                <div
+                  key={account.email}
+                  className={`rounded-xl border p-3 ${isDark ? "border-white/10 bg-white/5" : "border-[#E5E7EB] bg-[#FAFAFA]"}`}
+                >
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="min-w-0">
+                      <p className={`text-sm font-medium truncate ${textPrimary}`}>{account.email}</p>
+                    </div>
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full ${
+                        account.connected ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                      }`}
+                    >
+                      {account.connected ? "Connected" : "Needs Reconnect"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-[1fr_auto] gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        window.open(
+                          `/api/gmail/initiate?from=${encodeURIComponent(gmailSettingsSource)}&account=${encodeURIComponent(account.email)}`,
+                          "_self"
+                        )
+                      }
+                      className="rounded-lg px-3 py-2 text-sm font-medium bg-[#701CC0] text-white hover:bg-[#5f17a5] transition-colors"
+                    >
+                      Reconnect
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openDeleteGmailModal(account.email)}
+                      className="rounded-lg px-3 py-2 border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
+                      aria-label={`Delete Gmail account ${account.email}`}
+                      title="Remove account"
+                    >
+                      <FiTrash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       
       <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -678,7 +990,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               </h3>
               <p className="text-sm text-[#6B7280] mb-6">
                 {isPasswordChangeSuccess 
-                  ? "You will be logged out shortly."
+                  ? "Redirecting To Login..."
                   : "Your changes have been saved."
                 }
               </p>
@@ -788,6 +1100,23 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             </div>
           </div>
         </div>
+      )}
+
+      {showDeleteGmailModal && (
+        <ConfirmActionModal
+          isOpen={showDeleteGmailModal}
+          title="Remove Gmail Account"
+          message={
+            <>
+              Are you sure you want to remove{" "}
+              <span className="font-semibold text-[#111827]">{gmailToDelete || ""}</span>? This will remove the saved
+              Gmail authorization for this account.
+            </>
+          }
+          confirmLabel={isDeletingGmail ? "Removing..." : "Remove Account"}
+          onConfirm={handleDeleteGmailAccount}
+          onCancel={closeDeleteGmailModal}
+        />
       )}
     </div>
   );

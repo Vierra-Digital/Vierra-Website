@@ -54,6 +54,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         name: true,
         fileType: true,
         signingTokenId: true,
+        isDeletionProtected: true,
         createdAt: true,
         userId: true,
         clientId: true,
@@ -73,6 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         date: `${mm}/${dd}/${yyyy}`,
         fileType: f.fileType,
         signingTokenId: f.signingTokenId,
+        isDeletionProtected: f.isDeletionProtected,
         owner: f.user?.name ?? f.client?.name ?? "Unknown",
       }
     })

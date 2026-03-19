@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Inter } from "next/font/google"
-import { FiPlus, FiFileText, FiFilter, FiSearch, FiBold, FiItalic, FiLink, FiUnderline, FiImage, FiVideo, FiCornerUpLeft, FiCornerUpRight, FiList, FiMoreVertical, FiAlignLeft, FiAlignCenter, FiAlignRight } from "react-icons/fi"
+import { FiPlus, FiFileText, FiFilter, FiSearch, FiBold, FiItalic, FiLink, FiUnderline, FiImage, FiVideo, FiCornerUpLeft, FiCornerUpRight, FiList, FiAlignLeft, FiAlignCenter, FiAlignRight, FiEdit2, FiTrash2 } from "react-icons/fi"
 import { RiArrowDropDownLine } from "react-icons/ri"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
+import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -1733,10 +1734,6 @@ export default function BlogEditorSection() {
   const pageSize = 6
   const [filterOpen, setFilterOpen] = useState(false)
   const filterRef = useRef<HTMLDivElement>(null)
-  const [actionMenuOpen, setActionMenuOpen] = useState<number | null>(null)
-  const [actionMenuPosition, setActionMenuPosition] = useState<{ top: number; right: number; showAbove: boolean } | null>(null)
-  const actionMenuRefs = useRef<Record<number, HTMLDivElement | null>>({})
-  const actionMenuButtonRefs = useRef<Record<number, HTMLButtonElement | null>>({})
   const [dateSort, setDateSort] = useState<'none' | 'asc' | 'desc'>('none')
   const [tagFilter, setTagFilter] = useState<string>('all')
   const [authorFilter, setAuthorFilter] = useState<string>('all')
@@ -1773,41 +1770,6 @@ export default function BlogEditorSection() {
     })()
   }, [])
 
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      Object.entries(actionMenuRefs.current).forEach(([id, ref]) => {
-        if (ref && !ref.contains(event.target as Node)) {
-          if (actionMenuOpen === Number(id)) {
-            setActionMenuOpen(null)
-            setActionMenuPosition(null)
-          }
-        }
-      })
-    }
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [actionMenuOpen])
-
-  useEffect(() => {
-    if (actionMenuOpen) {
-      const button = actionMenuButtonRefs.current[actionMenuOpen]
-      if (button) {
-        const rect = button.getBoundingClientRect()
-        const dropdownHeight = 120
-        const viewportHeight = window.innerHeight
-        const viewportMiddle = viewportHeight / 2
-        const showAbove = rect.top > viewportMiddle
-
-        setActionMenuPosition({
-          top: showAbove ? rect.top - dropdownHeight - 2 : rect.bottom + 2,
-          right: window.innerWidth - rect.right,
-          showAbove,
-        })
-      }
-    } else {
-      setActionMenuPosition(null)
-    }
-  }, [actionMenuOpen])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -1876,7 +1838,7 @@ export default function BlogEditorSection() {
                             type="search"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search posts"
+                            placeholder="Search Posts"
                             className="w-64 md:w-80 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none"
                         />
                     </div>
@@ -2142,57 +2104,34 @@ export default function BlogEditorSection() {
                         )}
                       </td>
                       <td className="px-4 py-4 text-right">
-                        <div
-                          className="relative inline-flex justify-end"
-                          ref={(el) => { actionMenuRefs.current[p.id] = el }}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => setActionMenuOpen(actionMenuOpen === p.id ? null : p.id)}
-                            className="p-1.5 rounded-md hover:bg-gray-100 transition-colors"
-                            aria-label="Manage post"
-                            ref={(el) => { actionMenuButtonRefs.current[p.id] = el }}
-                          >
-                            <FiMoreVertical className="w-4 h-4 text-[#6B7280]" />
-                          </button>
-                          {actionMenuOpen === p.id && actionMenuPosition && (
-                            <div
-                              className="fixed w-40 bg-white rounded-lg shadow-xl border border-[#E5E7EB] py-1 z-[100]"
-                              style={{
-                                top: `${actionMenuPosition.top}px`,
-                                right: `${actionMenuPosition.right}px`,
+                        <div className="inline-flex justify-end">
+                          <RowActionMenu label="Manage post" menuWidthClassName="w-44">
+                            <RowActionMenuItem
+                              onClick={() => {
+                                setForm({
+                                  id: p.id,
+                                  title: p.title,
+                                  description: p.description ?? "",
+                                  content: p.content,
+                                  tag: p.tag ?? "",
+                                  date: p.published_date.slice(0, 10),
+                                  authorName: p.author?.name ?? "",
+                                })
+                                setMode("edit")
                               }}
+                              icon={<FiEdit2 className="w-4 h-4" />}
+                              tone="accent"
                             >
-                              <button
-                                onClick={() => {
-                                  setForm({
-                                    id: p.id,
-                                    title: p.title,
-                                    description: p.description ?? "",
-                                    content: p.content,
-                                    tag: p.tag ?? "",
-                                    date: p.published_date.slice(0, 10),
-                                    authorName: p.author?.name ?? "",
-                                  })
-                                  setMode("edit")
-                                  setActionMenuOpen(null)
-                                }}
-                                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 text-[#374151]"
-                              >
-                                Edit
-                              </button>
-                              <div className="border-t border-[#E5E7EB] my-1" />
-                              <button
-                                onClick={() => {
-                                  openDeleteModal({ id: p.id, title: p.title })
-                                  setActionMenuOpen(null)
-                                }}
-                                className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          )}
+                              Edit
+                            </RowActionMenuItem>
+                            <RowActionMenuItem
+                              onClick={() => openDeleteModal({ id: p.id, title: p.title })}
+                              icon={<FiTrash2 className="w-4 h-4" />}
+                              tone="danger"
+                            >
+                              Delete
+                            </RowActionMenuItem>
+                          </RowActionMenu>
                         </div>
                       </td>
                     </tr>

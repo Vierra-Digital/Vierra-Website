@@ -6,8 +6,10 @@ import ProfileImage from "@/components/ProfileImage"
 import Link from "next/link"
 import { FiLogOut, FiFolder } from "react-icons/fi"
 import { AiOutlineAppstore } from "react-icons/ai"
+import { HiOutlineDocumentText } from "react-icons/hi"
 import { CiSearch } from "react-icons/ci"
 import { RiArrowDropDownLine } from "react-icons/ri"
+import { useRouter } from "next/router"
 import { useSession, signOut } from "next-auth/react"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/pages/api/auth/[...nextauth]"
@@ -20,10 +22,15 @@ const UserSettingsPage = dynamic(() => import("@/components/UserSettingsPage"), 
 const FilesSection = dynamic(() => import("@/components/PanelPages/FilesSection"), {
   ssr: false,
 })
+const LinkedInContextSection = dynamic(
+  () => import("@/components/PanelPages/LinkedInContextSection"),
+  { ssr: false }
+)
 
 const inter = Inter({ subsets: ["latin"] })
 
 const ClientPage = () => {
+  const router = useRouter()
   const [showSettings, setShowSettings] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [currentSection, setCurrentSection] = useState(0)
@@ -34,6 +41,12 @@ const ClientPage = () => {
   useEffect(() => {
     fetchCurrentUser()
   }, [])
+
+  useEffect(() => {
+    if (router.query.settings === "1") {
+      setShowSettings(true)
+    }
+  }, [router.query.settings])
 
   useEffect(() => {
     const updateActivity = async () => {
@@ -110,6 +123,12 @@ const ClientPage = () => {
               <AiOutlineAppstore />
               <span className={`text-xs font-normal ${inter.className}`}>
                 Dashboard
+              </span>
+            </div>
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false) }} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 2 ? "bg-white text-black" : "hover:bg-white hover:text-black"}`}>
+              <HiOutlineDocumentText />
+              <span className={`text-xs font-normal ${inter.className}`}>
+                Context
               </span>
             </div>
             <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false) }} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 1 ? "bg-white text-black" : "hover:bg-white hover:text-black"}`}>
@@ -215,11 +234,18 @@ const ClientPage = () => {
             ) : (
               <>
                 {currentSection === 0 && (
-                  <div className="w-full p-6">
-                    <h2 className={`text-2xl font-bold text-[#111827] mb-4 ${inter.className}`}>Dashboard</h2>
+                  <div className="flex-1 flex justify-center px-6 pt-2">
+                    <div className="w-full max-w-6xl flex flex-col h-full">
+                      <div className="w-full flex justify-between items-center mb-2">
+                        <div>
+                          <h1 className={`text-2xl font-semibold text-[#111827] mt-6 mb-6 ${inter.className}`}>Dashboard</h1>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
-                {currentSection === 1 && <FilesSection readOnly />}
+                {currentSection === 1 && <FilesSection readOnly showOwnerInReadOnly />}
+                {currentSection === 2 && <LinkedInContextSection title="Context" />}
               </>
             )}
           </div>

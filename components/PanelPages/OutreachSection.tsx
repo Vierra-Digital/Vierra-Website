@@ -13,6 +13,7 @@ const statFields = [
 
 type CardKey =
     | "LinkedIn"
+    | "EmailPanel"
     | "Instagram"
     | "Facebook"
     | "ColdCall"
@@ -49,6 +50,7 @@ const months = [
 
 const outreachConfig: Record<CardKey, { color: string; icon: string }> = {
     LinkedIn: { color: "bg-blue-50 border-blue-200", icon: "/assets/Socials/LinkedIn.png" },
+    EmailPanel: { color: "bg-blue-50 border-blue-200", icon: "/assets/Outreach/ColdMail.png" },
     Instagram: { color: "bg-pink-50 border-pink-200", icon: "/assets/Socials/Instagram.png" },
     Facebook: { color: "bg-blue-50 border-blue-200", icon: "/assets/Socials/Facebook.png" },
     ColdCall: { color: "bg-purple-50 border-purple-200", icon: "/assets/Outreach/ColdCall.png" },
@@ -80,6 +82,7 @@ const OutreachSection = () => {
 
     const [stats, setStats] = useState<StatsType>({
         LinkedIn: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+        EmailPanel: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
         Instagram: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
         Facebook: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
         ColdCall: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
@@ -135,6 +138,7 @@ const OutreachSection = () => {
         try {
             const outreachMap: Record<CardKey, string> = {
                 LinkedIn: "linkedin",
+                EmailPanel: "emailingplatform",
                 Instagram: "instagram", 
                 Facebook: "facebook",
                 ColdCall: "coldcall",
@@ -206,6 +210,7 @@ const OutreachSection = () => {
             const data = await response.json();
             const outreachMap: Record<string, CardKey> = {
                 linkedin: "LinkedIn",
+                emailingplatform: "EmailPanel",
                 instagram: "Instagram",
                 facebook: "Facebook",
                 coldcall: "ColdCall",
@@ -217,6 +222,7 @@ const OutreachSection = () => {
             };
             const newStats: StatsType = {
                 LinkedIn: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+                EmailPanel: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
                 Instagram: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
                 Facebook: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
                 ColdCall: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
@@ -255,12 +261,13 @@ const OutreachSection = () => {
                 if (response.ok) {
                     const data = await response.json();
                     const outreachMap: Record<string, CardKey> = {
-                        linkedin: "LinkedIn", instagram: "Instagram", facebook: "Facebook",
+                        linkedin: "LinkedIn", emailingplatform: "EmailPanel", instagram: "Instagram", facebook: "Facebook",
                         coldcall: "ColdCall", coldmail: "ColdMail", coldmessage: "ColdMessage",
                         walkinnetworking: "WalkInNetworking", autoresponder: "AutoResponder", other: "Other"
                     };
                     const monthStats: StatsType = {
                         LinkedIn: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
+                        EmailPanel: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
                         Instagram: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
                         Facebook: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
                         ColdCall: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },

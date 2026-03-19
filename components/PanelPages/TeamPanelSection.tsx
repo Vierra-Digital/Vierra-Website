@@ -3,7 +3,7 @@ import { FiSearch, FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck } from "react-ic
 import Image from "next/image";
 import ProfileImage from "../ProfileImage";
 import { Inter } from "next/font/google";
-import RowActionMenu from "@/components/ui/RowActionMenu";
+import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -16,24 +16,12 @@ const StaffActionsMenu: React.FC<{
 }> = ({ staffName, onEdit, onDelete }) => {
     return (
         <RowActionMenu label={`Manage ${staffName}`}>
-                    <button
-                        onClick={() => {
-                            onEdit()
-                        }}
-                        className="w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-blue-600"
-                    >
-                        <FiEdit3 className="w-4 h-4" />
-                        Edit Staff
-                    </button>
-                    <button
-                        onClick={() => {
-                            onDelete()
-                        }}
-                        className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                    >
-                        <FiTrash2 className="w-4 h-4" />
-                        Remove Staff
-                    </button>
+            <RowActionMenuItem onClick={onEdit} icon={<FiEdit3 className="w-4 h-4" />} tone="accent">
+                Edit Staff
+            </RowActionMenuItem>
+            <RowActionMenuItem onClick={onDelete} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
+                Remove Staff
+            </RowActionMenuItem>
         </RowActionMenu>
     )
 }

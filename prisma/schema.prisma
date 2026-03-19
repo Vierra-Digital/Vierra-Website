@@ -99,8 +99,306 @@ model User {
   signedDocuments          SignedDocuments[]
   storedFiles              StoredFile[]
   tokens                   UserToken[]
+  emailAccountSettings     EmailAccountSetting[]
+  emailSignatures          EmailSignature[]
+  emailTemplates           EmailTemplate[]
+  emailOutboundMessages    EmailOutboundMessage[]
+  emailBlockedSenders      EmailBlockedSender[]
+  emailComposeDrafts       EmailComposeDraft[]
+  contacts                 Contact[]
+  contactTags              ContactTag[]
+  contactFieldVisibilitySettings ContactFieldVisibilitySetting[]
+  gmailContactSyncStates   GmailContactSyncState[]
+  emailProviderAccounts    EmailProviderAccount[]
 
   @@map("users")
+}
+
+model EmailAccountSetting {
+  id                         String                    @id @default(cuid())
+  userId                     Int
+  accountEmail               String
+  trackingEnabled            Boolean                   @default(false)
+  openTrackingEnabled        Boolean                   @default(true)
+  clickTrackingEnabled       Boolean                   @default(true)
+  vacationResponderEnabled   Boolean                   @default(false)
+  vacationSubject            String?
+  vacationBodyHtml           String?                   @db.Text
+  vacationBodyText           String?                   @db.Text
+  vacationStartAt            DateTime?
+  vacationEndAt              DateTime?
+  vacationReplyFrequencyHours Int                      @default(24)
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+  user                       User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vacationResponseLogs       EmailVacationResponseLog[]
+
+  @@unique([userId, accountEmail], name: "userId_accountEmail")
+  @@index([userId])
+  @@map("email_account_settings")
+}
+
+model EmailSignature {
+  id            String   @id @default(cuid())
+  userId        Int
+  accountEmail  String?
+  name          String
+  signatureHtml String?  @db.Text
+  signatureText String?  @db.Text
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, accountEmail])
+  @@map("email_signatures")
+}
+
+model EmailTemplate {
+  id           String   @id @default(cuid())
+  userId       Int
+  accountEmail String?
+  name         String
+  subject      String?
+  bodyHtml     String?  @db.Text
+  bodyText     String?  @db.Text
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, accountEmail])
+  @@map("email_templates")
+}
+
+model EmailOutboundMessage {
+  id              String                 @id @default(cuid())
+  userId          Int
+  accountEmail    String
+  gmailMessageId  String?
+  threadId        String?
+  subject         String?
+  bodyHtml        String?                @db.Text
+  bodyText        String?                @db.Text
+  trackingEnabled Boolean                @default(false)
+  openToken       String?                @unique
+  createdAt       DateTime               @default(now())
+  user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipients      EmailOutboundRecipient[]
+  trackingLinks   EmailTrackingLink[]
+  trackingEvents  EmailTrackingEvent[]
+
+  @@index([userId, accountEmail, createdAt])
+  @@index([gmailMessageId])
+  @@map("email_outbound_messages")
+}
+
+model EmailOutboundRecipient {
+  id                String             @id @default(cuid())
+  outboundMessageId String
+  email             String
+  recipientType     EmailRecipientType
+  createdAt         DateTime           @default(now())
+  outboundMessage   EmailOutboundMessage @relation(fields: [outboundMessageId], references: [id], onDelete: Cascade)
+
+  @@index([outboundMessageId, email])
+  @@map("email_outbound_recipients")
+}
+
+model EmailTrackingLink {
+  id                String              @id @default(cuid())
+  outboundMessageId String
+  token             String              @unique
+  originalUrl       String              @db.Text
+  createdAt         DateTime            @default(now())
+  outboundMessage   EmailOutboundMessage @relation(fields: [outboundMessageId], references: [id], onDelete: Cascade)
+  events            EmailTrackingEvent[]
+
+  @@index([outboundMessageId])
+  @@map("email_tracking_links")
+}
+
+model EmailTrackingEvent {
+  id                String                @id @default(cuid())
+  outboundMessageId String
+  trackingLinkId    String?
+  eventType         EmailTrackingEventType
+  recipientEmail    String?
+  ipHash            String?
+  userAgent         String?
+  occurredAt        DateTime              @default(now())
+  outboundMessage   EmailOutboundMessage  @relation(fields: [outboundMessageId], references: [id], onDelete: Cascade)
+  trackingLink      EmailTrackingLink?    @relation(fields: [trackingLinkId], references: [id], onDelete: SetNull)
+
+  @@index([outboundMessageId, occurredAt])
+  @@index([eventType, occurredAt])
+  @@map("email_tracking_events")
+}
+
+model EmailVacationResponseLog {
+  id                     String            @id @default(cuid())
+  emailAccountSettingId  String
+  senderEmail            String
+  lastSentAt             DateTime
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+  emailAccountSetting    EmailAccountSetting @relation(fields: [emailAccountSettingId], references: [id], onDelete: Cascade)
+
+  @@unique([emailAccountSettingId, senderEmail], name: "emailAccountSetting_sender")
+  @@map("email_vacation_response_logs")
+}
+
+model Contact {
+  id               String           @id @default(cuid())
+  userId           Int
+  accountEmail     String?
+  source           ContactSource    @default(MANUAL)
+  firstName        String?
+  lastName         String?
+  email            String
+  phone            String?
+  business         String?
+  website          String?
+  address          String?
+  gmailResourceName String?
+  gmailEtag        String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tags             ContactTagAssignment[]
+
+  @@unique([userId, accountEmail, email], name: "userId_accountEmail_email")
+  @@index([userId, accountEmail])
+  @@index([userId, source])
+  @@map("contacts")
+}
+
+model ContactTag {
+  id          String               @id @default(cuid())
+  userId      Int
+  name        String
+  color       String               @default("#701CC0")
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments ContactTagAssignment[]
+
+  @@unique([userId, name], name: "userId_name")
+  @@index([userId])
+  @@map("contact_tags")
+}
+
+model ContactTagAssignment {
+  id         String    @id @default(cuid())
+  contactId  String
+  tagId      String
+  createdAt  DateTime  @default(now())
+  contact    Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag        ContactTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, tagId], name: "contactId_tagId")
+  @@index([tagId])
+  @@map("contact_tag_assignments")
+}
+
+model ContactFieldVisibilitySetting {
+  id           String   @id @default(cuid())
+  userId       Int
+  accountEmail String?
+  showPhone    Boolean  @default(true)
+  showBusiness Boolean  @default(true)
+  showWebsite  Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, accountEmail], name: "contact_visibility_userId_accountEmail")
+  @@index([userId])
+  @@map("contact_field_visibility_settings")
+}
+
+model GmailContactSyncState {
+  id             String   @id @default(cuid())
+  userId         Int
+  accountEmail   String
+  nextSyncToken  String?
+  lastSyncAt     DateTime?
+  lastFullSyncAt DateTime?
+  lastSyncStatus String?
+  lastError      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, accountEmail], name: "gmail_contact_sync_userId_accountEmail")
+  @@index([userId])
+  @@map("gmail_contact_sync_states")
+}
+
+model EmailProviderAccount {
+  id                 String   @id @default(cuid())
+  userId             Int
+  accountEmail       String
+  providerLabel      String?
+  smtpHost           String
+  smtpPort           Int
+  smtpSecure         Boolean  @default(true)
+  smtpUsername       String
+  smtpPasswordEnc    String
+  imapHost           String?
+  imapPort           Int?
+  imapSecure         Boolean?
+  popHost            String?
+  popPort            Int?
+  popSecure          Boolean?
+  isDefaultSender    Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, accountEmail], name: "email_provider_userId_accountEmail")
+  @@index([userId])
+  @@map("email_provider_accounts")
+}
+
+model EmailBlockedSender {
+  id          String   @id @default(cuid())
+  userId      Int
+  accountEmail String?
+  email       String
+  name        String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, accountEmail, email], name: "email_blocked_sender_unique")
+  @@index([userId, accountEmail])
+  @@map("email_blocked_senders")
+}
+
+model EmailComposeDraft {
+  id          String   @id @default(cuid())
+  userId      Int
+  draftKey    String
+  accountEmail String?
+  toText      String   @db.Text
+  ccText      String?  @db.Text
+  bccText     String?  @db.Text
+  showCc      Boolean  @default(false)
+  showBcc     Boolean  @default(false)
+  subject     String
+  bodyText    String   @db.Text
+  bodyHtml    String?  @db.Text
+  previewHtml String?  @db.Text
+  threadId    String?
+  inReplyTo   String?
+  references  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, draftKey], name: "email_compose_drafts_userId_draftKey_key")
+  @@index([userId, accountEmail])
+  @@map("email_compose_drafts")
 }
 
 model OnboardingPlatformToken {
@@ -229,6 +527,7 @@ model StoredFile {
   signingTokenId String
   fileType       String   @default("pdf")
   pdfData        Bytes?   // Signed PDF bytes; used in production (serverless /tmp is ephemeral)
+  isDeletionProtected Boolean @default(false)
   createdAt      DateTime @default(now())
   userId         Int?
   user           User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -272,6 +571,7 @@ enum Outreach {
   facebook
   googleads
   linkedin
+  emailingplatform
   instagram
   coldcall
   coldmail
@@ -279,6 +579,23 @@ enum Outreach {
   walkinnetworking
   autoresponder
   other
+}
+
+enum EmailRecipientType {
+  TO
+  CC
+  BCC
+}
+
+enum EmailTrackingEventType {
+  OPEN
+  CLICK
+}
+
+enum ContactSource {
+  MANUAL
+  GMAIL
+  CSV
 }
 
 enum ProjectBoard {

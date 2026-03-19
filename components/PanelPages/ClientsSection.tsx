@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import ProfileImage from "../ProfileImage"
-import { FiPlus, FiFilter, FiTrash2, FiCheckCircle, FiXCircle } from 'react-icons/fi'
+import { FiPlus, FiFilter, FiTrash2, FiCheckCircle, FiXCircle, FiEye } from 'react-icons/fi'
 import PanelSearchInput from "@/components/ui/PanelSearchInput"
 import PanelSectionHeader from "@/components/ui/PanelSectionHeader"
 import PaginationControls from "@/components/ui/PaginationControls"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
-import RowActionMenu from "@/components/ui/RowActionMenu"
+import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 
 type ClientRow = {
     id: string
@@ -53,40 +53,24 @@ const ClientActionsMenu: React.FC<{
     clientName: string
     isActive: boolean
     hasImage: boolean
+    onView: () => void
     onDelete: () => void
     onToggleStatus: (isActive: boolean) => void
-}> = ({ clientName, isActive, onDelete, onToggleStatus }) => {
+}> = ({ clientName, isActive, onView, onDelete, onToggleStatus }) => {
     return (
         <RowActionMenu label={`Manage ${clientName}`}>
-                    <button
-                        onClick={() => {
-                            onToggleStatus(!isActive)
-                        }}
-                        className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
-                            isActive ? 'text-orange-600' : 'text-green-600'
-                        }`}
-                    >
-                        {isActive ? (
-                            <>
-                                <FiXCircle className="w-4 h-4" />
-                                Mark As Inactive
-                            </>
-                        ) : (
-                            <>
-                                <FiCheckCircle className="w-4 h-4" />
-                                Mark As Active
-                            </>
-                        )}
-                    </button>
-                    <button
-                        onClick={() => {
-                            onDelete()
-                        }}
-                        className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
-                    >
-                        <FiTrash2 className="w-4 h-4" />
-                        Remove Client
-                    </button>
+          <RowActionMenuItem onClick={onView} icon={<FiEye className="w-4 h-4" />} tone="accent">
+            View
+          </RowActionMenuItem>
+          <RowActionMenuItem
+            onClick={() => onToggleStatus(!isActive)}
+            icon={isActive ? <FiXCircle className="w-4 h-4" /> : <FiCheckCircle className="w-4 h-4" />}
+          >
+            {isActive ? "Mark As Inactive" : "Mark As Active"}
+          </RowActionMenuItem>
+          <RowActionMenuItem onClick={onDelete} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
+            Remove Client
+          </RowActionMenuItem>
         </RowActionMenu>
     )
 }
@@ -94,9 +78,10 @@ const ClientActionsMenu: React.FC<{
 interface ClientsSectionProps { 
     onAddClient?: () => void
     refreshTrigger?: number
+    onViewClient?: (client: Pick<ClientRow, "id" | "name" | "email">) => void
 }
 
-const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTrigger }) => {
+const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTrigger, onViewClient }) => {
     const [rows, setRows] = useState<ClientRow[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -428,7 +413,13 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                                                 alt={`${r.name}'s profile`}
                                                             />
                                                             <div className="flex flex-col">
-                                                                <div className="text-sm font-medium text-[#111827]">{r.name || "—"}</div>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
+                                                                    className="text-sm font-medium text-[#111827] hover:text-[#701CC0] hover:underline text-left"
+                                                                >
+                                                                    {r.name || "—"}
+                                                                </button>
                                                                 <div className="text-sm text-[#6B7280]">{r.email || ""}</div>
                                                             </div>
                                                         </div>
@@ -448,6 +439,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                                             clientName={r.name}
                                                             isActive={r.isActive}
                                                             hasImage={r.image}
+                                                            onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
                                                             onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
                                                             onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
                                                         />
