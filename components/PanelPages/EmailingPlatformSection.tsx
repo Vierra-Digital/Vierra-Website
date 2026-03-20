@@ -27,9 +27,11 @@ import {
 } from "react-icons/fi";
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
+import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 
 const inter = Inter({ subsets: ["latin"] });
 const PAGE_SIZE = 50;
+const CONTACTS_PAGE_SIZE = 50;
 
 type ModuleKey =
   | "inbox"
@@ -201,7 +203,7 @@ const MODULES: Array<{ key: ModuleKey; label: string; icon: React.ReactNode }> =
   { key: "inbox", label: "Inbox", icon: <FiInbox className="w-4 h-4" /> },
   { key: "drafts", label: "Drafts", icon: <FiMail className="w-4 h-4" /> },
   { key: "sent", label: "Sent", icon: <FiSend className="w-4 h-4" /> },
-  { key: "cryptography", label: "Cryptography", icon: <FiKey className="w-4 h-4" /> },
+  { key: "cryptography", label: "Cartography", icon: <FiKey className="w-4 h-4" /> },
   { key: "campaigns", label: "Campaigns", icon: <FiCheckSquare className="w-4 h-4" /> },
   { key: "contacts", label: "Contacts", icon: <FiUsers className="w-4 h-4" /> },
   { key: "archive", label: "Archive", icon: <FiArchive className="w-4 h-4" /> },
@@ -326,9 +328,26 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     title: "",
     message: "",
   });
+  const [contactsImportSuccessOpen, setContactsImportSuccessOpen] = useState(false);
+  const [contactsImportIssuesModal, setContactsImportIssuesModal] = useState<{
+    open: boolean;
+    imported: number;
+    skipped: number;
+    headerErrors: string[];
+    rowErrors: Array<{ lineNumber: number; email: string; reasons: string[] }>;
+  }>({
+    open: false,
+    imported: 0,
+    skipped: 0,
+    headerErrors: [],
+    rowErrors: [],
+  });
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
   const [contactsError, setContactsError] = useState("");
+  const [contactCurrentPage, setContactCurrentPage] = useState(1);
+  const [contactsTotalPages, setContactsTotalPages] = useState(1);
+  const [contactsTotalCount, setContactsTotalCount] = useState(0);
   const [contactsTags, setContactsTags] = useState<ContactTag[]>([]);
   const [contactSearch, setContactSearch] = useState("");
   const [contactTagFilter, setContactTagFilter] = useState("");
@@ -345,6 +364,29 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     address: "",
   });
   const [addingContact, setAddingContact] = useState(false);
+  const [addContactError, setAddContactError] = useState("");
+  const [addContactFirstNameTouched, setAddContactFirstNameTouched] = useState(false);
+  const [isEditContactModalOpen, setIsEditContactModalOpen] = useState(false);
+  const [editingContactId, setEditingContactId] = useState("");
+  const [editContactForm, setEditContactForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    business: "",
+    website: "",
+    address: "",
+  });
+  const [editingContact, setEditingContact] = useState(false);
+  const [editContactError, setEditContactError] = useState("");
+  const [editContactTouched, setEditContactTouched] = useState({
+    firstName: false,
+    email: false,
+    phone: false,
+    website: false,
+  });
+  const [contactToDelete, setContactToDelete] = useState<ContactRow | null>(null);
+  const [deletingContact, setDeletingContact] = useState(false);
   const [contactsVisibility, setContactsVisibility] = useState<ContactVisibility>({
     showPhone: true,
     showBusiness: true,
@@ -356,7 +398,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const selectedMessageIdRef = useRef("");
   const moveListMenuRef = useRef<HTMLDivElement | null>(null);
   const moveMessageMenuRef = useRef<HTMLDivElement | null>(null);
+  const contactFilterMenuRef = useRef<HTMLDivElement | null>(null);
   const inlineComposeRef = useRef<HTMLDivElement | null>(null);
+  const editContactModalRef = useRef<HTMLDivElement | null>(null);
 
   const connectedAccounts = useMemo(() => gmailAccounts.filter((a) => a.connected), [gmailAccounts]);
   const selectedAccountsKey = useMemo(() => selectedAccounts.join(","), [selectedAccounts]);
@@ -420,10 +464,71 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   }, [messages, rowKey, selectedRows, selectedMessage]);
 
   const hasSelectedEmails = selectedRows.length > 0;
+  const emptyAddContactForm = {
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    business: "",
+    website: "",
+    address: "",
+  };
+
+  const formatPhoneInput = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 10);
+    if (!digits) return "";
+    if (digits.length < 4) return `(${digits}`;
+    if (digits.length < 7) return `(${digits.slice(0, 3)})-${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)})-${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+  };
+
+  const isPhoneValid = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return true;
+    const digits = trimmed.replace(/\D/g, "");
+    return digits.length === 10;
+  };
+
+  const isWebsiteValid = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return true;
+    return /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:\/[^\s]*)?$/i.test(trimmed);
+  };
+
+  const closeAddContactModal = () => {
+    setAddContactError("");
+    setAddContactFirstNameTouched(false);
+    setAddContactForm(emptyAddContactForm);
+    setIsAddContactModalOpen(false);
+  };
+
+  const closeEditContactModal = () => {
+    if (editingContact) return;
+    setEditContactError("");
+    setEditingContactId("");
+    setEditContactTouched({
+      firstName: false,
+      email: false,
+      phone: false,
+      website: false,
+    });
+    setIsEditContactModalOpen(false);
+  };
 
   useEffect(() => {
     selectedMessageIdRef.current = selectedMessageId;
   }, [selectedMessageId]);
+
+  useEffect(() => {
+    if (!isEditContactModalOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (editContactModalRef.current && !editContactModalRef.current.contains(event.target as Node)) {
+        closeEditContactModal();
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isEditContactModalOpen, editingContact]);
 
   const openStandaloneViewer = (accounts: string[]) => {
     const query = new URLSearchParams();
@@ -495,7 +600,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setContactsLoading(true);
     setContactsError("");
     try {
-      const query = new URLSearchParams({ limit: "200" });
+      const query = new URLSearchParams({
+        limit: String(CONTACTS_PAGE_SIZE),
+        page: String(contactCurrentPage),
+      });
       if (contactSearch.trim()) query.set("search", contactSearch.trim());
       if (contactTagFilter) query.set("tagIds", contactTagFilter);
       if (contactSourceFilter) query.set("source", contactSourceFilter);
@@ -505,29 +613,61 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         throw new Error(payload?.message || "Failed to load contacts.");
       }
       setContacts(Array.isArray(payload?.contacts) ? payload.contacts : []);
+      const pagination = payload?.pagination || {};
+      const total = Number(pagination.total || 0);
+      const totalPages = Number.isFinite(Number(pagination.totalPages))
+        ? Math.max(1, Number(pagination.totalPages))
+        : Math.max(1, Math.ceil(total / CONTACTS_PAGE_SIZE));
+      setContactsTotalCount(total);
+      setContactsTotalPages(totalPages);
     } catch (error) {
       setContacts([]);
+      setContactsTotalCount(0);
+      setContactsTotalPages(1);
       setContactsError(error instanceof Error ? error.message : "Failed to load contacts.");
     } finally {
       setContactsLoading(false);
     }
-  }, [activeModule, contactSearch, contactSourceFilter, contactTagFilter, step]);
+  }, [activeModule, contactCurrentPage, contactSearch, contactSourceFilter, contactTagFilter, step]);
 
   const createContact = async () => {
-    if (!addContactForm.email.trim()) {
-      setContactsError("Contact email is required.");
+    const firstName = addContactForm.firstName.trim();
+    const email = addContactForm.email.trim();
+    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    const phoneValid = isPhoneValid(addContactForm.phone);
+    const websiteValid = isWebsiteValid(addContactForm.website);
+    if (!firstName) {
+      setAddContactFirstNameTouched(true);
+      setAddContactError("First name is required.");
+      return;
+    }
+    if (!email) {
+      setAddContactError("Contact email is required.");
+      return;
+    }
+    if (!emailValid) {
+      setAddContactError("Please enter a valid email address.");
+      return;
+    }
+    if (!phoneValid) {
+      setAddContactError("Please enter a valid phone number in the format (123)-456-7890.");
+      return;
+    }
+    if (!websiteValid) {
+      setAddContactError("Please enter a valid website URL (e.g., example.com or https://example.com).");
       return;
     }
     setAddingContact(true);
+    setAddContactError("");
     setContactsError("");
     try {
       const response = await fetch("/api/contacts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-        accountEmail: null,
-          email: addContactForm.email.trim(),
-          firstName: addContactForm.firstName.trim(),
+          accountEmail: null,
+          email,
+          firstName,
           lastName: addContactForm.lastName.trim(),
           phone: addContactForm.phone.trim(),
           business: addContactForm.business.trim(),
@@ -537,54 +677,60 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
-        setContactsError(payload?.message || "Failed to create contact.");
+        setAddContactError(payload?.message || "Failed to create contact.");
         return;
       }
-      setAddContactForm({
-        firstName: "",
-        lastName: "",
-        email: "",
-        phone: "",
-        business: "",
-        website: "",
-        address: "",
-      });
-      setIsAddContactModalOpen(false);
+      closeAddContactModal();
       await loadContacts();
     } catch (error) {
-      setContactsError(error instanceof Error ? error.message : "Failed to create contact.");
+      setAddContactError(error instanceof Error ? error.message : "Failed to create contact.");
     } finally {
       setAddingContact(false);
     }
   };
 
   const editContact = async (contact: ContactRow) => {
-    const firstName = window.prompt("First name", contact.firstName || "") ?? (contact.firstName || "");
-    const lastName = window.prompt("Last name", contact.lastName || "") ?? (contact.lastName || "");
-    const phone = window.prompt("Phone", contact.phone || "") ?? (contact.phone || "");
-    const business = window.prompt("Business", contact.business || "") ?? (contact.business || "");
-    const website = window.prompt("Website", contact.website || "") ?? (contact.website || "");
-    const address = window.prompt("Address", contact.address || "") ?? (contact.address || "");
-    await fetch(`/api/contacts/${encodeURIComponent(contact.id)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        firstName,
-        lastName,
-        phone,
-        business,
-        website,
-        address,
-      }),
+    setEditingContactId(contact.id);
+    setEditContactForm({
+      firstName: contact.firstName || "",
+      lastName: contact.lastName || "",
+      email: contact.email || "",
+      phone: formatPhoneInput(contact.phone || ""),
+      business: contact.business || "",
+      website: contact.website || "",
+      address: contact.address || "",
     });
-    await loadContacts();
+    setEditContactTouched({
+      firstName: false,
+      email: false,
+      phone: false,
+      website: false,
+    });
+    setEditContactError("");
+    setIsEditContactModalOpen(true);
   };
 
   const deleteContact = async (contact: ContactRow) => {
-    const ok = window.confirm(`Delete ${contact.email}?`);
-    if (!ok) return;
-    await fetch(`/api/contacts/${encodeURIComponent(contact.id)}`, { method: "DELETE" });
-    await loadContacts();
+    setContactToDelete(contact);
+  };
+
+  const confirmDeleteContact = async () => {
+    if (!contactToDelete || deletingContact) return;
+    setDeletingContact(true);
+    setContactsError("");
+    try {
+      const response = await fetch(`/api/contacts/${encodeURIComponent(contactToDelete.id)}`, { method: "DELETE" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.message || "Failed to delete contact.");
+      }
+      setContactToDelete(null);
+      await loadContacts();
+    } catch (error) {
+      setContactsError(error instanceof Error ? error.message : "Failed to delete contact.");
+    } finally {
+      setDeletingContact(false);
+    }
   };
 
   const addTagToContact = async (contactId: string, tagId: string, reload = true) => {
@@ -608,33 +754,65 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     await loadContacts();
   };
 
-  const addTagsFromManageMenu = async (contact: ContactRow) => {
-    const availableTags = contactsTags.filter((tag) => !contact.tags.some((assigned) => assigned.id === tag.id));
-    if (availableTags.length === 0) {
-      setContactsError("No available tags to add for this contact.");
+  const saveEditedContact = async () => {
+    const firstName = editContactForm.firstName.trim();
+    const email = editContactForm.email.trim();
+    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    const phoneValid = isPhoneValid(editContactForm.phone);
+    const websiteValid = isWebsiteValid(editContactForm.website);
+    if (!editingContactId) return;
+    if (!firstName) {
+      setEditContactTouched((prev) => ({ ...prev, firstName: true }));
+      setEditContactError("First name is required.");
       return;
     }
-    const helper = availableTags.map((tag) => tag.name).join(", ");
-    const raw = window.prompt(`Add tag(s) to ${contact.email}. Available: ${helper}`);
-    if (!raw) return;
-    const requestedNames = raw
-      .split(",")
-      .map((item) => item.trim().toLowerCase())
-      .filter(Boolean);
-    if (requestedNames.length === 0) return;
-    const uniqueIds = Array.from(
-      new Set(
-        requestedNames
-          .map((name) => availableTags.find((tag) => tag.name.toLowerCase() === name)?.id || "")
-          .filter(Boolean)
-      )
-    );
-    if (uniqueIds.length === 0) {
-      setContactsError("No matching tags found from your input.");
+    if (!email) {
+      setEditContactTouched((prev) => ({ ...prev, email: true }));
+      setEditContactError("Contact email is required.");
       return;
     }
-    await Promise.all(uniqueIds.map((tagId) => addTagToContact(contact.id, tagId, false)));
-    await loadContacts();
+    if (!emailValid) {
+      setEditContactTouched((prev) => ({ ...prev, email: true }));
+      setEditContactError("Please enter a valid email address.");
+      return;
+    }
+    if (!phoneValid) {
+      setEditContactTouched((prev) => ({ ...prev, phone: true }));
+      setEditContactError("Please enter a valid phone number in the format (123)-456-7890.");
+      return;
+    }
+    if (!websiteValid) {
+      setEditContactTouched((prev) => ({ ...prev, website: true }));
+      setEditContactError("Please enter a valid website URL (e.g., example.com or https://example.com).");
+      return;
+    }
+    setEditingContact(true);
+    setEditContactError("");
+    try {
+      const response = await fetch(`/api/contacts/${encodeURIComponent(editingContactId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName,
+          lastName: editContactForm.lastName.trim(),
+          email,
+          phone: editContactForm.phone.trim(),
+          business: editContactForm.business.trim(),
+          website: editContactForm.website.trim(),
+          address: editContactForm.address.trim(),
+        }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.message || "Failed to update contact.");
+      }
+      closeEditContactModal();
+      await loadContacts();
+    } catch (error) {
+      setEditContactError(error instanceof Error ? error.message : "Failed to update contact.");
+    } finally {
+      setEditingContact(false);
+    }
   };
 
   const exportContactsCsv = async () => {
@@ -662,20 +840,60 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     const file = event.target.files?.[0];
     if (!file) return;
     const csvText = await file.text();
-    const response = await fetch("/api/contacts/import", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        accountEmail: null,
-        csvText,
-      }),
-    });
-    if (!response.ok) {
-      setContactsError("Failed to import CSV.");
-      return;
+    setContactsError("");
+    setContactsImportSuccessOpen(false);
+    try {
+      const response = await fetch("/api/contacts/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountEmail: null,
+          csvText,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const headerErrors = Array.isArray(payload?.headerErrors) ? payload.headerErrors : [];
+        const rowErrors = Array.isArray(payload?.errors) ? payload.errors : [];
+        if (headerErrors.length > 0 || rowErrors.length > 0) {
+          setContactsImportIssuesModal({
+            open: true,
+            imported: Number(payload?.imported || 0),
+            skipped: Number(payload?.skipped || 0),
+            headerErrors,
+            rowErrors,
+          });
+          setContactsError("");
+        } else {
+          setContactsError(payload?.message || "Failed to import CSV.");
+        }
+        return;
+      }
+
+      const imported = Number(payload?.imported || 0);
+      const skipped = Number(payload?.skipped || 0);
+      const headerErrors = Array.isArray(payload?.headerErrors) ? payload.headerErrors : [];
+      const rowErrors = Array.isArray(payload?.errors) ? payload.errors : [];
+
+      event.target.value = "";
+      await Promise.all([loadContacts(), loadContactTags()]);
+
+      if (headerErrors.length > 0 || rowErrors.length > 0 || skipped > 0) {
+        setContactsImportIssuesModal({
+          open: true,
+          imported,
+          skipped,
+          headerErrors,
+          rowErrors,
+        });
+      } else {
+        setContactsImportSuccessOpen(true);
+      }
+    } catch (error) {
+      setContactsError(error instanceof Error ? error.message : "Failed to import CSV.");
+    } finally {
+      event.target.value = "";
     }
-    event.target.value = "";
-    await Promise.all([loadContacts(), loadContactTags()]);
   };
 
   const syncFromGmailContacts = async () => {
@@ -1078,6 +1296,16 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   }, [activeModule, loadContactTags, loadContactVisibility, step]);
 
   useEffect(() => {
+    if (step !== "client" || activeModule !== "contacts") return;
+    setContactCurrentPage(1);
+  }, [activeModule, contactSearch, contactSourceFilter, contactTagFilter, step]);
+
+  useEffect(() => {
+    if (contactCurrentPage <= contactsTotalPages) return;
+    setContactCurrentPage(Math.max(1, contactsTotalPages));
+  }, [contactCurrentPage, contactsTotalPages]);
+
+  useEffect(() => {
     if (!moveMenuOpen) return;
     const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
       const targetNode = event.target as Node | null;
@@ -1094,6 +1322,22 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       document.removeEventListener("touchstart", handleOutsideClick);
     };
   }, [moveMenuOpen]);
+
+  useEffect(() => {
+    if (!contactFilterOpen) return;
+    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
+      const targetNode = event.target as Node | null;
+      if (!targetNode) return;
+      if (contactFilterMenuRef.current?.contains(targetNode)) return;
+      setContactFilterOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+    };
+  }, [contactFilterOpen]);
 
   useEffect(() => {
     loadContacts();
@@ -2148,11 +2392,16 @@ ${sourceText}`;
                               onChange={handleImportCsv}
                               className="hidden"
                             />
-                            <div className="px-4 py-3 border-b border-[#E5E7EB] bg-[#FBFCFF] overflow-x-auto">
+                            <div className="px-4 py-3 border-b border-[#E5E7EB] bg-[#FBFCFF] overflow-visible relative z-20">
                               <div className="mx-auto inline-flex items-center justify-center gap-2 whitespace-nowrap min-w-max">
                                 <button
                                   type="button"
-                                  onClick={() => setIsAddContactModalOpen(true)}
+                                  onClick={() => {
+                                    setAddContactForm(emptyAddContactForm);
+                                    setAddContactFirstNameTouched(false);
+                                    setAddContactError("");
+                                    setIsAddContactModalOpen(true);
+                                  }}
                                   className="inline-flex items-center gap-2 rounded-lg bg-[#701CC0] text-white px-3 py-2 text-xs font-medium hover:bg-[#5f17a5]"
                                 >
                                   <FiPlus className="w-3.5 h-3.5" />
@@ -2161,20 +2410,22 @@ ${sourceText}`;
                                 <button
                                   type="button"
                                   onClick={() => importInputRef.current?.click()}
-                                  className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] bg-white p-2 text-[#374151] hover:bg-[#F9FAFB]"
-                                  title="Import"
-                                  aria-label="Import"
+                                  className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB]"
+                                  title="Import CSV"
+                                  aria-label="Import CSV"
                                 >
                                   <FiUpload className="w-3.5 h-3.5" />
+                                  Import CSV
                                 </button>
                                 <button
                                   type="button"
                                   onClick={exportContactsCsv}
-                                  className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] bg-white p-2 text-[#374151] hover:bg-[#F9FAFB]"
-                                  title="Export"
-                                  aria-label="Export"
+                                  className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB]"
+                                  title="Export As CSV"
+                                  aria-label="Export As CSV"
                                 >
                                   <FiDownload className="w-3.5 h-3.5" />
+                                  Export As CSV
                                 </button>
                                 <button
                                   type="button"
@@ -2215,16 +2466,20 @@ ${sourceText}`;
                                     <FiChevronDown className="w-3.5 h-3.5" />
                                   </button>
                                   {contactFilterOpen ? (
-                                    <div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-[#E5E7EB] bg-white p-3 shadow-lg space-y-2">
+                                    <div
+                                      ref={contactFilterMenuRef}
+                                      className="absolute right-0 z-[160] mt-2 w-56 rounded-xl border border-[#E5E7EB] bg-white p-3 shadow-lg space-y-2"
+                                    >
+                                      <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Sort & Filter</p>
                                       <div className="relative">
-                                        <FiChevronDown className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 text-[#7A8098] pointer-events-none" />
+                                        <FiChevronDown className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 text-[#7A8098] pointer-events-none" />
                                         <select
                                           value={contactTagFilter}
                                           onChange={(e) => {
                                             setContactTagFilter(e.target.value);
                                             setContactFilterOpen(false);
                                           }}
-                                          className="appearance-none w-full rounded-lg border border-[#E5E7EB] bg-white pl-3 pr-7 py-1.5 text-xs text-[#374151]"
+                                          className="appearance-none w-full rounded-lg border border-[#E5E7EB] bg-white pl-2.5 pr-6 py-0.5 text-[10px] text-[#374151]"
                                         >
                                           <option value="">All Tags</option>
                                           {contactsTags.map((tag) => (
@@ -2242,13 +2497,26 @@ ${sourceText}`;
                                             setContactSourceFilter((e.target.value || "") as "" | "MANUAL" | "GMAIL" | "CSV");
                                             setContactFilterOpen(false);
                                           }}
-                                          className="appearance-none w-full rounded-lg border border-[#E5E7EB] bg-white pl-3 pr-7 py-1.5 text-xs text-[#374151]"
+                                          className="appearance-none w-full rounded-lg border border-[#E5E7EB] bg-white pl-3 pr-7 py-1 text-[11px] text-[#374151]"
                                         >
                                           <option value="">All Sources</option>
                                           <option value="MANUAL">Manual</option>
                                           <option value="GMAIL">Gmail</option>
                                           <option value="CSV">CSV</option>
                                         </select>
+                                      </div>
+                                      <div className="pt-3 border-t border-[#E5E7EB]">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setContactTagFilter("");
+                                            setContactSourceFilter("");
+                                            setContactFilterOpen(false);
+                                          }}
+                                          className="w-full text-xs py-2 px-3 rounded-lg font-medium text-[#6B7280] bg-gray-50 hover:bg-gray-100 hover:text-[#374151] transition-colors duration-200"
+                                        >
+                                          Clear All Filters
+                                        </button>
                                       </div>
                                     </div>
                                   ) : null}
@@ -2265,120 +2533,144 @@ ${sourceText}`;
                                 <div className="h-full min-h-[320px] flex items-center justify-center px-6">
                                   <div className="text-center rounded-2xl border border-[#E7E9F2] bg-[#FBFCFF] px-8 py-10">
                                     <FiUsers className="w-8 h-8 mx-auto text-[#701CC0] animate-pulse" />
-                                    <p className="mt-3 text-sm font-semibold text-[#2A2D3B]">No contacts found</p>
+                                    <p className="mt-3 text-sm font-semibold text-[#2A2D3B]">No Contacts Found</p>
                                     <p className="text-xs text-[#7C829A] mt-1">Add a contact, import CSV, or sync from Gmail to get started.</p>
                                   </div>
                                 </div>
                               ) : (
-                                <div className="rounded-xl border border-[#E8EBF4] bg-white overflow-hidden">
-                                  <table className="min-w-full text-sm">
-                                    <thead className="sticky top-0 bg-[#F9FAFD] z-10">
-                                      <tr className="border-b border-[#E8EBF4] text-left text-xs text-[#6B7280] uppercase tracking-wide">
-                                        <th className="px-4 py-3 font-medium">Name</th>
-                                        <th className="px-4 py-3 font-medium">Email</th>
-                                        {contactsVisibility.showPhone ? <th className="px-4 py-3 font-medium">Phone</th> : null}
-                                        {contactsVisibility.showBusiness ? <th className="px-4 py-3 font-medium">Business</th> : null}
-                                        {contactsVisibility.showWebsite ? <th className="px-4 py-3 font-medium">Website</th> : null}
-                                        <th className="px-4 py-3 font-medium">Address</th>
-                                        <th className="px-4 py-3 font-medium">Tags</th>
-                                        <th className="px-4 py-3 font-medium text-right">Manage</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-[#EEF1F7]">
-                                      {contacts.map((contact) => {
-                                        const existingTagIds = new Set(contact.tags.map((tag) => tag.id));
-                                        const availableTags = contactsTags.filter((tag) => !existingTagIds.has(tag.id));
-                                        const displayName =
-                                          `${contact.firstName || ""} ${contact.lastName || ""}`.trim() || "(No Name)";
-                                        return (
-                                          <tr key={contact.id} className="hover:bg-[#F8F3FF] transition-colors">
-                                            <td className="px-4 py-3">
-                                              <div className="font-medium text-[#111827]">{displayName}</div>
-                                              <div className="mt-0.5 text-[11px] text-[#8A90A6] uppercase tracking-wide">{contact.source}</div>
-                                            </td>
-                                            <td className="px-4 py-3 text-[#374151]">{contact.email}</td>
-                                            {contactsVisibility.showPhone ? <td className="px-4 py-3 text-[#374151]">{contact.phone || "N/A"}</td> : null}
-                                            {contactsVisibility.showBusiness ? <td className="px-4 py-3 text-[#374151]">{contact.business || "N/A"}</td> : null}
-                                            {contactsVisibility.showWebsite ? (
-                                              <td className="px-4 py-3 text-[#374151]">
-                                                {contact.website ? (
-                                                  <a
-                                                    href={/^https?:\/\//i.test(contact.website) ? contact.website : `https://${contact.website}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-[#701CC0] hover:underline"
-                                                  >
-                                                    Click
-                                                  </a>
-                                                ) : (
-                                                  "N/A"
-                                                )}
+                                <div className="space-y-3">
+                                  <div className="rounded-xl border border-[#E8EBF4] bg-white overflow-hidden">
+                                    <table className="min-w-full text-sm">
+                                      <thead className="sticky top-0 bg-[#F9FAFD] z-10">
+                                        <tr className="border-b border-[#E8EBF4] text-left text-xs text-[#6B7280] uppercase tracking-wide">
+                                          <th className="px-4 py-3 font-medium">Name</th>
+                                          <th className="px-4 py-3 font-medium">Email</th>
+                                          {contactsVisibility.showPhone ? <th className="px-4 py-3 font-medium">Phone</th> : null}
+                                          {contactsVisibility.showBusiness ? <th className="px-4 py-3 font-medium">Business</th> : null}
+                                          {contactsVisibility.showWebsite ? <th className="px-4 py-3 font-medium">Website</th> : null}
+                                          <th className="px-4 py-3 font-medium">Address</th>
+                                          <th className="px-4 py-3 font-medium">Tags</th>
+                                          <th className="px-4 py-3 font-medium text-right">Manage</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="bg-white divide-y divide-[#EEF1F7]">
+                                        {contacts.map((contact) => {
+                                          const existingTagIds = new Set(contact.tags.map((tag) => tag.id));
+                                          const availableTags = contactsTags.filter((tag) => !existingTagIds.has(tag.id));
+                                          const displayName =
+                                            `${contact.firstName || ""} ${contact.lastName || ""}`.trim() || "(No Name)";
+                                          return (
+                                            <tr key={contact.id} className="hover:bg-[#F8F3FF] transition-colors">
+                                              <td className="px-4 py-3">
+                                                <div className="font-medium text-[#111827]">{displayName}</div>
+                                                <div className="mt-0.5 text-[11px] text-[#8A90A6] uppercase tracking-wide">{contact.source}</div>
                                               </td>
-                                            ) : null}
-                                            <td className="px-4 py-3 text-[#374151] max-w-[220px] truncate">{contact.address || "N/A"}</td>
-                                            <td className="px-4 py-3">
-                                              <div className="flex flex-wrap items-center gap-1.5">
-                                                {contact.tags.map((tag) => (
-                                                  <span
-                                                    key={tag.id}
-                                                    className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] text-white"
-                                                    style={{ backgroundColor: tag.color || "#701CC0" }}
-                                                  >
-                                                    {tag.name}
+                                              <td className="px-4 py-3 text-[#374151]">{contact.email}</td>
+                                              {contactsVisibility.showPhone ? <td className="px-4 py-3 text-[#374151]">{contact.phone || "-"}</td> : null}
+                                              {contactsVisibility.showBusiness ? <td className="px-4 py-3 text-[#374151]">{contact.business || "-"}</td> : null}
+                                              {contactsVisibility.showWebsite ? (
+                                                <td className="px-4 py-3 text-[#374151]">
+                                                  {contact.website ? (
+                                                    <a
+                                                      href={/^https?:\/\//i.test(contact.website) ? contact.website : `https://${contact.website}`}
+                                                      target="_blank"
+                                                      rel="noopener noreferrer"
+                                                      className="text-[#701CC0] hover:underline"
+                                                    >
+                                                      Click
+                                                    </a>
+                                                  ) : (
+                                                    "-"
+                                                  )}
+                                                </td>
+                                              ) : null}
+                                              <td className="px-4 py-3 text-[#374151] max-w-[220px] truncate">{contact.address || "-"}</td>
+                                              <td className="px-4 py-3">
+                                                <div className="flex flex-wrap items-center gap-1.5">
+                                                  {contact.tags.map((tag) => (
+                                                    <span
+                                                      key={tag.id}
+                                                      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] text-white"
+                                                      style={{ backgroundColor: tag.color || "#701CC0" }}
+                                                    >
+                                                      {tag.name}
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => removeTagFromContact(contact.id, tag.id)}
+                                                        className="text-white/90 hover:text-white"
+                                                      >
+                                                        <FiX className="w-3 h-3" />
+                                                      </button>
+                                                    </span>
+                                                  ))}
+                                                  <div className="relative">
                                                     <button
                                                       type="button"
-                                                      onClick={() => removeTagFromContact(contact.id, tag.id)}
-                                                      className="text-white/90 hover:text-white"
+                                                      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#374151]"
+                                                      aria-label="Add Tag"
+                                                      title="Add Tag"
                                                     >
-                                                      <FiX className="w-3 h-3" />
+                                                      <FiPlus className="w-3 h-3" />
                                                     </button>
-                                                  </span>
-                                                ))}
-                                                <div className="relative">
-                                                  <button
-                                                    type="button"
-                                                    className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#374151]"
-                                                    aria-label="Add Tag"
-                                                    title="Add Tag"
-                                                  >
-                                                    <FiPlus className="w-3.5 h-3.5" />
-                                                  </button>
-                                                  <select
-                                                    value=""
-                                                    onChange={(e) => addTagToContact(contact.id, e.target.value)}
-                                                    className="absolute inset-0 h-6 w-6 cursor-pointer opacity-0"
-                                                    aria-label="Select tag to add"
-                                                  >
-                                                    <option value="">Select tag</option>
-                                                    {availableTags.map((tag) => (
-                                                      <option key={tag.id} value={tag.id}>
-                                                        {tag.name}
-                                                      </option>
-                                                    ))}
-                                                  </select>
+                                                    <select
+                                                      value=""
+                                                      onChange={(e) => addTagToContact(contact.id, e.target.value)}
+                                                      className="absolute inset-0 h-5 w-5 cursor-pointer opacity-0"
+                                                      aria-label="Select tag to add"
+                                                    >
+                                                      <option value="">Select tag</option>
+                                                      {availableTags.map((tag) => (
+                                                        <option key={tag.id} value={tag.id}>
+                                                          {tag.name}
+                                                        </option>
+                                                      ))}
+                                                    </select>
+                                                  </div>
                                                 </div>
-                                              </div>
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                              <div className="inline-flex justify-end">
-                                                <RowActionMenu label={`Manage ${displayName}`} menuWidthClassName="w-44">
-                                                  <RowActionMenuItem onClick={() => editContact(contact)} icon={<FiEdit3 className="w-4 h-4" />} tone="accent">
-                                                    Edit Contact
-                                                  </RowActionMenuItem>
-                                                  <RowActionMenuItem onClick={() => addTagsFromManageMenu(contact)} icon={<FiPlus className="w-4 h-4" />}>
-                                                    Add Tags
-                                                  </RowActionMenuItem>
-                                                  <RowActionMenuItem onClick={() => deleteContact(contact)} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
-                                                    Delete Contact
-                                                  </RowActionMenuItem>
-                                                </RowActionMenu>
-                                              </div>
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                    </tbody>
-                                  </table>
+                                              </td>
+                                              <td className="px-4 py-3 text-right">
+                                                <div className="inline-flex justify-end">
+                                                  <RowActionMenu label={`Manage ${displayName}`} menuWidthClassName="w-44">
+                                                    <RowActionMenuItem onClick={() => editContact(contact)} icon={<FiEdit3 className="w-4 h-4" />} tone="accent">
+                                                      Edit Contact
+                                                    </RowActionMenuItem>
+                                                    <RowActionMenuItem onClick={() => deleteContact(contact)} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
+                                                      Delete Contact
+                                                    </RowActionMenuItem>
+                                                  </RowActionMenu>
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                  {contactsTotalCount > CONTACTS_PAGE_SIZE ? (
+                                    <div className="px-1 pb-1 flex items-center justify-between text-xs text-[#6B7280]">
+                                      <span>
+                                        Showing page {contactCurrentPage} of {contactsTotalPages} ({contactsTotalCount} contacts)
+                                      </span>
+                                      <div className="inline-flex items-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => setContactCurrentPage((prev) => Math.max(1, prev - 1))}
+                                          disabled={contactsLoading || contactCurrentPage <= 1}
+                                          className="px-2 py-1 rounded border border-[#E5E7EB] bg-white hover:bg-[#F9FAFB] disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                          Previous
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setContactCurrentPage((prev) => Math.min(contactsTotalPages, prev + 1))}
+                                          disabled={contactsLoading || contactCurrentPage >= contactsTotalPages}
+                                          className="px-2 py-1 rounded border border-[#E5E7EB] bg-white hover:bg-[#F9FAFB] disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                          Next
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : null}
                                 </div>
                               )}
                             </div>
@@ -2748,8 +3040,14 @@ ${sourceText}`;
       )}
 
       {isAddContactModalOpen ? (
-        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl border border-[#E5E7EB] p-6">
+        <div
+          className="fixed inset-0 z-[140] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={closeAddContactModal}
+        >
+          <div
+            className="w-full max-w-2xl rounded-lg bg-white shadow-xl border border-[#E5E7EB] p-6"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-[#701CC0]/10 text-[#701CC0] inline-flex items-center justify-center">
@@ -2759,61 +3057,115 @@ ${sourceText}`;
               </div>
               <button
                 type="button"
-                onClick={() => setIsAddContactModalOpen(false)}
+                onClick={closeAddContactModal}
                 className="p-1.5 rounded-md text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#374151]"
                 aria-label="Close Add Contact Modal"
               >
                 <FiX className="w-4 h-4" />
               </button>
             </div>
+            {addContactError ? (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{addContactError}</div>
+            ) : null}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <input
-                value={addContactForm.firstName}
-                onChange={(event) => setAddContactForm((prev) => ({ ...prev, firstName: event.target.value }))}
-                placeholder="First Name"
-                className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
-              />
-              <input
-                value={addContactForm.lastName}
-                onChange={(event) => setAddContactForm((prev) => ({ ...prev, lastName: event.target.value }))}
-                placeholder="Last Name"
-                className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
-              />
-              <input
-                value={addContactForm.email}
-                onChange={(event) => setAddContactForm((prev) => ({ ...prev, email: event.target.value }))}
-                placeholder="Email *"
-                className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] md:col-span-2"
-              />
-              <input
-                value={addContactForm.phone}
-                onChange={(event) => setAddContactForm((prev) => ({ ...prev, phone: event.target.value }))}
-                placeholder="Phone"
-                className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
-              />
-              <input
-                value={addContactForm.business}
-                onChange={(event) => setAddContactForm((prev) => ({ ...prev, business: event.target.value }))}
-                placeholder="Business"
-                className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
-              />
-              <input
-                value={addContactForm.website}
-                onChange={(event) => setAddContactForm((prev) => ({ ...prev, website: event.target.value }))}
-                placeholder="Website"
-                className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
-              />
-              <input
-                value={addContactForm.address}
-                onChange={(event) => setAddContactForm((prev) => ({ ...prev, address: event.target.value }))}
-                placeholder="Address"
-                className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
-              />
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#374151]">
+                  First Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  value={addContactForm.firstName}
+                  onChange={(event) => setAddContactForm((prev) => ({ ...prev, firstName: event.target.value }))}
+                  onBlur={() => setAddContactFirstNameTouched(true)}
+                  placeholder="Enter First Name"
+                  className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
+                    addContactFirstNameTouched && !addContactForm.firstName.trim()
+                      ? "border-red-500 bg-red-50"
+                      : "border-[#E5E7EB]"
+                  }`}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#374151]">Last Name</label>
+                <input
+                  value={addContactForm.lastName}
+                  onChange={(event) => setAddContactForm((prev) => ({ ...prev, lastName: event.target.value }))}
+                  placeholder="Enter Last Name"
+                  className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-sm font-medium text-[#374151]">
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  value={addContactForm.email}
+                  onChange={(event) => setAddContactForm((prev) => ({ ...prev, email: event.target.value }))}
+                  placeholder="Enter Email"
+                  className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
+                    addContactForm.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addContactForm.email.trim())
+                      ? "border-red-500 bg-red-50"
+                      : "border-[#E5E7EB]"
+                  }`}
+                />
+              </div>
+              {addContactForm.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addContactForm.email.trim()) ? (
+                <p className="md:col-span-2 -mt-1 text-xs text-red-600">Please enter a valid email address.</p>
+              ) : null}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#374151]">Phone</label>
+                <input
+                  value={addContactForm.phone}
+                  onChange={(event) => setAddContactForm((prev) => ({ ...prev, phone: formatPhoneInput(event.target.value) }))}
+                  placeholder="(123)-456-7890"
+                  className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
+                    addContactForm.phone.trim() && !isPhoneValid(addContactForm.phone)
+                      ? "border-red-500 bg-red-50"
+                      : "border-[#E5E7EB]"
+                  }`}
+                />
+              </div>
+              {addContactForm.phone.trim() && !isPhoneValid(addContactForm.phone) ? (
+                <p className="md:col-span-2 -mt-1 text-xs text-red-600">Phone format: (123)-456-7890</p>
+              ) : null}
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#374151]">Business</label>
+                <input
+                  value={addContactForm.business}
+                  onChange={(event) => setAddContactForm((prev) => ({ ...prev, business: event.target.value }))}
+                  placeholder="Enter Business"
+                  className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-[#374151]">Website</label>
+                <input
+                  value={addContactForm.website}
+                  onChange={(event) => setAddContactForm((prev) => ({ ...prev, website: event.target.value }))}
+                  placeholder="Enter Website"
+                  className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
+                    addContactForm.website.trim() && !isWebsiteValid(addContactForm.website)
+                      ? "border-red-500 bg-red-50"
+                      : "border-[#E5E7EB]"
+                  }`}
+                />
+              </div>
+              {addContactForm.website.trim() && !isWebsiteValid(addContactForm.website) ? (
+                <p className="md:col-span-2 -mt-1 text-xs text-red-600">Please enter a valid website URL.</p>
+              ) : null}
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-sm font-medium text-[#374151]">Address</label>
+                <input
+                  value={addContactForm.address}
+                  onChange={(event) => setAddContactForm((prev) => ({ ...prev, address: event.target.value }))}
+                  placeholder="Enter Address"
+                  className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
+                />
+              </div>
             </div>
             <div className="flex items-center justify-between mt-5">
               <button
                 type="button"
-                onClick={() => setIsAddContactModalOpen(false)}
+                onClick={closeAddContactModal}
                 className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700"
               >
                 Cancel
@@ -2821,10 +3173,168 @@ ${sourceText}`;
               <button
                 type="button"
                 onClick={createContact}
-                disabled={addingContact}
-                className="px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm font-medium hover:bg-[#5f17a5] disabled:opacity-50"
+                disabled={
+                  addingContact ||
+                  !addContactForm.firstName.trim() ||
+                  !addContactForm.email.trim() ||
+                  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addContactForm.email.trim()) ||
+                  !isPhoneValid(addContactForm.phone) ||
+                  !isWebsiteValid(addContactForm.website)
+                }
+                className="px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm font-medium hover:bg-[#5f17a5] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {addingContact ? "Adding..." : "Add Contact"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isEditContactModalOpen ? (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[150] p-4">
+          <div
+            className="bg-white rounded-xl p-6 w-full max-w-2xl mx-4"
+            ref={editContactModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Edit Contact"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                <FiEdit3 className="w-6 h-6 text-blue-600" />
+              </div>
+              <h3 className="text-xl font-semibold text-[#111827]">Edit Contact</h3>
+            </div>
+
+            {editContactError ? (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{editContactError}</div>
+            ) : null}
+
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-[#374151] mb-1">
+                  First Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editContactForm.firstName}
+                  onChange={(event) => setEditContactForm((prev) => ({ ...prev, firstName: event.target.value }))}
+                  onBlur={() => setEditContactTouched((prev) => ({ ...prev, firstName: true }))}
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm ${
+                    editContactTouched.firstName && !editContactForm.firstName.trim()
+                      ? "border-red-500 bg-red-50"
+                      : "border-[#D1D5DB]"
+                  }`}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#374151] mb-1">Last Name</label>
+                <input
+                  type="text"
+                  value={editContactForm.lastName}
+                  onChange={(event) => setEditContactForm((prev) => ({ ...prev, lastName: event.target.value }))}
+                  className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#374151] mb-1">
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={editContactForm.email}
+                  onChange={(event) => setEditContactForm((prev) => ({ ...prev, email: event.target.value }))}
+                  onBlur={() => setEditContactTouched((prev) => ({ ...prev, email: true }))}
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm ${
+                    editContactTouched.email &&
+                    editContactForm.email.trim() &&
+                    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editContactForm.email.trim())
+                      ? "border-red-500 bg-red-50"
+                      : "border-[#D1D5DB]"
+                  }`}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#374151] mb-1">Phone</label>
+                <input
+                  type="text"
+                  value={editContactForm.phone}
+                  onChange={(event) =>
+                    setEditContactForm((prev) => ({ ...prev, phone: formatPhoneInput(event.target.value) }))
+                  }
+                  onBlur={() => setEditContactTouched((prev) => ({ ...prev, phone: true }))}
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm ${
+                    editContactTouched.phone && editContactForm.phone.trim() && !isPhoneValid(editContactForm.phone)
+                      ? "border-red-500 bg-red-50"
+                      : "border-[#D1D5DB]"
+                  }`}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#374151] mb-1">Business</label>
+                <input
+                  type="text"
+                  value={editContactForm.business}
+                  onChange={(event) => setEditContactForm((prev) => ({ ...prev, business: event.target.value }))}
+                  className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[#374151] mb-1">Website</label>
+                <input
+                  type="text"
+                  value={editContactForm.website}
+                  onChange={(event) => setEditContactForm((prev) => ({ ...prev, website: event.target.value }))}
+                  onBlur={() => setEditContactTouched((prev) => ({ ...prev, website: true }))}
+                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm ${
+                    editContactTouched.website && editContactForm.website.trim() && !isWebsiteValid(editContactForm.website)
+                      ? "border-red-500 bg-red-50"
+                      : "border-[#D1D5DB]"
+                  }`}
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-[#374151] mb-1">Address</label>
+                <input
+                  type="text"
+                  value={editContactForm.address}
+                  onChange={(event) => setEditContactForm((prev) => ({ ...prev, address: event.target.value }))}
+                  className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={closeEditContactModal}
+                className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={saveEditedContact}
+                disabled={
+                  editingContact ||
+                  !editContactForm.firstName.trim() ||
+                  !editContactForm.email.trim() ||
+                  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editContactForm.email.trim()) ||
+                  !isPhoneValid(editContactForm.phone) ||
+                  !isWebsiteValid(editContactForm.website)
+                }
+                className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                  editingContact ||
+                  !editContactForm.firstName.trim() ||
+                  !editContactForm.email.trim() ||
+                  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editContactForm.email.trim()) ||
+                  !isPhoneValid(editContactForm.phone) ||
+                  !isWebsiteValid(editContactForm.website)
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-[#701CC0] text-white hover:bg-[#5f17a5]"
+                }`}
+              >
+                {editingContact ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </div>
@@ -2961,6 +3471,116 @@ ${sourceText}`;
         message={blockSuccessModal.message}
         onClose={() => setBlockSuccessModal({ open: false, title: "", message: "" })}
         buttonLabel="Done"
+      />
+      <SuccessStatusModal
+        isOpen={contactsImportSuccessOpen}
+        title="CSV Uploaded Successfully"
+        message="Your CSV data has been imported and contacts are now updated."
+        onClose={() => setContactsImportSuccessOpen(false)}
+        buttonLabel="Done"
+      />
+      {contactsImportIssuesModal.open ? (
+        <div
+          className="fixed inset-0 z-[170] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() =>
+            setContactsImportIssuesModal({
+              open: false,
+              imported: 0,
+              skipped: 0,
+              headerErrors: [],
+              rowErrors: [],
+            })
+          }
+        >
+          <div
+            className="w-full max-w-2xl rounded-lg bg-white shadow-xl border border-[#E5E7EB] p-6"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="CSV Import Issues"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center">
+                <FiAlertCircle className="w-6 h-6 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-semibold text-[#111827]">CSV Import Validation</h3>
+                <p className="text-sm text-[#6B7280]">
+                  Imported {contactsImportIssuesModal.imported} valid contact
+                  {contactsImportIssuesModal.imported === 1 ? "" : "s"} and skipped {contactsImportIssuesModal.skipped} invalid line
+                  {contactsImportIssuesModal.skipped === 1 ? "" : "s"}.
+                </p>
+              </div>
+            </div>
+
+            {contactsImportIssuesModal.headerErrors.length > 0 ? (
+              <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                <p className="text-sm font-semibold text-red-700">Header Errors</p>
+                <ul className="mt-2 space-y-1.5 text-xs text-red-700">
+                  {contactsImportIssuesModal.headerErrors.map((error, index) => (
+                    <li key={`${error}-${index}`}>- {error}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {contactsImportIssuesModal.rowErrors.length > 0 ? (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-sm font-semibold text-amber-800">Row Errors</p>
+                <div className="mt-2 max-h-64 overflow-auto space-y-2 text-xs text-amber-900">
+                  {contactsImportIssuesModal.rowErrors.map((row, index) => (
+                    <div key={`${row.lineNumber}-${row.email}-${index}`} className="rounded-lg border border-amber-200 bg-white px-3 py-2">
+                      <p className="font-semibold">
+                        Line {row.lineNumber}
+                        {row.email ? ` (${row.email})` : ""}
+                      </p>
+                      <ul className="mt-1 space-y-0.5">
+                        {row.reasons.map((reason, reasonIndex) => (
+                          <li key={`${reason}-${reasonIndex}`}>- {reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() =>
+                  setContactsImportIssuesModal({
+                    open: false,
+                    imported: 0,
+                    skipped: 0,
+                    headerErrors: [],
+                    rowErrors: [],
+                  })
+                }
+                className="px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm font-medium hover:bg-[#5f17a5]"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <ConfirmActionModal
+        isOpen={Boolean(contactToDelete)}
+        title="Delete Contact"
+        message={
+          <>
+            Are you sure you want to delete{" "}
+            <span className="font-semibold text-[#111827]">{contactToDelete?.email || "this contact"}</span>?
+            This action cannot be undone.
+          </>
+        }
+        confirmLabel={deletingContact ? "Deleting..." : "Delete Contact"}
+        onCancel={() => {
+          if (deletingContact) return;
+          setContactToDelete(null);
+        }}
+        onConfirm={confirmDeleteContact}
       />
     </div>
   );

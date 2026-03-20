@@ -99,6 +99,13 @@ export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsh
     cell.alignment = { horizontal: "center", vertical: "middle" };
   });
 
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    row.eachCell((cell) => {
+      cell.alignment = { horizontal: "left", vertical: "middle" };
+    });
+  });
+
   const workbookBytes = await workbook.xlsx.writeBuffer();
   const workbookBuffer = Buffer.from(workbookBytes);
   const fileName = "Contacts.xlsx";

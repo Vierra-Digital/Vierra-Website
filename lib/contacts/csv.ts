@@ -9,6 +9,16 @@ export type CsvContactRow = {
   tags: string;
 };
 
+export type CsvContactRowWithMeta = CsvContactRow & {
+  lineNumber: number;
+};
+
+export type ContactsCsvValidationResult = {
+  rows: CsvContactRowWithMeta[];
+  headerErrors: string[];
+  normalizedHeaders: string[];
+};
+
 function normalizeHeader(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, "");
 }
@@ -38,13 +48,20 @@ function parseCsvLine(line: string) {
 }
 
 export function parseContactsCsv(text: string): CsvContactRow[] {
+  return parseContactsCsvWithValidation(text).rows.map(({ lineNumber: _lineNumber, ...row }) => row);
+}
+
+export function parseContactsCsvWithValidation(text: string): ContactsCsvValidationResult {
   const lines = text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  if (lines.length === 0) return [];
+  if (lines.length === 0) {
+    return { rows: [], headerErrors: ["CSV is empty."], normalizedHeaders: [] };
+  }
 
-  const headers = parseCsvLine(lines[0]).map(normalizeHeader);
+  const rawHeaders = parseCsvLine(lines[0]).map((header) => header.trim());
+  const headers = rawHeaders.map(normalizeHeader);
   const indexOf = (keys: string[]) => headers.findIndex((header) => keys.includes(header));
   const fieldIndex = {
     firstName: indexOf(["firstname", "first"]),
@@ -57,10 +74,78 @@ export function parseContactsCsv(text: string): CsvContactRow[] {
     tags: indexOf(["tags", "tag"]),
   };
 
-  return lines.slice(1).map((line) => {
+  const requiredHeaders = [
+    { field: "firstName", labels: ["First Name", "first"] },
+    { field: "email", labels: ["Email", "emailAddress"] },
+  ] as const;
+  const optionalHeaders = [
+    { field: "lastName", labels: ["Last Name", "last"] },
+    { field: "phone", labels: ["Phone", "phoneNumber"] },
+    { field: "business", labels: ["Business", "company"] },
+    { field: "website", labels: ["Website", "url"] },
+    { field: "address", labels: ["Address"] },
+    { field: "tags", labels: ["Tags", "tag"] },
+  ] as const;
+  const headerErrors: string[] = [];
+  const duplicateHeaderErrors: string[] = [];
+
+  for (const column of requiredHeaders) {
+    if (fieldIndex[column.field] < 0) {
+      headerErrors.push(`Missing required header "${column.labels[0]}".`);
+    }
+  }
+
+  const blankHeaderPositions = rawHeaders
+    .map((header, index) => ({ header, index }))
+    .filter((entry) => entry.header.length === 0)
+    .map((entry) => entry.index + 1);
+  if (blankHeaderPositions.length > 0) {
+    headerErrors.push(`Blank header column(s) at position(s): ${blankHeaderPositions.join(", ")}.`);
+  }
+
+  const headerCounts = new Map<string, { count: number; samples: string[] }>();
+  for (let i = 0; i < headers.length; i += 1) {
+    const normalized = headers[i];
+    if (!normalized) continue;
+    const existing = headerCounts.get(normalized);
+    if (existing) {
+      existing.count += 1;
+      if (rawHeaders[i] && !existing.samples.includes(rawHeaders[i])) {
+        existing.samples.push(rawHeaders[i]);
+      }
+      continue;
+    }
+    headerCounts.set(normalized, {
+      count: 1,
+      samples: rawHeaders[i] ? [rawHeaders[i]] : [],
+    });
+  }
+  for (const [normalized, info] of headerCounts.entries()) {
+    if (info.count <= 1) continue;
+    const sampleLabel = info.samples.length > 0 ? info.samples.join(" / ") : normalized;
+    duplicateHeaderErrors.push(`Duplicate header "${sampleLabel}" appears ${info.count} times.`);
+  }
+  headerErrors.push(...duplicateHeaderErrors);
+
+  const allowedHeaderKeys = new Set<string>();
+  for (const column of [...requiredHeaders, ...optionalHeaders]) {
+    for (const label of column.labels) {
+      allowedHeaderKeys.add(normalizeHeader(label));
+    }
+  }
+  const unknownHeaders = headers
+    .map((header, index) => ({ normalized: header, raw: rawHeaders[index] || "" }))
+    .filter((entry) => entry.normalized && !allowedHeaderKeys.has(entry.normalized))
+    .map((entry) => entry.raw || entry.normalized);
+  if (unknownHeaders.length > 0) {
+    headerErrors.push(`Unsupported header column(s): ${Array.from(new Set(unknownHeaders)).join(", ")}.`);
+  }
+
+  const rows = lines.slice(1).map((line, index) => {
     const row = parseCsvLine(line);
     const pick = (idx: number) => (idx >= 0 ? String(row[idx] || "").trim() : "");
     return {
+      lineNumber: index + 2,
       firstName: pick(fieldIndex.firstName),
       lastName: pick(fieldIndex.lastName),
       email: pick(fieldIndex.email).toLowerCase(),
@@ -71,6 +156,12 @@ export function parseContactsCsv(text: string): CsvContactRow[] {
       tags: pick(fieldIndex.tags),
     };
   });
+
+  return {
+    rows,
+    headerErrors,
+    normalizedHeaders: headers,
+  };
 }
 
 function escapeCsvCell(value: string) {

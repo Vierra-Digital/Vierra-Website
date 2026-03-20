@@ -1,10 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-import { parseContactsCsv } from "@/lib/contacts/csv";
+import { parseContactsCsvWithValidation } from "@/lib/contacts/csv";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
 
 type ImportedRow = {
+  lineNumber: number;
   firstName: string;
   lastName: string;
   email: string;
@@ -37,6 +38,19 @@ function parseTagList(input: string) {
     .filter(Boolean);
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const WEBSITE_REGEX = /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:\/[^\s]*)?$/i;
+
+function hasLiteralNull(value: string) {
+  return value.trim().toLowerCase() === "null";
+}
+
+function normalizePhone(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length !== 10) return null;
+  return `(${digits.slice(0, 3)})-${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.status(405).json({ message: "Method Not Allowed" });
@@ -57,41 +71,106 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  const rows = parseContactsCsv(csvText).filter((row) => row.email);
+  const parsed = parseContactsCsvWithValidation(csvText);
+  if (parsed.headerErrors.length > 0) {
+    res.status(400).json({
+      message: "CSV headers are invalid.",
+      headerErrors: parsed.headerErrors,
+      imported: 0,
+      skipped: 0,
+      errors: [],
+    });
+    return;
+  }
+
+  const rows = parsed.rows;
   let imported = 0;
+  let skipped = 0;
   const createdTagIds = new Map<string, string>();
+  const normalizedAccountEmail = accountEmail || null;
+  const rowErrors: Array<{ lineNumber: number; email: string; reasons: string[] }> = [];
 
   for (const row of rows as ImportedRow[]) {
     const email = row.email.toLowerCase();
-    const contact = await prisma.contact.upsert({
-      where: {
-        userId_accountEmail_email: {
-          userId,
-          accountEmail: accountEmail || null,
-          email,
-        },
-      },
-      create: {
-        userId,
-        accountEmail: accountEmail || null,
-        source: "CSV",
-        firstName: row.firstName || null,
-        lastName: row.lastName || null,
-        email,
-        phone: row.phone || null,
-        business: row.business || null,
-        website: row.website || null,
-        address: row.address || null,
-      },
-      update: {
-        firstName: row.firstName || null,
-        lastName: row.lastName || null,
-        phone: row.phone || null,
-        business: row.business || null,
-        website: row.website || null,
-        address: row.address || null,
-      },
-    });
+    const reasons: string[] = [];
+
+    const fields = [
+      row.firstName,
+      row.lastName,
+      row.email,
+      row.phone,
+      row.business,
+      row.website,
+      row.address,
+      row.tags,
+    ];
+    if (fields.some((field) => hasLiteralNull(field))) {
+      reasons.push('Contains "NULL" value(s).');
+    }
+    if (!row.firstName.trim()) {
+      reasons.push("First Name is required.");
+    }
+    if (!email || !EMAIL_REGEX.test(email)) {
+      reasons.push("Email is invalid.");
+    }
+    const normalizedPhone = row.phone.trim() ? normalizePhone(row.phone.trim()) : null;
+    if (row.phone.trim() && !normalizedPhone) {
+      reasons.push("Phone must contain exactly 10 digits.");
+    }
+    if (row.website.trim() && !WEBSITE_REGEX.test(row.website.trim())) {
+      reasons.push("Website URL is invalid.");
+    }
+    if (reasons.length > 0) {
+      skipped += 1;
+      rowErrors.push({ lineNumber: row.lineNumber || 0, email, reasons });
+      continue;
+    }
+
+    const updateData = {
+      firstName: row.firstName || null,
+      lastName: row.lastName || null,
+      phone: normalizedPhone || null,
+      business: row.business || null,
+      website: row.website || null,
+      address: row.address || null,
+    };
+    const createData = {
+      userId,
+      accountEmail: normalizedAccountEmail,
+      source: "CSV" as const,
+      email,
+      ...updateData,
+    };
+
+    const contact = normalizedAccountEmail
+      ? await prisma.contact.upsert({
+          where: {
+            userId_accountEmail_email: {
+              userId,
+              accountEmail: normalizedAccountEmail,
+              email,
+            },
+          },
+          create: createData,
+          update: updateData,
+        })
+      : await (async () => {
+          const existing = await prisma.contact.findFirst({
+            where: {
+              userId,
+              accountEmail: null,
+              email,
+            },
+            select: { id: true },
+          });
+          if (existing) {
+            return prisma.contact.update({
+              where: { id: existing.id },
+              data: updateData,
+            });
+          }
+          return prisma.contact.create({ data: createData });
+        })();
     imported += 1;
 
     const tagNames = parseTagList(row.tags);
@@ -120,6 +199,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  await syncContactsSpreadsheetForUser({ userId });
-  res.status(200).json({ imported });
+  if (imported > 0) {
+    await syncContactsSpreadsheetForUser({ userId });
+  }
+  res.status(200).json({
+    imported,
+    skipped,
+    totalRows: rows.length,
+    errors: rowErrors,
+    headerErrors: [],
+  });
 }

@@ -211,7 +211,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const textBody = replaceUrls(body, replacements);
   let htmlBody = bodyHtmlInput ? replaceUrls(bodyHtmlInput, replacements) : linkifyText(textBody);
   if (openTrackingEnabled && openToken) {
-    const trackingPixel = `<img src="${baseUrl}/api/email/track/open/${openToken}.gif" width="1" height="1" style="display:block;max-width:1px;max-height:1px;" alt="" />`;
+    const trackingPixel = `<img src="${baseUrl}/api/email/track/open/${openToken}.gif" width="1" height="1" alt="" aria-hidden="true" style="width:1px;height:1px;opacity:0;position:absolute;left:-9999px;top:auto;border:0;overflow:hidden;" />`;
     htmlBody = `${trackingPixel}${htmlBody}`;
   }
 
