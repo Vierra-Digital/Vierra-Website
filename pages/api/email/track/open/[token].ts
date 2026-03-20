@@ -41,6 +41,21 @@ function isLikelySelfPreview(req: NextApiRequest) {
   }
 }
 
+function isLikelyAutomatedOpen(userAgentValue: string) {
+  const userAgent = (userAgentValue || "").toLowerCase();
+  if (!userAgent) return false;
+  return (
+    userAgent.includes("googleimageproxy") ||
+    userAgent.includes("microsoft office") ||
+    userAgent.includes("outlook") ||
+    userAgent.includes("proofpoint") ||
+    userAgent.includes("mimecast") ||
+    userAgent.includes("barracuda") ||
+    userAgent.includes("symantec") ||
+    userAgent.includes("urlscan")
+  );
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const token = normalizeOpenToken(asToken(req.query.token));
   if (token) {
@@ -49,9 +64,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       select: { id: true, createdAt: true },
     });
     if (outbound) {
+      const userAgent = String(req.headers["user-agent"] || "").slice(0, 512) || null;
       const sentAgeMs = Date.now() - outbound.createdAt.getTime();
       const shouldIgnoreOpen =
-        isLikelySelfPreview(req) || (sentAgeMs >= 0 && sentAgeMs < MIN_OPEN_EVENT_DELAY_MS);
+        isLikelySelfPreview(req) ||
+        (sentAgeMs >= 0 && sentAgeMs < MIN_OPEN_EVENT_DELAY_MS && isLikelyAutomatedOpen(userAgent || ""));
       if (shouldIgnoreOpen) {
         res.setHeader("Content-Type", "image/gif");
         res.setHeader("Cache-Control", "no-store, max-age=0");
@@ -64,7 +81,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .split(",")[0]
           .trim() || req.socket.remoteAddress || "";
       const ipHash = hashIp(ip);
-      const userAgent = String(req.headers["user-agent"] || "").slice(0, 512) || null;
       const recentDuplicate = await prisma.emailTrackingEvent.findFirst({
         where: {
           outboundMessageId: outbound.id,
