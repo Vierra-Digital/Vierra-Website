@@ -983,7 +983,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     if (!timestamp) return "";
     const diffMs = Math.max(0, Date.now() - timestamp);
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    if (diffHours < 1) return "less than 1 hour ago";
+    if (diffHours < 1) return "Less than 1 hour ago";
     if (diffHours < 24) return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
     const diffDays = Math.floor(diffHours / 24);
     return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
