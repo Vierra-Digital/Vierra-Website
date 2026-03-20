@@ -16,7 +16,7 @@ function hashIp(ip: string) {
 }
 
 const ONE_PIXEL_GIF = Buffer.from("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", "base64");
-const MIN_OPEN_EVENT_DELAY_MS = 15_000;
+const DUPLICATE_OPEN_WINDOW_MS = 2_000;
 
 function getRequestOrigin(req: NextApiRequest) {
   const proto = String(req.headers["x-forwarded-proto"] || "http");
@@ -41,34 +41,16 @@ function isLikelySelfPreview(req: NextApiRequest) {
   }
 }
 
-function isLikelyAutomatedOpen(userAgentValue: string) {
-  const userAgent = (userAgentValue || "").toLowerCase();
-  if (!userAgent) return false;
-  return (
-    userAgent.includes("googleimageproxy") ||
-    userAgent.includes("microsoft office") ||
-    userAgent.includes("outlook") ||
-    userAgent.includes("proofpoint") ||
-    userAgent.includes("mimecast") ||
-    userAgent.includes("barracuda") ||
-    userAgent.includes("symantec") ||
-    userAgent.includes("urlscan")
-  );
-}
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const token = normalizeOpenToken(asToken(req.query.token));
   if (token) {
     const outbound = await prisma.emailOutboundMessage.findFirst({
       where: { openToken: token, trackingEnabled: true },
-      select: { id: true, createdAt: true },
+      select: { id: true },
     });
     if (outbound) {
       const userAgent = String(req.headers["user-agent"] || "").slice(0, 512) || null;
-      const sentAgeMs = Date.now() - outbound.createdAt.getTime();
-      const shouldIgnoreOpen =
-        isLikelySelfPreview(req) ||
-        (sentAgeMs >= 0 && sentAgeMs < MIN_OPEN_EVENT_DELAY_MS && isLikelyAutomatedOpen(userAgent || ""));
+      const shouldIgnoreOpen = isLikelySelfPreview(req);
       if (shouldIgnoreOpen) {
         res.setHeader("Content-Type", "image/gif");
         res.setHeader("Cache-Control", "no-store, max-age=0");
@@ -88,7 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ipHash,
           userAgent,
           occurredAt: {
-            gte: new Date(Date.now() - 30_000),
+            gte: new Date(Date.now() - DUPLICATE_OPEN_WINDOW_MS),
           },
         },
         select: { id: true },
