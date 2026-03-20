@@ -2936,7 +2936,7 @@ ${sourceText}`;
                                           value={inlineComposeTo}
                                           onChange={(event) => setInlineComposeTo(event.target.value)}
                                           className="w-full bg-transparent px-0 py-1.5 text-sm text-[#111827] outline-none"
-                                          placeholder="recipient@example.com"
+                                          placeholder="Recipient Email"
                                         />
                                       </div>
                                       <div className="grid grid-cols-[88px_1fr] items-center gap-2 border-b border-[#E5E7EB] pb-1">

@@ -774,7 +774,7 @@ function AddTaskModal({
                   value={form.name}
                   onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                   className="w-full border border-[#E5E7EB] rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-shadow"
-                  placeholder="e.g. Design landing page hero"
+                  placeholder="E.g., Design Landing Page Hero"
                   required
                 />
               </div>

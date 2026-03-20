@@ -800,7 +800,7 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
                                 value={formData.name}
                                 onChange={(e) => handleInputChange("name", e.target.value)}
                                 className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                                placeholder="Enter full name"
+                                placeholder="Enter Full Name"
                             />
                         </div>
                         <div>
@@ -814,7 +814,7 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
                                         ? 'border-red-500 bg-red-50' 
                                         : 'border-[#E5E7EB]'
                                 }`}
-                                placeholder="Enter email address"
+                                placeholder="Enter Email Address"
                                 required
                                 pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
                             />
@@ -851,7 +851,7 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
                                 value={formData.country}
                                 onChange={(e) => handleInputChange("country", e.target.value)}
                                 className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                                placeholder="Enter country"
+                                placeholder="Enter Country"
                             />
                         </div>
                         <div>
@@ -861,7 +861,7 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
                                 value={formData.time_zone}
                                 onChange={(e) => handleInputChange("time_zone", e.target.value)}
                                 className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                                placeholder="e.g., EST, PST, GMT"
+                                placeholder="E.g., EST, PST, GMT"
                             />
                         </div>
                     </div>
@@ -880,7 +880,7 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
                                         ? 'border-red-500 bg-red-50' 
                                         : 'border-[#E5E7EB]'
                                 }`}
-                                placeholder="Company email"
+                                placeholder="Company Email"
                                 pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
                             />
                         </div>
@@ -891,7 +891,7 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
                                 value={formData.mentor}
                                 onChange={(e) => handleInputChange("mentor", e.target.value)}
                                 className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                                placeholder="Mentor name"
+                                placeholder="Mentor Name"
                             />
                         </div>
                     </div>

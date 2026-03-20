@@ -229,7 +229,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
                   value={clientData.clientName}
                   onChange={handleChange}
                   className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                  placeholder="Enter client name"
+                  placeholder="Enter Client Name"
                 />
               </div>
               <div>
@@ -245,7 +245,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
                       ? 'border-red-500 bg-red-50' 
                       : 'border-[#E5E7EB]'
                   }`}
-                  placeholder="Enter email address"
+                  placeholder="Enter Email Address"
                   required
                   pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
                 />
@@ -262,7 +262,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
                   value={clientData.businessName}
                   onChange={handleChange}
                   className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                  placeholder="Enter business name"
+                  placeholder="Enter Business Name"
                 />
               </div>
             </div>
@@ -301,7 +301,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
                   value={clientData.industry}
                   onChange={handleChange}
                   className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                  placeholder="Enter industry"
+                  placeholder="Enter Industry"
                 />
               </div>
               <div>
@@ -322,7 +322,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
                       ? "border-red-500 bg-red-50"
                       : "border-[#E5E7EB]"
                   }`}
-                  placeholder="Enter monthly amount (e.g. 2500)"
+                  placeholder="Enter Monthly Amount (E.g., 2500)"
                   required
                 />
                 {clientData.monthlyRetainer && !monthlyRetainerValid && (
@@ -347,7 +347,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
                       ? "border-red-500 bg-red-50"
                       : "border-[#E5E7EB]"
                   }`}
-                  placeholder="Enter lead goal (number only)"
+                  placeholder="Enter Lead Goal (Number Only)"
                   required
                 />
                 {clientData.clientGoal && !clientGoalValid && (
