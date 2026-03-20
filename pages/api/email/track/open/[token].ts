@@ -16,7 +16,6 @@ function hashIp(ip: string) {
 }
 
 const ONE_PIXEL_GIF = Buffer.from("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", "base64");
-const DUPLICATE_OPEN_WINDOW_MS = 2_000;
 
 function getRequestOrigin(req: NextApiRequest) {
   const proto = String(req.headers["x-forwarded-proto"] || "http");
@@ -49,7 +48,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       select: { id: true },
     });
     if (outbound) {
-      const userAgent = String(req.headers["user-agent"] || "").slice(0, 512) || null;
       const shouldIgnoreOpen = isLikelySelfPreview(req);
       if (shouldIgnoreOpen) {
         res.setHeader("Content-Type", "image/gif");
@@ -62,30 +60,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         String(req.headers["x-forwarded-for"] || "")
           .split(",")[0]
           .trim() || req.socket.remoteAddress || "";
-      const ipHash = hashIp(ip);
-      const recentDuplicate = await prisma.emailTrackingEvent.findFirst({
-        where: {
-          outboundMessageId: outbound.id,
-          eventType: "OPEN",
-          ipHash,
-          userAgent,
-          occurredAt: {
-            gte: new Date(Date.now() - DUPLICATE_OPEN_WINDOW_MS),
-          },
-        },
-        select: { id: true },
-      });
-      if (!recentDuplicate) {
       await prisma.emailTrackingEvent.create({
         data: {
           outboundMessageId: outbound.id,
           eventType: "OPEN",
           recipientEmail: typeof req.query.email === "string" ? req.query.email : null,
-          ipHash,
-          userAgent,
+          ipHash: hashIp(ip),
+          userAgent: String(req.headers["user-agent"] || "").slice(0, 512) || null,
         },
       });
-      }
     }
   }
 
