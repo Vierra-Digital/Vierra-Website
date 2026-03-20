@@ -4,6 +4,9 @@ import { requireSession } from "@/lib/auth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 
 type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive";
+const OPEN_BASE_WINDOW_MS = 15_000;
+const OPEN_SESSION_GAP_MS = 5 * 60 * 1000;
+const OPEN_MAX_CONTINUOUS_STEP_MS = 60_000;
 
 type GmailListResponse = {
   messages?: Array<{ id: string; threadId: string }>;
@@ -383,6 +386,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           eventType: true,
           occurredAt: true,
         },
+        orderBy: { occurredAt: "asc" },
       },
     },
   });
@@ -397,9 +401,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let clickCount = 0;
     let firstOpenedAt: Date | null = null;
     let lastOpenedAt: Date | null = null;
+    const openTimestamps: number[] = [];
     for (const event of row.trackingEvents) {
       if (event.eventType === "OPEN") {
         openCount += 1;
+        openTimestamps.push(event.occurredAt.getTime());
         if (!firstOpenedAt || event.occurredAt < firstOpenedAt) {
           firstOpenedAt = event.occurredAt;
         }
@@ -410,13 +416,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         clickCount += 1;
       }
     }
+    let totalOpenWindowMs = 0;
+    if (openTimestamps.length > 0) {
+      totalOpenWindowMs += OPEN_BASE_WINDOW_MS;
+      for (let idx = 1; idx < openTimestamps.length; idx += 1) {
+        const gapMs = openTimestamps[idx] - openTimestamps[idx - 1];
+        if (gapMs <= OPEN_SESSION_GAP_MS) {
+          totalOpenWindowMs += Math.min(Math.max(gapMs, 0), OPEN_MAX_CONTINUOUS_STEP_MS);
+        } else {
+          totalOpenWindowMs += OPEN_BASE_WINDOW_MS;
+        }
+      }
+    }
     trackedStatsByKey.set(key, {
       openCount,
       clickCount,
       firstOpenedAt: firstOpenedAt ? firstOpenedAt.toISOString() : null,
       lastOpenedAt: lastOpenedAt ? lastOpenedAt.toISOString() : null,
-      totalOpenWindowMs:
-        firstOpenedAt && lastOpenedAt ? Math.max(0, lastOpenedAt.getTime() - firstOpenedAt.getTime()) : 0,
+      totalOpenWindowMs,
     });
   }
   const messages = pageMessages.map((message) => ({
