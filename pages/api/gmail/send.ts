@@ -42,11 +42,23 @@ function toBase64Url(value: string) {
 }
 
 function getPublicBaseUrl(req: NextApiRequest) {
+  const normalizeExplicitBaseUrl = (value: string) => {
+    const raw = value.trim();
+    if (!raw) return "";
+    const protocol = /^https:\/\//i.test(raw) ? "https" : "http";
+    const hostMatch = raw.match(/([a-z0-9.-]+\.[a-z]{2,}(?::\d+)?)/i);
+    if (!hostMatch?.[1]) return "";
+    return `${protocol}://${hostMatch[1]}`.replace(/\/$/, "");
+  };
+
   const explicit =
     process.env.NEXTAUTH_URL ||
     process.env.APP_URL ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
-  if (explicit) return explicit.replace(/\/$/, "");
+  if (explicit) {
+    const normalized = normalizeExplicitBaseUrl(explicit);
+    if (normalized) return normalized;
+  }
 
   const proto = String(req.headers["x-forwarded-proto"] || "http");
   const host = String(req.headers["x-forwarded-host"] || req.headers.host || "localhost:3000");
@@ -72,12 +84,38 @@ function linkifyText(value: string) {
     .replace(/\n/g, "<br>");
 }
 
-function replaceUrls(text: string, replacements: Map<string, string>) {
-  let output = text;
-  for (const [source, target] of replacements.entries()) {
-    output = output.split(source).join(target);
+function rewriteTrackedLinksInHtml(value: string, replacements: Map<string, string>) {
+  if (!value || replacements.size === 0) return value;
+  return value.replace(/href=(['"])(https?:\/\/[^\s"'<>]+)\1/gi, (match, quote: string, href: string) => {
+    const trackedHref = replacements.get(href);
+    if (!trackedHref) return match;
+    return `href=${quote}${escapeHtml(trackedHref)}${quote}`;
+  });
+}
+
+function linkifyTextWithTrackedHrefs(value: string, replacements: Map<string, string>) {
+  if (!value) return "";
+  const urlRegex = /https?:\/\/[^\s<>"']+/g;
+  const chunks: string[] = [];
+  let lastIndex = 0;
+  let match = urlRegex.exec(value);
+  while (match) {
+    const rawUrl = match[0];
+    const start = match.index;
+    if (start > lastIndex) {
+      chunks.push(escapeHtml(value.slice(lastIndex, start)).replace(/\n/g, "<br>"));
+    }
+    const href = replacements.get(rawUrl) || rawUrl;
+    chunks.push(
+      `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="color:#5B21B6;text-decoration:underline;">${escapeHtml(rawUrl)}</a>`
+    );
+    lastIndex = start + rawUrl.length;
+    match = urlRegex.exec(value);
   }
-  return output;
+  if (lastIndex < value.length) {
+    chunks.push(escapeHtml(value.slice(lastIndex)).replace(/\n/g, "<br>"));
+  }
+  return chunks.join("");
 }
 
 function uniqueUrls(value: string) {
@@ -208,8 +246,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  const textBody = replaceUrls(body, replacements);
-  let htmlBody = bodyHtmlInput ? replaceUrls(bodyHtmlInput, replacements) : linkifyText(textBody);
+  const textBody = body;
+  let htmlBody = bodyHtmlInput
+    ? rewriteTrackedLinksInHtml(bodyHtmlInput, replacements)
+    : linkifyTextWithTrackedHrefs(body, replacements);
   if (openTrackingEnabled && openToken) {
     const trackingPixel = `<img src="${baseUrl}/api/email/track/open/${openToken}.gif" width="1" height="1" alt="" aria-hidden="true" style="width:1px;height:1px;opacity:0;position:absolute;left:-9999px;top:auto;border:0;overflow:hidden;" />`;
     htmlBody = `${trackingPixel}${htmlBody}`;
