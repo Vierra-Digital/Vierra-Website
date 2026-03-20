@@ -515,7 +515,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
         if (!email.trim()) {
             errors.email = "Email is required"
         } else if (!isValidEmail(email)) {
-            errors.email = "Please enter a valid email address"
+            errors.email = "Please enter a valid email address."
         }
 
         if (!password.trim()) {
@@ -613,27 +613,29 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                 if (e.target === e.currentTarget) onClose()
             }}
         >
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md border border-[#E5E7EB]" onClick={(e) => e.stopPropagation()}>
-                
-                <div className="flex items-center justify-between px-6 py-5 border-b border-[#E5E7EB]">
-                    <div>
-                        <h2 className="text-xl font-semibold text-[#111827]">Create User</h2>
-                        <p className="text-sm text-[#6B7280] mt-1">Add a new user to the system</p>
+            <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl border border-[#E5E7EB] p-6" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-[#701CC0]/10 text-[#701CC0] inline-flex items-center justify-center">
+                            <FiPlus className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-semibold text-[#111827]">Create User</h2>
+                            <p className="text-sm text-[#6B7280] mt-0.5">Add a new user to the system</p>
+                        </div>
                     </div>
                     <button 
                         onClick={onClose} 
-                        className="text-red-400 hover:text-red-600 transition-colors duration-200 p-1 rounded-md hover:bg-red-50"
+                        className="p-1.5 rounded-md text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#374151]"
                         aria-label="Close modal"
                     >
-                        <X className="w-5 h-5" />
-                </button>
-            </div>
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
 
-                
-                <div className="p-6 space-y-5">
-                    
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                        <label htmlFor="create-user-name" className="block text-sm font-medium text-[#374151] mb-1.5">
+                        <label htmlFor="create-user-name" className="block text-sm font-medium text-[#374151] mb-1">
                             Name <span className="text-red-500">*</span>
                         </label>
                         <input 
@@ -641,66 +643,16 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                             type="text" 
                             value={name} 
                             onChange={(e) => handleFieldChange("name", e.target.value)} 
-                            placeholder="Enter user's full name"
-                            className={`w-full border rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors ${
+                            placeholder="Enter Name"
+                            className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
                                 fieldErrors.name ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB]'
                             }`}
                         />
-                        {fieldErrors.name && (
-                            <p className="mt-1 text-sm text-red-600">{fieldErrors.name}</p>
-                        )}
+                        {fieldErrors.name ? <p className="mt-1 text-xs text-red-600">{fieldErrors.name}</p> : null}
                     </div>
 
-                    
                     <div>
-                        <label htmlFor="create-user-email" className="block text-sm font-medium text-[#374151] mb-1.5">
-                            Email <span className="text-red-500">*</span>
-                        </label>
-                        <input 
-                            id="create-user-email"
-                            type="email" 
-                            value={email} 
-                            onChange={(e) => handleFieldChange("email", e.target.value)} 
-                            placeholder="user@example.com"
-                            required
-                            className={`w-full border rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors ${
-                                fieldErrors.email || (email && !isValidEmail(email))
-                                    ? 'border-red-500 bg-red-50' 
-                                    : 'border-[#E5E7EB]'
-                            }`}
-                        />
-                        {fieldErrors.email && (
-                            <p className="mt-1 text-sm text-red-600">{fieldErrors.email}</p>
-                        )}
-                        {email && !fieldErrors.email && !isValidEmail(email) && (
-                            <p className="mt-1 text-sm text-red-600">Please enter a valid email address</p>
-                        )}
-                    </div>
-
-                    
-                    <div>
-                        <label htmlFor="create-user-password" className="block text-sm font-medium text-[#374151] mb-1.5">
-                            Password <span className="text-red-500">*</span>
-                        </label>
-                        <input 
-                            id="create-user-password"
-                            type="password" 
-                            value={password} 
-                            onChange={(e) => handleFieldChange("password", e.target.value)} 
-                            placeholder="Enter secure password"
-                            required
-                            className={`w-full border rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-colors ${
-                                fieldErrors.password ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB]'
-                            }`}
-                        />
-                        {fieldErrors.password && (
-                            <p className="mt-1 text-sm text-red-600">{fieldErrors.password}</p>
-                        )}
-            </div>
-
-                    
-                    <div>
-                        <label htmlFor="create-user-role" className="block text-sm font-medium text-[#374151] mb-1.5">
+                        <label htmlFor="create-user-role" className="block text-sm font-medium text-[#374151] mb-1">
                             Role <span className="text-red-500">*</span>
                         </label>
                         <div className="relative">
@@ -708,40 +660,74 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                                 id="create-user-role"
                                 value={role} 
                                 onChange={(e) => handleFieldChange("role", e.target.value)} 
-                                className="w-full border border-[#E5E7EB] rounded-lg px-4 py-2.5 pr-10 text-sm text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none transition-colors"
+                                className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 pr-10 text-sm bg-white outline-none focus:ring-2 focus:ring-[#701CC0] appearance-none"
                             >
                                 <option value="admin">Admin</option>
                                 <option value="staff">Staff</option>
                                 <option value="user">Client</option>
                             </select>
                             <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                <ChevronDown className="w-5 h-5 text-[#6B7280]" />
-                        </div>
+                                <ChevronDown className="w-4 h-4 text-[#6B7280]" />
+                            </div>
                         </div>
                     </div>
 
-                    
-                    {error && (
-                        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-start gap-2">
-                            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                            <p className="text-sm text-red-700">{error}</p>
-                </div>
-            )}
-        </div>
+                    <div className="md:col-span-2">
+                        <label htmlFor="create-user-email" className="block text-sm font-medium text-[#374151] mb-1">
+                            Email <span className="text-red-500">*</span>
+                        </label>
+                        <input 
+                            id="create-user-email"
+                            type="email" 
+                            value={email} 
+                            onChange={(e) => handleFieldChange("email", e.target.value)} 
+                            placeholder="Enter Email"
+                            className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
+                                fieldErrors.email || (email && !isValidEmail(email))
+                                    ? 'border-red-500 bg-red-50' 
+                                    : 'border-[#E5E7EB]'
+                            }`}
+                        />
+                        {fieldErrors.email ? <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p> : null}
+                        {email && !fieldErrors.email && !isValidEmail(email) ? (
+                            <p className="mt-1 text-xs text-red-600">Please enter a valid email address.</p>
+                        ) : null}
+                    </div>
 
-                
-                <div className="px-6 py-4 bg-gray-50 border-t border-[#E5E7EB] rounded-b-xl flex items-center justify-between gap-3">
+                    <div className="md:col-span-2">
+                        <label htmlFor="create-user-password" className="block text-sm font-medium text-[#374151] mb-1">
+                            Password <span className="text-red-500">*</span>
+                        </label>
+                        <input 
+                            id="create-user-password"
+                            type="password" 
+                            value={password} 
+                            onChange={(e) => handleFieldChange("password", e.target.value)} 
+                            placeholder="Enter Password"
+                            className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
+                                fieldErrors.password ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB]'
+                            }`}
+                        />
+                        {fieldErrors.password ? <p className="mt-1 text-xs text-red-600">{fieldErrors.password}</p> : null}
+                    </div>
+                </div>
+
+                {error ? (
+                    <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+                ) : null}
+
+                <div className="flex items-center justify-between mt-5">
                     <button 
                         onClick={onClose}
                         disabled={submitting}
-                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         Cancel
                     </button>
                     <button 
                         disabled={submitting || !name.trim() || !email.trim() || !password.trim() || (email ? !isValidEmail(email) : false)} 
                         onClick={submit} 
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm font-medium hover:bg-[#5f17a5] disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {submitting ? (
                             <>
