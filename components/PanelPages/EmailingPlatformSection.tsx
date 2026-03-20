@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Inter } from "next/font/google";
+import Image from "next/image";
 import { FaGoogle } from "react-icons/fa";
 import {
   FiAlertCircle,
@@ -272,7 +273,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [hasNextPage, setHasNextPage] = useState(false);
 
   const [mailboxCounts, setMailboxCounts] = useState<MailboxCounts>(EMPTY_COUNTS);
-  const [countsLoading, setCountsLoading] = useState(false);
+  const [, setCountsLoading] = useState(false);
   const [moduleUnreadBadges, setModuleUnreadBadges] = useState<ModuleUnreadBadgeCounts>({
     inbox: 0,
     sent: 0,
@@ -502,7 +503,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setIsAddContactModalOpen(false);
   };
 
-  const closeEditContactModal = () => {
+  const closeEditContactModal = useCallback(() => {
     if (editingContact) return;
     setEditContactError("");
     setEditingContactId("");
@@ -513,7 +514,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       website: false,
     });
     setIsEditContactModalOpen(false);
-  };
+  }, [editingContact]);
 
   useEffect(() => {
     selectedMessageIdRef.current = selectedMessageId;
@@ -528,7 +529,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isEditContactModalOpen, editingContact]);
+  }, [closeEditContactModal, isEditContactModalOpen]);
 
   const openStandaloneViewer = (accounts: string[]) => {
     const query = new URLSearchParams();
@@ -1073,7 +1074,24 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         if (/^on/i.test(attribute.name)) node.removeAttribute(attribute.name);
       });
     });
+    const isInternalOpenTrackingPixel = (srcValue: string) => {
+      const src = (srcValue || "").trim();
+      if (!src) return false;
+      if (/\/api\/email\/track\/open\/[^/\s]+(?:\.gif)?(?:\?.*)?$/i.test(src)) return true;
+      try {
+        const url = new URL(src, window.location.origin);
+        const isSameOrigin = url.origin === window.location.origin;
+        const isOpenPath = /\/api\/email\/track\/open\/[^/]+(?:\.gif)?$/i.test(url.pathname);
+        return isSameOrigin && isOpenPath;
+      } catch {
+        return false;
+      }
+    };
     parsed.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
+      if (isInternalOpenTrackingPixel(img.getAttribute("src") || "")) {
+        img.remove();
+        return;
+      }
       img.style.maxWidth = "100%";
       img.style.height = "auto";
       img.loading = "lazy";
@@ -1507,19 +1525,15 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
     }
   }, [
-    clearLocalDraft,
     composeAccountEmail,
     composeBcc,
     composeBody,
     composeCc,
-    composeActiveDraftKey,
-    composeDraftStorageKey,
     composeSubject,
     composeTo,
     effectiveComposeDraftStorageKey,
     inlineComposeSending,
     inlineComposeBodyHtml,
-    inlineComposeBodyText,
     inlineComposeInReplyTo,
     inlineComposeIntroText,
     inlineComposeMode,
@@ -2878,9 +2892,12 @@ ${sourceText}`;
                           <h2 className="text-xl font-semibold text-[#111827]">{selectedMessage.subject || "(No Subject)"}</h2>
                           <div className="mt-4 flex items-start gap-3">
                             {selectedMessageDetail?.senderPhotoUrl ? (
-                              <img
+                              <Image
                                 src={selectedMessageDetail.senderPhotoUrl}
                                 alt="Sender"
+                                width={40}
+                                height={40}
+                                unoptimized
                                 className="w-10 h-10 rounded-full object-cover border border-[#E5E7EB]"
                               />
                             ) : (
