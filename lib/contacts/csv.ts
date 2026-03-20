@@ -48,7 +48,16 @@ function parseCsvLine(line: string) {
 }
 
 export function parseContactsCsv(text: string): CsvContactRow[] {
-  return parseContactsCsvWithValidation(text).rows.map(({ lineNumber: _lineNumber, ...row }) => row);
+  return parseContactsCsvWithValidation(text).rows.map((row) => ({
+    firstName: row.firstName,
+    lastName: row.lastName,
+    email: row.email,
+    phone: row.phone,
+    business: row.business,
+    website: row.website,
+    address: row.address,
+    tags: row.tags,
+  }));
 }
 
 export function parseContactsCsvWithValidation(text: string): ContactsCsvValidationResult {

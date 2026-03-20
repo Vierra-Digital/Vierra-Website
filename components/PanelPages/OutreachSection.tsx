@@ -79,7 +79,6 @@ const OutreachSection = () => {
     const [selectedMonth, setSelectedMonth] = useState(currentMonth)
 
     const isCurrentMonth = selectedYear === currentYear && selectedMonth === currentMonth
-    const isPastDate = selectedYear < currentYear || (selectedYear === currentYear && selectedMonth < currentMonth)
     const isFutureDate = selectedYear > currentYear || (selectedYear === currentYear && selectedMonth > currentMonth)
     const isEditable = isCurrentMonth && !isFutureDate
 

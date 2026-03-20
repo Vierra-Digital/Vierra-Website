@@ -487,7 +487,6 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
 
   const q = questions[step];
   const aboutYouFields = ["website", "brandTone", "productService", "valueProposition", "targetAudience", "socialMediaGoals", "leadGeneration"];
-  const operationsFields = ["avoidMentions", "additionalInfo", "meetingAvailability", "meetingTime1Day", "meetingTime1Time", "meetingTime2Day", "meetingTime2Time", "meetingTime3Day", "meetingTime3Time", "meetingTime4Day", "meetingTime4Time"];
   const brandFields = ["website", "brandTone", "productService", "valueProposition"];
   const audienceFields = ["targetAudience", "socialMediaGoals", "leadGeneration"];
   const aboutYouComplete = aboutYouFields.every((f) => (answers[f] || "").trim());
