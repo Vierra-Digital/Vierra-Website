@@ -42,6 +42,7 @@ const BlogViewPage = ({
 }: BlogPostProps) => {
 
     const blogUrl = `https://vierradev.com/blog/${slug}`;
+    const authorPageUrl = `https://vierradev.com/blog/author/${encodeURIComponent(author.name)}`;
     const publishedDateISO = new Date(publishedDate).toISOString();
     const modifiedDateISO = new Date(publishedDate).toISOString();
 
@@ -50,6 +51,7 @@ const BlogViewPage = ({
             <Head>
                 <title>{`Vierra | ${title}`}</title>
                 <meta name="description" content={description || `${title} - Insights and strategies from Vierra to scale revenue and acquire more clients.`} />
+                <meta name="author" content={author.name} />
                 <meta name="keywords" content={tag ? tag.split(',').map(t => t.trim()).join(', ') : 'marketing, lead generation, business growth, digital marketing'} />
                 <link rel="canonical" href={blogUrl} />
                 
@@ -113,12 +115,13 @@ const BlogViewPage = ({
                         "@type": "BlogPosting",
                         headline: title,
                         description: description || `${title} - Insights and strategies from Vierra.`,
-                        image: "https://vierradev.com/assets/meta-banner.png",
+                        image: ["https://vierradev.com/assets/meta-banner.png"],
                         datePublished: publishedDateISO,
                         dateModified: modifiedDateISO,
                         author: {
                             "@type": "Person",
                             name: author.name,
+                            url: authorPageUrl,
                         },
                         publisher: {
                             "@type": "Organization",
@@ -131,6 +134,11 @@ const BlogViewPage = ({
                         mainEntityOfPage: {
                             "@type": "WebPage",
                             "@id": blogUrl,
+                        },
+                        isPartOf: {
+                            "@type": "Blog",
+                            "@id": "https://vierradev.com/blog",
+                            name: "Vierra Blog",
                         },
                         keywords: tag || "marketing, lead generation, business growth",
                     }),

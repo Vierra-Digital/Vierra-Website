@@ -38,6 +38,7 @@ export default function TagPage({ tag, posts }: TagPageProps) {
           name="description"
           content={`Browse Vierra blog posts tagged with ${tag}.`}
         />
+        <meta name="author" content="Vierra Digital" />
         <link rel="canonical" href={pageUrl} />
         <meta property="og:title" content={`Vierra | ${tag} Blog Posts`} />
         <meta property="og:description" content={`Browse Vierra blog posts tagged with ${tag}.`} />
@@ -73,12 +74,32 @@ export default function TagPage({ tag, posts }: TagPageProps) {
             "@type": "CollectionPage",
             name: `Tag: ${tag}`,
             url: pageUrl,
+            publisher: {
+              "@type": "Organization",
+              name: "Vierra Digital",
+              logo: {
+                "@type": "ImageObject",
+                url: "https://vierradev.com/assets/meta-banner.png",
+              },
+            },
             hasPart: posts.map((p) => ({
               "@type": "BlogPosting",
               headline: p.title,
               url: `${baseUrl}/blog/${p.slug}`,
               datePublished: p.publishedDate,
-              author: { "@type": "Person", name: p.author.name },
+              author: {
+                "@type": "Person",
+                name: p.author.name,
+                url: `${baseUrl}/blog/author/${encodeURIComponent(p.author.name)}`,
+              },
+              publisher: {
+                "@type": "Organization",
+                name: "Vierra Digital",
+                logo: {
+                  "@type": "ImageObject",
+                  url: "https://vierradev.com/assets/meta-banner.png",
+                },
+              },
             })),
           }),
         }}

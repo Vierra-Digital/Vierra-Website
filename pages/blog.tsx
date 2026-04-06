@@ -153,6 +153,7 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
             <Head>
                 <title>Vierra | Blog</title>
                 <meta name="description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients. Learn about marketing, lead generation, business growth, and digital optimization." />
+                <meta name="author" content="Vierra Digital" />
                 <meta name="keywords" content="marketing blog, business growth strategies, lead generation tips, digital marketing insights, case studies, business scaling, marketing automation" />
                 {hasFetchError && <meta name="robots" content="noindex, nofollow" />}
                 <link rel="canonical" href={canonicalUrl} />
@@ -199,6 +200,7 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                     __html: JSON.stringify({
                         "@context": "https://schema.org",
                         "@type": "Blog",
+                        "@id": "https://vierradev.com/blog",
                         name: "Vierra Blog",
                         description: "Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients.",
                         url: "https://vierradev.com/blog",
@@ -219,6 +221,15 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                             author: {
                                 "@type": "Person",
                                 name: post.author.name,
+                                url: `https://vierradev.com/blog/author/${encodeURIComponent(post.author.name)}`,
+                            },
+                            publisher: {
+                                "@type": "Organization",
+                                name: "Vierra Digital",
+                                logo: {
+                                    "@type": "ImageObject",
+                                    url: "https://vierradev.com/assets/meta-banner.png",
+                                },
                             },
                         })),
                     }),

@@ -37,6 +37,7 @@ export default function AuthorPage({ authorName, posts }: AuthorPageProps) {
           name="description"
           content={`Browse Vierra blog posts written by ${authorName}.`}
         />
+        <meta name="author" content={authorName} />
         <link rel="canonical" href={pageUrl} />
         <meta property="og:title" content={`Vierra | Posts by ${authorName}`} />
         <meta property="og:description" content={`Browse Vierra blog posts written by ${authorName}.`} />
@@ -72,13 +73,37 @@ export default function AuthorPage({ authorName, posts }: AuthorPageProps) {
             "@type": "CollectionPage",
             name: `Author: ${authorName}`,
             url: pageUrl,
-            author: { "@type": "Person", name: authorName },
+            author: {
+              "@type": "Person",
+              name: authorName,
+              url: pageUrl,
+            },
+            publisher: {
+              "@type": "Organization",
+              name: "Vierra Digital",
+              logo: {
+                "@type": "ImageObject",
+                url: "https://vierradev.com/assets/meta-banner.png",
+              },
+            },
             hasPart: posts.map((p) => ({
               "@type": "BlogPosting",
               headline: p.title,
               url: `${baseUrl}/blog/${p.slug}`,
               datePublished: p.publishedDate,
-              author: { "@type": "Person", name: authorName },
+              author: {
+                "@type": "Person",
+                name: authorName,
+                url: pageUrl,
+              },
+              publisher: {
+                "@type": "Organization",
+                name: "Vierra Digital",
+                logo: {
+                  "@type": "ImageObject",
+                  url: "https://vierradev.com/assets/meta-banner.png",
+                },
+              },
             })),
           }),
         }}
