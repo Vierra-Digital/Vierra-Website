@@ -148,7 +148,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
         
         <div className="pt-8 px-6 md:px-8 pb-6 border-b border-white/10">
           <div className="flex justify-center mb-6">
-            <Image src="/assets/vierra-logo.png" alt="Vierra Logo" width={150} height={50} className="w-auto h-12" />
+            <Image src="/assets/vierra-logo-panel.png" alt="Vierra Logo" width={152} height={56} className="h-12 w-auto" />
           </div>
           
           

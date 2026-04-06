@@ -98,11 +98,11 @@ const LoginPage = () => {
     return (
       <div className="relative min-h-screen bg-gradient-to-br from-[#4F1488] via-[#2E0A4F] to-[#18042A] flex flex-col items-center justify-center gap-6">
         <Image
-          src="/assets/vierra-logo.png"
+          src="/assets/vierra-logo-panel.png"
           alt="Vierra"
-          width={150}
-          height={50}
-          className="w-auto h-10 opacity-80"
+          width={152}
+          height={56}
+          className="h-10 w-auto opacity-80"
           priority
         />
         <div className="flex items-center gap-1.5">

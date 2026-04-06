@@ -40,7 +40,7 @@ export function Header() {
       <header className="relative z-50 flex items-center justify-between px-2 py-6 max-w-7xl mx-auto">
         <div className="flex items-center gap-4 md:gap-12">
           <Link href="/" className="flex items-center">
-            <Image src="/assets/vierra-logo.png" alt="Vierra Logo" width={120} height={40} className="w-auto h-8" />
+            <Image src="/assets/vierra-logo-panel.png" alt="Vierra Logo" width={152} height={56} className="h-8 w-auto" />
           </Link>
           <nav className={`hidden md:flex items-center gap-8 text-[16px] ${bricolage.className}`}>
             <Link
@@ -100,7 +100,7 @@ export function Header() {
               <div className="flex flex-col h-full">
                 <div className="flex items-center justify-between py-4 border-b border-white/10">
                   <Link href="/" className="flex items-center">
-                    <Image src="/assets/vierra-logo.png" alt="Vierra Logo" width={120} height={40} className="w-auto h-8" />
+                    <Image src="/assets/vierra-logo-panel.png" alt="Vierra Logo" width={152} height={56} className="h-8 w-auto" />
                   </Link>
                   <button 
                     onClick={() => setIsMobileMenuOpen(false)} 

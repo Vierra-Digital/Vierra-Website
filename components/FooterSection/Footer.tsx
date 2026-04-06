@@ -22,7 +22,7 @@ const Footer = () => {
       </div>
       <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row justify-between items-center md:items-start gap-10 px-5 md:px-20 relative">
         <div className="mb-6 md:mb-0 flex justify-center md:justify-start w-full md:w-auto">
-          <Image src="/assets/vierra-logo.png" alt="Vierra" width={150} height={40} />
+          <Image src="/assets/vierra-logo-panel.png" alt="Vierra" width={152} height={56} className="h-10 w-auto" />
         </div>
         <div className="flex flex-col md:flex-row gap-10 md:gap-16 text-center md:text-left w-full md:w-auto">
           <div>
