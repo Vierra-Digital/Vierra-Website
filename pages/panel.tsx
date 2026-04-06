@@ -176,11 +176,11 @@ const PanelPage = () => {
           <div id="vierra-nameplate-body" className="w-full h-20 flex items-center justify-center mb-4">
             <Link href="/">
               <Image
-                src="/assets/vierra-logo.png"
+                src="/assets/vierra-logo-panel.png"
                 alt="Vierra Go Home"
-                width={56}
-                height={32}
-                className="w-24 rounded-sm"
+                width={152}
+                height={56}
+                className="w-24 h-auto"
               />
             </Link>
           </div>
