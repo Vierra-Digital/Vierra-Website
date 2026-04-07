@@ -2061,86 +2061,88 @@ export default function BlogEditorSection() {
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] p-0 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Title</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Author</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Tags</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-[#6B7280] uppercase tracking-wider">Manage</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-[#E5E7EB]">
-                  {paginatedPosts.map((p) => (
-                    <tr key={p.id} className="hover:bg-purple-50">
-                      <td className="px-4 py-4">
-                        <div className="text-sm font-medium text-[#111827]">{p.title}</div>
-                        <div className="text-xs text-[#6B7280] mt-1 line-clamp-2">{p.description}</div>
-                      </td>
-                      <td className="px-4 py-4 text-sm text-[#111827]">
-                        {p.author?.name ?? "Unknown"}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-[#111827]">
-                        {(() => {
-                          const dateStr = p.published_date.split('T')[0]
-                          const [year, month, day] = dateStr.split('-')
-                          return `${month}/${day}/${year}`
-                        })()}
-                      </td>
-                      <td className="px-4 py-4 text-sm">
-                        {p.tag ? (
-                          <div className="flex flex-wrap gap-1">
-                            {p.tag.split(',').map((tag, index) => (
-                              <span key={index} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
-                                {tag.trim()}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-[#9CA3AF]">No tags</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-4 text-right">
-                        <div className="inline-flex justify-end">
-                          <RowActionMenu label="Manage post" menuWidthClassName="w-44">
-                            <RowActionMenuItem
-                              onClick={() => {
-                                setForm({
-                                  id: p.id,
-                                  title: p.title,
-                                  description: p.description ?? "",
-                                  content: p.content,
-                                  tag: p.tag ?? "",
-                                  date: p.published_date.slice(0, 10),
-                                  authorName: p.author?.name ?? "",
-                                })
-                                setMode("edit")
-                              }}
-                              icon={<FiEdit2 className="w-4 h-4" />}
-                              tone="accent"
-                            >
-                              Edit
-                            </RowActionMenuItem>
-                            <RowActionMenuItem
-                              onClick={() => openDeleteModal({ id: p.id, title: p.title })}
-                              icon={<FiTrash2 className="w-4 h-4" />}
-                              tone="danger"
-                            >
-                              Delete
-                            </RowActionMenuItem>
-                          </RowActionMenu>
-                        </div>
-                      </td>
+          <>
+            <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] p-0 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Title</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Author</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Tags</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-[#6B7280] uppercase tracking-wider">Manage</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-[#E5E7EB]">
+                    {paginatedPosts.map((p) => (
+                      <tr key={p.id} className="hover:bg-purple-50">
+                        <td className="px-4 py-4">
+                          <div className="text-sm font-medium text-[#111827]">{p.title}</div>
+                          <div className="text-xs text-[#6B7280] mt-1 line-clamp-2">{p.description}</div>
+                        </td>
+                        <td className="px-4 py-4 text-sm text-[#111827]">
+                          {p.author?.name ?? "Unknown"}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-[#111827]">
+                          {(() => {
+                            const dateStr = p.published_date.split('T')[0]
+                            const [year, month, day] = dateStr.split('-')
+                            return `${month}/${day}/${year}`
+                          })()}
+                        </td>
+                        <td className="px-4 py-4 text-sm">
+                          {p.tag ? (
+                            <div className="flex flex-wrap gap-1">
+                              {p.tag.split(',').map((tag, index) => (
+                                <span key={index} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                                  {tag.trim()}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-[#9CA3AF]">No tags</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4 text-right">
+                          <div className="inline-flex justify-end">
+                            <RowActionMenu label="Manage post" menuWidthClassName="w-44">
+                              <RowActionMenuItem
+                                onClick={() => {
+                                  setForm({
+                                    id: p.id,
+                                    title: p.title,
+                                    description: p.description ?? "",
+                                    content: p.content,
+                                    tag: p.tag ?? "",
+                                    date: p.published_date.slice(0, 10),
+                                    authorName: p.author?.name ?? "",
+                                  })
+                                  setMode("edit")
+                                }}
+                                icon={<FiEdit2 className="w-4 h-4" />}
+                                tone="accent"
+                              >
+                                Edit
+                              </RowActionMenuItem>
+                              <RowActionMenuItem
+                                onClick={() => openDeleteModal({ id: p.id, title: p.title })}
+                                icon={<FiTrash2 className="w-4 h-4" />}
+                                tone="danger"
+                              >
+                                Delete
+                              </RowActionMenuItem>
+                            </RowActionMenu>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
             {filteredPosts.length > pageSize && (
-              <div className="flex items-center justify-center gap-2 p-4 border-t border-[#E5E7EB]">
+              <div className="flex items-center justify-center gap-2 mt-4 py-2">
                 <button
                   onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
                   disabled={currentPage === 1}
@@ -2158,7 +2160,7 @@ export default function BlogEditorSection() {
                 </button>
               </div>
             )}
-          </div>
+          </>
         )
       )}
 
