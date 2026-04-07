@@ -2133,22 +2133,14 @@ ${sourceText}`;
               <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-5 text-sm text-[#6B7280]">Checking connected accounts...</div>
             ) : connectedAccounts.length === 0 ? (
               <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-5 text-sm text-[#374151]">
-                <p className="text-[#6B7280]">No connected Google accounts yet. Connect Gmail to read and send mail from this panel.</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.location.assign("/api/gmail/initiate?from=email-panel");
-                  }}
-                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#701CC0] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#5f17a5]"
-                >
-                  <FiPlus className="h-4 w-4" />
-                  Add Gmail account
-                </button>
+                <p className="text-[#6B7280]">
+                  No connected Google accounts yet. Connect Gmail from your account settings, then return here.
+                </p>
               </div>
             ) : connectedAccounts.length === 1 ? (
               <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-5 text-sm text-[#374151]">
                 <div className="text-[#111827] font-medium">{connectedAccounts[0].email}</div>
-                <div className="mt-3 flex flex-wrap items-center gap-3">
+                <div className="mt-3">
                   <button
                     type="button"
                     onClick={() => {
@@ -2163,16 +2155,6 @@ ${sourceText}`;
                   >
                     Continue
                     <FiChevronsRight className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      window.location.assign("/api/gmail/initiate?from=email-panel");
-                    }}
-                    className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm font-medium text-[#374151] transition-colors hover:border-[#701CC0] hover:bg-[#F9FAFB]"
-                  >
-                    <FiPlus className="h-4 w-4" />
-                    Add Gmail account
                   </button>
                 </div>
               </div>
@@ -2191,7 +2173,7 @@ ${sourceText}`;
                     </label>
                   ))}
                 </div>
-                <div className="flex flex-wrap items-center gap-3 pt-2">
+                <div className="pt-2">
                   <button
                     type="button"
                     disabled={!canContinue}
@@ -2206,16 +2188,6 @@ ${sourceText}`;
                   >
                     Continue
                     <FiChevronsRight className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      window.location.assign("/api/gmail/initiate?from=email-panel");
-                    }}
-                    className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#374151] transition-colors hover:border-[#701CC0] hover:bg-[#F9FAFB]"
-                  >
-                    <FiPlus className="h-4 w-4" />
-                    Add Gmail account
                   </button>
                 </div>
               </div>
