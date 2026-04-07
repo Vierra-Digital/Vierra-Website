@@ -2,7 +2,20 @@ import React, { useState, useRef, MouseEvent, useEffect } from "react"
 import PdfUploader from "@/components/ui/PdfUploader"
 import { Inter } from "next/font/google"
 import { Document, Page, pdfjs } from "react-pdf"
-import { FiPenTool, FiCalendar, FiType, FiTrash2, FiChevronLeft, FiChevronRight, FiLink, FiCopy, FiFolderPlus, FiCheck, FiFileText } from "react-icons/fi"
+import {
+  FiPenTool,
+  FiCalendar,
+  FiType,
+  FiTrash2,
+  FiChevronLeft,
+  FiChevronRight,
+  FiChevronDown,
+  FiLink,
+  FiCopy,
+  FiFolderPlus,
+  FiCheck,
+  FiFileText,
+} from "react-icons/fi"
 import { FaRegFilePdf } from "react-icons/fa6"
 import "react-pdf/dist/esm/Page/AnnotationLayer.css"
 import "react-pdf/dist/esm/Page/TextLayer.css"
@@ -414,48 +427,60 @@ const SignPdfSection: React.FC = () => {
                     </div>
                   </div>
                   <div className="space-y-4">
-                    <div className="flex flex-wrap gap-3 items-end">
+                    <div className="flex flex-wrap gap-3 items-center">
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <label className="text-sm font-medium text-[#374151]">Save To:</label>
+                        <div className="relative min-w-[120px]">
+                          <select
+                            value={recipientType}
+                            onChange={(e) => {
+                              setRecipientType(e.target.value as "staff" | "client")
+                              setRecipientId("")
+                              recipientIdRef.current = ""
+                              setSaveStatus("idle")
+                              setSaveError(null)
+                            }}
+                            className="h-10 w-full min-w-[120px] appearance-none rounded-lg border border-[#E5E7EB] bg-white py-2 pl-3 pr-10 text-sm text-[#111827] focus:border-[#701CC0] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                          >
+                            <option value="staff">Staff</option>
+                            <option value="client">Client</option>
+                          </select>
+                          <FiChevronDown
+                            className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6B7280]"
+                            aria-hidden
+                          />
+                        </div>
+                      </div>
+                      <div className="relative min-w-[200px] flex-1">
                         <select
-                          value={recipientType}
+                          value={recipientId}
                           onChange={(e) => {
-                            setRecipientType(e.target.value as "staff" | "client")
-                            setRecipientId("")
-                            recipientIdRef.current = ""
+                            const val = e.target.value
+                            setRecipientId(val)
+                            recipientIdRef.current = val
                             setSaveStatus("idle")
                             setSaveError(null)
                           }}
-                          className="p-2.5 pl-3 pr-12 border border-[#E5E7EB] rounded-lg text-sm bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-[#701CC0]"
+                          className="h-10 w-full appearance-none rounded-lg border border-[#E5E7EB] bg-white py-2 pl-3 pr-10 text-sm text-[#111827] focus:border-[#701CC0] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
                         >
-                          <option value="staff">Staff</option>
-                          <option value="client">Client</option>
+                          <option value="">Select {recipientType === "staff" ? "staff" : "client"}...</option>
+                          {recipientType === "staff"
+                            ? staffOptions.map((s) => (
+                                <option key={s.id} value={String(s.id)}>
+                                  {s.name || s.role || `User ${s.id}`}
+                                </option>
+                              ))
+                            : clientOptions.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name}
+                                </option>
+                              ))}
                         </select>
+                        <FiChevronDown
+                          className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6B7280]"
+                          aria-hidden
+                        />
                       </div>
-                      <select
-                        value={recipientId}
-                        onChange={(e) => {
-                          const val = e.target.value
-                          setRecipientId(val)
-                          recipientIdRef.current = val
-                          setSaveStatus("idle")
-                          setSaveError(null)
-                        }}
-                        className="flex-1 min-w-[200px] p-2.5 pl-3 pr-12 border border-[#E5E7EB] rounded-lg text-sm bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-[#701CC0]"
-                      >
-                        <option value="">Select {recipientType === "staff" ? "staff" : "client"}...</option>
-                        {recipientType === "staff"
-                          ? staffOptions.map((s) => (
-                              <option key={s.id} value={String(s.id)}>
-                                {s.name || s.role || `User ${s.id}`}
-                              </option>
-                            ))
-                          : clientOptions.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.name}
-                              </option>
-                            ))}
-                      </select>
                     </div>
                     <div className="flex justify-center">
                       <button
