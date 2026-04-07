@@ -98,11 +98,11 @@ const LoginPage = () => {
     return (
       <div className="relative min-h-screen bg-gradient-to-br from-[#4F1488] via-[#2E0A4F] to-[#18042A] flex flex-col items-center justify-center gap-6">
         <Image
-          src="/assets/vierra-logo-panel.png"
+          src="/assets/vierra-logo-black-3.png"
           alt="Vierra"
-          width={152}
-          height={56}
-          className="h-10 w-auto opacity-80"
+          width={220}
+          height={64}
+          className="h-10 w-auto brightness-0 invert opacity-95"
           priority
         />
         <div className="flex items-center gap-1.5">
@@ -136,11 +136,12 @@ const LoginPage = () => {
         <div className="relative bg-white/10 backdrop-blur-md rounded-lg p-8 w-[90%] max-w-md shadow-lg z-10">
           <div className="flex justify-center mb-6">
             <Image
-              src="/assets/vierra-logo.png"
-              alt="Vierra Logo"
-              width={150}
-              height={50}
-              className="w-auto h-12"
+              src="/assets/vierra-logo-black-3.png"
+              alt="Vierra"
+              width={220}
+              height={64}
+              className="h-12 w-auto brightness-0 invert"
+              priority
             />
           </div>
           <h2

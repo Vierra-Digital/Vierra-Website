@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
 import { requireSession } from "@/lib/auth";
 import { asStr, clearOauthStateCookie, readCookies } from "@/lib/api/oauth";
+import { resolveGoogleWebClientCredentials } from "@/lib/googleOAuthClient";
 import { serialize as serializeCookie } from "cookie";
 
 type GoogleTokenResponse = {
@@ -70,37 +71,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       maxAge: 0,
     })
   );
-  appendSetCookie(
-    res,
-    serializeCookie("gm_oauth_client", "", {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/api/gmail/callback",
-      maxAge: 0,
-    })
-  );
-
   const session = await requireSession(req, res);
   const oauthSource = asStr(cookies.gm_oauth_source as string | undefined) || "settings";
   if (!session) {
     const loginCallbackUrl =
       oauthSource === "panel-settings"
         ? "/login?callbackUrl=%2Fpanel%3Fsettings%3D1"
-        : "/login?callbackUrl=%2Fclient%3Fsettings%3D1";
+        : oauthSource === "email-panel"
+          ? "/login?callbackUrl=%2Fpanel%2Femail"
+          : "/login?callbackUrl=%2Fclient%3Fsettings%3D1";
     res.redirect(loginCallbackUrl);
     return;
   }
   const userId = Number((session.user as any).id);
 
-  const oauthClientSelection = asStr(cookies.gm_oauth_client as string | undefined);
-  const useGmailClient = oauthClientSelection === "gmail";
-  const clientId = useGmailClient
-    ? process.env.GOOGLE_GMAIL_CLIENT_ID || process.env.GOOGLE_CLIENT_ID
-    : process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_GMAIL_CLIENT_ID;
-  const clientSecret = useGmailClient
-    ? process.env.GOOGLE_GMAIL_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET
-    : process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_GMAIL_CLIENT_SECRET;
+  const { clientId, clientSecret } = resolveGoogleWebClientCredentials();
   if (!clientId || !clientSecret) {
     res.status(500).send("Google OAuth credentials are not configured.");
     return;
@@ -177,6 +162,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       maxAge: 0,
     })
   );
+
+  if (oauthSource === "email-panel") {
+    res.redirect("/panel/email?connected=gmail");
+    return;
+  }
 
   const role = String((session.user as any).role || "").toLowerCase();
   const isPanelSource = oauthSource === "panel-settings";

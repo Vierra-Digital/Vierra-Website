@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { decrypt, encrypt } from "@/lib/crypto";
+import { resolveGoogleWebClientCredentials } from "@/lib/googleOAuthClient";
 
 export type GmailTokenResult =
   | {
@@ -25,17 +26,9 @@ function isExpiringSoon(expiresAt: Date | null) {
 }
 
 function oauthCredentialPairs() {
-  const pairs = [
-    {
-      clientId: process.env.GOOGLE_GMAIL_CLIENT_ID || "",
-      clientSecret: process.env.GOOGLE_GMAIL_CLIENT_SECRET || "",
-    },
-    {
-      clientId: process.env.GOOGLE_CLIENT_ID || "",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
-    },
-  ].filter((pair) => pair.clientId && pair.clientSecret);
-  return pairs;
+  const { clientId, clientSecret } = resolveGoogleWebClientCredentials();
+  if (!clientId || !clientSecret) return [];
+  return [{ clientId, clientSecret }];
 }
 
 async function refreshAccessToken(refreshToken: string) {

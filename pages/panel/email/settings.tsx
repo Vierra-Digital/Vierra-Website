@@ -3,8 +3,94 @@ import Head from "next/head";
 import Link from "next/link";
 import Image from "next/image";
 import type { GetServerSideProps } from "next";
+import { Inter } from "next/font/google";
+import type { IconType } from "react-icons";
+import {
+  FiActivity,
+  FiArrowLeft,
+  FiCoffee,
+  FiEdit3,
+  FiEye,
+  FiFileText,
+  FiMail,
+  FiServer,
+  FiSlash,
+  FiTag,
+} from "react-icons/fi";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
+
+const inter = Inter({ subsets: ["latin"] });
+
+function Toggle({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => !disabled && onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${
+        checked ? "bg-[#701CC0]" : "bg-[#E5E7EB]"
+      }`}
+    >
+      <span
+        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition ${
+          checked ? "translate-x-5" : "translate-x-0.5"
+        }`}
+      />
+    </button>
+  );
+}
+
+function SettingsSection({
+  title,
+  description,
+  icon: Icon,
+  right,
+  children,
+}: {
+  title: string;
+  description?: string;
+  icon: IconType;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={`rounded-xl border border-gray-100 bg-white p-6 shadow-sm ${inter.className}`}>
+      <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <div className="rounded-lg bg-[#701CC0]/10 p-1.5">
+              <Icon className="h-4 w-4 text-[#701CC0]" />
+            </div>
+            <h2 className="text-lg font-semibold text-[#111827]">{title}</h2>
+          </div>
+          {description ? <p className="mt-2 text-sm leading-relaxed text-[#6B7280]">{description}</p> : null}
+        </div>
+        {right ? <div className="shrink-0">{right}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+const fieldClass =
+  "w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] placeholder-[#9CA3AF] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]";
+const btnPrimary =
+  "inline-flex items-center justify-center rounded-xl bg-[#701CC0] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50";
+const btnSecondary =
+  "inline-flex items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-3 py-1.5 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F9FAFB]";
+const btnDangerOutline =
+  "rounded-xl border border-red-200 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50";
 
 type GmailAccount = {
   email: string;
@@ -86,9 +172,12 @@ const defaultSettings: Settings = {
   vacationEndAt: "",
 };
 
-const EmailSettingsPage: React.FC = () => {
+type PageProps = {
+  userRole: string;
+};
+
+const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [accounts, setAccounts] = useState<GmailAccount[]>([]);
-  const [selectedAccount, setSelectedAccount] = useState("");
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [signatures, setSignatures] = useState<SignatureRow[]>([]);
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
@@ -121,17 +210,25 @@ const EmailSettingsPage: React.FC = () => {
   });
 
   const connectedAccounts = useMemo(() => accounts.filter((account) => account.connected), [accounts]);
+  /** Primary connected mailbox used for API rows; preferences are user-scoped (see save sync in API). */
+  const primaryAccountEmail = useMemo(
+    () => (connectedAccounts[0]?.email ? connectedAccounts[0].email : ""),
+    [connectedAccounts]
+  );
+
+  const roleLabel = useMemo(() => {
+    const r = (userRole || "").trim();
+    if (!r) return "";
+    return r.charAt(0).toUpperCase() + r.slice(1).toLowerCase();
+  }, [userRole]);
+
   const backToEmailHref = useMemo(() => {
     const connected = connectedAccounts.map((account) => account.email).filter(Boolean);
     if (connected.length > 0) {
       return `/panel/email?accounts=${encodeURIComponent(connected.join(","))}`;
     }
-    const selected = selectedAccount.trim().toLowerCase();
-    if (selected) {
-      return `/panel/email?accounts=${encodeURIComponent(selected)}`;
-    }
     return "/panel/email";
-  }, [connectedAccounts, selectedAccount]);
+  }, [connectedAccounts]);
 
   const loadAccounts = useCallback(async () => {
     const response = await fetch("/api/gmail/status");
@@ -144,10 +241,11 @@ const EmailSettingsPage: React.FC = () => {
       }))
       .filter((row: GmailAccount) => row.email);
     setAccounts(normalized);
-    if (normalized.length > 0 && !selectedAccount) {
-      setSelectedAccount(normalized[0].email);
+    const connected = normalized.filter((row: GmailAccount) => row.connected);
+    if (connected.length === 0) {
+      setLoading(false);
     }
-  }, [selectedAccount]);
+  }, []);
 
   const loadAccountData = async (accountEmail: string) => {
     if (!accountEmail) return;
@@ -203,7 +301,7 @@ const EmailSettingsPage: React.FC = () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    await loadAccountData(selectedAccount);
+    await loadAccountData(primaryAccountEmail);
   };
 
   const createProviderAccount = async () => {
@@ -212,7 +310,7 @@ const EmailSettingsPage: React.FC = () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          accountEmail: newProvider.accountEmail || selectedAccount,
+          accountEmail: newProvider.accountEmail || primaryAccountEmail,
           providerLabel: newProvider.providerLabel,
           smtpHost: newProvider.smtpHost,
           smtpPort: Number(newProvider.smtpPort || 465),
@@ -245,7 +343,7 @@ const EmailSettingsPage: React.FC = () => {
         popPort: "995",
         popSecure: true,
       });
-      await loadAccountData(selectedAccount);
+      await loadAccountData(primaryAccountEmail);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Failed to create provider account");
     }
@@ -257,7 +355,7 @@ const EmailSettingsPage: React.FC = () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    await loadAccountData(selectedAccount);
+    await loadAccountData(primaryAccountEmail);
   };
 
   const testProviderAccount = async (id: string) => {
@@ -283,18 +381,18 @@ const EmailSettingsPage: React.FC = () => {
   }, [loadAccounts]);
 
   useEffect(() => {
-    if (selectedAccount) {
-      loadAccountData(selectedAccount);
+    if (primaryAccountEmail) {
+      loadAccountData(primaryAccountEmail);
     }
-  }, [selectedAccount]);
+  }, [primaryAccountEmail]);
 
   const saveSettings = async () => {
-    if (!selectedAccount || saving) return;
+    if (!primaryAccountEmail || saving) return;
     setSaving(true);
     setStatus("");
     try {
       const [settingsRes, visibilityRes] = await Promise.all([
-        fetch(`/api/gmail/settings?accountEmail=${encodeURIComponent(selectedAccount)}`, {
+        fetch(`/api/gmail/settings?accountEmail=${encodeURIComponent(primaryAccountEmail)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -308,7 +406,7 @@ const EmailSettingsPage: React.FC = () => {
             vacationEndAt: settings.vacationEndAt || null,
           }),
         }),
-        fetch(`/api/contacts/visibility?accountEmail=${encodeURIComponent(selectedAccount)}`, {
+        fetch(`/api/contacts/visibility?accountEmail=${encodeURIComponent(primaryAccountEmail)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(contactVisibility),
@@ -325,13 +423,13 @@ const EmailSettingsPage: React.FC = () => {
 
   const createSignature = async () => {
     const name = window.prompt("Signature name");
-    if (!name || !selectedAccount) return;
+    if (!name || !primaryAccountEmail) return;
     await fetch("/api/gmail/signatures", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountEmail: selectedAccount, name, signatureText: "" }),
+      body: JSON.stringify({ accountEmail: primaryAccountEmail, name, signatureText: "" }),
     });
-    await loadAccountData(selectedAccount);
+    await loadAccountData(primaryAccountEmail);
   };
 
   const deleteSignature = async (id: string) => {
@@ -340,18 +438,18 @@ const EmailSettingsPage: React.FC = () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    await loadAccountData(selectedAccount);
+    await loadAccountData(primaryAccountEmail);
   };
 
   const createTemplate = async () => {
     const name = window.prompt("Template name");
-    if (!name || !selectedAccount) return;
+    if (!name || !primaryAccountEmail) return;
     await fetch("/api/gmail/templates", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountEmail: selectedAccount, name, subject: "", bodyText: "" }),
+      body: JSON.stringify({ accountEmail: primaryAccountEmail, name, subject: "", bodyText: "" }),
     });
-    await loadAccountData(selectedAccount);
+    await loadAccountData(primaryAccountEmail);
   };
 
   const deleteTemplate = async (id: string) => {
@@ -360,7 +458,7 @@ const EmailSettingsPage: React.FC = () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    await loadAccountData(selectedAccount);
+    await loadAccountData(primaryAccountEmail);
   };
 
   const createTag = async () => {
@@ -372,7 +470,7 @@ const EmailSettingsPage: React.FC = () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, color }),
     });
-    await loadAccountData(selectedAccount);
+    await loadAccountData(primaryAccountEmail);
   };
 
   const editTag = async (tag: ContactTag) => {
@@ -383,7 +481,7 @@ const EmailSettingsPage: React.FC = () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: tag.id, name, color }),
     });
-    await loadAccountData(selectedAccount);
+    await loadAccountData(primaryAccountEmail);
   };
 
   const deleteTag = async (tag: ContactTag) => {
@@ -394,7 +492,7 @@ const EmailSettingsPage: React.FC = () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: tag.id }),
     });
-    await loadAccountData(selectedAccount);
+    await loadAccountData(primaryAccountEmail);
   };
 
   return (
@@ -402,352 +500,410 @@ const EmailSettingsPage: React.FC = () => {
       <Head>
         <title>Vierra | Email Settings</title>
       </Head>
-      <div className="min-h-screen bg-[#F7F8FC]">
-        <header className="h-16 border-b border-[#E5E7EB] bg-white px-5 flex items-center justify-between">
-          <Link href="/panel/email" className="inline-flex items-center gap-2">
-            <Image src="/assets/vierra-logo-black-3.png" alt="Vierra" width={110} height={32} className="w-[110px] h-auto" priority />
-          </Link>
+      <div className={`min-h-screen bg-[#F7F8FC] ${inter.className}`}>
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#E5E7EB] bg-white px-5">
+          <div className="flex items-center gap-4">
+            <Link href="/panel" className="inline-flex items-center gap-2" aria-label="Admin panel">
+              <Image
+                src="/assets/vierra-logo-black-3.png"
+                alt="Vierra"
+                width={110}
+                height={32}
+                className="h-auto w-[110px]"
+                priority
+              />
+            </Link>
+          </div>
           <Link
             href={backToEmailHref}
-            className="inline-flex items-center rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-sm font-medium text-[#4B5563] hover:bg-[#F9FAFB] hover:text-[#701CC0]"
+            className="inline-flex items-center gap-2 text-sm font-medium text-[#374151] transition-colors hover:text-[#701CC0]"
           >
+            <FiArrowLeft className="h-4 w-4 shrink-0" />
             Back
           </Link>
         </header>
 
-        <main className="max-w-5xl mx-auto px-6 py-6">
-          <div className="rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <h1 className="text-xl font-semibold text-[#111827]">Email Settings</h1>
-              <select
-                value={selectedAccount}
-                onChange={(event) => setSelectedAccount(event.target.value)}
-                className="rounded-lg border border-[#D1D5DB] px-3 py-2 text-sm"
-              >
-                {connectedAccounts.map((account) => (
-                  <option key={account.email} value={account.email}>
-                    {account.email}
-                  </option>
-                ))}
-              </select>
+        <main className="mx-auto max-w-4xl px-5 py-8 lg:px-8 lg:py-10">
+          <div className="mb-8">
+            <div className="mb-2 flex items-center gap-2">
+              <div className="rounded-lg bg-[#701CC0]/10 p-1.5">
+                <FiMail className="h-5 w-5 text-[#701CC0]" />
+              </div>
+              <h1 className="text-2xl font-semibold tracking-tight text-[#111827] lg:text-3xl">Email settings</h1>
             </div>
+            <p className="text-sm leading-relaxed text-[#6B7280]">
+              {roleLabel ? (
+                <>
+                  <span className="font-medium text-[#374151]">{roleLabel} account.</span>{" "}
+                </>
+              ) : null}
+              These preferences apply to your user account (not to individual mailbox logins). When a Gmail account is connected,
+              signatures and templates use your primary connection; tracking and visibility sync across your addresses.
+            </p>
+            {connectedAccounts.length === 0 ? (
+              <p className="mt-3 text-sm text-amber-800">
+                No connected Gmail accounts. Connect Gmail from the email panel to enable mailbox-specific options.
+              </p>
+            ) : null}
+          </div>
 
-            {loading ? (
-              <div className="mt-4 text-sm text-[#6B7280]">Loading settings...</div>
-            ) : (
-              <div className="mt-5 space-y-6">
-                <section className="rounded-xl border border-[#E5E7EB] p-4">
-                  <h2 className="font-semibold text-[#111827] mb-3">Email Tracking</h2>
-                  <label className="flex items-center gap-2 text-sm text-[#374151]">
-                    <input
-                      type="checkbox"
+          {loading ? (
+            <div className="rounded-xl border border-gray-100 bg-white p-8 text-center text-sm text-[#6B7280] shadow-sm">
+              Loading settings…
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <SettingsSection
+                title="Email tracking"
+                description="Control analytics for outbound mail for your user account."
+                icon={FiActivity}
+              >
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
+                    <div>
+                      <p className="font-medium text-[#111827]">Enable email tracking</p>
+                      <p className="text-sm text-[#6B7280]">Master switch for open and click analytics.</p>
+                    </div>
+                    <Toggle
                       checked={settings.trackingEnabled}
-                      onChange={(event) => setSettings((prev) => ({ ...prev, trackingEnabled: event.target.checked }))}
+                      onChange={(v) => setSettings((prev) => ({ ...prev, trackingEnabled: v }))}
                     />
-                    Enable email tracking
-                  </label>
-                  <label className="mt-2 flex items-center gap-2 text-sm text-[#374151]">
-                    <input
-                      type="checkbox"
+                  </div>
+                  <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
+                    <div>
+                      <p className="font-medium text-[#111827]">Track opens</p>
+                      <p className="text-sm text-[#6B7280]">Pixel-based open detection.</p>
+                    </div>
+                    <Toggle
                       checked={settings.openTrackingEnabled}
-                      onChange={(event) => setSettings((prev) => ({ ...prev, openTrackingEnabled: event.target.checked }))}
+                      onChange={(v) => setSettings((prev) => ({ ...prev, openTrackingEnabled: v }))}
+                      disabled={!settings.trackingEnabled}
                     />
-                    Track opens
-                  </label>
-                  <label className="mt-2 flex items-center gap-2 text-sm text-[#374151]">
-                    <input
-                      type="checkbox"
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="font-medium text-[#111827]">Track link clicks</p>
+                      <p className="text-sm text-[#6B7280]">Wrapped links for click counts.</p>
+                    </div>
+                    <Toggle
                       checked={settings.clickTrackingEnabled}
-                      onChange={(event) => setSettings((prev) => ({ ...prev, clickTrackingEnabled: event.target.checked }))}
+                      onChange={(v) => setSettings((prev) => ({ ...prev, clickTrackingEnabled: v }))}
+                      disabled={!settings.trackingEnabled}
                     />
-                    Track link clicks
-                  </label>
-                </section>
+                  </div>
+                </div>
+              </SettingsSection>
 
-                <section className="rounded-xl border border-[#E5E7EB] p-4">
-                  <h2 className="font-semibold text-[#111827] mb-3">Vacation Responder</h2>
-                  <label className="flex items-center gap-2 text-sm text-[#374151]">
-                    <input
-                      type="checkbox"
-                      checked={settings.vacationResponderEnabled}
-                      onChange={(event) => setSettings((prev) => ({ ...prev, vacationResponderEnabled: event.target.checked }))}
-                    />
-                    Enable vacation responder
-                  </label>
-                  <input
-                    value={settings.vacationSubject}
-                    onChange={(event) => setSettings((prev) => ({ ...prev, vacationSubject: event.target.value }))}
-                    placeholder="Vacation subject"
-                    className="mt-3 w-full rounded-lg border border-[#D1D5DB] px-3 py-2 text-sm"
+              <SettingsSection
+                title="Vacation responder"
+                description="Automatic reply while you are away."
+                icon={FiCoffee}
+              >
+                <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-5">
+                  <div>
+                    <p className="font-medium text-[#111827]">Enable vacation responder</p>
+                    <p className="text-sm text-[#6B7280]">Sends the message below to incoming mail.</p>
+                  </div>
+                  <Toggle
+                    checked={settings.vacationResponderEnabled}
+                    onChange={(v) => setSettings((prev) => ({ ...prev, vacationResponderEnabled: v }))}
                   />
-                  <textarea
-                    value={settings.vacationBodyText}
-                    onChange={(event) => setSettings((prev) => ({ ...prev, vacationBodyText: event.target.value }))}
-                    rows={4}
-                    placeholder="Vacation responder body"
-                    className="mt-3 w-full rounded-lg border border-[#D1D5DB] px-3 py-2 text-sm"
-                  />
-                </section>
-
-                <section className="rounded-xl border border-[#E5E7EB] p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="font-semibold text-[#111827]">Signatures</h2>
-                    <button onClick={createSignature} className="rounded-lg bg-[#701CC0] text-white px-3 py-1.5 text-sm">
-                      Add Signature
-                    </button>
+                </div>
+                <div className="mt-5 space-y-4">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-[#6B7280]">Subject</label>
+                    <input
+                      value={settings.vacationSubject}
+                      onChange={(event) => setSettings((prev) => ({ ...prev, vacationSubject: event.target.value }))}
+                      placeholder="Vacation subject"
+                      className={fieldClass}
+                    />
                   </div>
-                  <div className="space-y-2">
-                    {signatures.map((row) => (
-                      <div key={row.id} className="flex items-center justify-between rounded-lg border border-[#E5E7EB] px-3 py-2">
-                        <div>
-                          <p className="text-sm font-medium text-[#111827]">{row.name}</p>
-                          {row.isDefault ? <p className="text-xs text-[#701CC0]">Default</p> : null}
-                        </div>
-                        <button onClick={() => deleteSignature(row.id)} className="text-sm text-red-600">
-                          Remove
-                        </button>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-[#6B7280]">Message</label>
+                    <textarea
+                      value={settings.vacationBodyText}
+                      onChange={(event) => setSettings((prev) => ({ ...prev, vacationBodyText: event.target.value }))}
+                      rows={4}
+                      placeholder="Vacation responder body"
+                      className={`${fieldClass} resize-y`}
+                    />
+                  </div>
+                </div>
+              </SettingsSection>
+
+              <SettingsSection
+                title="Signatures"
+                description="Saved signatures for your primary connected mailbox."
+                icon={FiEdit3}
+                right={
+                  <button type="button" onClick={createSignature} className={btnPrimary}>
+                    Add signature
+                  </button>
+                }
+              >
+                <div className="space-y-2">
+                  {signatures.map((row) => (
+                    <div
+                      key={row.id}
+                      className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] px-4 py-3"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-[#111827]">{row.name}</p>
+                        {row.isDefault ? <p className="text-xs font-medium text-[#701CC0]">Default</p> : null}
                       </div>
-                    ))}
-                  </div>
-                </section>
+                      <button type="button" onClick={() => deleteSignature(row.id)} className="text-sm font-medium text-red-600 hover:underline">
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </SettingsSection>
 
-                <section className="rounded-xl border border-[#E5E7EB] p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="font-semibold text-[#111827]">Templates</h2>
-                    <button onClick={createTemplate} className="rounded-lg bg-[#701CC0] text-white px-3 py-1.5 text-sm">
-                      Add Template
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {templates.map((row) => (
-                      <div key={row.id} className="flex items-center justify-between rounded-lg border border-[#E5E7EB] px-3 py-2">
-                        <div>
-                          <p className="text-sm font-medium text-[#111827]">{row.name}</p>
-                          {row.isDefault ? <p className="text-xs text-[#701CC0]">Default</p> : null}
-                        </div>
-                        <button onClick={() => deleteTemplate(row.id)} className="text-sm text-red-600">
-                          Remove
-                        </button>
+              <SettingsSection
+                title="Templates"
+                description="Reusable email templates."
+                icon={FiFileText}
+                right={
+                  <button type="button" onClick={createTemplate} className={btnPrimary}>
+                    Add template
+                  </button>
+                }
+              >
+                <div className="space-y-2">
+                  {templates.map((row) => (
+                    <div
+                      key={row.id}
+                      className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] px-4 py-3"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-[#111827]">{row.name}</p>
+                        {row.isDefault ? <p className="text-xs font-medium text-[#701CC0]">Default</p> : null}
                       </div>
-                    ))}
-                  </div>
-                </section>
+                      <button type="button" onClick={() => deleteTemplate(row.id)} className="text-sm font-medium text-red-600 hover:underline">
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </SettingsSection>
 
-                <section className="rounded-xl border border-[#E5E7EB] p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="font-semibold text-[#111827]">Contact Tags</h2>
-                    <button onClick={createTag} className="rounded-lg bg-[#701CC0] text-white px-3 py-1.5 text-sm">
-                      Add Tag
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {contactTags.length === 0 ? (
-                      <p className="text-sm text-[#6B7280]">No tags yet.</p>
-                    ) : (
-                      contactTags.map((tag) => (
-                        <div key={tag.id} className="flex items-center justify-between rounded-lg border border-[#E5E7EB] px-3 py-2">
-                          <div className="inline-flex items-center gap-2">
-                            <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: tag.color || "#701CC0" }} />
-                            <p className="text-sm font-medium text-[#111827]">{tag.name}</p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <button onClick={() => editTag(tag)} className="text-sm text-[#374151]">
-                              Edit
-                            </button>
-                            <button onClick={() => deleteTag(tag)} className="text-sm text-red-600">
-                              Remove
-                            </button>
-                          </div>
+              <SettingsSection
+                title="Contact tags"
+                description="Organize contacts with colored tags."
+                icon={FiTag}
+                right={
+                  <button type="button" onClick={createTag} className={btnPrimary}>
+                    Add tag
+                  </button>
+                }
+              >
+                <div className="space-y-2">
+                  {contactTags.length === 0 ? (
+                    <p className="text-sm text-[#6B7280]">No tags yet.</p>
+                  ) : (
+                    contactTags.map((tag) => (
+                      <div
+                        key={tag.id}
+                        className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] px-4 py-3"
+                      >
+                        <div className="inline-flex items-center gap-2">
+                          <span
+                            className="inline-block h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: tag.color || "#701CC0" }}
+                          />
+                          <p className="text-sm font-medium text-[#111827]">{tag.name}</p>
                         </div>
-                      ))
-                    )}
-                  </div>
-                </section>
-
-                <section className="rounded-xl border border-[#E5E7EB] p-4">
-                  <h2 className="font-semibold text-[#111827] mb-3">Contact Field Visibility</h2>
-                  <label className="flex items-center gap-2 text-sm text-[#374151]">
-                    <input
-                      type="checkbox"
-                      checked={contactVisibility.showPhone}
-                      onChange={(event) =>
-                        setContactVisibility((prev) => ({
-                          ...prev,
-                          showPhone: event.target.checked,
-                        }))
-                      }
-                    />
-                    Show phone field
-                  </label>
-                  <label className="mt-2 flex items-center gap-2 text-sm text-[#374151]">
-                    <input
-                      type="checkbox"
-                      checked={contactVisibility.showBusiness}
-                      onChange={(event) =>
-                        setContactVisibility((prev) => ({
-                          ...prev,
-                          showBusiness: event.target.checked,
-                        }))
-                      }
-                    />
-                    Show business field
-                  </label>
-                  <label className="mt-2 flex items-center gap-2 text-sm text-[#374151]">
-                    <input
-                      type="checkbox"
-                      checked={contactVisibility.showWebsite}
-                      onChange={(event) =>
-                        setContactVisibility((prev) => ({
-                          ...prev,
-                          showWebsite: event.target.checked,
-                        }))
-                      }
-                    />
-                    Show website field
-                  </label>
-                </section>
-
-                <section className="rounded-xl border border-[#E5E7EB] p-4">
-                  <h2 className="font-semibold text-[#111827] mb-3">Blocked Senders</h2>
-                  <div className="space-y-2">
-                    {blockedSenders.length === 0 ? (
-                      <p className="text-sm text-[#6B7280]">No blocked senders.</p>
-                    ) : (
-                      blockedSenders.map((sender) => (
-                        <div key={sender.id} className="rounded-lg border border-[#E5E7EB] px-3 py-2 flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-[#111827]">{sender.name || sender.email}</p>
-                            <p className="text-xs text-[#6B7280]">{sender.email}</p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeBlockedSender(sender.id)}
-                            className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-600"
-                          >
-                            Unblock
+                        <div className="flex items-center gap-3">
+                          <button type="button" onClick={() => editTag(tag)} className="text-sm font-medium text-[#374151] hover:text-[#701CC0]">
+                            Edit
+                          </button>
+                          <button type="button" onClick={() => deleteTag(tag)} className="text-sm font-medium text-red-600 hover:underline">
+                            Remove
                           </button>
                         </div>
-                      ))
-                    )}
-                  </div>
-                </section>
-
-                <section className="rounded-xl border border-[#E5E7EB] p-4">
-                  <h2 className="font-semibold text-[#111827] mb-3">Domain Mail Accounts (SMTP + POP/IMAP)</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <input
-                      value={newProvider.accountEmail}
-                      onChange={(event) => setNewProvider((prev) => ({ ...prev, accountEmail: event.target.value }))}
-                      placeholder="From email (domain mailbox)"
-                      className="rounded-lg border border-[#D1D5DB] px-3 py-2 text-sm"
-                    />
-                    <input
-                      value={newProvider.providerLabel}
-                      onChange={(event) => setNewProvider((prev) => ({ ...prev, providerLabel: event.target.value }))}
-                      placeholder="Label (optional)"
-                      className="rounded-lg border border-[#D1D5DB] px-3 py-2 text-sm"
-                    />
-                    <input
-                      value={newProvider.smtpHost}
-                      onChange={(event) => setNewProvider((prev) => ({ ...prev, smtpHost: event.target.value }))}
-                      placeholder="SMTP host"
-                      className="rounded-lg border border-[#D1D5DB] px-3 py-2 text-sm"
-                    />
-                    <input
-                      value={newProvider.smtpPort}
-                      onChange={(event) => setNewProvider((prev) => ({ ...prev, smtpPort: event.target.value }))}
-                      placeholder="SMTP port"
-                      className="rounded-lg border border-[#D1D5DB] px-3 py-2 text-sm"
-                    />
-                    <input
-                      value={newProvider.smtpUsername}
-                      onChange={(event) => setNewProvider((prev) => ({ ...prev, smtpUsername: event.target.value }))}
-                      placeholder="SMTP username"
-                      className="rounded-lg border border-[#D1D5DB] px-3 py-2 text-sm"
-                    />
-                    <input
-                      type="password"
-                      value={newProvider.smtpPassword}
-                      onChange={(event) => setNewProvider((prev) => ({ ...prev, smtpPassword: event.target.value }))}
-                      placeholder="SMTP password"
-                      className="rounded-lg border border-[#D1D5DB] px-3 py-2 text-sm"
-                    />
-                    <input
-                      value={newProvider.imapHost}
-                      onChange={(event) => setNewProvider((prev) => ({ ...prev, imapHost: event.target.value }))}
-                      placeholder="IMAP host (optional)"
-                      className="rounded-lg border border-[#D1D5DB] px-3 py-2 text-sm"
-                    />
-                    <input
-                      value={newProvider.popHost}
-                      onChange={(event) => setNewProvider((prev) => ({ ...prev, popHost: event.target.value }))}
-                      placeholder="POP host (optional)"
-                      className="rounded-lg border border-[#D1D5DB] px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={createProviderAccount}
-                    className="mt-3 rounded-lg bg-[#701CC0] text-white px-4 py-2 text-sm"
-                  >
-                    Save Mail Account
-                  </button>
-                  <div className="mt-4 space-y-2">
-                    {providerAccounts.length === 0 ? (
-                      <p className="text-sm text-[#6B7280]">No domain mail accounts configured.</p>
-                    ) : (
-                      providerAccounts.map((account) => (
-                        <div key={account.id} className="rounded-lg border border-[#E5E7EB] px-3 py-2 flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium text-[#111827]">{account.accountEmail}</p>
-                            <p className="text-xs text-[#6B7280]">
-                              SMTP {account.smtpHost}:{account.smtpPort}
-                              {account.imapHost ? ` · IMAP ${account.imapHost}` : ""}
-                              {account.popHost ? ` · POP ${account.popHost}` : ""}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => testProviderAccount(account.id)}
-                              className="rounded-md border border-[#D1D5DB] px-2 py-1 text-xs text-[#374151]"
-                            >
-                              {testingProviderId === account.id ? "Testing..." : "Test"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => deleteProviderAccount(account.id)}
-                              className="rounded-md border border-red-200 px-2 py-1 text-xs text-red-600"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </section>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={saveSettings}
-                    disabled={saving}
-                    className="rounded-lg bg-[#701CC0] text-white px-4 py-2 text-sm disabled:opacity-50"
-                  >
-                    {saving ? "Saving..." : "Save Settings"}
-                  </button>
-                  {status ? <span className="text-sm text-[#4B5563]">{status}</span> : null}
+                      </div>
+                    ))
+                  )}
                 </div>
+              </SettingsSection>
+
+              <SettingsSection
+                title="Contact field visibility"
+                description="Choose which optional fields appear in the contacts UI."
+                icon={FiEye}
+              >
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
+                    <div>
+                      <p className="font-medium text-[#111827]">Phone</p>
+                      <p className="text-sm text-[#6B7280]">Show phone field on contact records.</p>
+                    </div>
+                    <Toggle
+                      checked={contactVisibility.showPhone}
+                      onChange={(v) => setContactVisibility((prev) => ({ ...prev, showPhone: v }))}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
+                    <div>
+                      <p className="font-medium text-[#111827]">Business</p>
+                      <p className="text-sm text-[#6B7280]">Show business name field.</p>
+                    </div>
+                    <Toggle
+                      checked={contactVisibility.showBusiness}
+                      onChange={(v) => setContactVisibility((prev) => ({ ...prev, showBusiness: v }))}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="font-medium text-[#111827]">Website</p>
+                      <p className="text-sm text-[#6B7280]">Show website field.</p>
+                    </div>
+                    <Toggle
+                      checked={contactVisibility.showWebsite}
+                      onChange={(v) => setContactVisibility((prev) => ({ ...prev, showWebsite: v }))}
+                    />
+                  </div>
+                </div>
+              </SettingsSection>
+
+              <SettingsSection title="Blocked senders" description="Messages from these addresses are suppressed." icon={FiSlash}>
+                <div className="space-y-2">
+                  {blockedSenders.length === 0 ? (
+                    <p className="text-sm text-[#6B7280]">No blocked senders.</p>
+                  ) : (
+                    blockedSenders.map((sender) => (
+                      <div
+                        key={sender.id}
+                        className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] px-4 py-3"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-[#111827]">{sender.name || sender.email}</p>
+                          <p className="text-xs text-[#6B7280]">{sender.email}</p>
+                        </div>
+                        <button type="button" onClick={() => removeBlockedSender(sender.id)} className={btnDangerOutline}>
+                          Unblock
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </SettingsSection>
+
+              <SettingsSection
+                title="Domain mail (SMTP / IMAP / POP)"
+                description="Send from domain mailboxes with custom SMTP credentials."
+                icon={FiServer}
+              >
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <input
+                    value={newProvider.accountEmail}
+                    onChange={(event) => setNewProvider((prev) => ({ ...prev, accountEmail: event.target.value }))}
+                    placeholder="From email (domain mailbox)"
+                    className={fieldClass}
+                  />
+                  <input
+                    value={newProvider.providerLabel}
+                    onChange={(event) => setNewProvider((prev) => ({ ...prev, providerLabel: event.target.value }))}
+                    placeholder="Label (optional)"
+                    className={fieldClass}
+                  />
+                  <input
+                    value={newProvider.smtpHost}
+                    onChange={(event) => setNewProvider((prev) => ({ ...prev, smtpHost: event.target.value }))}
+                    placeholder="SMTP host"
+                    className={fieldClass}
+                  />
+                  <input
+                    value={newProvider.smtpPort}
+                    onChange={(event) => setNewProvider((prev) => ({ ...prev, smtpPort: event.target.value }))}
+                    placeholder="SMTP port"
+                    className={fieldClass}
+                  />
+                  <input
+                    value={newProvider.smtpUsername}
+                    onChange={(event) => setNewProvider((prev) => ({ ...prev, smtpUsername: event.target.value }))}
+                    placeholder="SMTP username"
+                    className={fieldClass}
+                  />
+                  <input
+                    type="password"
+                    value={newProvider.smtpPassword}
+                    onChange={(event) => setNewProvider((prev) => ({ ...prev, smtpPassword: event.target.value }))}
+                    placeholder="SMTP password"
+                    className={fieldClass}
+                  />
+                  <input
+                    value={newProvider.imapHost}
+                    onChange={(event) => setNewProvider((prev) => ({ ...prev, imapHost: event.target.value }))}
+                    placeholder="IMAP host (optional)"
+                    className={fieldClass}
+                  />
+                  <input
+                    value={newProvider.popHost}
+                    onChange={(event) => setNewProvider((prev) => ({ ...prev, popHost: event.target.value }))}
+                    placeholder="POP host (optional)"
+                    className={fieldClass}
+                  />
+                </div>
+                <button type="button" onClick={createProviderAccount} className={`${btnPrimary} mt-4`}>
+                  Save mail account
+                </button>
+                <div className="mt-6 space-y-2">
+                  {providerAccounts.length === 0 ? (
+                    <p className="text-sm text-[#6B7280]">No domain mail accounts configured.</p>
+                  ) : (
+                    providerAccounts.map((account) => (
+                      <div
+                        key={account.id}
+                        className="flex flex-col gap-3 rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-[#111827]">{account.accountEmail}</p>
+                          <p className="text-xs text-[#6B7280]">
+                            SMTP {account.smtpHost}:{account.smtpPort}
+                            {account.imapHost ? ` · IMAP ${account.imapHost}` : ""}
+                            {account.popHost ? ` · POP ${account.popHost}` : ""}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button type="button" onClick={() => testProviderAccount(account.id)} className={btnSecondary}>
+                            {testingProviderId === account.id ? "Testing…" : "Test"}
+                          </button>
+                          <button type="button" onClick={() => deleteProviderAccount(account.id)} className={btnDangerOutline}>
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </SettingsSection>
+
+              <div className="sticky bottom-4 z-10 flex flex-col gap-3 rounded-xl border border-[#701CC0]/20 bg-white/95 p-4 shadow-lg backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button type="button" onClick={saveSettings} disabled={saving} className={btnPrimary}>
+                    {saving ? "Saving…" : "Save settings"}
+                  </button>
+                  {status ? (
+                    <span className={`text-sm ${status.includes("Failed") || status.includes("failed") ? "text-red-600" : "text-[#6B7280]"}`}>
+                      {status}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="text-xs text-[#9CA3AF]">
+                  Applies tracking, vacation, and contact visibility for your user account (synced across connected addresses where applicable).
+                </p>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </main>
       </div>
     </>
   );
 };
 
-export const getServerSideProps: GetServerSideProps = async (ctx) => {
+export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
   const session = await getServerSession(ctx.req, ctx.res, authOptions);
   if (!session) {
     return { redirect: { destination: "/login", permanent: false } };
@@ -756,7 +912,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   if (role !== "admin" && role !== "staff") {
     return { redirect: { destination: "/client", permanent: false } };
   }
-  return { props: {} };
+  return { props: { userRole: typeof role === "string" ? role : "" } };
 };
 
 export default EmailSettingsPage;

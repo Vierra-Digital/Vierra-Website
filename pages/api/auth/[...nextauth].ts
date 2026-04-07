@@ -5,27 +5,22 @@ import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import crypto from "crypto";
+import { resolveGoogleWebClientCredentials } from "@/lib/googleOAuthClient";
 
-
-declare module "next-auth" {
-  interface Profile {
-    hd?: string;
-  }
-}
+const googleWebOAuth = resolveGoogleWebClientCredentials();
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: googleWebOAuth.clientId,
+      clientSecret: googleWebOAuth.clientSecret,
       authorization: {
         params: {
           prompt: "consent",
           access_type: "offline",
           response_type: "code",
-          hd: "vierradev.com",
         },
       },
     }),
@@ -66,15 +61,6 @@ export const authOptions: NextAuthOptions = {
   ],
 
   callbacks: {
-    async signIn({ user, account, profile }) {
-      if (account?.provider === "google") {
-        const email = user.email?.toLowerCase() ?? "";
-        const hd = (profile as any)?.hd as string | undefined;
-        if (hd === "vierradev.com" || email.endsWith("@vierradev.com")) return true;
-        return false;
-      }
-      return true;
-    },
     async jwt({ token, user }) {
       if (user) {
         token.id = (user as any).id;    

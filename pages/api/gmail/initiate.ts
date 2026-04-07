@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { requireSession } from "@/lib/auth";
 import { asStr, issueOauthStateCookie } from "@/lib/api/oauth";
 import { serialize as serializeCookie } from "cookie";
+import { resolveGoogleWebClientCredentials } from "@/lib/googleOAuthClient";
 
 const SCOPES = [
   "openid",
@@ -41,22 +42,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const source = asStr(req.query.from)?.trim().toLowerCase() || "settings";
-  const explicitClient = asStr(req.query.client)?.toLowerCase() || "";
-  const primaryClientId = process.env.GOOGLE_CLIENT_ID;
-  const gmailClientId = process.env.GOOGLE_GMAIL_CLIENT_ID;
-  // Default to dedicated Gmail OAuth credentials (the currently working client).
-  // Optional override via ?client=primary if needed.
-  const clientSelection =
-    explicitClient === "primary" && primaryClientId
-      ? "primary"
-      : gmailClientId
-        ? "gmail"
-        : primaryClientId
-          ? "primary"
-          : "";
-  const clientId = clientSelection === "gmail" ? gmailClientId : primaryClientId;
+  const { clientId } = resolveGoogleWebClientCredentials();
   if (!clientId) {
-    res.status(500).send("GOOGLE_GMAIL_CLIENT_ID (or GOOGLE_CLIENT_ID) is not configured.");
+    res.status(500).send("Configure GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.");
     return;
   }
 
@@ -94,17 +82,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       maxAge: 10 * 60,
     })
   );
-  appendSetCookie(
-    res,
-    serializeCookie("gm_oauth_client", clientSelection, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/api/gmail/callback",
-      maxAge: 10 * 60,
-    })
-  );
-
   const authUrl =
     "https://accounts.google.com/o/oauth2/v2/auth?" +
     new URLSearchParams({

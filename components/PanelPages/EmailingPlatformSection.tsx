@@ -2132,11 +2132,23 @@ ${sourceText}`;
             {gmailLoading ? (
               <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-5 text-sm text-[#6B7280]">Checking connected accounts...</div>
             ) : connectedAccounts.length === 0 ? (
-              <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-5 text-sm text-[#6B7280]">No connected Google accounts found.</div>
+              <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-5 text-sm text-[#374151]">
+                <p className="text-[#6B7280]">No connected Google accounts yet. Connect Gmail to read and send mail from this panel.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    window.location.assign("/api/gmail/initiate?from=email-panel");
+                  }}
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#701CC0] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#5f17a5]"
+                >
+                  <FiPlus className="h-4 w-4" />
+                  Add Gmail account
+                </button>
+              </div>
             ) : connectedAccounts.length === 1 ? (
               <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-5 text-sm text-[#374151]">
                 <div className="text-[#111827] font-medium">{connectedAccounts[0].email}</div>
-                <div className="mt-3">
+                <div className="mt-3 flex flex-wrap items-center gap-3">
                   <button
                     type="button"
                     onClick={() => {
@@ -2151,6 +2163,16 @@ ${sourceText}`;
                   >
                     Continue
                     <FiChevronsRight className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.location.assign("/api/gmail/initiate?from=email-panel");
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm font-medium text-[#374151] transition-colors hover:border-[#701CC0] hover:bg-[#F9FAFB]"
+                  >
+                    <FiPlus className="h-4 w-4" />
+                    Add Gmail account
                   </button>
                 </div>
               </div>
@@ -2169,7 +2191,7 @@ ${sourceText}`;
                     </label>
                   ))}
                 </div>
-                <div className="pt-2">
+                <div className="flex flex-wrap items-center gap-3 pt-2">
                   <button
                     type="button"
                     disabled={!canContinue}
@@ -2184,6 +2206,16 @@ ${sourceText}`;
                   >
                     Continue
                     <FiChevronsRight className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.location.assign("/api/gmail/initiate?from=email-panel");
+                    }}
+                    className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#374151] transition-colors hover:border-[#701CC0] hover:bg-[#F9FAFB]"
+                  >
+                    <FiPlus className="h-4 w-4" />
+                    Add Gmail account
                   </button>
                 </div>
               </div>
@@ -2469,68 +2501,90 @@ ${sourceText}`;
                                     </button>
                                   ) : null}
                                 </div>
-                                <div className="relative">
+                                <div className="relative" ref={contactFilterMenuRef}>
                                   <button
                                     type="button"
                                     onClick={() => setContactFilterOpen((prev) => !prev)}
-                                    className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-xs font-medium text-[#374151] hover:bg-[#F9FAFB]"
+                                    className="inline-flex items-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm text-[#374151] shadow-sm transition-colors duration-200 hover:border-[#701CC0] hover:bg-gray-50"
                                   >
-                                    <FiFilter className="w-3.5 h-3.5" />
-                                    Filter
-                                    <FiChevronDown className="w-3.5 h-3.5" />
+                                    <FiFilter className="h-4 w-4" />
+                                    <span className="text-sm font-medium">Filter</span>
+                                    <svg
+                                      className={`h-4 w-4 transition-transform duration-200 ${contactFilterOpen ? "rotate-180" : ""}`}
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                      aria-hidden
+                                    >
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
                                   </button>
                                   {contactFilterOpen ? (
-                                    <div
-                                      ref={contactFilterMenuRef}
-                                      className="absolute right-0 z-[160] mt-2 w-56 rounded-xl border border-[#E5E7EB] bg-white p-3 shadow-lg space-y-2"
-                                    >
-                                      <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Sort & Filter</p>
-                                      <div className="relative">
-                                        <FiChevronDown className="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 text-[#7A8098] pointer-events-none" />
-                                        <select
-                                          value={contactTagFilter}
-                                          onChange={(e) => {
-                                            setContactTagFilter(e.target.value);
-                                            setContactFilterOpen(false);
-                                          }}
-                                          className="appearance-none w-full rounded-lg border border-[#E5E7EB] bg-white pl-2.5 pr-6 py-0.5 text-[10px] text-[#374151]"
-                                        >
-                                          <option value="">All Tags</option>
-                                          {contactsTags.map((tag) => (
-                                            <option key={tag.id} value={tag.id}>
-                                              {tag.name}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      </div>
-                                      <div className="relative">
-                                        <FiChevronDown className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 text-[#7A8098] pointer-events-none" />
-                                        <select
-                                          value={contactSourceFilter}
-                                          onChange={(e) => {
-                                            setContactSourceFilter((e.target.value || "") as "" | "MANUAL" | "GMAIL" | "CSV");
-                                            setContactFilterOpen(false);
-                                          }}
-                                          className="appearance-none w-full rounded-lg border border-[#E5E7EB] bg-white pl-3 pr-7 py-1 text-[11px] text-[#374151]"
-                                        >
-                                          <option value="">All Sources</option>
-                                          <option value="MANUAL">Manual</option>
-                                          <option value="GMAIL">Gmail</option>
-                                          <option value="CSV">CSV</option>
-                                        </select>
-                                      </div>
-                                      <div className="pt-3 border-t border-[#E5E7EB]">
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setContactTagFilter("");
-                                            setContactSourceFilter("");
-                                            setContactFilterOpen(false);
-                                          }}
-                                          className="w-full text-xs py-2 px-3 rounded-lg font-medium text-[#6B7280] bg-gray-50 hover:bg-gray-100 hover:text-[#374151] transition-colors duration-200"
-                                        >
-                                          Clear All Filters
-                                        </button>
+                                    <div className="absolute right-0 z-[160] mt-2 w-72 rounded-xl border border-[#E5E7EB] bg-white py-4 shadow-xl">
+                                      <div className="px-5">
+                                        <h3 className="mb-4 text-sm font-semibold text-[#111827]">{"Sort & Filter"}</h3>
+
+                                        <div className="mb-5">
+                                          <label className="mb-2 block text-xs font-medium text-[#6B7280]">Tag</label>
+                                          <div className="relative">
+                                            <select
+                                              value={contactTagFilter}
+                                              onChange={(e) => {
+                                                setContactTagFilter(e.target.value);
+                                              }}
+                                              className="w-full appearance-none rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 pr-10 text-sm text-[#111827] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                                            >
+                                              <option value="">All tags</option>
+                                              {contactsTags.map((tag) => (
+                                                <option key={tag.id} value={tag.id}>
+                                                  {tag.name}
+                                                </option>
+                                              ))}
+                                            </select>
+                                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                                              <svg className="h-4 w-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                              </svg>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        <div className="mb-5">
+                                          <label className="mb-2 block text-xs font-medium text-[#6B7280]">Source</label>
+                                          <div className="relative">
+                                            <select
+                                              value={contactSourceFilter}
+                                              onChange={(e) => {
+                                                setContactSourceFilter((e.target.value || "") as "" | "MANUAL" | "GMAIL" | "CSV");
+                                              }}
+                                              className="w-full appearance-none rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 pr-10 text-sm text-[#111827] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                                            >
+                                              <option value="">All sources</option>
+                                              <option value="MANUAL">Manual</option>
+                                              <option value="GMAIL">Gmail</option>
+                                              <option value="CSV">CSV</option>
+                                            </select>
+                                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+                                              <svg className="h-4 w-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                              </svg>
+                                            </div>
+                                          </div>
+                                        </div>
+
+                                        <div className="border-t border-[#E5E7EB] pt-3">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setContactTagFilter("");
+                                              setContactSourceFilter("");
+                                              setContactFilterOpen(false);
+                                            }}
+                                            className="w-full rounded-lg bg-gray-50 px-3 py-2 text-xs font-medium text-[#6B7280] transition-colors duration-200 hover:bg-gray-100 hover:text-[#374151]"
+                                          >
+                                            Clear All Filters
+                                          </button>
+                                        </div>
                                       </div>
                                     </div>
                                   ) : null}
