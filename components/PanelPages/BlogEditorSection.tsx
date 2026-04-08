@@ -1610,11 +1610,12 @@ const InsertImageModal: React.FC<{
             type="file"
             accept="image/*"
             className="hidden"
-            onChange={(e) => {
+            onChange={async (e) => {
               const file = e.target.files?.[0]
               if (file) {
                 setUploading(true)
-                onFileUpload(file)
+                await onFileUpload(file)
+                setUploading(false)
               }
             }}
           />
