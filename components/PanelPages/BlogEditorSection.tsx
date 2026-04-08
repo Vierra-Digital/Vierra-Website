@@ -13,6 +13,7 @@ const normalizeUrl = (u: string) => {
   const t = u.trim()
   if (/^(https?:|data:|blob:)/i.test(t)) return t
   if (t.startsWith('//')) return `https:${t}`
+  if (t.startsWith('/')) return t
   return `https://${t.replace(/^\/+/, '')}`
 }
 
@@ -1486,11 +1487,11 @@ const RichTextEditor: React.FC<{
           setImageUrl('')
         }}
         onFileUpload={async (file) => {
-          setImageModalOpen(false)
           const permanentUrl = await uploadBlogImage(file)
           if (permanentUrl) {
             insertPlaceholder('image', permanentUrl)
           }
+          setImageModalOpen(false)
         }}
         onCancel={() => { setImageModalOpen(false); setImageUrl('') }}
       />
