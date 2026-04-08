@@ -108,6 +108,7 @@ export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsh
 
   const workbookBytes = await workbook.xlsx.writeBuffer();
   const workbookBuffer = Buffer.from(workbookBytes);
+  const pdfDataBytes = new Uint8Array(workbookBuffer);
   const fileName = "Contacts.xlsx";
 
   const existing = await prisma.storedFile.findFirst({
@@ -124,7 +125,7 @@ export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsh
       where: { id: existing.id },
       data: {
         name: fileName,
-        pdfData: workbookBuffer,
+        pdfData: pdfDataBytes,
         isDeletionProtected: true,
       },
     });
@@ -135,7 +136,7 @@ export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsh
         name: fileName,
         signingTokenId,
         fileType: "xlsx",
-        pdfData: workbookBuffer,
+        pdfData: pdfDataBytes,
         isDeletionProtected: true,
       },
     });

@@ -3,6 +3,7 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { getSessionData, saveSessionData, deleteSessionFile, PdfField } from '@/lib/sessionStore';
 import { sendSignedDocumentEmail, sendSignerCopyEmail } from '@/lib/emailSender';
 import { prisma } from '@/lib/prisma';
+import { toPrismaBytes } from '@/lib/api/image';
 
 interface SubmitSignatureBody {
     tokenId: string;
@@ -149,7 +150,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             if (storedFiles.length > 0) {
                 await prisma.storedFile.updateMany({
                     where: { signingTokenId: tokenId },
-                    data: { pdfData: signedPdfBytes },
+                    data: { pdfData: toPrismaBytes(signedPdfBytes) },
                 });
                 console.log(`[submit-signature] Saved signed PDF to database for ${storedFiles.length} stored file(s), token ${tokenId}`);
             }
