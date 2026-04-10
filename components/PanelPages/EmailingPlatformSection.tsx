@@ -28,6 +28,7 @@ import {
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
+import RichTextEditor from "@/components/ui/RichTextEditor";
 
 const inter = Inter({ subsets: ["latin"] });
 const PAGE_SIZE = 50;
@@ -3482,12 +3483,9 @@ ${sourceText}`;
                 />
               </div>
 
-              <textarea
+              <RichTextEditor
                 value={composeBody}
-                onChange={(event) => setComposeBody(event.target.value)}
-                rows={8}
-                placeholder="Write your message..."
-                className="w-full rounded-md border border-[#E7E9F2] px-2.5 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] resize-none"
+                onChange={setComposeBody}
               />
             </div>
             {composeError ? <div className="mt-2 text-sm text-red-600">{composeError}</div> : null}
