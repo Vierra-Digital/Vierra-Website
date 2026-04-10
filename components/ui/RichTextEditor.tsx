@@ -1423,14 +1423,6 @@ const RichTextEditor: React.FC<{
             display: none !important;
           }
         `}</style>
-        
-        <textarea
-          className="absolute -left-[10000px] w-[1px] h-[1px] opacity-0"
-          aria-hidden
-          tabIndex={-1}
-          value={value}
-          readOnly
-        />
       </div>
       <InsertLinkModal
         isOpen={linkModalOpen}

@@ -3386,8 +3386,8 @@ ${sourceText}`;
 
       {isComposeOpen ? (
         <div
-          className={`fixed z-[120] border border-[#E5E7EB] bg-white shadow-2xl overflow-hidden ${
-            composeExpanded ? "inset-4 rounded-2xl" : "bottom-4 right-4 w-[520px] rounded-2xl"
+          className={`fixed z-[120] border border-[#E5E7EB] bg-white shadow-2xl overflow-hidden rounded-2xl ${
+            composeExpanded ? "inset-4" : "bottom-4 right-4 w-[520px]"
           }`}
         >
           <div className="bg-[#701CC0] text-white px-4 py-2 flex items-center justify-between">
