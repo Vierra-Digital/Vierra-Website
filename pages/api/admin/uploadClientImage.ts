@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-import { decodeBase64Image } from "@/lib/api/image";
+import { decodeBase64Image, toPrismaBytes } from "@/lib/api/image";
 
 export const config = {
   api: {
@@ -31,7 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const updated = await prisma.client.update({
       where: { id: String(clientId) },
       data: { 
-        image: imageBuffer,
+        image: toPrismaBytes(imageBuffer),
         imageMimeType: mimeType
       },
       select: { id: true, name: true, email: true, businessName: true },
