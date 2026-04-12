@@ -992,7 +992,7 @@ const RichTextEditor: React.FC<{
   }
 
   return (
-    <div className="border border-[#D1D5DB] rounded-lg overflow-hidden">
+    <div className="border border-[#D1D5DB] rounded-lg overflow-x-hidden overflow-y-auto flex flex-col flex-1">
       
       <div className="bg-gray-50 border-b border-[#D1D5DB] px-3 py-2 flex items-center gap-2">
         <button
@@ -1259,7 +1259,7 @@ const RichTextEditor: React.FC<{
 
       
       <div 
-        className="min-h-[420px] max-h-[80vh] overflow-auto rounded-md resize-y"
+        className="min-h-[200px] max-h-[80vh] overflow-auto rounded-md flex-1 flex flex-col"
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
@@ -1269,7 +1269,7 @@ const RichTextEditor: React.FC<{
           ref={editableRef}
           contentEditable
           suppressContentEditableWarning
-          className="w-full min-h-[420px] p-4 bg-white border-0 outline-none text-sm text-[#111827] prose max-w-none"
+          className="w-full min-h-[200px] p-4 bg-white border-0 outline-none text-sm text-[#111827] prose max-w-none flex-1"
           onKeyDown={(e) => {
             const navKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab', 'Shift', 'Control', 'Alt', 'Meta']
             if (navKeys.includes(e.key)) return
