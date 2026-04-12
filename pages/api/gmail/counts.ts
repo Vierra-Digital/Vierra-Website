@@ -6,6 +6,7 @@ import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 type GmailLabel = {
   id?: string;
   messagesUnread?: number;
+  messagesTotal?: number;
 };
 
 type GmailLabelsResponse = {
@@ -23,6 +24,11 @@ function asStr(v: string | string[] | undefined) {
 function readLabelUnreadCount(labels: GmailLabel[], id: string) {
   const label = labels.find((entry) => (entry.id || "").toUpperCase() === id.toUpperCase());
   return Number(label?.messagesUnread || 0);
+}
+
+function readLabelTotalMessages(labels: GmailLabel[], id: string) {
+  const label = labels.find((entry) => (entry.id || "").toUpperCase() === id.toUpperCase());
+  return Number(label?.messagesTotal || 0);
 }
 
 async function fetchEstimate(accessToken: string, query: string) {
@@ -44,11 +50,26 @@ async function fetchEstimate(accessToken: string, query: string) {
   return Number(payload.resultSizeEstimate || 0);
 }
 
+/** Draft count for the DRAFT label — matches `labelIds=DRAFT` in messages list (not `q=in:drafts`, whose resultSizeEstimate can be wildly off). */
+async function fetchDraftLabelMessageTotal(accessToken: string) {
+  const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/labels/DRAFT", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`gmail label DRAFT failed ${response.status}: ${text}`);
+  }
+  const payload = (await response.json()) as { messagesTotal?: number };
+  return Number(payload.messagesTotal ?? 0);
+}
+
 async function fetchMailboxCounts(accessToken: string) {
   const [inbox, sent, draftsTotal, spam, trash, archive] = await Promise.all([
     fetchEstimate(accessToken, "in:inbox is:unread"),
     fetchEstimate(accessToken, "in:sent is:unread"),
-    fetchEstimate(accessToken, "in:drafts"),
+    fetchDraftLabelMessageTotal(accessToken),
     fetchEstimate(accessToken, "in:spam is:unread"),
     fetchEstimate(accessToken, "in:trash is:unread"),
     fetchEstimate(accessToken, "-in:inbox -in:sent -in:drafts -in:spam -in:trash is:unread"),
@@ -73,7 +94,7 @@ async function fetchMailboxCounts(accessToken: string) {
   return {
     inbox: Number.isFinite(inbox) ? inbox : readLabelUnreadCount(labelsFallback, "INBOX"),
     sent: Number.isFinite(sent) ? sent : readLabelUnreadCount(labelsFallback, "SENT"),
-    drafts: Number.isFinite(draftsTotal) ? draftsTotal : readLabelUnreadCount(labelsFallback, "DRAFT"),
+    drafts: Number.isFinite(draftsTotal) ? draftsTotal : readLabelTotalMessages(labelsFallback, "DRAFT"),
     spam: Number.isFinite(spam) ? spam : readLabelUnreadCount(labelsFallback, "SPAM"),
     trash: Number.isFinite(trash) ? trash : readLabelUnreadCount(labelsFallback, "TRASH"),
     archive,
@@ -81,7 +102,7 @@ async function fetchMailboxCounts(accessToken: string) {
 }
 
 function isAuthError(error: unknown) {
-  return error instanceof Error && /gmail unread estimate failed 401/i.test(error.message);
+  return error instanceof Error && /gmail (unread estimate|label DRAFT) failed 401/i.test(error.message);
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
