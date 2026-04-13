@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
+import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 
 function asStr(v: unknown) {
   return typeof v === "string" ? v.trim() : "";
@@ -104,6 +105,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         clickTrackingEnabled: Boolean(req.body?.clickTrackingEnabled ?? true),
       },
     });
+
+    const tokenResult = await getValidGmailAccessToken(userId, accountEmail);
+    if (!tokenResult.ok) {
+      res.status(tokenResult.reason === "account_not_found" ? 404 : 401).json({ message: tokenResult.message });
+      return;
+    }
+
+    const setVacationWithToken = async (accessToken: string) => fetch("https://gmail.googleapis.com/gmail/v1/users/me/settings/vacation", {
+      method: "PUT",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        enableAutoReply: req.body?.vacationResponderEnabled,
+        responseSubject: req.body?.vacationSubject,
+        responseBodyPlainText: req.body?.vacationBodyText,
+        responseBodyHtml: req.body?.vacationBodyHtml,
+        startTime: req.body?.vacationStartAt,
+        endTime: req.body?.vacationEndAt
+      })
+    });
+
+    let vacationResult = await setVacationWithToken(tokenResult.accessToken);
+    if (vacationResult.status == 401) {
+      const refreshResult = await getValidGmailAccessToken(userId, accountEmail, { forceRefresh: true });
+      if (!refreshResult.ok) {
+        res.status(401).json({ message: refreshResult.message });
+        return;
+      }
+      vacationResult = await setVacationWithToken(refreshResult.accessToken);
+    }
+    if (!vacationResult.ok) {
+      res.status(502).json({ message: "Failed to update vacation settings" });
+      return;
+    }
+
     res.status(200).json({ settings: updated });
     return;
   }
