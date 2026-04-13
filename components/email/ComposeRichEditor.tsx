@@ -183,7 +183,7 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
   return (
     <div className={`flex min-h-0 flex-col overflow-hidden rounded-md border border-[#e8eaed] bg-white ${className}`}>
       <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto ${COMPOSE_EDITOR_SCROLL} ${minHeightClass}`}>
-        <EditorContent editor={editor} className="min-h-0 flex-1 px-3 py-2 [&_.ProseMirror]:min-h-[inherit] [&_.ProseMirror]:outline-none" />
+        <EditorContent editor={editor} className="min-h-0 flex-1 px-3 py-2 [&_.ProseMirror]:h-full [&_.ProseMirror]:outline-none" />
       </div>
       {showToolbar ? (
         <div
