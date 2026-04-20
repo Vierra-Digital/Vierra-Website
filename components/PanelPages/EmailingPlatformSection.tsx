@@ -28,6 +28,7 @@ import {
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
+import RichTextEditor from "@/components/ui/RichTextEditor";
 
 const inter = Inter({ subsets: ["latin"] });
 const PAGE_SIZE = 50;
@@ -3385,8 +3386,8 @@ ${sourceText}`;
 
       {isComposeOpen ? (
         <div
-          className={`fixed z-[120] border border-[#E5E7EB] bg-white shadow-2xl overflow-hidden ${
-            composeExpanded ? "inset-4 rounded-2xl" : "bottom-4 right-4 w-[520px] rounded-2xl"
+          className={`fixed z-[120] border border-[#E5E7EB] bg-white shadow-2xl overflow-hidden rounded-2xl flex flex-col ${
+            composeExpanded ? "inset-4" : "bottom-4 right-4 w-[520px] max-h-[calc(100vh-2rem)]"
           }`}
         >
           <div className="bg-[#701CC0] text-white px-4 py-2 flex items-center justify-between">
@@ -3409,8 +3410,8 @@ ${sourceText}`;
               </button>
             </div>
           </div>
-          <div className={`p-3 ${composeExpanded ? "h-[calc(100vh-7rem)] overflow-y-auto" : ""}`}>
-            <div className="space-y-1.5">
+          <div className={`p-3 flex flex-col ${composeExpanded ? "flex-1 overflow-hidden" : "overflow-hidden"}`}>
+            <div className="space-y-1.5 mb-2">
               <div className="grid grid-cols-[56px_1fr] items-center gap-2">
                 <span className="text-xs text-[#7C829A]">From</span>
                 <select
@@ -3481,15 +3482,11 @@ ${sourceText}`;
                   className="w-full rounded-md border border-[#E7E9F2] px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
                 />
               </div>
-
-              <textarea
-                value={composeBody}
-                onChange={(event) => setComposeBody(event.target.value)}
-                rows={8}
-                placeholder="Write your message..."
-                className="w-full rounded-md border border-[#E7E9F2] px-2.5 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] resize-none"
-              />
             </div>
+            <RichTextEditor
+              value={composeBody}
+              onChange={setComposeBody}
+            />
             {composeError ? <div className="mt-2 text-sm text-red-600">{composeError}</div> : null}
             {composeSuccess ? <div className="mt-2 text-sm text-green-600">{composeSuccess}</div> : null}
             <div className="mt-3 flex justify-end">
