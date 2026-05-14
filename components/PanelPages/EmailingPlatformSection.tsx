@@ -6,14 +6,23 @@ import {
   FiAlertCircle,
   FiArchive,
   FiCheckSquare,
+  FiCheck,
+  FiChevronDown,
   FiChevronsRight,
   FiCornerUpLeft,
   FiDownload,
   FiEdit3,
   FiFilter,
+  FiFileText,
+  FiImage,
   FiInbox,
+  FiLink,
+  FiPaperclip,
+  FiPrinter,
   FiKey,
   FiMail,
+  FiMaximize2,
+  FiMinimize2,
   FiMove,
   FiPlus,
   FiRefreshCw,
@@ -22,16 +31,36 @@ import {
   FiUpload,
   FiUserPlus,
   FiTrash2,
+  FiType,
   FiUsers,
   FiX,
 } from "react-icons/fi";
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
+import ComposeRichEditor, { printComposeContent, type ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
 
 const inter = Inter({ subsets: ["latin"] });
 const PAGE_SIZE = 50;
 const CONTACTS_PAGE_SIZE = 50;
+
+/** Neutral scrollbar; overrides global purple `::-webkit-scrollbar` in app/globals.css for compose UI */
+
+/** Basic validation for comma-separated recipient fields (Cc / Bcc). */
+function validateRecipientCsv(label: "Cc" | "Bcc", raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const parts = trimmed.split(",").map((entry) => entry.trim()).filter(Boolean);
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  for (const part of parts) {
+    const addr = part.includes("<") ? (part.match(/<([^>]+)>/)?.[1] || part).trim() : part;
+    if (!emailOk.test(addr)) return `${label}: invalid address "${part}"`;
+  }
+  return null;
+}
+
+const COMPOSE_NEUTRAL_SCROLLBAR =
+  "[scrollbar-width:thin] [scrollbar-color:rgb(203_213_225)_rgb(241_245_249)] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb:hover]:bg-slate-400";
 
 type ModuleKey =
   | "inbox"
@@ -296,6 +325,20 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [showBcc, setShowBcc] = useState(false);
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
+  const [composeBodyHtml, setComposeBodyHtml] = useState("");
+  const [composeAttachments, setComposeAttachments] = useState<
+    Array<{ id: string; filename: string; contentType: string; contentBase64: string }>
+  >([]);
+  const [composeTemplates, setComposeTemplates] = useState<
+    Array<{ id: string; name: string; subject: string | null; bodyHtml: string | null; bodyText: string | null }>
+  >([]);
+  const [composeTemplateMenuOpen, setComposeTemplateMenuOpen] = useState(false);
+  const [saveTemplateModalOpen, setSaveTemplateModalOpen] = useState(false);
+  const [saveTemplateName, setSaveTemplateName] = useState("");
+  const [saveTemplateSaving, setSaveTemplateSaving] = useState(false);
+  const composeEditorRef = useRef<ComposeRichEditorHandle | null>(null);
+  const composeAttachInputRef = useRef<HTMLInputElement | null>(null);
+  const [composeFormattingToolbarOpen, setComposeFormattingToolbarOpen] = useState(false);
   const [composeAccountEmail, setComposeAccountEmail] = useState("");
   const [composeThreadId, setComposeThreadId] = useState("");
   const [composeInReplyTo, setComposeInReplyTo] = useState("");
@@ -303,6 +346,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [sendingCompose, setSendingCompose] = useState(false);
   const [composeError, setComposeError] = useState("");
   const [composeSuccess, setComposeSuccess] = useState("");
+  const [sentToastMessage, setSentToastMessage] = useState<string | null>(null);
+  const sentToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [composeExpanded, setComposeExpanded] = useState(false);
   const [composeActiveDraftKey, setComposeActiveDraftKey] = useState("");
   const [inlineComposeMode, setInlineComposeMode] = useState<null | "reply" | "replyAll" | "forward">(null);
@@ -514,6 +559,21 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     });
     setIsEditContactModalOpen(false);
   }, [editingContact]);
+
+  const showSentToast = useCallback((message: string) => {
+    setSentToastMessage(message);
+    if (sentToastTimerRef.current) clearTimeout(sentToastTimerRef.current);
+    sentToastTimerRef.current = setTimeout(() => {
+      setSentToastMessage(null);
+      sentToastTimerRef.current = null;
+    }, 4500);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (sentToastTimerRef.current) clearTimeout(sentToastTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     selectedMessageIdRef.current = selectedMessageId;
@@ -966,6 +1026,22 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     return `popup:new:${account}`;
   }, [composeAccountEmail, connectedAccounts, selectedAccounts]);
   const effectiveComposeDraftStorageKey = composeActiveDraftKey || composeDraftStorageKey;
+
+  useEffect(() => {
+    if (!isComposeOpen || !composeAccountEmail) return;
+    let cancelled = false;
+    void fetch(`/api/gmail/templates?accountEmail=${encodeURIComponent(composeAccountEmail)}`)
+      .then((r) => r.json())
+      .then((payload) => {
+        if (cancelled) return;
+        const list = Array.isArray(payload?.templates) ? payload.templates : [];
+        setComposeTemplates(list);
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, [isComposeOpen, composeAccountEmail]);
 
   const inlineDraftStorageKey = useMemo(() => {
     if (!inlineComposeMode || !selectedMessage) return "";
@@ -1482,7 +1558,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
   const flushDraftsNow = useCallback(() => {
     if (!sendingCompose && isComposeOpen && effectiveComposeDraftStorageKey) {
-      const hasComposeContent = composeBody.trim();
+      const hasComposeContent =
+        composeBody.trim() ||
+        composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim();
       if (hasComposeContent) {
         void saveLocalDraft(
           effectiveComposeDraftStorageKey,
@@ -1494,6 +1572,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             showBcc,
             subject: composeSubject,
             bodyText: composeBody,
+            bodyHtml: composeBodyHtml,
             accountEmail: composeAccountEmail,
             updatedAt: Date.now(),
           },
@@ -1527,6 +1606,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     composeAccountEmail,
     composeBcc,
     composeBody,
+    composeBodyHtml,
     composeCc,
     composeSubject,
     composeTo,
@@ -1573,7 +1653,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
   useEffect(() => {
     if (sendingCompose || !isComposeOpen || !effectiveComposeDraftStorageKey) return;
-    const hasContent = composeBody.trim();
+    const hasContent =
+      composeBody.trim() ||
+      composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim();
     const timeout = window.setTimeout(() => {
       if (!hasContent) return;
       void saveLocalDraft(effectiveComposeDraftStorageKey, {
@@ -1584,6 +1666,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         showBcc,
         subject: composeSubject,
         bodyText: composeBody,
+        bodyHtml: composeBodyHtml,
         accountEmail: composeAccountEmail,
         updatedAt: Date.now(),
       });
@@ -1594,6 +1677,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     composeAccountEmail,
     composeBcc,
     composeBody,
+    composeBodyHtml,
     composeCc,
     composeActiveDraftKey,
     composeDraftStorageKey,
@@ -1670,6 +1754,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setShowBcc(Boolean(draftMessage.composeShowBcc));
     setComposeSubject(draftMessage.subject || "");
     setComposeBody(draftMessage.composeBodyText || "");
+    setComposeBodyHtml(draftMessage.composeBodyHtml || "");
+    setComposeAttachments([]);
+    setComposeFormattingToolbarOpen(false);
     setComposeAccountEmail(accountEmail);
     setComposeThreadId(draftMessage.threadId || "");
     setComposeInReplyTo(draftMessage.messageIdHeader || "");
@@ -1904,7 +1991,7 @@ ${sourceText}`;
   };
 
   const sendInlineCompose = async () => {
-    if (!selectedMessage || !inlineComposeTo.trim() || !inlineComposeSubject.trim() || inlineComposeSending) return;
+    if (!selectedMessage || !inlineComposeTo.trim() || inlineComposeSending) return;
     const intro = inlineComposeIntroText.trim();
     const textBody = intro ? `${intro}\n\n${inlineComposeBodyText}` : inlineComposeBodyText || intro;
     if (!textBody.trim()) return;
@@ -1941,7 +2028,7 @@ ${sourceText}`;
           () => null
         );
       }
-      setInlineComposeSuccess("Sent.");
+      showSentToast("Message Sent");
       setInlineComposeMode(null);
       await Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
       setDetailError("");
@@ -2005,6 +2092,10 @@ ${sourceText}`;
     setShowBcc(false);
     setComposeSubject("");
     setComposeBody("");
+    setComposeBodyHtml("");
+    setComposeAttachments([]);
+    setComposeTemplateMenuOpen(false);
+    setComposeFormattingToolbarOpen(false);
     setComposeAccountEmail(defaultAccount);
     setComposeThreadId("");
     setComposeInReplyTo("");
@@ -2017,7 +2108,15 @@ ${sourceText}`;
   };
 
   const handleSendCompose = async () => {
-    if (!composeTo.trim() || !composeSubject.trim() || !composeBody.trim() || !composeAccountEmail || sendingCompose) return;
+    const strippedHtml = composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim();
+    const hasBody = Boolean(composeBody.trim() || strippedHtml);
+    if (!composeTo.trim() || !hasBody || !composeAccountEmail || sendingCompose) return;
+    const ccErr = validateRecipientCsv("Cc", composeCc);
+    const bccErr = validateRecipientCsv("Bcc", composeBcc);
+    if (ccErr || bccErr) {
+      setComposeError(ccErr || bccErr || "");
+      return;
+    }
     setSendingCompose(true);
     setComposeError("");
     setComposeSuccess("");
@@ -2032,12 +2131,18 @@ ${sourceText}`;
           bcc: composeBcc.trim(),
           subject: composeSubject.trim(),
           body: composeBody.trim(),
+          bodyHtml: composeBodyHtml.trim(),
           threadId: composeThreadId || undefined,
           inReplyTo: composeInReplyTo || undefined,
           references: composeReferences || undefined,
           draftKey: effectiveComposeDraftStorageKey || undefined,
           providerAccountId:
             providerAccounts.find((entry) => entry.accountEmail === composeAccountEmail.toLowerCase())?.id || undefined,
+          attachments: composeAttachments.map((a) => ({
+            filename: a.filename,
+            contentType: a.contentType,
+            contentBase64: a.contentBase64,
+          })),
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -2056,8 +2161,10 @@ ${sourceText}`;
       setShowBcc(false);
       setComposeSubject("");
       setComposeBody("");
+      setComposeBodyHtml("");
+      setComposeAttachments([]);
       setIsComposeOpen(false);
-      setComposeSuccess("Email sent.");
+      showSentToast("Message Sent");
       if (activeModule === "sent" || activeModule === "drafts") {
         await Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
       } else {
@@ -2068,6 +2175,96 @@ ${sourceText}`;
     } finally {
       setSendingCompose(false);
     }
+  };
+
+  const composeHasMeaningfulBody = useMemo(() => {
+    const stripped = composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim();
+    return Boolean(composeBody.trim() || stripped);
+  }, [composeBody, composeBodyHtml]);
+
+  const addComposeAttachmentsFromFiles = useCallback(async (fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    const additions: Array<{ id: string; filename: string; contentType: string; contentBase64: string }> = [];
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList.item(i);
+      if (!file) continue;
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const comma = dataUrl.indexOf(",");
+      const contentBase64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+      additions.push({
+        id: `${Date.now()}-${i}-${file.name}`,
+        filename: file.name,
+        contentType: file.type || "application/octet-stream",
+        contentBase64,
+      });
+    }
+    setComposeAttachments((prev) => [...prev, ...additions]);
+  }, []);
+
+  const handleSaveComposeTemplate = async () => {
+    const name = saveTemplateName.trim();
+    if (!name || !composeAccountEmail || saveTemplateSaving) return;
+    setSaveTemplateSaving(true);
+    setComposeError("");
+    try {
+      const response = await fetch("/api/gmail/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountEmail: composeAccountEmail,
+          name,
+          subject: composeSubject.trim() || "",
+          bodyHtml: composeBodyHtml,
+          bodyText: composeBody,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.message || "Failed to save template.");
+      setSaveTemplateModalOpen(false);
+      setSaveTemplateName("");
+      const listRes = await fetch(
+        `/api/gmail/templates?accountEmail=${encodeURIComponent(composeAccountEmail)}`
+      );
+      const listPayload = await listRes.json().catch(() => ({}));
+      setComposeTemplates(Array.isArray(listPayload?.templates) ? listPayload.templates : []);
+    } catch (error) {
+      setComposeError(error instanceof Error ? error.message : "Failed to save template.");
+    } finally {
+      setSaveTemplateSaving(false);
+    }
+  };
+
+  const applyComposeTemplate = (templateId: string) => {
+    const template = composeTemplates.find((entry) => entry.id === templateId);
+    if (!template) return;
+    if (template.subject) setComposeSubject(template.subject);
+    if (template.bodyHtml && template.bodyHtml.trim()) {
+      setComposeBodyHtml(template.bodyHtml);
+      setComposeBody(template.bodyText || "");
+    } else if (template.bodyText && template.bodyText.trim()) {
+      const raw = template.bodyText;
+      setComposeBody(raw);
+      const esc = (value: string) =>
+        value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      setComposeBodyHtml(`<p>${esc(raw).replace(/\n/g, "<br />")}</p>`);
+    }
+    setComposeTemplateMenuOpen(false);
+  };
+
+  const handlePrintCompose = () => {
+    const html =
+      composeBodyHtml.trim() ||
+      `<p>${composeBody
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\n/g, "<br />")}</p>`;
+    printComposeContent(composeSubject || "(No Subject)", html);
   };
 
   const messagesCountLabel = `${filteredMessages.length} Messages`;
@@ -2757,7 +2954,7 @@ ${sourceText}`;
                                     setDetailError("");
                                   }}
                                   className={`w-full text-left px-3 py-2.5 flex items-center gap-2 transition hover:bg-[#F4EDFF] ${
-                                    isSelected ? "bg-[#EDE1FF]" : message.unread ? "font-semibold bg-[#FBFBFF]" : ""
+                                    isSelected ? "bg-[#EDE1FF]" : message.unread ? "bg-[#FBFBFF]" : ""
                                   }`}
                                 >
                                   <input
@@ -2776,7 +2973,11 @@ ${sourceText}`;
                                       />
                                     </span>
                                   ) : null}
-                                  <span className="text-sm text-[#111827] w-52 shrink-0 truncate">
+                                  <span
+                                    className={`w-52 shrink-0 truncate text-sm text-[#111827] ${
+                                      message.unread ? "font-bold" : "font-normal"
+                                    }`}
+                                  >
                                     {message.isComposeDraft ? (
                                       <>
                                         <span className="text-[#F87171] font-medium mr-1">(Draft)</span>
@@ -2786,11 +2987,20 @@ ${sourceText}`;
                                       senderOrTo
                                     )}
                                   </span>
-                                  <span className="text-sm text-[#111827] min-w-0 truncate">
-                                    <span className="font-medium">{message.subject || "(No Subject)"}</span>
-                                    <span className="text-[#6B7280]"> - {message.snippet || "No preview available."}</span>
+                                  <span className="min-w-0 truncate text-sm text-[#111827]">
+                                    <span className={message.unread ? "font-bold" : "font-medium"}>
+                                      {message.subject || "(No Subject)"}
+                                    </span>
+                                    <span className="font-normal text-[#6B7280]">
+                                      {" "}
+                                      - {message.snippet || "No preview available."}
+                                    </span>
                                   </span>
-                                  <span className="ml-auto text-xs text-[#6B7280] w-24 text-right shrink-0">
+                                  <span
+                                    className={`ml-auto w-24 shrink-0 text-right text-xs text-[#6B7280] ${
+                                      message.unread ? "font-semibold" : "font-normal"
+                                    }`}
+                                  >
                                     {formatDate(message.timestamp, message.date)}
                                   </span>
                                 </button>
@@ -2959,76 +3169,105 @@ ${sourceText}`;
                                 ))}
 
                                 {inlineComposeMode ? (
-                                  <div ref={inlineComposeRef} className="pt-2">
-                                    <div className="mb-2">
-                                      <p className="text-sm font-medium text-[#374151]">
-                                        {inlineComposeMode === "forward"
-                                          ? "Forward Message"
-                                          : inlineComposeMode === "replyAll"
-                                            ? "Reply All"
-                                            : "Reply"}
-                                      </p>
-                                    </div>
-                                    <div className="space-y-2">
-                                      <div className="grid grid-cols-[88px_1fr] items-center gap-2 border-b border-[#E5E7EB] pb-1">
-                                        <span className="text-xs text-[#6B7280]">
-                                          {inlineComposeMode === "forward" ? "To" : "Replying To"}
+                                  <div ref={inlineComposeRef} className="pt-3">
+                                    <div className="rounded-2xl border border-[#E8EAEF] bg-gradient-to-b from-[#FAFBFF] to-white p-4 shadow-[0_4px_24px_-8px_rgba(15,23,42,0.08)] ring-1 ring-black/[0.03]">
+                                      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2.5 min-w-0">
+                                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#701CC0]/10 text-[#701CC0]">
+                                            <FiCornerUpLeft className="h-4 w-4" />
+                                          </div>
+                                          <div className="min-w-0">
+                                            <p className="text-[15px] font-semibold text-[#111827] leading-tight">
+                                              {inlineComposeMode === "forward"
+                                                ? "Forward"
+                                                : inlineComposeMode === "replyAll"
+                                                  ? "Reply all"
+                                                  : "Reply"}
+                                            </p>
+                                            <p className="text-xs text-[#6B7280] mt-0.5">Compose below the thread</p>
+                                          </div>
+                                        </div>
+                                        <span className="inline-flex items-center rounded-full bg-[#701CC0]/8 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-[#5B21B6]">
+                                          Draft
                                         </span>
-                                        <input
-                                          value={inlineComposeTo}
-                                          onChange={(event) => setInlineComposeTo(event.target.value)}
-                                          className="w-full bg-transparent px-0 py-1.5 text-sm text-[#111827] outline-none"
-                                          placeholder="Recipient Email"
-                                        />
                                       </div>
-                                      <div className="grid grid-cols-[88px_1fr] items-center gap-2 border-b border-[#E5E7EB] pb-1">
-                                        <span className="text-xs text-[#6B7280]">Subject</span>
-                                        <input
-                                          value={inlineComposeSubject}
-                                          onChange={(event) => setInlineComposeSubject(event.target.value)}
-                                          className="w-full bg-transparent px-0 py-1.5 text-sm text-[#111827] outline-none"
-                                        />
-                                      </div>
-                                      <div>
-                                        <textarea
-                                          value={inlineComposeIntroText}
-                                          onChange={(event) => setInlineComposeIntroText(event.target.value)}
-                                          rows={4}
-                                          className="w-full rounded-md border border-[#ECEEF6] bg-white px-3 py-2 text-sm text-[#111827] outline-none resize-y min-h-[110px] focus:border-[#DADDF0] focus:ring-2 focus:ring-[#701CC0]/10"
-                                          placeholder="Write your message..."
-                                        />
-                                      </div>
-                                      {inlineComposeMode === "forward" && inlineComposePreviewHtml ? (
-                                        <div className="mt-2">
-                                          <div
-                                            className="text-sm text-[#374151] leading-6"
-                                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(inlineComposePreviewHtml) }}
+                                      <div className="space-y-3">
+                                        <div>
+                                          <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
+                                            {inlineComposeMode === "forward" ? "To" : "Replying to"}
+                                          </label>
+                                          <input
+                                            value={inlineComposeTo}
+                                            onChange={(event) => setInlineComposeTo(event.target.value)}
+                                            className="w-full rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-2.5 text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
+                                            placeholder="name@email.com"
                                           />
                                         </div>
-                                      ) : null}
-                                      {inlineComposeError ? <p className="text-xs text-red-600">{inlineComposeError}</p> : null}
-                                      {inlineComposeSuccess ? <p className="text-xs text-green-600">{inlineComposeSuccess}</p> : null}
-                                      <div className="flex items-center justify-end gap-2 pt-1">
-                                        <button
-                                          type="button"
-                                          onClick={() => setInlineComposeMode(null)}
-                                          className="rounded px-2 py-1 text-sm text-[#4B5563] hover:bg-[#F3F4F6]"
-                                        >
-                                          Cancel
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={sendInlineCompose}
-                                          disabled={
-                                            inlineComposeSending ||
-                                            !inlineComposeTo.trim() ||
-                                            !inlineComposeSubject.trim() ||
-                                            (!inlineComposeIntroText.trim() && !inlineComposeBodyText.trim())
-                                          }
-                                          className="rounded bg-[#701CC0] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#5F17A5] disabled:opacity-50"
-                                        >
-                                          {inlineComposeSending ? "Sending..." : "Send"}
-                                        </button>
+                                        <div>
+                                          <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
+                                            Subject
+                                          </label>
+                                          <input
+                                            value={inlineComposeSubject}
+                                            onChange={(event) => setInlineComposeSubject(event.target.value)}
+                                            className="w-full rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-2.5 text-sm text-[#111827] outline-none transition focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
+                                            Message
+                                          </label>
+                                          <textarea
+                                            value={inlineComposeIntroText}
+                                            onChange={(event) => setInlineComposeIntroText(event.target.value)}
+                                            rows={5}
+                                            className="w-full min-h-[120px] resize-y rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-3 text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
+                                            placeholder="Write your message…"
+                                          />
+                                        </div>
+                                        {inlineComposeMode === "forward" && inlineComposePreviewHtml ? (
+                                          <div className="rounded-xl border border-[#E8EAEF] bg-[#F9FAFB] p-3">
+                                            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
+                                              Forwarded content
+                                            </p>
+                                            <div
+                                              className="text-sm text-[#374151] leading-6 max-h-48 overflow-y-auto"
+                                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(inlineComposePreviewHtml) }}
+                                            />
+                                          </div>
+                                        ) : null}
+                                        {inlineComposeError ? (
+                                          <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                            {inlineComposeError}
+                                          </div>
+                                        ) : null}
+                                        {inlineComposeSuccess ? (
+                                          <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                                            {inlineComposeSuccess}
+                                          </div>
+                                        ) : null}
+                                        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#EEF0F6] pt-4">
+                                          <button
+                                            type="button"
+                                            onClick={() => setInlineComposeMode(null)}
+                                            className="rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#F9FAFB]"
+                                          >
+                                            Cancel
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={sendInlineCompose}
+                                            disabled={
+                                              inlineComposeSending ||
+                                              !inlineComposeTo.trim() ||
+                                              (!inlineComposeIntroText.trim() && !inlineComposeBodyText.trim())
+                                            }
+                                            className="inline-flex items-center gap-2 rounded-xl bg-[#701CC0] px-5 py-2 text-sm font-semibold text-white shadow-md shadow-[#701CC0]/25 transition hover:bg-[#5f17a5] disabled:pointer-events-none disabled:opacity-45"
+                                          >
+                                            <FiSend className="h-4 w-4" />
+                                            {inlineComposeSending ? "Sending…" : "Send"}
+                                          </button>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
@@ -3385,122 +3624,376 @@ ${sourceText}`;
 
       {isComposeOpen ? (
         <div
-          className={`fixed z-[120] border border-[#E5E7EB] bg-white shadow-2xl overflow-hidden ${
-            composeExpanded ? "inset-4 rounded-2xl" : "bottom-4 right-4 w-[520px] rounded-2xl"
-          }`}
+          className={
+            composeExpanded
+              ? "fixed inset-0 z-[120] flex items-center justify-center bg-[#202124]/45 p-4"
+              : "contents"
+          }
+          onClick={composeExpanded ? () => setComposeExpanded(false) : undefined}
+          role="presentation"
         >
-          <div className="bg-[#701CC0] text-white px-4 py-2 flex items-center justify-between">
-            <p className="text-sm font-medium">{composeThreadId ? "Reply" : "New Message"}</p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setComposeExpanded((prev) => !prev)}
-                className="px-2 py-1 text-xs rounded hover:bg-white/20"
+          <div
+            onClick={(event) => event.stopPropagation()}
+            className={`flex flex-col overflow-hidden bg-white shadow-[0_8px_10px_1px_rgba(0,0,0,0.14),0_3px_14px_2px_rgba(0,0,0,0.12)] border border-[#dadce0] ${
+              composeExpanded
+                ? "h-[75vh] w-[75vw] max-h-[75vh] max-w-[75vw] rounded-lg"
+                : "fixed bottom-6 right-6 z-[120] w-[min(100vw-1.5rem,572px)] max-h-[min(92vh,760px)] rounded-t-xl"
+            }`}
+            role="dialog"
+            aria-label={composeThreadId ? "Reply composer" : "New message composer"}
+          >
+            <div className="flex shrink-0 cursor-default items-center justify-between gap-2 border-b border-[#5f17a5]/40 bg-[#701CC0] px-3 py-2.5">
+              <p className="min-w-0 flex-1 truncate pr-2 text-sm font-semibold text-white">
+                {composeThreadId ? "Reply" : "New Message"}
+              </p>
+              <div className="flex shrink-0 items-center">
+                <button
+                  type="button"
+                  onClick={() => setComposeExpanded((prev) => !prev)}
+                  className="rounded-full p-2 text-white/90 hover:bg-white/15"
+                  title={composeExpanded ? "Resize" : "Expand"}
+                  aria-label={composeExpanded ? "Shrink composer" : "Expand composer"}
+                >
+                  {composeExpanded ? <FiMinimize2 className="h-5 w-5" /> : <FiMaximize2 className="h-5 w-5" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsComposeOpen(false)}
+                  className="rounded-full p-2 text-white/90 hover:bg-white/15"
+                  aria-label="Close compose"
+                >
+                  <FiX className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className={`flex min-h-0 flex-1 flex-col bg-white ${composeExpanded ? "overflow-hidden" : ""}`}>
+              <div
+                className={`flex min-h-0 flex-1 flex-col px-0 ${
+                  composeExpanded
+                    ? "overflow-hidden"
+                    : `max-h-[min(52vh,440px)] overflow-y-auto ${COMPOSE_NEUTRAL_SCROLLBAR}`
+                }`}
               >
-                {composeExpanded ? "Compact" : "Expand"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsComposeOpen(false)}
-                className="p-1 rounded hover:bg-white/20"
-                aria-label="Close compose"
-              >
-                <FiX className="w-4 h-4" />
-              </button>
+                <div className="shrink-0 px-3">
+                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#dadce0] py-2">
+                    <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">From</span>
+                    <div className="relative min-w-0">
+                      <select
+                        value={composeAccountEmail}
+                        onChange={(event) => setComposeAccountEmail(event.target.value)}
+                        className="min-w-0 w-full cursor-pointer appearance-none border-0 bg-transparent py-1.5 pl-0 pr-7 text-sm text-[#202124] outline-none focus:ring-0"
+                      >
+                        {composeFromOptions.map((email) => (
+                          <option key={email} value={email}>
+                            {email}
+                          </option>
+                        ))}
+                      </select>
+                      <FiChevronDown
+                        className="pointer-events-none absolute right-0 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5f6368]"
+                        aria-hidden
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#dadce0] py-2">
+                    <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">To</span>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <input
+                        value={composeTo}
+                        onChange={(event) => setComposeTo(event.target.value)}
+                        placeholder=""
+                        className="min-w-0 flex-1 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#202124] outline-none placeholder:text-[#70757a]"
+                      />
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowCc((prev) => !prev)}
+                          className={`whitespace-nowrap text-sm font-medium hover:underline ${
+                            showCc ? "text-[#701CC0]" : "text-[#1a73e8]"
+                          }`}
+                          aria-pressed={showCc}
+                          title={showCc ? "Hide Cc field" : "Show Cc field"}
+                        >
+                          Cc
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowBcc((prev) => !prev)}
+                          className={`whitespace-nowrap text-sm font-medium hover:underline ${
+                            showBcc ? "text-[#701CC0]" : "text-[#1a73e8]"
+                          }`}
+                          aria-pressed={showBcc}
+                          title={showBcc ? "Hide Bcc field" : "Show Bcc field"}
+                        >
+                          Bcc
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {showCc ? (
+                    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#dadce0] py-2">
+                      <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Cc</span>
+                      <input
+                        value={composeCc}
+                        onChange={(event) => setComposeCc(event.target.value)}
+                        placeholder=""
+                        className="min-w-0 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#202124] outline-none"
+                      />
+                    </div>
+                  ) : null}
+
+                  {showBcc ? (
+                    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#dadce0] py-2">
+                      <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Bcc</span>
+                      <input
+                        value={composeBcc}
+                        onChange={(event) => setComposeBcc(event.target.value)}
+                        placeholder=""
+                        className="min-w-0 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#202124] outline-none"
+                      />
+                    </div>
+                  ) : null}
+
+                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#dadce0] py-2">
+                    <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Subject</span>
+                    <input
+                      value={composeSubject}
+                      onChange={(event) => setComposeSubject(event.target.value)}
+                      placeholder=""
+                      className="min-w-0 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#202124] outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div
+                  className={
+                    composeExpanded
+                      ? "flex min-h-0 flex-1 flex-col px-3 pb-1 pt-3"
+                      : "px-3 pt-3"
+                  }
+                >
+                  <ComposeRichEditor
+                    ref={composeEditorRef}
+                    valueHtml={composeBodyHtml}
+                    onChange={({ html, text }) => {
+                      setComposeBodyHtml(html);
+                      setComposeBody(text);
+                    }}
+                    minHeightClass={composeExpanded ? "min-h-0 flex-1" : "min-h-[140px]"}
+                    className={composeExpanded ? "min-h-0 flex-1 flex flex-col overflow-hidden" : ""}
+                    showToolbar={composeFormattingToolbarOpen}
+                  />
+                  {composeAttachments.length > 0 ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {composeAttachments.map((attachment) => (
+                        <span
+                          key={attachment.id}
+                          className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#dadce0] bg-[#f8f9fa] px-2 py-0.5 text-xs text-[#202124]"
+                        >
+                          <span className="min-w-0 truncate">{attachment.filename}</span>
+                          <button
+                            type="button"
+                            className="shrink-0 rounded-full p-0.5 text-[#5f6368] hover:bg-[#e8eaed]"
+                            onClick={() =>
+                              setComposeAttachments((prev) => prev.filter((a) => a.id !== attachment.id))
+                            }
+                            aria-label={`Remove ${attachment.filename}`}
+                          >
+                            <FiX className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  <input
+                    ref={composeAttachInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={async (event) => {
+                      await addComposeAttachmentsFromFiles(event.target.files);
+                      event.target.value = "";
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="shrink-0 border-t border-[#dadce0] bg-white px-3 py-2">
+                {composeError ? (
+                  <div className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-800">{composeError}</div>
+                ) : null}
+                {composeSuccess ? (
+                  <div className="mb-2 rounded border border-green-200 bg-green-50 px-2 py-1.5 text-xs text-green-800">
+                    {composeSuccess}
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex min-w-0 flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleSendCompose}
+                      disabled={
+                        sendingCompose ||
+                        !composeTo.trim() ||
+                        !composeHasMeaningfulBody ||
+                        !composeAccountEmail
+                      }
+                      className="inline-flex min-h-9 shrink-0 items-center rounded bg-[#0b57d0] px-4 text-sm font-medium text-white hover:bg-[#0842a0] disabled:pointer-events-none disabled:opacity-40"
+                    >
+                      {sendingCompose ? "Sending…" : "Send"}
+                    </button>
+                    <span className="inline-block h-6 w-px shrink-0 self-center bg-[#dadce0]" aria-hidden />
+                    <div className="relative flex min-w-0 flex-wrap items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setComposeFormattingToolbarOpen((open) => !open)}
+                        className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
+                          composeFormattingToolbarOpen
+                            ? "bg-[#e8eaed] text-[#202124]"
+                            : "text-[#5f6368] hover:bg-[#f1f3f4]"
+                        }`}
+                        title="Formatting options"
+                        aria-label="Formatting options"
+                        aria-pressed={composeFormattingToolbarOpen}
+                      >
+                        <FiType className="h-[18px] w-[18px]" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => composeAttachInputRef.current?.click()}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        title="Attach files"
+                        aria-label="Attach files"
+                      >
+                        <FiPaperclip className="h-[18px] w-[18px]" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => composeEditorRef.current?.promptInsertLink()}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        title="Insert link"
+                        aria-label="Insert link"
+                      >
+                        <FiLink className="h-[18px] w-[18px]" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => composeEditorRef.current?.promptInsertImage()}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        title="Insert image"
+                        aria-label="Insert image"
+                      >
+                        <FiImage className="h-[18px] w-[18px]" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handlePrintCompose}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        title="Print"
+                        aria-label="Print"
+                      >
+                        <FiPrinter className="h-[18px] w-[18px]" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setComposeTemplateMenuOpen((open) => !open)}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        title="Load template"
+                        aria-label="Load template"
+                        aria-expanded={composeTemplateMenuOpen}
+                      >
+                        <FiFileText className="h-[18px] w-[18px]" aria-hidden />
+                      </button>
+                      {composeTemplateMenuOpen ? (
+                        <div className="absolute left-0 top-full z-[130] mt-1 max-h-56 w-56 overflow-y-auto rounded-md border border-[#dadce0] bg-white py-1 shadow-lg">
+                          {composeTemplates.length === 0 ? (
+                            <div className="px-3 py-2 text-xs text-[#5f6368]">No templates yet</div>
+                          ) : (
+                            composeTemplates.map((template) => (
+                              <button
+                                key={template.id}
+                                type="button"
+                                className="block w-full truncate px-3 py-2 text-left text-sm text-[#202124] hover:bg-[#f1f3f4]"
+                                onClick={() => applyComposeTemplate(template.id)}
+                              >
+                                {template.name}
+                              </button>
+                            ))
+                          )}
+                          <div className="border-t border-[#e8eaed]" />
+                          <button
+                            type="button"
+                            className="block w-full px-3 py-2 text-left text-sm font-medium text-[#1a73e8] hover:bg-[#f1f3f4]"
+                            onClick={() => {
+                              setComposeTemplateMenuOpen(false);
+                              setSaveTemplateName("");
+                              setSaveTemplateModalOpen(true);
+                            }}
+                          >
+                            Save as template…
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsComposeOpen(false)}
+                    className="shrink-0 rounded px-3 py-1.5 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
+                  >
+                    Discard
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
-          <div className={`p-3 ${composeExpanded ? "h-[calc(100vh-7rem)] overflow-y-auto" : ""}`}>
-            <div className="space-y-1.5">
-              <div className="grid grid-cols-[56px_1fr] items-center gap-2">
-                <span className="text-xs text-[#7C829A]">From</span>
-                <select
-                  value={composeAccountEmail}
-                  onChange={(event) => setComposeAccountEmail(event.target.value)}
-                  className="w-full rounded-md border border-[#E7E9F2] px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
-                >
-                  {composeFromOptions.map((email) => (
-                    <option key={email} value={email}>
-                      {email}
-                    </option>
-                  ))}
-                </select>
-              </div>
+        </div>
+      ) : null}
 
-              <div className="grid grid-cols-[56px_1fr_auto] items-center gap-2">
-                <span className="text-xs text-[#7C829A]">To</span>
-                <input
-                  value={composeTo}
-                  onChange={(event) => setComposeTo(event.target.value)}
-                  placeholder="Recipients"
-                  className="w-full rounded-md border border-[#E7E9F2] px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
-                />
-                <div className="flex items-center gap-2 pr-1">
-                  {!showCc ? (
-                    <button type="button" onClick={() => setShowCc(true)} className="text-xs text-[#6D7390] hover:text-[#4D536E]">
-                      Cc
-                    </button>
-                  ) : null}
-                  {!showBcc ? (
-                    <button type="button" onClick={() => setShowBcc(true)} className="text-xs text-[#6D7390] hover:text-[#4D536E]">
-                      Bcc
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-
-              {showCc ? (
-                <div className="grid grid-cols-[56px_1fr] items-center gap-2">
-                  <span className="text-xs text-[#7C829A]">Cc</span>
-                  <input
-                    value={composeCc}
-                    onChange={(event) => setComposeCc(event.target.value)}
-                    placeholder="Cc recipients"
-                    className="w-full rounded-md border border-[#E7E9F2] px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
-                  />
-                </div>
-              ) : null}
-
-              {showBcc ? (
-                <div className="grid grid-cols-[56px_1fr] items-center gap-2">
-                  <span className="text-xs text-[#7C829A]">Bcc</span>
-                  <input
-                    value={composeBcc}
-                    onChange={(event) => setComposeBcc(event.target.value)}
-                    placeholder="Bcc recipients"
-                    className="w-full rounded-md border border-[#E7E9F2] px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
-                  />
-                </div>
-              ) : null}
-
-              <div className="grid grid-cols-[56px_1fr] items-center gap-2">
-                <span className="text-xs text-[#7C829A]">Subject</span>
-                <input
-                  value={composeSubject}
-                  onChange={(event) => setComposeSubject(event.target.value)}
-                  placeholder="Subject"
-                  className="w-full rounded-md border border-[#E7E9F2] px-2.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-[#701CC0]"
-                />
-              </div>
-
-              <textarea
-                value={composeBody}
-                onChange={(event) => setComposeBody(event.target.value)}
-                rows={8}
-                placeholder="Write your message..."
-                className="w-full rounded-md border border-[#E7E9F2] px-2.5 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] resize-none"
-              />
-            </div>
-            {composeError ? <div className="mt-2 text-sm text-red-600">{composeError}</div> : null}
-            {composeSuccess ? <div className="mt-2 text-sm text-green-600">{composeSuccess}</div> : null}
-            <div className="mt-3 flex justify-end">
+      {saveTemplateModalOpen ? (
+        <div
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-[#202124]/45 p-4"
+          onClick={() => !saveTemplateSaving && setSaveTemplateModalOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-sm rounded-lg bg-white p-4 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-label="Save template"
+          >
+            <p className="text-sm font-semibold text-[#202124]">Save template</p>
+            <label className="mt-3 block text-xs font-medium text-[#5f6368]" htmlFor="compose-template-name">
+              Name
+            </label>
+            <input
+              id="compose-template-name"
+              type="text"
+              value={saveTemplateName}
+              onChange={(event) => setSaveTemplateName(event.target.value)}
+              className="mt-1 w-full rounded-md border border-[#dadce0] px-3 py-2 text-sm text-[#202124] outline-none focus:ring-2 focus:ring-[#701CC0]"
+              placeholder="Template name"
+              disabled={saveTemplateSaving}
+            />
+            <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={handleSendCompose}
-                disabled={sendingCompose || !composeTo.trim() || !composeSubject.trim() || !composeBody.trim() || !composeAccountEmail}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#701CC0] text-white px-4 py-2 text-sm font-medium hover:bg-[#5f17a5] disabled:opacity-50"
+                disabled={saveTemplateSaving}
+                onClick={() => setSaveTemplateModalOpen(false)}
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4] disabled:opacity-50"
               >
-                <FiSend className="w-4 h-4" />
-                {sendingCompose ? "Sending..." : "Send"}
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={saveTemplateSaving || !saveTemplateName.trim()}
+                onClick={() => void handleSaveComposeTemplate()}
+                className="rounded-md bg-[#701CC0] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#5f17a5] disabled:opacity-50"
+              >
+                {saveTemplateSaving ? "Saving…" : "Save"}
               </button>
             </div>
           </div>
@@ -3624,6 +4117,16 @@ ${sourceText}`;
         }}
         onConfirm={confirmDeleteContact}
       />
+      {sentToastMessage ? (
+        <div
+          className="fixed bottom-6 left-6 z-[220] flex max-w-sm items-center gap-3 rounded-lg border border-[#701CC0]/40 bg-[#701CC0] px-4 py-3 text-sm font-medium text-white shadow-lg shadow-[#701CC0]/30"
+          role="status"
+          aria-live="polite"
+        >
+          <FiCheck className="h-5 w-5 shrink-0 text-white" aria-hidden />
+          <span>{sentToastMessage}</span>
+        </div>
+      ) : null}
     </div>
   );
 };
