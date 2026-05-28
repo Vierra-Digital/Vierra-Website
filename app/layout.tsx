@@ -108,6 +108,17 @@ export default function RootLayout({
   return (
     <html lang="en" style={{ scrollBehavior: "smooth" }}>
       <head>
+        <script async src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}></script>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', '${GA_MEASUREMENT_ID}');
+            `,
+          }}
+        />
         <meta charSet="utf-8" />
         <meta
           name="description"
@@ -147,17 +158,6 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
         <link rel="dns-prefetch" href="https://www.youtube.com" />
         <link rel="dns-prefetch" href="https://www.youtube-nocookie.com" />
-        <script async src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}></script>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-              gtag('config', '${GA_MEASUREMENT_ID}');
-            `,
-          }}
-        />
 
         <Script
           id="schema-org-organization"
