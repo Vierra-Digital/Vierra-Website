@@ -99,7 +99,7 @@ const FilesSection: React.FC<{
                 id="files-search"
                 value={search}
                 onChange={setSearch}
-                placeholder="Search By Name"
+                placeholder="Search by File Name"
                 label="Search files"
               />
             }
@@ -115,8 +115,11 @@ const FilesSection: React.FC<{
           ) : filteredFiles.length === 0 ? (
             <div className="bg-white rounded-xl shadow-sm border border-[#E5E7EB] p-10">
               <div className="flex flex-col items-center justify-center text-center">
-                <div className="w-14 h-14 rounded-full bg-[#F3E8FF] flex items-center justify-center mb-4">
-                  <FiFolder className="w-7 h-7 text-[#701CC0]" />
+                <div className="relative mb-4 flex h-14 w-14 items-center justify-center">
+                  <div className="files-empty-ping absolute inset-0 rounded-full bg-[#E9D5FF]" />
+                  <div className="files-empty-icon relative flex h-14 w-14 items-center justify-center rounded-full bg-[#F3E8FF]">
+                    <FiFolder className="w-7 h-7 text-[#701CC0]" />
+                  </div>
                 </div>
                 <h3 className="text-lg font-semibold text-[#111827]">No Files Found</h3>
                 <p className="text-sm text-[#6B7280] mt-2 max-w-md">
@@ -239,6 +242,40 @@ const FilesSection: React.FC<{
           )}
         </div>
       </div>
+      <style jsx>{`
+        .files-empty-ping {
+          animation: filesEmptyPulse 1.8s ease-out infinite;
+        }
+
+        .files-empty-icon {
+          animation: filesEmptyFloat 2.4s ease-in-out infinite;
+        }
+
+        @keyframes filesEmptyPulse {
+          0% {
+            transform: scale(0.75);
+            opacity: 0.85;
+          }
+          70% {
+            transform: scale(1.35);
+            opacity: 0;
+          }
+          100% {
+            transform: scale(1.35);
+            opacity: 0;
+          }
+        }
+
+        @keyframes filesEmptyFloat {
+          0%,
+          100% {
+            transform: translateY(0);
+          }
+          50% {
+            transform: translateY(-3px);
+          }
+        }
+      `}</style>
     </div>
   )
 }

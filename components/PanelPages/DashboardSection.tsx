@@ -1,197 +1,263 @@
 import React, { useState, useEffect } from "react"
 import { RiArrowDropDownLine } from "react-icons/ri"
-import { FiTrendingUp, FiCalendar, FiClock } from "react-icons/fi"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
+import { FiTrendingUp, FiTrendingDown, FiMinus, FiCalendar, FiClock } from "react-icons/fi"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+
+type GrowthDirection = "up" | "flat" | "down"
+type DashboardStatKey = "clients" | "meetingsBooked" | "campaigns" | "leadsGenerated"
+
+type DashboardStat = {
+    key: DashboardStatKey
+    label: string
+    lifetimeValue: number
+    currentMonthValue: number
+    previousMonthValue: number
+    growthPercent: number
+    growthDirection: GrowthDirection
+}
+
+type UpcomingMeeting = {
+    id: string
+    title: string
+    organizer: string
+    startIso: string
+    endIso: string | null
+    timeZone: string
+    meetingLink: string | null
+}
+
+type WebsiteVisitsPoint = { week: string; visits: number }
 
 const DashboardSection = () => {
-    const [platformFilter, setPlatformFilter] = useState("Overall")
-    const [monthFilter] = useState("March")
-    const [activeClientsCount, setActiveClientsCount] = useState(0)
-    const [loading, setLoading] = useState(true)
-    const currentDate = new Date()
-    const currentMonth = currentDate.toLocaleString('default', { month: 'long' })
-    const currentYear = currentDate.getFullYear().toString()
-    
-    const [calendarMonth, setCalendarMonth] = useState(currentMonth)
-    const [calendarYear, setCalendarYear] = useState(currentYear)
-    const generateWeekOptions = () => {
-        const options = []
-        const today = new Date()
-        const currentWeekStart = new Date(today)
-        const dayOfWeek = today.getDay()
-        const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
-        currentWeekStart.setDate(today.getDate() + daysToMonday)
-        for (let i = -3; i <= 3; i++) {
-            const weekDate = new Date(currentWeekStart)
-            weekDate.setDate(currentWeekStart.getDate() + (i * 7))
-            
-            const month = weekDate.getMonth() + 1
-            const day = weekDate.getDate()
-            const formattedDate = `${month.toString().padStart(2, '0')}/${day.toString().padStart(2, '0')}`
-            
-            let label
-            if (i === 0) {
-                label = "This Week"
-            } else if (i < 0) {
-                label = `${Math.abs(i)} Week${Math.abs(i) > 1 ? 's' : ''} Ago`
-            } else {
-                label = `In ${i} Week${i > 1 ? 's' : ''}`
-            }
-            
-            options.push({
-                value: formattedDate,
-                label: label,
-                date: formattedDate
-            })
+    const allMonths = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    const MONTH_WINDOW = 6
+    const now = new Date()
+    const monthOptions = Array.from({ length: MONTH_WINDOW }, (_, index) => {
+        const date = new Date(now.getFullYear(), now.getMonth() - index, 1)
+        const year = date.getFullYear()
+        const monthIndex = date.getMonth()
+        const monthName = allMonths[monthIndex] ?? "January"
+        const value = `${year}-${String(monthIndex + 1).padStart(2, "0")}`
+        return {
+            value,
+            monthName,
+            year,
+            label: `${monthName} ${year}`,
         }
-        
-        return options
-    }
+    }).reverse()
+    const currentMonthValue = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+    const [monthFilter, setMonthFilter] = useState(currentMonthValue)
+    const [statsLoading, setStatsLoading] = useState(true)
+    const [statsCards, setStatsCards] = useState<DashboardStat[]>([])
+    const [meetingsLoading, setMeetingsLoading] = useState(true)
+    const [calendarConnected, setCalendarConnected] = useState(false)
+    const [calendarNeedsReconnect, setCalendarNeedsReconnect] = useState(false)
+    const [calendarIssueMessage, setCalendarIssueMessage] = useState("")
+    const [upcomingMeetings, setUpcomingMeetings] = useState<UpcomingMeeting[]>([])
+    const [websiteVisitsLoading, setWebsiteVisitsLoading] = useState(true)
+    const [websiteVisitsConfigured, setWebsiteVisitsConfigured] = useState(false)
+    const [websiteVisitsData, setWebsiteVisitsData] = useState<WebsiteVisitsPoint[]>([])
+
     useEffect(() => {
-        const fetchActiveClients = async () => {
+        const fetchDashboardStats = async () => {
             try {
-                const response = await fetch('/api/admin/clients')
+                const response = await fetch("/api/dashboard/stats")
                 if (response.ok) {
-                    const clients = await response.json()
-                    const activeCount = clients.filter((client: any) => 
-                        client.status === 'completed' || client.status === 'in_progress'
-                    ).length
-                    setActiveClientsCount(activeCount)
+                    const data = await response.json()
+                    if (Array.isArray(data?.stats)) {
+                        setStatsCards(data.stats)
+                    }
                 }
             } catch (error) {
-                console.error('Error fetching clients:', error)
+                console.error("Error fetching dashboard stats:", error)
             } finally {
-                setLoading(false)
+                setStatsLoading(false)
             }
         }
 
-        fetchActiveClients()
+        fetchDashboardStats()
     }, [])
 
-    const weekOptions = generateWeekOptions()
-    const currentWeekValue = weekOptions.find(option => option.label === "This Week")?.value || weekOptions[3]?.value || ""
-    const [timeFilter, setTimeFilter] = useState(currentWeekValue)
-    const generateCalendarDays = () => {
-        const monthNames = [
-            "January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December"
-        ]
-        
-        const monthIndex = monthNames.indexOf(calendarMonth)
-        const year = parseInt(calendarYear)
-        const firstDay = new Date(year, monthIndex, 1)
-        const lastDay = new Date(year, monthIndex + 1, 0)
-        const daysInMonth = lastDay.getDate()
-        let startingDayOfWeek = firstDay.getDay()
-        startingDayOfWeek = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1
-        
-        const days = []
-        for (let i = 0; i < startingDayOfWeek; i++) {
-            days.push(null)
-        }
-        for (let day = 1; day <= daysInMonth; day++) {
-            days.push(day)
-        }
-        
-        return days
-    }
-    const getHighlightedDays = () => {
-        if (!timeFilter) return []
-        const [month, day] = timeFilter.split('/').map(Number)
-        const year = parseInt(calendarYear)
-        const selectedDate = new Date(year, month - 1, day)
-        const selectedMonth = selectedDate.getMonth()
-        const calendarMonthIndex = ["January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December"].indexOf(calendarMonth)
-        
-        if (selectedMonth !== calendarMonthIndex) {
-            return []
-        }
-        const highlightedDays = []
-        for (let i = 0; i < 7; i++) {
-            const weekDay = new Date(selectedDate)
-            weekDay.setDate(selectedDate.getDate() + i)
-            if (weekDay.getMonth() === calendarMonthIndex) {
-                highlightedDays.push(weekDay.getDate())
+    useEffect(() => {
+        const fetchUpcomingMeetings = async () => {
+            try {
+                const response = await fetch("/api/dashboard/upcoming-meetings")
+                if (!response.ok) {
+                    setCalendarConnected(false)
+                    setCalendarNeedsReconnect(false)
+                    setCalendarIssueMessage("")
+                    setUpcomingMeetings([])
+                    return
+                }
+                const data = await response.json()
+                setCalendarConnected(!!data?.connected)
+                setCalendarNeedsReconnect(!!data?.needsReconnect)
+                setCalendarIssueMessage(typeof data?.issueMessage === "string" ? data.issueMessage : "")
+                setUpcomingMeetings(Array.isArray(data?.meetings) ? data.meetings : [])
+            } catch (error) {
+                console.error("Error fetching upcoming meetings:", error)
+                setCalendarConnected(false)
+                setCalendarNeedsReconnect(false)
+                setCalendarIssueMessage("")
+                setUpcomingMeetings([])
+            } finally {
+                setMeetingsLoading(false)
             }
         }
-        
-        return highlightedDays
+
+        fetchUpcomingMeetings()
+    }, [])
+
+    useEffect(() => {
+        const fetchWebsiteVisits = async () => {
+            setWebsiteVisitsLoading(true)
+            try {
+                const response = await fetch(`/api/dashboard/website-visits?month=${encodeURIComponent(monthFilter)}`)
+                if (!response.ok) {
+                    setWebsiteVisitsConfigured(false)
+                    setWebsiteVisitsData([])
+                    return
+                }
+                const data = await response.json()
+                setWebsiteVisitsConfigured(data?.configured !== false)
+                setWebsiteVisitsData(Array.isArray(data?.points) ? data.points : [])
+            } catch (error) {
+                console.error("Error fetching website visits:", error)
+                setWebsiteVisitsConfigured(false)
+                setWebsiteVisitsData([])
+            } finally {
+                setWebsiteVisitsLoading(false)
+            }
+        }
+
+        fetchWebsiteVisits()
+    }, [monthFilter])
+
+    const statOrder: DashboardStatKey[] = ["clients", "meetingsBooked", "campaigns", "leadsGenerated"]
+    const orderedStats = statOrder.map((key) =>
+        statsCards.find((card) => card.key === key) ?? {
+            key,
+            label:
+                key === "clients"
+                    ? "Clients"
+                    : key === "meetingsBooked"
+                        ? "Meetings Booked"
+                        : key === "campaigns"
+                            ? "Campaigns"
+                            : "Leads Generated",
+            lifetimeValue: 0,
+            currentMonthValue: 0,
+            previousMonthValue: 0,
+            growthPercent: 0,
+            growthDirection: "flat" as GrowthDirection,
+        }
+    )
+
+    const numberColorByStat: Record<DashboardStatKey, string> = {
+        clients: "text-blue-600",
+        meetingsBooked: "text-orange-600",
+        campaigns: "text-purple-600",
+        leadsGenerated: "text-green-600",
     }
 
-    const calendarDays = generateCalendarDays()
-    const highlightedDays = getHighlightedDays()
-    const platformOptions = ["Overall", "Clients", "Revenue", "Marketing"]
-    const monthOptions = [
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
-    ]
-    const yearOptions = Array.from({ length: 5 }, (_, i) => (2022 + i).toString())
-    const websiteVisitsData = [
-        { week: "Week 1", visits: 20000 },
-        { week: "Week 2", visits: 10000 },
-        { week: "Week 3", visits: 22000 },
-        { week: "Week 4", visits: 20000 }
-    ]
+    const getTrendUi = (direction: GrowthDirection) => {
+        if (direction === "up") {
+            return {
+                Icon: FiTrendingUp,
+                valueClass: "text-green-600",
+                iconClass: "text-green-600",
+            }
+        }
+        if (direction === "down") {
+            return {
+                Icon: FiTrendingDown,
+                valueClass: "text-red-600",
+                iconClass: "text-red-600",
+            }
+        }
+        return {
+            Icon: FiMinus,
+            valueClass: "text-gray-400",
+            iconClass: "text-gray-400",
+        }
+    }
 
-    const trafficByDeviceData = [
-        { device: "Linux", traffic: 18000 },
-        { device: "Mac", traffic: 30000 },
-        { device: "iOS", traffic: 22000 },
-        { device: "Windows", traffic: 30000 },
-        { device: "Android", traffic: 13000 },
-        { device: "Other", traffic: 25000 }
-    ]
+    const formatMeetingDate = (iso: string, timeZone: string) => {
+        const date = new Date(iso)
+        const now = new Date()
+        const meetingDay = new Intl.DateTimeFormat("en-CA", {
+            timeZone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        }).format(date)
+        const todayDay = new Intl.DateTimeFormat("en-CA", {
+            timeZone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        }).format(now)
+        const tomorrow = new Date(now)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        const tomorrowDay = new Intl.DateTimeFormat("en-CA", {
+            timeZone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        }).format(tomorrow)
 
-    const outreachData = [
-        { name: "Instagram", value: 52.1, color: "#6B7280" },
-        { name: "Tiktok", value: 22.8, color: "#3B82F6" },
-        { name: "Linkedin", value: 13.9, color: "#10B981" },
-        { name: "Facebook", value: 11.2, color: "#8B5CF6" }
-    ]
+        if (meetingDay === todayDay) return "Today"
+        if (meetingDay === tomorrowDay) return "Tomorrow"
 
-    const upcomingMeetings = [
-        { name: "Jane Doe", email: "janed@gtech.com", date: "12/12/2025", time: "17:00 GMT", avatar: "/assets/Team/team-member-1.png" },
-        { name: "Jane Doe", email: "janed@gtech.com", date: "12/12/2025", time: "17:00 GMT", avatar: "/assets/Team/team-member-1.png" },
-        { name: "Jane Doe", email: "janed@gtech.com", date: "12/12/2025", time: "17:00 GMT", avatar: "/assets/Team/team-member-1.png" }
-    ]
+        return new Intl.DateTimeFormat(undefined, {
+            month: "2-digit",
+            day: "2-digit",
+            year: "numeric",
+            timeZone,
+        }).format(date)
+    }
+
+    const isMeetingToday = (iso: string, timeZone: string) => {
+        const date = new Date(iso)
+        const now = new Date()
+        const meetingDay = new Intl.DateTimeFormat("en-CA", {
+            timeZone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        }).format(date)
+        const todayDay = new Intl.DateTimeFormat("en-CA", {
+            timeZone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        }).format(now)
+        return meetingDay === todayDay
+    }
+
+    const formatMeetingTime = (iso: string, timeZone: string) => {
+        const date = new Date(iso)
+        return new Intl.DateTimeFormat(undefined, {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+            timeZone,
+        }).format(date)
+    }
+
+    const formatMeetingTimeRange = (startIso: string, endIso: string | null, timeZone: string) => {
+        const start = formatMeetingTime(startIso, timeZone)
+        if (!endIso) return start
+        return `${start} - ${formatMeetingTime(endIso, timeZone)}`
+    }
 
     return (
         <div className="w-full h-full bg-white text-[#111014] flex flex-col">
-            <div className="flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
+            <div className="dashboard-scroll-area flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
                 <div className="w-full max-w-6xl flex flex-col h-full pb-16">
             <div className="w-full flex justify-between items-center mb-2">
                 <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Dashboard</h1>
-                <div className="flex items-center gap-4">
-                    <div className="relative">
-                        <select 
-                            value={timeFilter} 
-                            onChange={(e) => setTimeFilter(e.target.value)}
-                            className="appearance-none bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200 text-sm text-[#6B7280] pr-8 cursor-pointer hover:bg-gray-50"
-                        >
-                            {weekOptions.map((option, index) => (
-                                <option key={index} value={option.value}>
-                                    {option.label} - {option.date}
-                                </option>
-                            ))}
-                        </select>
-                        <RiArrowDropDownLine className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
-                    </div>
-                    <div className="relative">
-                        <select 
-                            value={platformFilter} 
-                            onChange={(e) => setPlatformFilter(e.target.value)}
-                            className="appearance-none bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200 text-sm text-[#6B7280] pr-8 cursor-pointer hover:bg-gray-50"
-                        >
-                            {platformOptions.map((option, index) => (
-                                <option key={index} value={option}>
-                                    {option}
-                                </option>
-                            ))}
-                        </select>
-                        <RiArrowDropDownLine className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
-                    </div>
-                </div>
+                <div />
             </div>
 
             
@@ -200,100 +266,65 @@ const DashboardSection = () => {
                 <div className="flex-1">
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                            <div className="mb-2">
-                                <h3 className="text-sm font-medium text-[#6B7280]">LEADS GENERATED</h3>
-                            </div>
-                            <div className="text-2xl font-bold text-green-600 mb-1">5,000</div>
-                            <div className="flex items-center text-sm text-green-600">
-                                <FiTrendingUp className="w-3 h-3 mr-1" />
-                                8.5%
-                            </div>
-                        </div>
+                        {orderedStats.map((card) => {
+                            const trendUi = getTrendUi(card.growthDirection)
+                            const TrendIcon = trendUi.Icon
+                            const roundedGrowth = Number(card.growthPercent.toFixed(1))
+                            const growthLabel = roundedGrowth % 1 === 0 ? `${roundedGrowth.toFixed(0)}%` : `${roundedGrowth}%`
+                            const displayValue = statsLoading ? "..." : card.lifetimeValue.toLocaleString()
 
-                        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                            <div className="mb-2">
-                                <h3 className="text-sm font-medium text-[#6B7280]">CAMPAIGNS</h3>
-                            </div>
-                            <div className="text-2xl font-bold text-purple-600 mb-1">500</div>
-                            <div className="flex items-center text-sm text-green-600">
-                                <FiTrendingUp className="w-3 h-3 mr-1" />
-                                8.5%
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                            <div className="mb-2">
-                                <h3 className="text-sm font-medium text-[#6B7280]">CLIENTS</h3>
-                            </div>
-                            <div className="text-2xl font-bold text-blue-600 mb-1">
-                                {loading ? "..." : activeClientsCount}
-                            </div>
-                            <div className="flex items-center text-sm text-green-600">
-                                <FiTrendingUp className="w-3 h-3 mr-1" />
-                                8.5%
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                            <div className="mb-2">
-                                <h3 className="text-sm font-medium text-[#6B7280]">MEETINGS</h3>
-                            </div>
-                            <div className="text-2xl font-bold text-orange-600 mb-1">500</div>
-                            <div className="flex items-center text-sm text-green-600">
-                                <FiTrendingUp className="w-3 h-3 mr-1" />
-                                8.5%
-                            </div>
-                        </div>
+                            return (
+                                <div key={card.key} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                                    <div className="mb-2">
+                                        <h3 className="text-sm font-medium text-[#6B7280] uppercase">{card.label}</h3>
+                                    </div>
+                                    <div className={`text-2xl font-bold mb-1 ${numberColorByStat[card.key]}`}>
+                                        {displayValue}
+                                    </div>
+                                    <div className={`flex items-center text-sm ${trendUi.valueClass}`}>
+                                        <TrendIcon className={`w-3 h-3 mr-1 ${trendUi.iconClass}`} />
+                                        {statsLoading ? "..." : growthLabel}
+                                    </div>
+                                </div>
+                            )
+                        })}
                     </div>
 
                     
                     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-8">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Website Visits</h3>
-                            <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200">
-                                <span className="text-sm text-[#6B7280]">{monthFilter}</span>
-                                <RiArrowDropDownLine className="w-4 h-4 text-[#6B7280]" />
+                            <div className="relative">
+                                <select
+                                    value={monthFilter}
+                                    onChange={(e) => setMonthFilter(e.target.value)}
+                                    className="appearance-none bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200 text-sm text-[#6B7280] pr-8 cursor-pointer hover:bg-gray-50"
+                                >
+                                    {monthOptions.map((month) => (
+                                        <option key={month.value} value={month.value}>
+                                            {month.label}
+                                        </option>
+                                    ))}
+                                </select>
+                                <RiArrowDropDownLine className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
                             </div>
                         </div>
                         <div className="h-80 bg-gray-50 rounded-lg p-4 shadow-inner">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={websiteVisitsData}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                                    <XAxis dataKey="week" stroke="#6B7280" fontSize={12} />
-                                    <YAxis stroke="#6B7280" fontSize={12} />
-                                    <Tooltip 
-                                        contentStyle={{ 
-                                            backgroundColor: 'white', 
-                                            border: '1px solid #E5E7EB', 
-                                            borderRadius: '8px',
-                                            fontSize: '12px'
-                                        }} 
-                                    />
-                                    <Line 
-                                        type="monotone" 
-                                        dataKey="visits" 
-                                        stroke="#701CC0" 
-                                        strokeWidth={3}
-                                        dot={{ fill: '#701CC0', strokeWidth: 2, r: 4 }}
-                                    />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        
-                        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-                            <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-lg font-semibold text-[#111827]">Traffic by Device</h3>
-                            </div>
-                            <div className="h-64">
+                            {websiteVisitsLoading ? (
+                                <div className="h-full w-full flex items-center justify-center text-sm text-[#6B7280]">
+                                    Loading website visits...
+                                </div>
+                            ) : !websiteVisitsConfigured ? (
+                                <div className="h-full w-full flex items-center justify-center text-sm text-[#6B7280] text-center px-6">
+                                    Website visits not connected. Run{" "}
+                                    <code className="mx-1 text-xs bg-white px-1.5 py-0.5 rounded border">npm run connect-ga4</code>{" "}
+                                    and set <code className="text-xs">GA4_PROPERTY_ID</code> in .env.
+                                </div>
+                            ) : (
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={trafficByDeviceData}>
+                                    <LineChart data={websiteVisitsData}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-                                        <XAxis dataKey="device" stroke="#6B7280" fontSize={12} />
+                                        <XAxis dataKey="week" stroke="#6B7280" fontSize={12} />
                                         <YAxis stroke="#6B7280" fontSize={12} />
                                         <Tooltip 
                                             contentStyle={{ 
@@ -303,153 +334,143 @@ const DashboardSection = () => {
                                                 fontSize: '12px'
                                             }} 
                                         />
-                                        <Bar dataKey="traffic" fill="#701CC0" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
+                                        <Line 
+                                            type="monotone" 
+                                            dataKey="visits"
+                                            name="Visits"
+                                            stroke="#701CC0" 
+                                            strokeWidth={3}
+                                            dot={{ fill: '#701CC0', strokeWidth: 2, r: 4 }}
+                                        />
+                                    </LineChart>
                                 </ResponsiveContainer>
-                            </div>
-                        </div>
-
-                        
-                        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-                            <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-lg font-semibold text-[#111827]">Outreach</h3>
-                                <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200">
-                                    <span className="text-sm text-[#6B7280]">{monthFilter}</span>
-                                    <RiArrowDropDownLine className="w-4 h-4 text-[#6B7280]" />
-                                </div>
-                            </div>
-                            <div className="flex items-center justify-center">
-                                <div className="h-48 w-48">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie
-                                                data={outreachData}
-                                                cx="50%"
-                                                cy="50%"
-                                                innerRadius={60}
-                                                outerRadius={80}
-                                                paddingAngle={2}
-                                                dataKey="value"
-                                            >
-                                                {outreachData.map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={entry.color} />
-                                                ))}
-                                            </Pie>
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                </div>
-                            </div>
-                            <div className="mt-4 space-y-2">
-                                {outreachData.map((item, index) => (
-                                    <div key={index} className="flex items-center justify-between text-sm">
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></div>
-                                            <span className="text-[#6B7280]">{item.name}</span>
-                                        </div>
-                                        <span className="font-medium">{item.value}%</span>
-                                    </div>
-                                ))}
-                            </div>
+                            )}
                         </div>
                     </div>
+
                 </div>
 
                 
                 <div className="w-80 space-y-6">
-                    
-                    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
-                        <div className="mb-6">
-                            <h3 className="text-lg font-semibold text-[#111827] mb-4">Calendar</h3>
-                            <div className="flex items-center gap-2">
-                                <div className="relative">
-                                    <select 
-                                        value={calendarMonth} 
-                                        onChange={(e) => setCalendarMonth(e.target.value)}
-                                        className="appearance-none bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200 text-sm text-[#6B7280] pr-8 cursor-pointer hover:bg-gray-50"
-                                    >
-                                        {monthOptions.map((month, index) => (
-                                            <option key={index} value={month}>
-                                                {month}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <RiArrowDropDownLine className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
-                                </div>
-                                <div className="relative">
-                                    <select 
-                                        value={calendarYear} 
-                                        onChange={(e) => setCalendarYear(e.target.value)}
-                                        className="appearance-none bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200 text-sm text-[#6B7280] pr-8 cursor-pointer hover:bg-gray-50"
-                                    >
-                                        {yearOptions.map((year, index) => (
-                                            <option key={index} value={year}>
-                                                {year}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    <RiArrowDropDownLine className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
-                                </div>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-7 gap-1 text-center text-xs">
-                            {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(day => (
-                                <div key={day} className="p-2 text-[#6B7280] font-medium">{day}</div>
-                            ))}
-                            {calendarDays.map((day, index) => (
-                                <div 
-                                    key={index} 
-                                    className={`p-2 text-sm cursor-pointer hover:bg-gray-100 rounded ${
-                                        day === null ? 'invisible' : 
-                                        highlightedDays.includes(day) ? 'bg-blue-500 text-white' : 'text-[#111827]'
-                                    }`}
-                                >
-                                    {day}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    
                     <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Upcoming Meetings</h3>
                         </div>
-                        <div className="space-y-4">
-                            {upcomingMeetings.map((meeting, index) => (
-                                <div key={index} className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg">
-                                    <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                                        <span className="text-sm font-medium text-gray-600">JD</span>
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="font-medium text-sm mb-1">{meeting.name}</div>
-                                        <div className="text-xs text-[#6B7280] mb-2">{meeting.email}</div>
-                                        <div className="flex items-center gap-4 mb-3">
-                                            <div className="flex items-center gap-1 text-xs text-[#6B7280]">
-                                                <FiCalendar className="w-3 h-3" />
-                                                {meeting.date}
-                                            </div>
-                                            <div className="flex items-center gap-1 text-xs text-[#6B7280]">
-                                                <FiClock className="w-3 h-3" />
-                                                {meeting.time}
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-col gap-2">
-                                            <button className="w-full px-3 py-2 text-xs bg-white text-[#701CC0] border border-[#701CC0] rounded hover:bg-[#701CC0] hover:text-white transition">
-                                                Send Reminder
-                                            </button>
-                                            <button className="w-full px-3 py-2 text-xs bg-[#701CC0] text-white rounded hover:bg-[#5f17a5] transition">
-                                                Join Meeting
-                                            </button>
-                                        </div>
+                        {meetingsLoading ? (
+                            <div className="text-sm text-[#6B7280]">Loading upcoming meetings...</div>
+                        ) : !calendarConnected ? (
+                            <div className="rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-4">
+                                <p className="text-sm text-[#374151]">
+                                    Connect your Google Gmail account in settings to load upcoming meetings.
+                                </p>
+                            </div>
+                        ) : calendarNeedsReconnect ? (
+                            <div className="rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-4">
+                                <p className="text-sm text-[#6B7280]">
+                                    Reconnect your Google account in settings to grant calendar access, then refresh this page.
+                                </p>
+                                {calendarIssueMessage ? (
+                                    <p className="mt-2 text-xs text-[#9CA3AF]">{calendarIssueMessage}</p>
+                                ) : null}
+                            </div>
+                        ) : upcomingMeetings.length === 0 ? (
+                            <div className="rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-4 flex flex-col items-center text-center">
+                                <div className="relative mb-3 flex h-14 w-14 items-center justify-center">
+                                    <div className="meeting-empty-ping absolute inset-0 rounded-full bg-[#E9D5FF]" />
+                                    <div className="meeting-empty-icon relative flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm border border-[#E9D5FF]">
+                                        <FiCalendar className="h-5 w-5 text-[#701CC0]" />
                                     </div>
                                 </div>
-                            ))}
-                        </div>
+                                <p className="text-sm text-[#6B7280]">No upcoming meetings found in your connected calendars.</p>
+                                {calendarIssueMessage ? (
+                                    <p className="mt-2 text-xs text-[#9CA3AF]">{calendarIssueMessage}</p>
+                                ) : null}
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {upcomingMeetings.map((meeting) => (
+                                    <div key={meeting.id} className="p-4 bg-gray-50 rounded-lg">
+                                        <div className="min-w-0">
+                                            <div className="font-medium text-sm mb-2">{meeting.title}</div>
+                                            <div className="flex items-center gap-4 mb-3">
+                                                <div className="flex items-center gap-1 text-xs text-[#6B7280]">
+                                                    <FiCalendar className="w-3 h-3" />
+                                                    <span className={isMeetingToday(meeting.startIso, meeting.timeZone) ? "text-red-600 font-semibold" : ""}>
+                                                        {formatMeetingDate(meeting.startIso, meeting.timeZone)}
+                                                    </span>
+                                                </div>
+                                                <div className="flex items-center gap-1 text-xs text-[#6B7280]">
+                                                    <FiClock className="w-3 h-3" />
+                                                    {formatMeetingTimeRange(meeting.startIso, meeting.endIso, meeting.timeZone)}
+                                                </div>
+                                            </div>
+                                            {meeting.meetingLink ? (
+                                                <a
+                                                    href={meeting.meetingLink}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex w-full items-center justify-center px-3 py-2 text-xs bg-[#701CC0] text-white rounded hover:bg-[#5f17a5] transition"
+                                                >
+                                                    Join Meeting
+                                                </a>
+                                            ) : (
+                                                <div className="inline-flex w-full items-center justify-center px-3 py-2 text-xs bg-gray-200 text-gray-600 rounded">
+                                                    No Meeting Link
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
                 </div>
             </div>
         </div>
+        <style jsx>{`
+            .dashboard-scroll-area {
+                scrollbar-width: none;
+                -ms-overflow-style: none;
+            }
+
+            .dashboard-scroll-area::-webkit-scrollbar {
+                display: none;
+            }
+
+            .meeting-empty-ping {
+                animation: meetingPulse 1.8s ease-out infinite;
+            }
+
+            .meeting-empty-icon {
+                animation: meetingFloat 2.4s ease-in-out infinite;
+            }
+
+            @keyframes meetingPulse {
+                0% {
+                    transform: scale(0.75);
+                    opacity: 0.85;
+                }
+                70% {
+                    transform: scale(1.35);
+                    opacity: 0;
+                }
+                100% {
+                    transform: scale(1.35);
+                    opacity: 0;
+                }
+            }
+
+            @keyframes meetingFloat {
+                0%,
+                100% {
+                    transform: translateY(0);
+                }
+                50% {
+                    transform: translateY(-3px);
+                }
+            }
+        `}</style>
         </div>
     )
 }

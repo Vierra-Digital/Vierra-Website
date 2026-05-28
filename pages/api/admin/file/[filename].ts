@@ -52,6 +52,27 @@ function wrapCellText(
   return lines
 }
 
+function columnWeight(header: string) {
+  const h = header.toLowerCase()
+  if (h === "email") return 3.2
+  if (h === "address" || h === "website") return 1.9
+  if (h === "business") return 1.5
+  if (h === "phone") return 1.25
+  return 1
+}
+
+function buildColumnWidths(headerRow: string[], columnCount: number, tableWidth: number) {
+  const weights = Array.from({ length: columnCount }).map((_, index) =>
+    columnWeight(String(headerRow[index] || ""))
+  )
+  const total = weights.reduce((sum, w) => sum + w, 0) || 1
+  return weights.map((w) => (tableWidth * w) / total)
+}
+
+function columnOffset(columnWidths: number[], index: number, marginX: number) {
+  return marginX + columnWidths.slice(0, index).reduce((sum, w) => sum + w, 0)
+}
+
 async function convertXlsxToPdfBuffer(xlsxBuffer: Buffer, title: string) {
   const workbook = XLSX.read(xlsxBuffer, { type: "buffer" })
   const sheetName = workbook.SheetNames[0]
@@ -96,8 +117,8 @@ async function convertXlsxToPdfBuffer(xlsxBuffer: Buffer, title: string) {
   const normalizedRows = (rows || []).map((row) => (Array.isArray(row) ? row.map(cellToText) : []))
   const columnCount = Math.max(1, ...normalizedRows.map((row) => row.length), 1)
   const tableWidth = pageWidth - marginX * 2
-  const columnWidth = tableWidth / columnCount
   const headerRow = normalizedRows[0] || []
+  const columnWidths = buildColumnWidths(headerRow, columnCount, tableWidth)
 
   const drawHeader = () => {
     const headerHeight = lineHeight + cellPaddingY * 2
@@ -110,18 +131,19 @@ async function convertXlsxToPdfBuffer(xlsxBuffer: Buffer, title: string) {
     })
 
     for (let c = 0; c < columnCount; c += 1) {
-      const x = marginX + c * columnWidth
+      const colWidth = columnWidths[c]
+      const x = columnOffset(columnWidths, c, marginX)
       page.drawRectangle({
         x,
         y: cursorY - headerHeight + 1,
-        width: columnWidth,
+        width: colWidth,
         height: headerHeight,
         borderColor: rgb(0.82, 0.84, 0.90),
         borderWidth: 0.6,
       })
       const text = headerRow[c] || `Column ${c + 1}`
       const trimmed =
-        bold.widthOfTextAtSize(text, headerFontSize) > columnWidth - cellPaddingX * 2
+        bold.widthOfTextAtSize(text, headerFontSize) > colWidth - cellPaddingX * 2
           ? `${text.slice(0, Math.max(1, Math.floor(text.length * 0.75)))}...`
           : text
       page.drawText(trimmed, {
@@ -139,7 +161,7 @@ async function convertXlsxToPdfBuffer(xlsxBuffer: Buffer, title: string) {
   for (let rowIndex = 1; rowIndex < normalizedRows.length; rowIndex += 1) {
     const row = normalizedRows[rowIndex]
     const wrappedByColumn = Array.from({ length: columnCount }).map((_, c) =>
-      wrapCellText(row[c] || "", columnWidth - cellPaddingX * 2, regular, bodyFontSize, maxCellLines)
+      wrapCellText(row[c] || "", columnWidths[c] - cellPaddingX * 2, regular, bodyFontSize, maxCellLines)
     )
     const rowLineCount = Math.max(1, ...wrappedByColumn.map((lines) => lines.length))
     const rowHeight = rowLineCount * lineHeight + cellPaddingY * 2
@@ -151,12 +173,13 @@ async function convertXlsxToPdfBuffer(xlsxBuffer: Buffer, title: string) {
     }
 
     for (let c = 0; c < columnCount; c += 1) {
-      const x = marginX + c * columnWidth
+      const colWidth = columnWidths[c]
+      const x = columnOffset(columnWidths, c, marginX)
       const y = cursorY - rowHeight
       page.drawRectangle({
         x,
         y,
-        width: columnWidth,
+        width: colWidth,
         height: rowHeight,
         borderColor: rgb(0.86, 0.88, 0.92),
         borderWidth: 0.5,
