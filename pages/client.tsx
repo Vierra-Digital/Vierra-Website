@@ -201,11 +201,13 @@ const ClientPage = () => {
                     priority
                     quality={100}
                   />
-                  <div id="name-holder" className="hidden w-auto h-auto text-[#111014] md:flex items-center font-semibold">
-                    <span>{currentUserName || session?.user?.name || "Client"}</span>
-                  </div>
-                  <div id="dropdowner" className="hidden md:flex">
-                    <RiArrowDropDownLine width={32} height={32} className="w-8 h-8" />
+                  <div className="hidden md:flex items-center gap-0">
+                    <div id="name-holder" className="w-auto h-auto text-[#111014] flex items-center font-semibold">
+                      <span>{currentUserName || session?.user?.name || "Client"}</span>
+                    </div>
+                    <div id="dropdowner" className="flex -ml-1">
+                      <RiArrowDropDownLine width={32} height={32} className="w-8 h-8" />
+                    </div>
                   </div>
                 </button>
               </div>
