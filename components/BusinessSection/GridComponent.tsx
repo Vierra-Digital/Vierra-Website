@@ -203,7 +203,7 @@ function GridComponent() {
         opacity: 1,
         pathLength: 1,
         transition: {
-          pathLength: { duration: 0.5, ease: "easeInOut" },
+          pathLength: { duration: 0.5, ease: "easeInOut" as const },
           opacity: { duration: 0.1 },
         },
       },
@@ -217,7 +217,7 @@ function GridComponent() {
         pathLength: 1,
         pathOffset: 1,
         transition: {
-          pathOffset: { duration: 0.5, ease: "easeInOut" },
+          pathOffset: { duration: 0.5, ease: "easeInOut" as const },
           opacity: { duration: 0.4 },
         },
       },
@@ -236,7 +236,7 @@ function GridComponent() {
       backgroundColor: "#F3F3F3",
       transition: {
         duration: 0.3,
-        ease: "easeOut",
+        ease: "easeOut" as const,
       },
     },
     active: {
@@ -244,10 +244,10 @@ function GridComponent() {
       transition: {
         backgroundColor: {
           duration: 2.5,
-          ease: "easeInOut",
+          ease: "easeInOut" as const,
         },
         duration: 0.3,
-        ease: "easeOut",
+        ease: "easeOut" as const,
       },
     },
   }
@@ -598,7 +598,7 @@ function GridComponent() {
                         transition={{
                           duration: 3,
                           repeat: Infinity,
-                          ease: "easeInOut",
+                          ease: "easeInOut" as const,
                         }}
                       />
                       <motion.stop
@@ -607,7 +607,7 @@ function GridComponent() {
                         transition={{
                           duration: 3,
                           repeat: Infinity,
-                          ease: "easeInOut",
+                          ease: "easeInOut" as const,
                         }}
                       />
                       <motion.stop
@@ -616,7 +616,7 @@ function GridComponent() {
                         transition={{
                           duration: 3,
                           repeat: Infinity,
-                          ease: "easeInOut",
+                          ease: "easeInOut" as const,
                         }}
                       />
                       <motion.stop
@@ -625,7 +625,7 @@ function GridComponent() {
                         transition={{
                           duration: 3,
                           repeat: Infinity,
-                          ease: "easeInOut",
+                          ease: "easeInOut" as const,
                         }}
                       />
                     </linearGradient>
