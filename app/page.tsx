@@ -21,10 +21,10 @@ const heroVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { staggerChildren: 0.2, ease: "easeOut" },
+    transition: { staggerChildren: 0.2, ease: "easeOut" as const },
   },
 }
-const heroTitleTransition = { duration: 0.6, ease: "easeOut" }
+const heroTitleTransition = { duration: 0.6, ease: "easeOut" as const }
 const ctaVariants = {
   hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0 },
@@ -40,13 +40,13 @@ const floatingGradientTransition = {
   duration: 5,
   repeat: Infinity,
   repeatType: "loop" as const,
-  ease: "easeInOut",
+  ease: "easeInOut" as const,
 }
 const heroImageTransition = {
   duration: 2,
   repeat: Infinity,
   repeatType: "loop" as const,
-  ease: "easeInOut",
+  ease: "easeInOut" as const,
 }
 const LazyBusinessSolutions = dynamic(
   () =>
@@ -113,8 +113,8 @@ export default function Page() {
             transition={{
               duration: 3,
               delay: index * 0.2,
-              ease: "easeInOut",
-              x: { duration: 4, repeat: Infinity, ease: "easeInOut" },
+              ease: "easeInOut" as const,
+              x: { duration: 4, repeat: Infinity, ease: "easeInOut" as const },
             }}
           />
         ))}
@@ -199,7 +199,7 @@ export default function Page() {
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
+            transition={{ duration: 0.8, ease: "easeOut" as const }}
             className="flex-shrink-0"
           >
             <motion.div initial={{ y: 0 }} animate={{ y: [0, -10, 0] }} transition={heroImageTransition}>

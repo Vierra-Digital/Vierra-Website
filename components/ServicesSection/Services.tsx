@@ -54,7 +54,7 @@ const descriptionVariants = {
     y: 0,
     transition: {
       duration: 0.3,
-      ease: "easeOut",
+      ease: "easeOut" as const,
     },
   },
   exit: {
@@ -63,7 +63,7 @@ const descriptionVariants = {
     y: -10,
     transition: {
       duration: 0.2,
-      ease: "easeIn",
+      ease: "easeIn" as const,
     },
   },
 }
@@ -176,11 +176,14 @@ const Model = React.memo(function Model({
                 let hasValidTexture = false
                 if (material.map) {
                   try {
-                    const imageSrc = material.map.image?.src || ""
-                    hasValidTexture = imageSrc && 
+                    const mapImage = material.map.image as HTMLImageElement | undefined
+                    const imageSrc = mapImage?.src || ""
+                    hasValidTexture = Boolean(
+                      imageSrc &&
                       !imageSrc.startsWith("blob:") &&
-                      material.map.image.complete &&
-                      !material.map.image.error
+                      mapImage?.complete &&
+                      (mapImage?.naturalWidth ?? 0) > 0
+                    )
                   } catch {
                     hasValidTexture = false
                   }

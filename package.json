@@ -49,7 +49,7 @@
     "iconsax-reactjs": "^0.0.8",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.474.0",
-    "next": "^15.5.14",
+    "next": "^15.5.18",
     "next-auth": "^4.24.13",
     "nodemailer": "^8.0.4",
     "particles.js": "^2.0.0",
@@ -67,7 +67,7 @@
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
     "three": "^0.174.0",
-    "uuid": "^11.1.0",
+    "uuid": "^11.1.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
@@ -81,8 +81,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9.39.4",
-    "eslint-config-next": "^15.5.14",
-    "postcss": "^8",
+    "eslint-config-next": "^15.5.18",
+    "postcss": "^8.5.15",
     "prisma": "^6.19.3",
     "tailwindcss": "^3.4.1",
     "ts-node": "^10.9.2",
@@ -101,10 +101,17 @@
     "glob": "10.5.0",
     "@eslint/config-array": "0.23.4",
     "next-auth": {
-      "nodemailer": "$nodemailer"
+      "nodemailer": "$nodemailer",
+      "uuid": "$uuid"
     },
     "glob@7.2.3": {
       "minimatch": "3.1.4"
+    },
+    "next": {
+      "postcss": "8.5.15"
+    },
+    "exceljs": {
+      "uuid": "$uuid"
     }
   }
 }
