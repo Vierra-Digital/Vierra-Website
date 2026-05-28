@@ -42,6 +42,34 @@ const tabs: TabItem[] = [
   },
 ]
 
+const headerContainerVariants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.18 } },
+}
+
+const headerItemVariants = {
+  hidden: { opacity: 0, y: 35 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.65, ease: [0.32, 0.72, 0, 1] },
+  },
+}
+
+const tabContainerVariants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.1 } },
+}
+
+const tabItemVariants = {
+  hidden: { opacity: 0, x: -24 },
+  show: {
+    opacity: 1,
+    x: 0,
+    transition: { duration: 0.5, ease: [0.32, 0.72, 0, 1] },
+  },
+}
+
 export function BusinessSolutions() {
   const [activeTab, setActiveTab] = useState(tabs[0].id)
 
@@ -59,29 +87,50 @@ export function BusinessSolutions() {
   return (
     <section className="w-full py-20 px-6 bg-[#F3F3F3]" id="solutions">
       <div className="max-w-7xl mx-auto px-6 max-md:px-2">
-        <div className="grid md:grid-cols-2 gap-12 mb-16">
-          <h2
+        {/* Header — staggered fade-up on scroll */}
+        <motion.div
+          className="grid md:grid-cols-2 gap-12 mb-16"
+          variants={headerContainerVariants}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, margin: "-80px" }}
+        >
+          <motion.h2
             className={`text-3xl font-semibold text-[#18042A] mb-4 ${bricolage.className}`}
+            variants={headerItemVariants}
           >
             We Are Not Your Average
             <br />
-            “Consultants”
-          </h2>
-          <p className={`text-[#8A9197] text-lg ${inter.className}`}>
-            We reduce complexity by eliminating corporate formalities. We
+            "Consultants"
+          </motion.h2>
+          <motion.p
+            className={`text-[#8A9197] text-lg ${inter.className}`}
+            variants={headerItemVariants}
+          >
+           We reduce complexity by eliminating corporate formalities. We
             implement a clear-cut and simple approach to increasing the return
             on ad spending. Our team hand-picks leads so we can offer more
             clients and increase your time.
-          </p>
-        </div>
+            </motion.p>
+        </motion.div>
+
         <div className="grid md:grid-cols-2 gap-12 mb-20 place-items-center">
-          <div className="space-y-6 relative max-md:min-h-[480px]">
+          {/* Tabs — staggered slide-in from left */}
+          <motion.div
+            className="space-y-6 relative max-md:min-h-[480px]"
+            variants={tabContainerVariants}
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, margin: "-60px" }}
+          >
             {tabs.map((tab) => (
               <motion.div
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`block text-left w-full cursor-pointer ${bricolage.className}`}
-                initial={false}
+                variants={tabItemVariants}
+                whileHover={{ x: 6 }}
+                whileTap={{ scale: 0.98 }}
               >
                 <motion.h3
                   className={`text-2xl sm:text-4xl md:text-5xl md:mb-6 relative inline-block ${
@@ -169,18 +218,42 @@ export function BusinessSolutions() {
                 </AnimatePresence>
               </motion.div>
             ))}
-          </div>
-          <div className="relative mx-auto">
+          </motion.div>
+
+          {/* Grid — scale + fade entrance */}
+          <motion.div
+            className="relative mx-auto"
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.7, ease: [0.32, 0.72, 0, 1] }}
+          >
             <GridComponent />
-          </div>
+          </motion.div>
         </div>
       </div>
-      <div className="mt-24">
+
+      {/* Timeline — fade in only (no y-transform: preserves sticky behaviour) */}
+      <motion.div
+        className="mt-24"
+        initial={{ opacity: 0 }}
+        whileInView={{ opacity: 1 }}
+        viewport={{ once: true, margin: "-40px" }}
+        transition={{ duration: 0.7, ease: "easeOut" }}
+      >
         <Timeline />
-      </div>
-      <div className="mt-24">
+      </motion.div>
+
+      {/* StatsGrid — fade up on scroll */}
+      <motion.div
+        className="mt-24"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-60px" }}
+        transition={{ duration: 0.65, ease: [0.32, 0.72, 0, 1] }}
+      >
         <StatsGrid />
-      </div>
+      </motion.div>
     </section>
   )
 }

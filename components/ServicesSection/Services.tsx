@@ -1,10 +1,8 @@
 "use client"
-import React, { useState, useEffect, useRef, useMemo } from "react"
+import React, { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Bricolage_Grotesque, Figtree } from "next/font/google"
-import { Canvas, useFrame } from "@react-three/fiber"
-import { useGLTF } from "@react-three/drei"
-import * as THREE from "three"
+import { ServiceIconDisplay } from "./ServiceIconDisplay"
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
 const figtree = Figtree({ subsets: ["latin"] })
@@ -43,223 +41,20 @@ const services: Service[] = [
 ]
 
 const descriptionVariants = {
-  initial: {
-    opacity: 0,
-    height: 0,
-    y: -10,
-  },
+  initial: { opacity: 0, height: 0, y: -10 },
   animate: {
     opacity: 1,
     height: "auto",
     y: 0,
-    transition: {
-      duration: 0.3,
-      ease: "easeOut",
-    },
+    transition: { duration: 0.3, ease: "easeOut" },
   },
   exit: {
     opacity: 0,
     height: 0,
     y: -10,
-    transition: {
-      duration: 0.2,
-      ease: "easeIn",
-    },
+    transition: { duration: 0.2, ease: "easeIn" },
   },
 }
-
-const Lighting = () => (
-  <>
-    <ambientLight intensity={2.5} />
-    <directionalLight position={[5, 8, 5]} intensity={4} color="#ffffff" />
-    <directionalLight position={[-5, 8, -5]} intensity={3} color="#B0E0E6" />
-    <directionalLight position={[0, -8, 0]} intensity={2} color="#5B9BD5" />
-    <pointLight position={[10, 10, 10]} intensity={2} color="#87CEEB" />
-    <pointLight position={[-10, -10, -10]} intensity={1.5} color="#4169E1" />
-  </>
-)
-
-const getAnimationConfig = (isMobile: boolean) => {
-  return {
-    modelPosition: [0, 0, 0],
-    modelScale: 4,
-    modelScaleAnimating: 4.2,
-    springStrength: isMobile ? 3 : 5,
-    moveSpeed: {
-      animating: isMobile ? 0.2 : 0.15,
-      idle: isMobile ? 0.08 : 0.05,
-    },
-    getPositionForId: (id: string | null, services: Service[]) => {
-      if (!id) return new THREE.Vector3(0, 0, 0)
-
-      const index = services.findIndex((service) => service.id === id)
-      if (index === -1) return new THREE.Vector3(0, 0, 0)
-
-      if (isMobile) {
-        const angle = (index / services.length) * Math.PI * 2
-        const radius = 0.5
-        const x = Math.sin(angle) * radius
-        const z = Math.cos(angle) * radius
-        return new THREE.Vector3(x, 0, z)
-      } else {
-        const yOffset = index === services.length - 1 ? 0.4 : 0
-        return new THREE.Vector3(0, 1.5 - index + yOffset, 0)
-      }
-    },
-  }
-}
-
-const Model = React.memo(function Model({
-  selectedId,
-  isMobile,
-}: {
-  selectedId: string | null
-  isMobile: boolean
-}) {
-  const gltf = useGLTF("/assets/object.glb")
-  const [isAnimating, setIsAnimating] = useState(false)
-  const lastSelectedId = useRef<string | null>(null)
-  const animConfig = useMemo(() => getAnimationConfig(isMobile), [isMobile])
-  const force = useRef(new THREE.Vector3())
-
-  const targetPosition = animConfig.getPositionForId(selectedId, services)
-
-  useEffect(() => {
-    if (selectedId !== lastSelectedId.current) {
-      setIsAnimating(true)
-      lastSelectedId.current = selectedId
-      const timeout = setTimeout(() => setIsAnimating(false), 500)
-      return () => clearTimeout(timeout)
-    }
-  }, [selectedId])
-  useEffect(() => {
-    if (!gltf.scene) return
-    const createGradientTexture = () => {
-      const size = 512
-      const canvas = document.createElement("canvas")
-      canvas.width = size
-      canvas.height = size
-      const context = canvas.getContext("2d")
-      
-      if (!context) return null
-      context.fillStyle = "#701CC0"
-      context.fillRect(0, 0, size, size)
-      
-      const texture = new THREE.CanvasTexture(canvas)
-      texture.wrapS = THREE.RepeatWrapping
-      texture.wrapT = THREE.RepeatWrapping
-      texture.minFilter = THREE.LinearFilter
-      texture.magFilter = THREE.LinearFilter
-      texture.needsUpdate = true
-      return texture
-    }
-    const fixMaterials = () => {
-      const gradientTexture = createGradientTexture()
-      
-      gltf.scene.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          if (child.geometry) {
-            child.geometry.computeVertexNormals()
-            child.geometry.normalizeNormals()
-            if (child.geometry.attributes.normal) {
-              child.geometry.attributes.normal.needsUpdate = true
-            }
-          }
-          
-          if (child.material) {
-            const materials = Array.isArray(child.material)
-              ? child.material
-              : [child.material]
-
-            materials.forEach((material) => {
-              if (material instanceof THREE.MeshStandardMaterial) {
-                let hasValidTexture = false
-                if (material.map) {
-                  try {
-                    const imageSrc = material.map.image?.src || ""
-                    hasValidTexture = imageSrc && 
-                      !imageSrc.startsWith("blob:") &&
-                      material.map.image.complete &&
-                      !material.map.image.error
-                  } catch {
-                    hasValidTexture = false
-                  }
-                }
-
-                if (!hasValidTexture && gradientTexture) {
-                  if (material.map) {
-                    try {
-                      material.map.dispose()
-                    } catch {
-                    }
-                  }
-                  material.map = gradientTexture
-                  material.color = new THREE.Color(0x701CC0)
-                  material.emissive = new THREE.Color(0x701CC0)
-                  material.emissiveIntensity = 0.05
-                  material.metalness = 0.15
-                  material.roughness = 0.1
-                  material.side = THREE.DoubleSide
-                  material.flatShading = false
-                  material.map.needsUpdate = true
-                } else if (hasValidTexture) {
-                  material.metalness = 0.1
-                  material.roughness = 0.25
-                  material.flatShading = false
-                  material.side = THREE.DoubleSide
-                }
-                material.flatShading = false
-                material.needsUpdate = true
-              }
-            })
-          }
-        }
-      })
-    }
-    fixMaterials()
-    const timeout = setTimeout(fixMaterials, 100)
-    const timeout2 = setTimeout(fixMaterials, 500)
-
-    return () => {
-      clearTimeout(timeout)
-      clearTimeout(timeout2)
-    }
-  }, [gltf.scene])
-
-  useFrame((state, delta) => {
-    if (!gltf.scene) return
-
-    force.current
-      .subVectors(targetPosition, gltf.scene.position)
-      .multiplyScalar(animConfig.springStrength)
-    const moveSpeed = isAnimating
-      ? animConfig.moveSpeed.animating
-      : animConfig.moveSpeed.idle
-    gltf.scene.position.add(force.current.multiplyScalar(moveSpeed * delta))
-
-    const targetScale = isAnimating
-      ? animConfig.modelScaleAnimating
-      : animConfig.modelScale
-    gltf.scene.scale.lerp(
-      new THREE.Vector3(targetScale, targetScale, targetScale),
-      0.1
-    )
-
-    const targetRotationY = selectedId
-      ? (parseInt(selectedId) - 1) * (Math.PI / 2)
-      : gltf.scene.rotation.y
-    gltf.scene.rotation.y += (targetRotationY - gltf.scene.rotation.y) * 0.05
-    gltf.scene.rotation.y += delta / 2
-  })
-
-  return (
-    <primitive
-      object={gltf.scene}
-      scale={animConfig.modelScale}
-      position={animConfig.modelPosition}
-    />
-  )
-})
 
 const ServiceItem = React.memo(function ServiceItem({
   service,
@@ -271,7 +66,7 @@ const ServiceItem = React.memo(function ServiceItem({
   toggleService: (id: string) => void
 }) {
   return (
-    <div key={service.id}>
+    <div>
       <motion.div
         onClick={() => toggleService(service.id)}
         className={`flex items-center cursor-pointer border-b py-6 md:py-8 group ${
@@ -330,64 +125,15 @@ const ServiceItem = React.memo(function ServiceItem({
 })
 
 export function Services() {
-  const [openServiceId, setOpenServiceId] = useState<string | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const canvasWrapperRef = useRef<HTMLDivElement>(null)
-  const [canvasSize, setCanvasSize] = useState({ width: 480, height: 800 })
-  const [isCanvasActive, setIsCanvasActive] = useState(false)
-
-  useEffect(() => {
-    if (!canvasWrapperRef.current) return
-
-    const updateCanvasSize = () => {
-      const isMobileView = window.innerWidth <= 768
-      const containerWidth = canvasWrapperRef.current
-        ? canvasWrapperRef.current.clientWidth
-        : 0
-      const size = isMobileView
-        ? Math.min(Math.max(containerWidth, 280), 350)
-        : Math.min(containerWidth, 480)
-      setCanvasSize({ width: size, height: isMobileView ? 350 : 800 })
-    }
-
-    const observer = new ResizeObserver(updateCanvasSize)
-    observer.observe(canvasWrapperRef.current)
-
-    updateCanvasSize()
-
-    return () => observer.disconnect()
-  }, [])
-
-  useEffect(() => {
-    if (!canvasWrapperRef.current) return
-    if (typeof IntersectionObserver === "undefined") {
-      setIsCanvasActive(true)
-      return
-    }
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsCanvasActive(true)
-          observer.disconnect()
-        }
-      },
-      { rootMargin: "200px" }
-    )
-    observer.observe(canvasWrapperRef.current)
-    return () => observer.disconnect()
-  }, [])
+  const [openServiceId, setOpenServiceId] = useState<string | null>(services[0].id)
 
   useEffect(() => {
     const timer = setInterval(() => {
       setOpenServiceId((prevId) => {
-        const currentIndex = services.findIndex(
-          (service) => service.id === prevId
-        )
-        const nextIndex = (currentIndex + 1) % services.length
-        return services[nextIndex].id
+        const currentIndex = services.findIndex((s) => s.id === prevId)
+        return services[(currentIndex + 1) % services.length].id
       })
     }, 5000)
-
     return () => clearInterval(timer)
   }, [])
 
@@ -396,38 +142,34 @@ export function Services() {
   }
 
   return (
-    <div
-      className="w-full max-w-[1174px] px-4 md:px-6 lg:px-0 my-20"
-      id="services"
-      ref={containerRef}
-    >
+    <div className="w-full my-20" id="services">
+      {/* Narrow screens: card only, no icon */}
       <div
-        className={`relative w-full min-h-[600px] md:min-h-[773px] bg-[#18042A] rounded-[30px] md:rounded-tr-[60px] md:rounded-br-[60px] md:rounded-tl-[0px] md:rounded-bl-[0px] z-0 ${bricolage.className}`}
+        className={`block lg:hidden relative w-full min-h-[600px] bg-[#18042A]
+          rounded-[30px] md:rounded-tr-[60px] md:rounded-br-[60px]
+          md:rounded-tl-none md:rounded-bl-none z-0 mx-4 md:mx-0 ${bricolage.className}`}
       >
-        <div className="block md:hidden">
-          <div
-            className="py-8 flex justify-center"
-            ref={canvasWrapperRef}
-            style={{ minHeight: "350px" }}
-          >
-            {isCanvasActive ? (
-              <Canvas
-                style={{
-                  width: canvasSize.width,
-                  height: canvasSize.height,
-                  minHeight: "350px",
-                }}
-                gl={{ antialias: true, alpha: true }}
-                camera={{ position: [0, 0, 5], fov: 75 }}
-              >
-                <Lighting />
-                <Model selectedId={openServiceId} isMobile={true} />
-              </Canvas>
-            ) : (
-              <div className="w-full h-[350px]" />
-            )}
-          </div>
-          <div className="px-4 py-4">
+        <div className="px-6 md:px-12 xl:px-20 py-12 md:py-20">
+          {services.map((service) => (
+            <ServiceItem
+              key={service.id}
+              service={service}
+              isOpen={openServiceId === service.id}
+              toggleService={toggleService}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Wide screens: equal two-column grid, card left, icon right */}
+      <div className="hidden lg:grid lg:grid-cols-2 items-stretch">
+        {/* Card — left column */}
+        <div
+          className={`relative min-h-[773px] bg-[#18042A]
+            rounded-tr-[60px] rounded-br-[60px] rounded-tl-none rounded-bl-none
+            z-0 ${bricolage.className}`}
+        >
+          <div className="px-12 xl:px-20 py-20">
             {services.map((service) => (
               <ServiceItem
                 key={service.id}
@@ -438,40 +180,10 @@ export function Services() {
             ))}
           </div>
         </div>
-        <div className="hidden md:block">
-          <div
-            className="z-10 absolute right-[12%] top-1/3 -translate-y-[40%] translate-x-1/2"
-            ref={canvasWrapperRef}
-          >
-            {isCanvasActive ? (
-              <Canvas
-                style={{
-                  width: canvasSize.width,
-                  height: canvasSize.height,
-                }}
-                gl={{ antialias: true }}
-                onPointerOver={() => (document.body.style.cursor = "grab")}
-                onPointerOut={() => (document.body.style.cursor = "default")}
-              >
-                <Lighting />
-                <Model selectedId={openServiceId} isMobile={false} />
-              </Canvas>
-            ) : (
-              <div
-                style={{ width: canvasSize.width, height: canvasSize.height }}
-              />
-            )}
-          </div>
-          <div className="px-4 md:ml-40 md:mr-20 py-8 md:py-20">
-            {services.map((service) => (
-              <ServiceItem
-                key={service.id}
-                service={service}
-                isOpen={openServiceId === service.id}
-                toggleService={toggleService}
-              />
-            ))}
-          </div>
+
+        {/* Icon — right column, centered */}
+        <div className="flex items-center justify-center">
+          <ServiceIconDisplay selectedId={openServiceId} size="lg" />
         </div>
       </div>
     </div>

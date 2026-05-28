@@ -42,20 +42,37 @@ const Timeline = () => {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
+  const trackFillWidth =
+    activeStep >= 0 ? `${((activeStep + 1) / steps.length) * 100}%` : "0%"
+
   return (
     <>
+      {/* Desktop — sticky scroll-driven timeline */}
       <div
         id="timeline-section"
         className="hidden lg:block relative h-[200vh] mx-[-1.5rem]"
       >
         <div className="bg-gradient-to-r from-[#010205] via-[#0c0415] to-[#19082d] text-white py-16 px-20 sticky top-0 h-[100vh] flex flex-col justify-center w-full overflow-hidden">
-          <h2
+          <motion.h2
             className={`${bricolage.className} text-5xl font-normal text-start mb-16`}
+            initial={{ opacity: 0, x: -30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.7, ease: [0.32, 0.72, 0, 1] }}
           >
             How Does It Work?
-          </h2>
+          </motion.h2>
+
           <div className="h-[50vh] flex relative w-full justify-between items-center">
-            <div className="absolute top-1/2 left-0 right-0 h-4 bg-[#3E1F58] z-0" />
+            {/* Track — grey rail with animated purple fill */}
+            <div className="absolute top-1/2 left-0 right-0 h-4 bg-[#3E1F58] z-0 overflow-hidden">
+              <motion.div
+                className="h-full bg-[#701CC0]"
+                animate={{ width: trackFillWidth }}
+                transition={{ duration: 0.5, ease: [0.32, 0.72, 0, 1] }}
+              />
+            </div>
+
             {steps.map((step, index) => (
               <div key={index} className="relative w-1/4 text-center">
                 <div
@@ -70,11 +87,7 @@ const Timeline = () => {
                       opacity: activeStep >= index ? 1 : 0,
                       scale: activeStep >= index ? 1 : 0.5,
                     }}
-                    transition={{
-                      duration: 0.8,
-                      type: "spring",
-                      stiffness: 100,
-                    }}
+                    transition={{ duration: 0.8, type: "spring", stiffness: 100 }}
                   >
                     {step.number}
                   </motion.span>
@@ -87,6 +100,8 @@ const Timeline = () => {
                     {step.text}
                   </motion.p>
                 </div>
+
+                {/* Circle with pulsing ring when active */}
                 <motion.div
                   className="relative z-10 w-12 h-12 bg-[#7A13D0] left-[9.7rem] rounded-full flex items-center justify-center"
                   initial={{ opacity: 0, scale: 0 }}
@@ -96,10 +111,23 @@ const Timeline = () => {
                   }}
                   transition={{ duration: 0.5 }}
                 >
+                  {activeStep >= index && (
+                    <motion.div
+                      className="absolute inset-0 rounded-full border-2 border-[#7A13D0] pointer-events-none"
+                      animate={{ scale: [1, 2.2], opacity: [0.7, 0] }}
+                      transition={{
+                        duration: 1.5,
+                        repeat: Infinity,
+                        ease: "easeOut",
+                        repeatDelay: 0.5,
+                      }}
+                    />
+                  )}
                   <div className="w-8 h-8 bg-[#010205] rounded-full flex items-center justify-center">
                     <div className="w-4 h-4 bg-[#FFFFFF] rounded-full" />
                   </div>
                 </motion.div>
+
                 <motion.div
                   className={`absolute ${
                     index % 2 === 1 ? "top-[2.8rem]" : "bottom-[2.8rem]"
@@ -113,13 +141,19 @@ const Timeline = () => {
           </div>
         </div>
       </div>
+
+      {/* Mobile — vertical timeline with whileInView stagger */}
       <div className="lg:hidden bg-gradient-to-b from-[#010205] via-[#0c0415] to-[#19082d] text-white py-16 w-screen -mx-[1.5rem] relative overflow-hidden">
         <div className="px-4">
-          <h2
+          <motion.h2
             className={`${bricolage.className} text-4xl font-normal text-start mb-16`}
+            initial={{ opacity: 0, x: -20 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, margin: "-40px" }}
+            transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1] }}
           >
             How Does It Work?
-          </h2>
+          </motion.h2>
           <div className="flex flex-col items-center relative w-full">
             <div className="absolute left-1/2 -translate-x-1/2 w-2 h-full bg-[#3E1F58] z-0" />
             {steps.map((step, index) => (
@@ -132,6 +166,17 @@ const Timeline = () => {
                 viewport={{ once: true, amount: 0.5 }}
               >
                 <div className="relative z-10 w-12 h-12 bg-[#7A13D0] rounded-full flex items-center justify-center">
+                  <motion.div
+                    className="absolute inset-0 rounded-full border-2 border-[#7A13D0] pointer-events-none"
+                    animate={{ scale: [1, 2.2], opacity: [0.7, 0] }}
+                    transition={{
+                      duration: 1.5,
+                      repeat: Infinity,
+                      ease: "easeOut",
+                      repeatDelay: 0.5,
+                      delay: index * 0.35,
+                    }}
+                  />
                   <div className="w-8 h-8 bg-[#010205] rounded-full flex items-center justify-center">
                     <div className="w-4 h-4 bg-[#FFFFFF] rounded-full" />
                   </div>

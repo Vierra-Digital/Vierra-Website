@@ -1,9 +1,9 @@
 "use client"
 import Image from "next/image"
-import { ArrowRight } from "lucide-react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Bricolage_Grotesque, Inter } from "next/font/google"
 import { useState, useEffect } from "react"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
 const inter = Inter({ subsets: ["latin"] })
@@ -46,95 +46,235 @@ const testimonials = [
   },
 ]
 
-export default function TestimonialsSection() {
-  const [currentTestimonial, setCurrentTestimonial] = useState(0)
+const n = testimonials.length
+const STACK = 3
 
-  const nextTestimonial = () =>
-    setCurrentTestimonial((prev) => (prev + 1) % testimonials.length)
+// Visual state for each position in the stack
+const stackStyles = [
+  { scale: 1,    y: 0,   zIndex: 30, opacity: 1 }, // front
+  { scale: 0.95, y: -20, zIndex: 20, opacity: 1 }, // middle
+  { scale: 0.90, y: -36, zIndex: 10, opacity: 1 }, // back
+]
+
+export default function TestimonialsSection() {
+  const [current, setCurrent] = useState(0)
+  const [direction, setDirection] = useState(1)
+
+  const next = () => {
+    setDirection(1)
+    setCurrent(p => (p + 1) % n)
+  }
+  const prev = () => {
+    setDirection(-1)
+    setCurrent(p => (p - 1 + n) % n)
+  }
 
   useEffect(() => {
-    const interval = setInterval(nextTestimonial, 3000)
-    return () => clearInterval(interval)
-  }, [])
+    const timer = setInterval(next, 5000)
+    return () => clearInterval(timer)
+  }, [current])
+
+  // Build the visible stack (front … back)
+  const stack = Array.from({ length: STACK }, (_, pos) => ({
+    tIndex: (current + pos) % n,
+    pos,
+  }))
 
   return (
-    <section className="w-full min-h-screen bg-[#010205] text-white px-4 md:mt-32 relative overflow-hidden">
-      <div className="text-center mt-10 md:mt-20 max-w-[800px] mx-auto">
-        <h2
-          className={`text-2xl md:text-[2.6rem] md:leading-[3rem] font-bold ${bricolage.className}`}
-        >
+    <section className="w-full bg-[#010205] text-white pt-16 pb-24 px-6 relative overflow-hidden">
+      {/* Ambient glow */}
+      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-[700px] h-[500px] bg-[#701CC0]/8 rounded-full blur-[120px] pointer-events-none -z-10" />
+
+      {/* Heading */}
+      <motion.div
+        className="text-center mb-20 max-w-2xl mx-auto"
+        initial={{ opacity: 0, y: 30 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-60px" }}
+        transition={{ duration: 0.65, ease: [0.32, 0.72, 0, 1] }}
+      >
+        <p className={`text-[#701CC0] text-xs font-semibold tracking-[0.2em] uppercase mb-4 ${inter.className}`}>
+          Client Results
+        </p>
+        <h2 className={`text-4xl md:text-5xl font-bold leading-tight ${bricolage.className}`}>
           See How We{" "}
-          <span className="bg-[#701CC0B3]">
-            Increased Profits For Top Experts
+          <span className="bg-gradient-to-r from-[#8F42FF] via-[#B366FF] to-[#D4A5FF] bg-clip-text text-transparent">
+            Increased Profits
           </span>{" "}
-          in the Industry.
+          For Top Experts in the Industry.
         </h2>
-      </div>
-      <div className="relative max-w-[800px] mx-auto z-0">
-        <div className="md:min-h-[550px] mt-20 md:mt-44 p-6 md:p-12 max-lg:mt-40 rounded-[30px] md:rounded-[60px] border-2 border-[#42345099] z-0 hover:scale-105 transition-transform duration-300 ease-in-out">
-          <div className="my-4 md:my-6 mx-4 md:mx-20">
-            <motion.div
-              key={currentTestimonial}
-              initial={{ opacity: 0, x: -50 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 50 }}
-              transition={{ duration: 0.5, ease: "easeInOut" }}
-            >
-              <div className="flex items-center gap-4 md:gap-6 mb-6 md:mb-8">
-                <Image
-                  src={testimonials[currentTestimonial].image}
-                  alt={testimonials[currentTestimonial].name}
-                  width={100}
-                  height={100}
-                  quality={100}
-                  className="w-[60px] h-[60px] md:w-[80px] md:h-[80px] object-cover rounded-full"
-                />
-                <div>
-                  <h3
-                    className={`${bricolage.className} text-xl md:text-2xl font-semibold`}
+      </motion.div>
+
+      {/* Card stack */}
+      <motion.div
+        className="max-w-5xl mx-auto"
+        initial={{ opacity: 0, y: 40 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, margin: "-60px" }}
+        transition={{ duration: 0.65, delay: 0.15, ease: [0.32, 0.72, 0, 1] }}
+      >
+        {/*
+          paddingTop reserves space so the peaking back/middle cards
+          don't overlap the heading above.
+          The inner div has a fixed height; all cards are absolute inset-0.
+          Rendered back→front so DOM order gives front the highest natural z.
+        */}
+        <div className="relative" style={{ paddingTop: 40 }}>
+          <div className="relative" style={{ height: 460 }}>
+            <AnimatePresence mode="sync" custom={direction}>
+              {[...stack].reverse().map(({ tIndex, pos }) => {
+                const t = testimonials[tIndex]
+                const isFront = pos === 0
+                const s = stackStyles[pos]
+
+                return (
+                  <motion.div
+                    key={tIndex}
+                    className="absolute inset-0 rounded-[40px] border border-[#42345055] bg-gradient-to-br from-[#0D0618] to-[#100820] overflow-hidden"
+                    custom={direction}
+                    initial={
+                      direction > 0
+                        ? { scale: 0.86, y: -50, opacity: 0, zIndex: 10 }
+                        : { scale: 1.04, y: -80, opacity: 0, zIndex: 35 }
+                    }
+                    animate={{
+                      scale: s.scale,
+                      y: s.y,
+                      zIndex: s.zIndex,
+                      opacity: s.opacity,
+                    }}
+                    exit={
+                      direction > 0
+                        ? { scale: 0.88, y: -50, opacity: 0, zIndex: 5 }
+                        : { scale: 1.04, y: -80, opacity: 0, zIndex: 35 }
+                    }
+                    transition={{ duration: 0.55, ease: [0.32, 0.72, 0, 1] }}
                   >
-                    {testimonials[currentTestimonial].name}
-                  </h3>
-                  <p
-                    className={`${inter.className} text-sm md:text-base text-white/80`}
-                  >
-                    {testimonials[currentTestimonial].role}
-                  </p>
-                </div>
-              </div>
-              <p
-                className={`${bricolage.className} md:text-3xl text-xl font-light md:leading-relaxed leading-relaxed`}
-              >
-                &ldquo;{testimonials[currentTestimonial].text}&rdquo;
-              </p>
-            </motion.div>
+                    {/* Glow — front card only */}
+                    {isFront && (
+                      <div className="absolute -top-24 -right-24 w-[300px] h-[300px] bg-[#701CC0]/12 rounded-full blur-[80px] pointer-events-none" />
+                    )}
+
+                    {isFront ? (
+                      /* ── Front card: full content ── */
+                      <div className="relative p-10 md:p-14 h-full flex flex-col md:flex-row md:gap-14 md:items-center">
+                        {/* Quote */}
+                        <div className="flex-1 min-w-0 flex flex-col justify-center">
+                          <span className={`block text-[100px] leading-none text-[#701CC0]/25 -mb-4 select-none ${bricolage.className}`}>
+                            &ldquo;
+                          </span>
+                          <p className={`text-xl md:text-2xl font-light leading-relaxed text-white/85 ${bricolage.className}`}>
+                            {t.text}
+                          </p>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="hidden md:block w-px self-stretch bg-[#42345044] flex-shrink-0" />
+
+                        {/* Person + company */}
+                        <div className="md:w-44 flex-shrink-0 mt-8 md:mt-0 flex flex-col items-center text-center">
+                          <div className="relative mb-4">
+                            <div className="absolute inset-0 rounded-full bg-[#701CC0] blur-[12px] scale-110 opacity-50" />
+                            <Image
+                              src={t.image}
+                              alt={t.name}
+                              width={80}
+                              height={80}
+                              quality={100}
+                              className="relative w-16 h-16 md:w-20 md:h-20 rounded-full object-cover ring-2 ring-[#701CC0]"
+                            />
+                          </div>
+                          <p className={`font-semibold text-base leading-tight mb-1 ${bricolage.className}`}>
+                            {t.name}
+                          </p>
+                          <p className={`text-xs text-white/50 mb-6 ${inter.className}`}>
+                            {t.role}
+                          </p>
+                          <div className="bg-[#701CC0] rounded-2xl px-6 py-4 flex items-center justify-center">
+                            <Image
+                              src={t.companyLogo}
+                              alt={t.role}
+                              width={140}
+                              height={52}
+                              className="h-10 w-auto object-contain filter invert brightness-0"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* ── Backing card: faded preview ── */
+                      <div className="relative p-10 md:p-14 h-full flex flex-col justify-center pointer-events-none select-none opacity-40">
+                        <span className={`block text-[100px] leading-none text-[#701CC0]/25 -mb-4 ${bricolage.className}`}>
+                          &ldquo;
+                        </span>
+                        <p className={`text-xl md:text-2xl font-light leading-relaxed text-white/85 line-clamp-3 ${bricolage.className}`}>
+                          {t.text}
+                        </p>
+                      </div>
+                    )}
+                  </motion.div>
+                )
+              })}
+            </AnimatePresence>
           </div>
         </div>
-        <div className="hidden md:block absolute -right-[89%] -top-[32%] w-[800px] h-[470px] bg-[#18042A] rounded-[60px] -z-10" />
-        <div className="absolute -top-16 right-4 md:-right-[155px] md:-top-20 bg-[#701CC0] rounded-[30px] md:rounded-[60px] flex items-center justify-center w-[200px] md:w-[305px] h-[100px] md:h-[160px]">
-          <Image
-            src={testimonials[currentTestimonial].companyLogo}
-            alt={testimonials[currentTestimonial].name}
-            width={120}
-            height={40}
-            className="md:w-[180px] md:h-[60px] object-contain filter invert brightness-0"
+
+        {/* Auto-advance progress bar */}
+        <div className="mt-6 h-[2px] w-full bg-[#42345044]">
+          <motion.div
+            key={`pb-${current}`}
+            className="h-full bg-[#701CC0]"
+            initial={{ width: "0%" }}
+            animate={{ width: "100%" }}
+            transition={{ duration: 5, ease: "linear" }}
           />
         </div>
-        <div className="hidden md:block absolute -top-40 right-0 w-[250px] h-[470px] opacity-25 blur-[10px] rotate-[83deg] rounded-full bg-gradient-to-t from-transparent to-[#701CC0] -z-10" />
-        <div className="absolute bottom-4 right-4 md:-right-28 md:top-36">
-          <div
-            className="rounded-full p-2 md:p-4 cursor-pointer bg-white hover:bg-[#EEE6F4] transform transition-all duration-300 hover:scale-105"
-            onClick={nextTestimonial}
+
+        {/* Navigation */}
+        <div className="flex items-center justify-center gap-5 mt-6">
+          <motion.button
+            onClick={prev}
+            className="w-9 h-9 rounded-full border border-[#42345088] flex items-center justify-center text-white/50 hover:text-white hover:border-[#701CC0] transition-colors duration-200"
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.88 }}
+            aria-label="Previous testimonial"
           >
-            <ArrowRight size={24} className="text-black" />
+            <ChevronLeft size={16} />
+          </motion.button>
+
+          <div className="flex items-center gap-1.5">
+            {testimonials.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => {
+                  setDirection(i > current ? 1 : -1)
+                  setCurrent(i)
+                }}
+                aria-label={`Go to testimonial ${i + 1}`}
+              >
+                <motion.div
+                  className="h-2 rounded-full bg-[#701CC0]"
+                  animate={{
+                    width: i === current ? 28 : 8,
+                    opacity: i === current ? 1 : 0.25,
+                  }}
+                  transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+                />
+              </button>
+            ))}
           </div>
+
+          <motion.button
+            onClick={next}
+            className="w-9 h-9 rounded-full border border-[#42345088] flex items-center justify-center text-white/50 hover:text-white hover:border-[#701CC0] transition-colors duration-200"
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.88 }}
+            aria-label="Next testimonial"
+          >
+            <ChevronRight size={16} />
+          </motion.button>
         </div>
-      </div>
-      <div className="text-center mt-4">
-        <p className="text-lg md:text-xl">
-          {currentTestimonial + 1} / {testimonials.length}
-        </p>
-      </div>
+      </motion.div>
     </section>
   )
 }
