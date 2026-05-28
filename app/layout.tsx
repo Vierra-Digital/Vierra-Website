@@ -11,7 +11,7 @@ const geistMono = Geist_Mono({
 
 const SITE_URL = "https://vierradev.com"
 const META_IMAGE_URL = `${SITE_URL}/assets/meta-banner.png`
-const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || "G-65W30MKNXT"
+const GA_MEASUREMENT_ID = "G-6SGW30MKNX"
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),

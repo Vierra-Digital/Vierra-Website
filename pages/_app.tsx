@@ -5,6 +5,7 @@ import Script from "next/script";
 import { SessionProvider } from "next-auth/react";
 
 export default function App({ Component, pageProps: { session, ...pageProps } }: AppProps) {
+  const gaMeasurementId = "G-6SGW30MKNX";
   return (
     <SessionProvider session={session}>
       <>
@@ -13,7 +14,7 @@ export default function App({ Component, pageProps: { session, ...pageProps } }:
           <link rel="shortcut icon" href="/favicon.ico" />
         </Head>
         <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-65W30MKNXT"
+          src={`https://www.googletagmanager.com/gtag/js?id=${gaMeasurementId}`}
           strategy="afterInteractive"
         />
         <Script id="ga4-init" strategy="afterInteractive">
@@ -21,7 +22,7 @@ export default function App({ Component, pageProps: { session, ...pageProps } }:
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
-            gtag('config', 'G-65W30MKNXT');
+            gtag('config', '${gaMeasurementId}');
           `}
         </Script>
         <Component {...pageProps} />
