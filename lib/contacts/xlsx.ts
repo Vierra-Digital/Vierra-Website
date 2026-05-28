@@ -13,7 +13,6 @@ type RawContactRow = {
   business: string;
   website: string;
   address: string;
-  sourceType: string;
 };
 
 type RawColumnKey = keyof RawContactRow;
@@ -57,7 +56,6 @@ export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsh
     business: typeof contact.business === "string" ? contact.business.trim() : "",
     website: typeof contact.website === "string" ? contact.website.trim() : "",
     address: typeof contact.address === "string" ? contact.address.trim() : "",
-    sourceType: String(contact.source || "MANUAL").toLowerCase(),
   }));
 
   const allColumns: SpreadsheetColumn[] = [
@@ -68,7 +66,6 @@ export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsh
     { key: "business", header: "Business" },
     { key: "website", header: "Website" },
     { key: "address", header: "Address" },
-    { key: "sourceType", header: "sourceType" },
   ];
   const columns = allColumns.filter((column) =>
     rawRows.some((row) => String(row[column.key] || "").trim().length > 0)
@@ -79,7 +76,10 @@ export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsh
   worksheet.columns = columns.map((column) => ({
     key: column.key,
     header: column.header,
-    width: Math.max(column.header.length + 2, 14),
+    width:
+      column.key === "email"
+        ? 36
+        : Math.max(column.header.length + 2, 14),
   }));
 
   for (const row of rawRows) {
