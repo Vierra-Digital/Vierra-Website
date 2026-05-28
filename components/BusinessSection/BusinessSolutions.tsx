@@ -101,7 +101,7 @@ export function BusinessSolutions() {
           >
             We Are Not Your Average
             <br />
-            "Consultants"
+            &ldquo;Consultants&rdquo;
           </motion.h2>
           <motion.p
             className={`text-[#8A9197] text-lg ${inter.className}`}
