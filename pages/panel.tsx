@@ -80,7 +80,11 @@ const UserSettingsPage = dynamic(() => import("@/components/UserSettingsPage"), 
 
 const inter = Inter({ subsets: ["latin"] })
 
-const PanelPage = () => {
+type PanelPageProps = {
+  initialUserRole: "admin" | "staff"
+}
+
+const PanelPage = ({ initialUserRole }: PanelPageProps) => {
   const router = useRouter()
   const [showSettings, setShowSettings] = useState(false)
   const [currentSection, setCurrentSection] = useState(0);
@@ -93,7 +97,10 @@ const PanelPage = () => {
   const [isClientViewMode, setIsClientViewMode] = useState(false)
   const [viewModeSection, setViewModeSection] = useState<0 | 1 | 2 | 3>(0)
   const [viewClient, setViewClient] = useState<{ id: string; name: string; email: string } | null>(null)
-  const canAccessEmailPanel = session?.user?.role === "admin" || session?.user?.role === "staff"
+  const resolvedUserRole = ((session?.user as any)?.role ?? initialUserRole) as "admin" | "staff"
+  const isAdmin = resolvedUserRole === "admin"
+  const isStaff = resolvedUserRole === "staff"
+  const canAccessEmailPanel = isAdmin || isStaff
 
   useEffect(() => {
     fetchCurrentUser()
@@ -220,7 +227,7 @@ const PanelPage = () => {
                     Dashboard
                   </span>
                 </div>
-                {session?.user?.role !== "staff" && (
+                {!isStaff && (
                   <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 1 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
                     <PiUsersThree />
                     <span className={`text-xs ${inter.className}`}>
@@ -255,7 +262,7 @@ const PanelPage = () => {
                   </span>
                 </div>
                 
-                {session?.user?.role !== "staff" && (
+                {!isStaff && (
                   <div
                     id="panel-nav-item"
                     onClick={() => { setCurrentSection(9); setShowSettings(false); setIsSidebarOpen(false); }}
@@ -297,7 +304,7 @@ const PanelPage = () => {
                     Files
                   </span>
                 </div>
-                {session?.user?.role !== "staff" && (
+                {!isStaff && (
                   <div
                     id="panel-nav-item"
                     onClick={() => { setCurrentSection(8); setShowSettings(false); setIsSidebarOpen(false)}}
@@ -322,7 +329,7 @@ const PanelPage = () => {
                 <FiArrowLeft className="w-5 h-5 text-white group-hover:text-black transition-colors" />
                 <span className={`text-xs ${inter.className} ml-2`}>Back</span>
               </button>
-            ) : session?.user?.role === "admin" ? null : (
+            ) : isAdmin ? null : (
               <button
                 onClick={() => signOut({ callbackUrl: "/login" })}
                 className="group w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 justify-start rounded-xl text-white bg-transparent hover:bg-white hover:text-black transition"
@@ -333,7 +340,7 @@ const PanelPage = () => {
             )}
           </div>
         </div>
-          <div id="right-side" className="flex flex-col w-full h-full overflow-y-auto relative">
+        <div id="right-side" className="flex flex-col w-full h-full relative">
           <div id="right-side-heading" className="flex w-full flex-row h-16 bg-[#F8F0FF]">
             <div className="md:hidden flex items-center pl-2">
               <button
@@ -384,12 +391,13 @@ const PanelPage = () => {
                   priority
                   quality={100}
                 />
-                  <div id="name-holder" className="hidden w-auto h-auto text-[#111014] md:flex items-center font-semibold">
-                    <span className="">{currentUserName || session?.user?.name || "Vierra Admin"}</span>
-                  </div>
-                  <div id="dropdowner" className="hidden md:flex">
-                    <RiArrowDropDownLine width={32}
-                      height={32} className="w-8 h-8" />
+                  <div className="hidden md:flex items-center gap-0">
+                    <div id="name-holder" className="w-auto h-auto text-[#111014] flex items-center font-semibold">
+                      <span>{currentUserName || session?.user?.name || "Vierra Admin"}</span>
+                    </div>
+                    <div id="dropdowner" className="flex -ml-1">
+                      <RiArrowDropDownLine width={32} height={32} className="w-8 h-8" />
+                    </div>
                   </div>
                 </button>
               </div>
@@ -429,14 +437,14 @@ const PanelPage = () => {
                   ) : (
                     <>
                       {currentSection === 0 && <DashboardSection />}
-                      {currentSection === 1 && session?.user?.role !== "staff" && (
+                      {currentSection === 1 && !isStaff && (
                         <ClientsSection
                           onAddClient={() => setIsAddClientOpen(true)}
                           refreshTrigger={clientRefreshTrigger}
                           onViewClient={enterClientViewMode}
                         />
                       )}
-                      {currentSection === 2 && <TeamPanelSection userRole={session?.user?.role} />}
+                      {currentSection === 2 && <TeamPanelSection userRole={resolvedUserRole} />}
                       {currentSection === 4 && <LtvCalculatorSection />}
                       {currentSection === 5 && <OutreachSection />}
                       {currentSection === 11 && canAccessEmailPanel && (
@@ -448,8 +456,8 @@ const PanelPage = () => {
                           <BlogEditorSection />
                         </div>
                       )}
-                      {currentSection === 8 && session?.user?.role !== "staff" && <AdminEditorSection />}
-                      {currentSection === 9 && session?.user?.role !== "staff" && <SignPdfSection />}
+                      {currentSection === 8 && !isStaff && <AdminEditorSection />}
+                      {currentSection === 9 && !isStaff && <SignPdfSection />}
                       {currentSection === 10 && <FilesSection />}
                     </>
                   )}
@@ -472,6 +480,16 @@ const PanelPage = () => {
           }}
         />
       )}
+      <style jsx>{`
+        #right-side-body {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+
+        #right-side-body::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
     </>
   )
 }
@@ -485,7 +503,11 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   if ((session.user as any).role !== "staff" && (session.user as any).role !== "admin") {
     return { redirect: { destination: "/client", permanent: false } }
   }
-  return { props: {} }
+  return {
+    props: {
+      initialUserRole: (session.user as any).role as "admin" | "staff",
+    },
+  }
 }
 
 export default PanelPage
