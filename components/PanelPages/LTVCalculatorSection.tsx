@@ -73,7 +73,7 @@ const LTVCalculatorSection = () => {
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-[#374151] mb-2">Cost Of Goods/Services Sold (%)</label>
+                                        <label className="block text-sm font-medium text-[#374151] mb-2">Cost of Goods/Services Sold (%)</label>
                                         <div className="relative">
                                             <input
                                                 type="number"
@@ -89,7 +89,7 @@ const LTVCalculatorSection = () => {
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-[#374151] mb-2">Number Of Referrals</label>
+                                        <label className="block text-sm font-medium text-[#374151] mb-2">Number of Referrals</label>
                                         <input
                                             type="number"
                                             className="w-full bg-white border border-[#E5E7EB] rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:ring-2 focus:ring-[#701CC0] focus:border-[#701CC0] outline-none transition-colors"
@@ -101,7 +101,7 @@ const LTVCalculatorSection = () => {
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-[#374151] mb-2">Returns Per Year</label>
+                                        <label className="block text-sm font-medium text-[#374151] mb-2">Returns per Year</label>
                                         <input
                                             type="number"
                                             className="w-full bg-white border border-[#E5E7EB] rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:ring-2 focus:ring-[#701CC0] focus:border-[#701CC0] outline-none transition-colors"
@@ -125,7 +125,7 @@ const LTVCalculatorSection = () => {
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-[#374151] mb-2">Number Of Clients Brought In</label>
+                                        <label className="block text-sm font-medium text-[#374151] mb-2">Number of Clients Brought In</label>
                                         <input
                                             type="number"
                                             className="w-full bg-white border border-[#E5E7EB] rounded-lg px-4 py-2.5 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:ring-2 focus:ring-[#701CC0] focus:border-[#701CC0] outline-none transition-colors"
