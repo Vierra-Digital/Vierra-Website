@@ -3,7 +3,7 @@ import { signOut } from "next-auth/react";
 import ProfileImage from "./ProfileImage";
 import ImageCropModal from "./ImageCropModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
-import { FiEdit3, FiUpload, FiRotateCcw, FiLock, FiLogOut, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2 } from "react-icons/fi";
+import { FiEdit3, FiUpload, FiRotateCcw, FiLock, FiLogOut, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2, FiCalendar } from "react-icons/fi";
 import { FaFacebookF, FaLinkedinIn, FaGoogle } from "react-icons/fa";
 import { X } from "lucide-react";
 
@@ -23,6 +23,19 @@ type GmailAccountConnection = {
   email: string;
   connected: boolean;
   expiresAt: string | null;
+};
+
+type DetectedCalendar = {
+  id: string;
+  summary: string;
+  timeZone: string;
+  enabled: boolean;
+};
+
+type DetectedCalendarAccount = {
+  email: string;
+  connected: boolean;
+  calendars: DetectedCalendar[];
 };
 
 function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -81,6 +94,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const [showDeleteGmailModal, setShowDeleteGmailModal] = useState(false);
   const [gmailToDelete, setGmailToDelete] = useState<string | null>(null);
   const [isDeletingGmail, setIsDeletingGmail] = useState(false);
+  const [detectedCalendarAccounts, setDetectedCalendarAccounts] = useState<DetectedCalendarAccount[]>([]);
+  const [calendarSettingsLoading, setCalendarSettingsLoading] = useState(false);
+  const [calendarToggleKeyLoading, setCalendarToggleKeyLoading] = useState<string | null>(null);
 
   const avatarMenuRef = useRef<HTMLDivElement>(null);
   const displayName = name && name.trim().length > 0 ? name : (user.email ? user.email.split("@")[0] : "User");
@@ -165,9 +181,80 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     }
   };
 
+  const loadDetectedCalendars = async () => {
+    setCalendarSettingsLoading(true);
+    try {
+      const response = await fetch("/api/google-calendar/calendars");
+      if (!response.ok) {
+        setDetectedCalendarAccounts([]);
+        return;
+      }
+      const data = await response.json();
+      const accounts = Array.isArray(data?.accounts) ? data.accounts : [];
+      setDetectedCalendarAccounts(
+        accounts.map((account: any) => ({
+          email: typeof account?.email === "string" ? account.email : "",
+          connected: !!account?.connected,
+          calendars: Array.isArray(account?.calendars)
+            ? account.calendars
+                .map((calendar: any) => ({
+                  id: typeof calendar?.id === "string" ? calendar.id : "",
+                  summary: typeof calendar?.summary === "string" ? calendar.summary : "Untitled Calendar",
+                  timeZone: typeof calendar?.timeZone === "string" ? calendar.timeZone : "UTC",
+                  enabled: calendar?.enabled !== false,
+                }))
+                .filter((calendar: DetectedCalendar) => calendar.id.length > 0)
+            : [],
+        })).filter((account: DetectedCalendarAccount) => account.email.length > 0)
+      );
+    } catch (error) {
+      console.error("Failed to load detected calendars:", error);
+      setDetectedCalendarAccounts([]);
+    } finally {
+      setCalendarSettingsLoading(false);
+    }
+  };
+
+  const handleCalendarToggle = async (accountEmail: string, calendarId: string, enabled: boolean) => {
+    const toggleKey = `${accountEmail}::${calendarId}`;
+    setCalendarToggleKeyLoading(toggleKey);
+    try {
+      const response = await fetch("/api/google-calendar/calendars", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountEmail, calendarId, enabled }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.message || "Failed to update calendar visibility.");
+      }
+
+      setDetectedCalendarAccounts((prev) =>
+        prev.map((account) =>
+          account.email !== accountEmail
+            ? account
+            : {
+                ...account,
+                calendars: account.calendars.map((calendar) =>
+                  calendar.id === calendarId ? { ...calendar, enabled } : calendar
+                ),
+              }
+        )
+      );
+    } catch (error) {
+      setUpdateMessage({
+        type: "error",
+        text: error instanceof Error ? error.message : "Failed to update calendar visibility.",
+      });
+    } finally {
+      setCalendarToggleKeyLoading(null);
+    }
+  };
+
   useEffect(() => {
     loadSocialConnections();
     loadGmailConnections();
+    loadDetectedCalendars();
   }, []);
 
   useEffect(() => {
@@ -478,7 +565,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       setUpdateMessage({ type: "success", text: "Gmail account removed successfully." });
       setShowDeleteGmailModal(false);
       setGmailToDelete(null);
-      await loadGmailConnections();
+      await Promise.all([loadGmailConnections(), loadDetectedCalendars()]);
     } catch (error) {
       setUpdateMessage({
         type: "error",
@@ -488,6 +575,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       setIsDeletingGmail(false);
     }
   };
+
 
   const isDark = variant === "dark";
   const isPanel = variant === "panel";
@@ -829,11 +917,14 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             </div>
             <button
               type="button"
-              onClick={loadGmailConnections}
-              disabled={gmailLoading}
+              onClick={() => {
+                loadGmailConnections();
+                loadDetectedCalendars();
+              }}
+              disabled={gmailLoading || calendarSettingsLoading}
               className="text-sm px-3 py-1.5 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 disabled:opacity-50"
             >
-              {gmailLoading ? "Refreshing..." : "Refresh"}
+              {gmailLoading || calendarSettingsLoading ? "Refreshing..." : "Refresh"}
             </button>
           </div>
           <p className={`text-sm ${textSecondary} mb-4`}>
@@ -904,7 +995,79 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         </div>
       )}
 
-      
+      {canManageGmailAccounts && (
+        <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
+          <div className="flex items-center gap-2 mb-2">
+            <div className="p-1.5 rounded-lg bg-[#701CC0]/10">
+              <FiCalendar className="w-4 h-4 text-[#701CC0]" />
+            </div>
+            <h3 className={`font-semibold ${textPrimary}`}>Detected Google Calendars</h3>
+          </div>
+          <p className={`text-sm ${textSecondary} mb-4`}>
+            Toggle calendars on or off to control which calendars are used for upcoming meeting detection.
+          </p>
+
+          {calendarSettingsLoading ? (
+            <div className={`rounded-xl border p-4 text-sm ${isDark ? "border-white/10 text-white/70" : "border-[#E5E7EB] text-[#6B7280]"}`}>
+              Loading detected calendars...
+            </div>
+          ) : detectedCalendarAccounts.length === 0 ? (
+            <div className={`rounded-xl border p-4 text-sm ${isDark ? "border-white/10 text-white/70" : "border-[#E5E7EB] text-[#6B7280]"}`}>
+              No calendars detected yet. Connect a Gmail account and refresh.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {detectedCalendarAccounts.map((account) => (
+                <div
+                  key={account.email}
+                  className={`rounded-xl border p-4 ${isDark ? "border-white/10 bg-white/5" : "border-[#E5E7EB] bg-[#FAFAFA]"}`}
+                >
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <p className={`text-sm font-semibold truncate ${textPrimary}`}>{account.email}</p>
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full ${
+                        account.connected ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                      }`}
+                    >
+                      {account.connected ? "Connected" : "Needs Reconnect"}
+                    </span>
+                  </div>
+
+                  {account.calendars.length === 0 ? (
+                    <p className={`text-xs ${textSecondary}`}>No readable calendars found for this account.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {account.calendars.map((calendar) => {
+                        const toggleKey = `${account.email}::${calendar.id}`;
+                        const isSaving = calendarToggleKeyLoading === toggleKey;
+                        return (
+                          <div
+                            key={toggleKey}
+                            className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
+                              isDark ? "border-white/10 bg-white/5" : "border-[#E5E7EB] bg-white"
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <p className={`text-sm font-medium truncate ${textPrimary}`}>{calendar.summary}</p>
+                              <p className={`text-xs truncate ${textSecondary}`}>{calendar.timeZone}</p>
+                            </div>
+                            <Toggle
+                              checked={calendar.enabled}
+                              onChange={(value) => handleCalendarToggle(account.email, calendar.id, value)}
+                              disabled={isSaving}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
