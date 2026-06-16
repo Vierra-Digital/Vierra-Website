@@ -11,7 +11,7 @@ const geistMono = Geist_Mono({
 
 const SITE_URL = "https://vierradev.com"
 const META_IMAGE_URL = `${SITE_URL}/assets/meta-banner.png`
-const GA_MEASUREMENT_ID = "G-6SGW30MKNX"
+const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),
@@ -108,7 +108,7 @@ export default function RootLayout({
   return (
     <html lang="en" style={{ scrollBehavior: "smooth" }}>
       <head>
-        {!process.env.NETLIFY ? (
+        {!process.env.NETLIFY && GA_MEASUREMENT_ID ? (
           <>
             <Script
               src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
