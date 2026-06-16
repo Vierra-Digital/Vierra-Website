@@ -601,6 +601,25 @@ const RichTextEditor: React.FC<{
     }
   }
 
+  // A contenteditable=false embed left as the last node leaves the caret with
+  // nowhere to go, so the user can't type (e.g. inserting an image into an empty
+  // editor). When the embed has no following sibling, append an editable line and
+  // move the caret into it.
+  const ensureCaretAfterEmbed = (embed: HTMLElement) => {
+    const el = editableRef.current
+    if (!el || embed.nextSibling) return
+    const p = document.createElement("p")
+    p.appendChild(document.createElement("br"))
+    el.appendChild(p)
+    const sel = window.getSelection()
+    if (!sel) return
+    const range = document.createRange()
+    range.setStart(p, 0)
+    range.collapse(true)
+    sel.removeAllRanges()
+    sel.addRange(range)
+  }
+
   const insertPlaceholder = (type: 'image' | 'video', url: string) => {
     const el = editableRef.current
     if (!el) return
@@ -625,6 +644,7 @@ const RichTextEditor: React.FC<{
       } else {
         el.appendChild(embed)
       }
+      ensureCaretAfterEmbed(embed)
       isLocalEditRef.current = true
       const newDisplay = el.innerHTML
       onChange(toHtml(newDisplay))
@@ -649,6 +669,7 @@ const RichTextEditor: React.FC<{
       } else {
         el.appendChild(embed)
       }
+      ensureCaretAfterEmbed(embed)
       isLocalEditRef.current = true
       const newDisplay = el.innerHTML
       onChange(toHtml(newDisplay))
