@@ -192,6 +192,9 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   });
   const [providerAccounts, setProviderAccounts] = useState<EmailProviderAccount[]>([]);
   const [blockedSenders, setBlockedSenders] = useState<BlockedSender[]>([]);
+  /** Baseline for tracking / vacation / contact visibility — updated after load and successful save. */
+  const [savedSettings, setSavedSettings] = useState<Settings | null>(null);
+  const [savedContactVisibility, setSavedContactVisibility] = useState<ContactVisibility | null>(null);
   const [testingProviderId, setTestingProviderId] = useState("");
   const [newProvider, setNewProvider] = useState({
     accountEmail: "",
@@ -229,6 +232,14 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
     return "/panel/email";
   }, [connectedAccounts]);
+
+  const hasUnsavedSettingsChanges = useMemo(() => {
+    if (!primaryAccountEmail || !savedSettings || !savedContactVisibility) return false;
+    return (
+      JSON.stringify(settings) !== JSON.stringify(savedSettings) ||
+      JSON.stringify(contactVisibility) !== JSON.stringify(savedContactVisibility)
+    );
+  }, [primaryAccountEmail, settings, contactVisibility, savedSettings, savedContactVisibility]);
 
   const loadAccounts = useCallback(async () => {
     const response = await fetch("/api/gmail/status");
@@ -269,7 +280,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       const blockedPayload = await blockedRes.json().catch(() => ({}));
 
       const rawSettings = settingsPayload?.settings || {};
-      setSettings({
+      const nextSettings: Settings = {
         trackingEnabled: Boolean(rawSettings.trackingEnabled),
         openTrackingEnabled: Boolean(rawSettings.openTrackingEnabled ?? true),
         clickTrackingEnabled: Boolean(rawSettings.clickTrackingEnabled ?? true),
@@ -278,16 +289,20 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         vacationBodyText: String(rawSettings.vacationBodyText || ""),
         vacationStartAt: rawSettings.vacationStartAt ? String(rawSettings.vacationStartAt).slice(0, 16) : "",
         vacationEndAt: rawSettings.vacationEndAt ? String(rawSettings.vacationEndAt).slice(0, 16) : "",
-      });
+      };
+      setSettings(nextSettings);
       setSignatures(Array.isArray(signaturesPayload?.signatures) ? signaturesPayload.signatures : []);
       setTemplates(Array.isArray(templatesPayload?.templates) ? templatesPayload.templates : []);
       setContactTags(Array.isArray(tagsPayload?.tags) ? tagsPayload.tags : []);
       const visibility = visibilityPayload?.visibility || {};
-      setContactVisibility({
+      const nextVisibility: ContactVisibility = {
         showPhone: Boolean(visibility.showPhone ?? true),
         showBusiness: Boolean(visibility.showBusiness ?? true),
         showWebsite: Boolean(visibility.showWebsite ?? true),
-      });
+      };
+      setContactVisibility(nextVisibility);
+      setSavedSettings(nextSettings);
+      setSavedContactVisibility(nextVisibility);
       setProviderAccounts(Array.isArray(providersPayload?.accounts) ? providersPayload.accounts : []);
       setBlockedSenders(Array.isArray(blockedPayload?.blocked) ? blockedPayload.blocked : []);
     } finally {
@@ -413,6 +428,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         }),
       ]);
       if (!settingsRes.ok || !visibilityRes.ok) throw new Error("Failed to save settings");
+      setSavedSettings({ ...settings });
+      setSavedContactVisibility({ ...contactVisibility });
       setStatus("Settings saved.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Failed to save settings");
@@ -880,21 +897,25 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 </div>
               </SettingsSection>
 
-              <div className="sticky bottom-4 z-10 flex flex-col gap-3 rounded-xl border border-[#701CC0]/20 bg-white/95 p-4 shadow-lg backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap items-center gap-3">
-                  <button type="button" onClick={saveSettings} disabled={saving} className={btnPrimary}>
-                    {saving ? "Saving…" : "Save settings"}
-                  </button>
+              {(hasUnsavedSettingsChanges || status) ? (
+                <div className="sticky bottom-4 z-10 flex flex-wrap items-center gap-3 rounded-xl border border-[#701CC0]/20 bg-white/95 p-4 shadow-lg backdrop-blur-sm">
+                  {hasUnsavedSettingsChanges ? (
+                    <button
+                      type="button"
+                      onClick={saveSettings}
+                      disabled={saving || !primaryAccountEmail}
+                      className={btnPrimary}
+                    >
+                      {saving ? "Saving…" : "Save settings"}
+                    </button>
+                  ) : null}
                   {status ? (
                     <span className={`text-sm ${status.includes("Failed") || status.includes("failed") ? "text-red-600" : "text-[#6B7280]"}`}>
                       {status}
                     </span>
                   ) : null}
                 </div>
-                <p className="text-xs text-[#9CA3AF]">
-                  Applies tracking, vacation, and contact visibility for your user account (synced across connected addresses where applicable).
-                </p>
-              </div>
+              ) : null}
             </div>
           )}
         </main>

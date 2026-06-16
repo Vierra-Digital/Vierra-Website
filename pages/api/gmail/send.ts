@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { NextApiRequest, NextApiResponse } from "next";
 import nodemailer from "nodemailer";
+import sanitizeHtml from "sanitize-html";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { requireSession } from "@/lib/auth";
@@ -123,6 +124,140 @@ function uniqueUrls(value: string) {
   return Array.from(new Set(matches));
 }
 
+function uniqueUrlsFromHtmlHref(html: string) {
+  const set = new Set<string>();
+  const re = /href\s*=\s*(["'])(https?:\/\/[^"']+)\1/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html))) {
+    set.add(m[2]);
+  }
+  return Array.from(set);
+}
+
+function mergeClickTrackUrls(plain: string, html: string) {
+  return Array.from(new Set([...uniqueUrls(plain), ...uniqueUrlsFromHtmlHref(html)]));
+}
+
+function sanitizeEmailHtml(html: string) {
+  return sanitizeHtml(html, {
+    allowedTags: [
+      ...sanitizeHtml.defaults.allowedTags,
+      "img",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "span",
+      "div",
+      "font",
+    ],
+    allowedAttributes: {
+      ...sanitizeHtml.defaults.allowedAttributes,
+      a: ["href", "name", "target", "rel", "style", "class"],
+      img: ["src", "alt", "width", "height", "style", "class"],
+      p: ["style", "class"],
+      span: ["style", "class"],
+      div: ["style", "class"],
+      font: ["color", "face", "size"],
+      td: ["colspan", "rowspan", "style", "class"],
+      th: ["colspan", "rowspan", "style", "class"],
+      "*": ["style", "class"],
+    },
+    allowedSchemes: ["http", "https", "mailto", "data"],
+    allowedSchemesByTag: {
+      img: ["http", "https", "data"],
+    },
+  });
+}
+
+const ATTACHMENTS_MAX_BYTES = 24 * 1024 * 1024;
+
+function parseAttachments(raw: unknown): { ok: true; parts: Array<{ filename: string; contentType: string; base64: string }> } | { ok: false; message: string } {
+  if (raw == null || raw === undefined) return { ok: true, parts: [] };
+  if (!Array.isArray(raw)) return { ok: false, message: "attachments must be an array." };
+  const parts: Array<{ filename: string; contentType: string; base64: string }> = [];
+  let total = 0;
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const filename = asString(row.filename) || "attachment";
+    const contentType = asString(row.contentType) || "application/octet-stream";
+    const contentBase64 = asString(row.contentBase64);
+    if (!contentBase64) continue;
+    const buf = Buffer.from(contentBase64, "base64");
+    if (!buf.length) continue;
+    total += buf.length;
+    if (total > ATTACHMENTS_MAX_BYTES) {
+      return { ok: false, message: "Attachments exceed size limit." };
+    }
+    parts.push({ filename, contentType, base64: contentBase64.replace(/\r?\n/g, "") });
+  }
+  return { ok: true, parts };
+}
+
+function chunkBase64ForMime(b64: string) {
+  const clean = b64.replace(/\r?\n/g, "");
+  return clean.match(/.{1,76}/g)?.join("\r\n") || clean;
+}
+
+function buildRawMime(opts: {
+  to: string;
+  cc: string;
+  bcc: string;
+  subject: string;
+  textBody: string;
+  htmlBody: string;
+  attachments: Array<{ filename: string; contentType: string; base64: string }>;
+  inReplyTo: string;
+  references: string;
+}) {
+  const nl = "\r\n";
+  const mixedBoundary = `mixed_${randomUUID().replace(/-/g, "")}`;
+  const altBoundary = `alt_${randomUUID().replace(/-/g, "")}`;
+
+  const headers: string[] = [
+    `To: ${opts.to}`,
+    "MIME-Version: 1.0",
+    `Subject: ${opts.subject}`,
+  ];
+  if (opts.cc) headers.push(`Cc: ${opts.cc}`);
+  if (opts.bcc) headers.push(`Bcc: ${opts.bcc}`);
+  if (opts.inReplyTo) headers.push(`In-Reply-To: ${opts.inReplyTo}`);
+  if (opts.references) headers.push(`References: ${opts.references}`);
+  else if (opts.inReplyTo) headers.push(`References: ${opts.inReplyTo}`);
+
+  const altInner =
+    `--${altBoundary}${nl}Content-Type: text/plain; charset=UTF-8${nl}${nl}${opts.textBody}${nl}${nl}` +
+    `--${altBoundary}${nl}Content-Type: text/html; charset=UTF-8${nl}${nl}${opts.htmlBody}${nl}${nl}` +
+    `--${altBoundary}--`;
+
+  if (opts.attachments.length === 0) {
+    headers.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`);
+    return `${headers.join(nl)}${nl}${nl}${altInner}`;
+  }
+
+  headers.push(`Content-Type: multipart/mixed; boundary="${mixedBoundary}"`);
+
+  const firstPart =
+    `--${mixedBoundary}${nl}Content-Type: multipart/alternative; boundary="${altBoundary}"${nl}${nl}${altInner}${nl}`;
+
+  const rest = opts.attachments
+    .map((att) => {
+      const body = chunkBase64ForMime(att.base64);
+      const safeName = att.filename.replace(/[\r\n"]/g, "_");
+      return (
+        `--${mixedBoundary}${nl}Content-Type: ${att.contentType}; name="${safeName}"${nl}` +
+        `Content-Disposition: attachment; filename="${safeName}"${nl}` +
+        `Content-Transfer-Encoding: base64${nl}${nl}${body}${nl}`
+      );
+    })
+    .join("");
+
+  return `${headers.join(nl)}${nl}${nl}${firstPart}${rest}--${mixedBoundary}--`;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.status(405).json({ message: "Method Not Allowed" });
@@ -151,6 +286,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const isReply = Boolean(threadId || inReplyTo || references);
   const subject = isReply ? ensureReplyPrefix(subjectRaw) : subjectRaw || "(No Subject)";
 
+  const attachmentParse = parseAttachments(req.body?.attachments);
+  if (!attachmentParse.ok) {
+    res.status(400).json({ message: attachmentParse.message });
+    return;
+  }
+  const attachmentParts = attachmentParse.parts;
+
   if (!accountEmail) {
     res.status(400).json({ message: "accountEmail is required." });
     return;
@@ -159,7 +301,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(400).json({ message: "Recipient email is required." });
     return;
   }
-  if (!body) {
+  if (!body.trim() && !bodyHtmlInput.trim()) {
     res.status(400).json({ message: "Email body is required." });
     return;
   }
@@ -209,14 +351,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const openTrackingEnabled = trackingEnabled && Boolean(setting?.openTrackingEnabled ?? true);
   const clickTrackingEnabled = trackingEnabled && Boolean(setting?.clickTrackingEnabled ?? true);
 
+  const sanitizedHtmlInput = bodyHtmlInput ? sanitizeEmailHtml(bodyHtmlInput) : "";
+  const plainTextBody =
+    body.trim() ||
+    (sanitizedHtmlInput
+      ? sanitizedHtmlInput.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+      : "");
+
   const openToken = openTrackingEnabled ? randomUUID().replace(/-/g, "") : null;
   const outbound = await prisma.emailOutboundMessage.create({
     data: {
       userId,
       accountEmail,
       subject,
-      bodyText: body,
-      bodyHtml: bodyHtmlInput || linkifyText(body),
+      bodyText: plainTextBody,
+      bodyHtml: sanitizedHtmlInput || linkifyText(plainTextBody),
       trackingEnabled,
       openToken,
       recipients: {
@@ -232,8 +381,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const baseUrl = getPublicBaseUrl(req);
   const replacements = new Map<string, string>();
   if (clickTrackingEnabled) {
-    const urls = uniqueUrls(body);
-    for (const url of urls) {
+    const urlsForTracking = mergeClickTrackUrls(plainTextBody, sanitizedHtmlInput);
+    for (const url of urlsForTracking) {
       const token = randomUUID().replace(/-/g, "");
       await prisma.emailTrackingLink.create({
         data: {
@@ -246,29 +395,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  const textBody = body;
-  let htmlBody = bodyHtmlInput
-    ? rewriteTrackedLinksInHtml(bodyHtmlInput, replacements)
-    : linkifyTextWithTrackedHrefs(body, replacements);
+  const textBody = plainTextBody;
+  let htmlBody = sanitizedHtmlInput
+    ? rewriteTrackedLinksInHtml(sanitizedHtmlInput, replacements)
+    : linkifyTextWithTrackedHrefs(plainTextBody, replacements);
   if (openTrackingEnabled && openToken) {
     const trackingPixel = `<img src="${baseUrl}/api/email/track/open/${openToken}.gif" width="1" height="1" alt="" aria-hidden="true" style="width:1px;height:1px;opacity:0;position:absolute;left:-9999px;top:auto;border:0;overflow:hidden;" />`;
     htmlBody = `${trackingPixel}${htmlBody}`;
   }
 
-  const boundary = `vierra_${randomUUID().replace(/-/g, "")}`;
-  const headers = [
-    `To: ${toRecipients.join(", ")}`,
-    "MIME-Version: 1.0",
-    `Subject: ${subject}`,
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-  ];
-  if (ccRecipients.length > 0) headers.push(`Cc: ${ccRecipients.join(", ")}`);
-  if (bccRecipients.length > 0) headers.push(`Bcc: ${bccRecipients.join(", ")}`);
-  if (inReplyTo) headers.push(`In-Reply-To: ${inReplyTo}`);
-  if (references) headers.push(`References: ${references}`);
-  else if (inReplyTo) headers.push(`References: ${inReplyTo}`);
-
-  const rawMime = `${headers.join("\r\n")}\r\n\r\n--${boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n${textBody}\r\n\r\n--${boundary}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n${htmlBody}\r\n\r\n--${boundary}--`;
+  const rawMime = buildRawMime({
+    to: toRecipients.join(", "),
+    cc: ccRecipients.length > 0 ? ccRecipients.join(", ") : "",
+    bcc: bccRecipients.length > 0 ? bccRecipients.join(", ") : "",
+    subject,
+    textBody,
+    htmlBody,
+    attachments: attachmentParts,
+    inReplyTo,
+    references,
+  });
   const raw = toBase64Url(rawMime);
 
   const sendPayload: Record<string, string> = { raw };
@@ -277,6 +423,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   let sentMessageId: string | null = null;
   let sentThreadId: string | null = threadId || null;
   let provider: "gmail" | "smtp" = "gmail";
+
+  const smtpAttachments = attachmentParts.map((att) => ({
+    filename: att.filename,
+    content: Buffer.from(att.base64, "base64"),
+    contentType: att.contentType,
+  }));
 
   if (providerAccount) {
     provider = "smtp";
@@ -298,6 +450,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         subject,
         text: textBody,
         html: htmlBody,
+        attachments: smtpAttachments.length > 0 ? smtpAttachments : undefined,
         inReplyTo: inReplyTo || undefined,
         references: references || undefined,
       });
