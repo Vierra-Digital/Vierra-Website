@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
+import { sendImageAsset } from "@/lib/api/image";
+import { STORAGE_BUCKETS } from "@/lib/storage";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
@@ -14,19 +16,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const image = await prisma.blogImage.findUnique({
       where: { id },
-      select: { data: true, mimeType: true },
+      select: { storageKey: true, mimeType: true },
     });
 
-    if (!image || !image.data) {
+    if (!image) {
       return res.status(404).json({ message: "Image not found" });
     }
 
-    const imageBuffer = Buffer.from(image.data);
-
-    res.setHeader("Content-Type", image.mimeType || "image/jpeg");
-    res.setHeader("Content-Length", imageBuffer.length);
-    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    res.end(imageBuffer);
+    const sent = await sendImageAsset(res, {
+      bucket: STORAGE_BUCKETS.blog,
+      storageKey: image.storageKey,
+      mimeType: image.mimeType,
+      cacheControl: "public, max-age=31536000, immutable",
+    });
+    if (!sent) {
+      return res.status(404).json({ message: "Image not found" });
+    }
   } catch (e) {
     console.error("blog/image/[id]", e);
     return res.status(500).json({ message: "Internal Server Error" });

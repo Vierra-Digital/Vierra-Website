@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next"
 import { requireSession } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx"
+import { getFileBuffer, STORAGE_BUCKETS } from "@/lib/storage"
 import * as XLSX from "xlsx"
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib"
 
@@ -251,7 +252,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const stored = await prisma.storedFile.findFirst({
     where,
-    select: { pdfData: true, name: true, fileType: true },
+    select: { storageKey: true, name: true, fileType: true },
   })
 
   const getSafeFilename = (fallback: string, fileType = "pdf") => {
@@ -277,13 +278,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     )
   }
 
-  if (stored?.pdfData) {
-    const sourceBuffer = Buffer.from(stored.pdfData)
-    const storedFileType = (stored.fileType || "pdf").toLowerCase()
+  // Resolve bytes from object storage by key.
+  let sourceBuffer: Buffer | null = null
+  if (stored?.storageKey) {
+    sourceBuffer = await getFileBuffer(STORAGE_BUCKETS.docs, stored.storageKey)
+  }
+
+  if (sourceBuffer) {
+    const storedFileType = (stored?.fileType || "pdf").toLowerCase()
     if (preview && storedFileType === "xlsx") {
       try {
-        const pdfBuffer = await convertXlsxToPdfBuffer(sourceBuffer, stored.name || "Contacts")
-        const pdfName = (stored.name || "document").replace(/\.xlsx$/i, ".pdf")
+        const pdfBuffer = await convertXlsxToPdfBuffer(sourceBuffer, stored?.name || "Contacts")
+        const pdfName = (stored?.name || "document").replace(/\.xlsx$/i, ".pdf")
         const safePdfName = getSafeFilename(pdfName, "pdf")
         setFileHeaders(safePdfName, pdfBuffer, "pdf")
         return res.send(pdfBuffer)
@@ -291,12 +297,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // If conversion fails, fall back to raw file output.
       }
     }
-    const safeFilename = getSafeFilename(stored.name || "document", stored.fileType || "pdf")
-    setFileHeaders(safeFilename, sourceBuffer, stored.fileType || "pdf")
+    const safeFilename = getSafeFilename(stored?.name || "document", stored?.fileType || "pdf")
+    setFileHeaders(safeFilename, sourceBuffer, stored?.fileType || "pdf")
     return res.send(sourceBuffer)
   }
 
-  if (stored && !stored.pdfData) {
+  if (stored && !sourceBuffer) {
     const signingSession = await prisma.signingSession.findUnique({
       where: { token: tokenId },
       select: { pdfBase64: true, originalFilename: true },

@@ -22,6 +22,7 @@
     "@radix-ui/react-slot": "^1.1.1",
     "@react-three/drei": "^10.0.4",
     "@react-three/fiber": "^9.1.0",
+    "@supabase/supabase-js": "^2.108.2",
     "@tiptap/extension-color": "^3.22.3",
     "@tiptap/extension-font-family": "^3.22.2",
     "@tiptap/extension-highlight": "^3.22.2",

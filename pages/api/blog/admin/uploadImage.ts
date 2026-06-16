@@ -1,6 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { v4 as uuidv4 } from "uuid";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
+import { putImageAsset } from "@/lib/api/image";
+import { STORAGE_BUCKETS } from "@/lib/storage";
 
 export const config = {
   api: {
@@ -30,9 +33,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const imageBuffer = Buffer.from(imageData, "base64");
 
+    // Upload to object storage first so no orphan row is created if the upload fails.
+    const storageKey = await putImageAsset(
+      STORAGE_BUCKETS.blog,
+      `blog/${uuidv4()}`,
+      imageBuffer,
+      mimeType
+    );
+
     const image = await prisma.blogImage.create({
       data: {
-        data: imageBuffer,
+        storageKey,
         mimeType,
         filename: filename || null,
       },

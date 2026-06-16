@@ -1,5 +1,21 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import ExcelJS from "exceljs";
+import {
+  putFileAsset,
+  deleteFileAsset,
+  STORAGE_BUCKETS,
+  toStorageKeySegment,
+} from "@/lib/storage";
+
+const XLSX_CONTENT_TYPE =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+/** Remove any object-storage files backing the StoredFile rows matched by `where`. */
+async function cleanupStoredFileObjects(where: Prisma.StoredFileWhereInput) {
+  const rows = await prisma.storedFile.findMany({ where, select: { storageKey: true } });
+  await Promise.all(rows.map((r) => deleteFileAsset(STORAGE_BUCKETS.docs, r.storageKey)));
+}
 
 type SyncContactsSpreadsheetInput = {
   userId: number;
@@ -30,21 +46,21 @@ export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsh
   });
 
   const signingTokenId = `contacts-xlsx:${input.userId}`;
-  await prisma.storedFile.deleteMany({
-    where: {
-      userId: input.userId,
-      fileType: "xlsx",
-      signingTokenId: { startsWith: `contacts-xlsx:${input.userId}:` },
-    },
-  });
+  const legacyWhere: Prisma.StoredFileWhereInput = {
+    userId: input.userId,
+    fileType: "xlsx",
+    signingTokenId: { startsWith: `contacts-xlsx:${input.userId}:` },
+  };
+  await cleanupStoredFileObjects(legacyWhere);
+  await prisma.storedFile.deleteMany({ where: legacyWhere });
   if (contacts.length === 0) {
-    await prisma.storedFile.deleteMany({
-      where: {
-        userId: input.userId,
-        signingTokenId,
-        fileType: "xlsx",
-      },
-    });
+    const emptyWhere: Prisma.StoredFileWhereInput = {
+      userId: input.userId,
+      signingTokenId,
+      fileType: "xlsx",
+    };
+    await cleanupStoredFileObjects(emptyWhere);
+    await prisma.storedFile.deleteMany({ where: emptyWhere });
     return { saved: false as const };
   }
 
@@ -108,8 +124,14 @@ export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsh
 
   const workbookBytes = await workbook.xlsx.writeBuffer();
   const workbookBuffer = Buffer.from(workbookBytes);
-  const pdfDataBytes = new Uint8Array(workbookBuffer);
   const fileName = "Contacts.xlsx";
+
+  const storageKey = await putFileAsset(
+    STORAGE_BUCKETS.docs,
+    `documents/${toStorageKeySegment(signingTokenId)}.xlsx`,
+    workbookBuffer,
+    XLSX_CONTENT_TYPE
+  );
 
   const existing = await prisma.storedFile.findFirst({
     where: {
@@ -125,7 +147,7 @@ export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsh
       where: { id: existing.id },
       data: {
         name: fileName,
-        pdfData: pdfDataBytes,
+        storageKey,
         isDeletionProtected: true,
       },
     });
@@ -136,7 +158,7 @@ export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsh
         name: fileName,
         signingTokenId,
         fileType: "xlsx",
-        pdfData: pdfDataBytes,
+        storageKey,
         isDeletionProtected: true,
       },
     });

@@ -3,7 +3,7 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { getSessionData, saveSessionData, deleteSessionFile, PdfField } from '@/lib/sessionStore';
 import { sendSignedDocumentEmail, sendSignerCopyEmail } from '@/lib/emailSender';
 import { prisma } from '@/lib/prisma';
-import { toPrismaBytes } from '@/lib/api/image';
+import { putFileAsset, STORAGE_BUCKETS, toStorageKeySegment } from '@/lib/storage';
 
 interface SubmitSignatureBody {
     tokenId: string;
@@ -148,11 +148,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 select: { id: true },
             });
             if (storedFiles.length > 0) {
+                const storageKey = await putFileAsset(
+                    STORAGE_BUCKETS.docs,
+                    `documents/${toStorageKeySegment(tokenId)}.pdf`,
+                    Buffer.from(signedPdfBytes),
+                    "application/pdf"
+                );
                 await prisma.storedFile.updateMany({
                     where: { signingTokenId: tokenId },
-                    data: { pdfData: toPrismaBytes(signedPdfBytes) },
+                    data: { storageKey },
                 });
-                console.log(`[submit-signature] Saved signed PDF to database for ${storedFiles.length} stored file(s), token ${tokenId}`);
+                console.log(`[submit-signature] Saved signed PDF to storage for ${storedFiles.length} stored file(s), token ${tokenId}`);
             }
         } catch (updateError) {
             console.warn(`[submit-signature] WARNING: Failed to update stored file with signed PDF for token ${tokenId}:`, updateError);

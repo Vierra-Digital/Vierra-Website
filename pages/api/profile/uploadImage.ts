@@ -1,7 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-import { toPrismaBytes } from "@/lib/api/image";
+import { putImageAsset } from "@/lib/api/image";
+import { STORAGE_BUCKETS } from "@/lib/storage";
 
 export const config = {
   api: {
@@ -36,8 +37,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (imageData === null && mimeType === null) {
       const updated = await prisma.user.update({
         where: { email: userEmail },
-        data: { 
-          image: null,
+        data: {
+          imageStorageKey: null,
           imageMimeType: null,
           imageUpdatedAt: null
         },
@@ -51,10 +52,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ message: "Image data and mime type are required" });
     }
     const imageBuffer = Buffer.from(imageData, 'base64');
+    const storageKey = await putImageAsset(
+      STORAGE_BUCKETS.avatars,
+      `user/${existingUser.id}`,
+      imageBuffer,
+      mimeType
+    );
     const updated = await prisma.user.update({
       where: { email: userEmail },
-      data: { 
-        image: toPrismaBytes(imageBuffer),
+      data: {
+        imageStorageKey: storageKey,
         imageMimeType: mimeType,
         imageUpdatedAt: new Date()
       },

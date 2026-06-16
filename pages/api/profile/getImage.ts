@@ -1,7 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-import { sendImageBuffer } from "@/lib/api/image";
+import { sendImageAsset } from "@/lib/api/image";
+import { STORAGE_BUCKETS } from "@/lib/storage";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireSession(req, res);
@@ -19,13 +20,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const user = await prisma.user.findUnique({
       where: { email: userEmail },
-      select: { image: true, imageMimeType: true },
+      select: { imageStorageKey: true, imageMimeType: true },
     });
 
-    if (!user || !user.image) {
+    if (!user) {
       return res.status(404).json({ message: "No image found" });
     }
-    sendImageBuffer(res, user.image, user.imageMimeType, "private, max-age=3600, stale-while-revalidate=86400");
+    const sent = await sendImageAsset(res, {
+      bucket: STORAGE_BUCKETS.avatars,
+      storageKey: user.imageStorageKey,
+      mimeType: user.imageMimeType,
+      cacheControl: "private, max-age=3600, stale-while-revalidate=86400",
+    });
+    if (!sent) {
+      return res.status(404).json({ message: "No image found" });
+    }
   } catch (e) {
     console.error("profile/getImage", e);
     return res.status(500).json({ message: "Internal Server Error" });

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { prisma } from "@/lib/prisma"
 import { requireSession } from "@/lib/auth"
+import { deleteFileAsset, STORAGE_BUCKETS } from "@/lib/storage"
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireSession(req, res)
@@ -26,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const file = await prisma.storedFile.findUnique({
       where: { id: fileId },
-      select: { userId: true, clientId: true, isDeletionProtected: true },
+      select: { userId: true, clientId: true, isDeletionProtected: true, storageKey: true },
     })
     if (!file) {
       return res.status(404).json({ message: "File not found." })
@@ -41,6 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(403).json({ message: "You can only delete files saved to you." })
     }
     await prisma.storedFile.delete({ where: { id: fileId } })
+    await deleteFileAsset(STORAGE_BUCKETS.docs, file.storageKey)
     return res.status(200).json({ success: true })
   } catch (e) {
     console.error("deleteFile error", e)

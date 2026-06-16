@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         businessName: true,
         monthlyRetainerCents: true,
         clientGoal: true,
-        image: true,
+        imageStorageKey: true,
         createdAt: true,
         isActive: true,
         onboardingSessions: {
@@ -72,7 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         status: displayStatus,
         isActive: c.isActive,
         isExpired: isExpired || false,
-        image: Boolean(c.image),
+        image: Boolean(c.imageStorageKey),
       };
     });
 
