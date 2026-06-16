@@ -138,6 +138,7 @@ model EmailAccountSetting {
   @@map("email_account_settings")
 }
 
+
 model EmailSignature {
   id            String   @id @default(cuid())
   userId        Int
