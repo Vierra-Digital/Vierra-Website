@@ -38,18 +38,53 @@ export function Modal({ isOpen, onClose }: ModalProps) {
   };
 
   const validateStep = (): boolean => {
-    const requiredFields: Record<number, string[]> = {
-      1: ["fullName", "email", "phoneNumber"],
-      2: ["website", "monthlyRevenue", "desiredRevenue"],
-    };
-    const stepErrors: Record<string, string> = {};
-    requiredFields[currentStep]?.forEach((field) => {
-      if (!formData[field as keyof typeof formData]) {
-        stepErrors[field] = "This field is required.";
+  const stepErrors: Record<string, string> = {};
+
+  const isEmpty = (value: string) => !value.trim();
+
+  if (currentStep === 1) {
+    if (isEmpty(formData.fullName)) {
+      stepErrors.fullName = "Full name is required.";
+    }
+
+    if (isEmpty(formData.email)) {
+      stepErrors.email = "Email is required.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      stepErrors.email = "Enter a valid email address.";
+    }
+
+    if (isEmpty(formData.phoneNumber)) {
+      stepErrors.phoneNumber = "Phone number is required.";
+    } else if (!/^[\d\s()+.-]{7,20}$/.test(formData.phoneNumber)) {
+      stepErrors.phoneNumber = "Enter a valid phone number.";
+    }
+  }
+
+  if (currentStep === 2) {
+    if (isEmpty(formData.website)) {
+      stepErrors.website = "Website is required.";
+    } else {
+      const websiteRegex =
+        /^(https?:\/\/)?([\w-]+\.)+[a-zA-Z]{2,}$/;
+
+      if (!websiteRegex.test(formData.website.trim())) {
+        stepErrors.website = "Enter a valid website.";
       }
-    });
-    setErrors(stepErrors);
-    return Object.keys(stepErrors).length === 0;
+    }
+
+    if (isEmpty(formData.monthlyRevenue)) {
+      stepErrors.monthlyRevenue = "Select your monthly revenue.";
+    }
+
+    if (isEmpty(formData.desiredRevenue)) {
+      stepErrors.desiredRevenue = "Desired revenue is required.";
+    } else if (!/^\$?\d[\d,]*(\+)?$/.test(formData.desiredRevenue.trim())) {
+      stepErrors.desiredRevenue = "Enter a valid revenue amount.";
+    }
+  }
+
+  setErrors(stepErrors);
+  return Object.keys(stepErrors).length === 0;
   };
 
   const handleNextStep = () => {
