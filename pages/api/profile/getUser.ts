@@ -18,25 +18,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const user = await prisma.user.findUnique({
       where: { email: userEmail },
-      select: { id: true, name: true, email: true, imageUpdatedAt: true, position: true, role: true },
+      select: { id: true, name: true, email: true, imageStorageKey: true, imageUpdatedAt: true, position: true, role: true },
     });
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    const hasImageResult = await prisma.$queryRaw<[{ hasImage: boolean }]>`
-      SELECT (image IS NOT NULL AND octet_length(image) > 0) as "hasImage"
-      FROM users WHERE email = ${userEmail} LIMIT 1
-    `;
-    const hasImage = hasImageResult[0]?.hasImage ?? false;
+    const { imageStorageKey, ...rest } = user;
+    const hasImage = Boolean(imageStorageKey);
     const imageVersion = user.imageUpdatedAt
       ? user.imageUpdatedAt.getTime()
       : hasImage
         ? user.id
         : 0;
 
-    return res.status(200).json({ ...user, hasImage, imageVersion });
+    return res.status(200).json({ ...rest, hasImage, imageVersion });
   } catch (e) {
     console.error("profile/getUser", e);
     return res.status(500).json({ message: "Internal Server Error" });
