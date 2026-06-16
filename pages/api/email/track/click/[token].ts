@@ -17,6 +17,31 @@ function normalizeTarget(url: string) {
   return `https://${url}`;
 }
 
+function getRequestOrigin(req: NextApiRequest) {
+  const proto = String(req.headers["x-forwarded-proto"] || "http");
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "");
+  return host ? `${proto}://${host}` : "";
+}
+
+/** True when the click originates from inside our own portal (staff previewing a sent email),
+ *  so we don't record it as recipient engagement. Mirrors the open-pixel logic. */
+function isLikelySelfPreview(req: NextApiRequest) {
+  const fetchSite = String(req.headers["sec-fetch-site"] || "").toLowerCase();
+  if (fetchSite === "same-origin") return true;
+
+  const referer = String(req.headers.referer || "");
+  if (!referer) return false;
+  const requestOrigin = getRequestOrigin(req);
+  if (!requestOrigin) return false;
+
+  try {
+    const refererUrl = new URL(referer);
+    return refererUrl.origin === requestOrigin && refererUrl.pathname.startsWith("/panel");
+  } catch {
+    return false;
+  }
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const token = asToken(req.query.token).trim();
   if (!token) {
@@ -38,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  if (link.outboundMessage.trackingEnabled) {
+  if (link.outboundMessage.trackingEnabled && !isLikelySelfPreview(req)) {
     const ip =
       String(req.headers["x-forwarded-for"] || "")
         .split(",")[0]
