@@ -14,6 +14,102 @@ import Image from "@tiptap/extension-image";
 import FontFamily from "@tiptap/extension-font-family";
 import { FiBold, FiItalic, FiLink2, FiImage, FiList, FiMinus } from "react-icons/fi";
 
+/**
+ * Image with drag-to-resize. Adds a `width` attribute that serializes to an inline
+ * `style` (inline styles are required for images to render correctly in emails) and a
+ * NodeView that shows a corner handle on hover for resizing.
+ */
+const toPx = (w: unknown) => (typeof w === "number" ? `${w}px` : typeof w === "string" && w ? w : "");
+
+const ResizableImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      width: {
+        default: null,
+        parseHTML: (el: HTMLElement) =>
+          el.style.width || el.getAttribute("width") || null,
+        renderHTML: (attrs: { width?: string | number | null }) =>
+          attrs.width ? { style: `width: ${toPx(attrs.width)}; max-width: 100%; height: auto;` } : {},
+      },
+    };
+  },
+  addNodeView() {
+    return ({ node, editor, getPos }) => {
+      const container = document.createElement("div");
+      container.style.cssText = "position:relative;display:inline-block;max-width:100%;line-height:0;";
+
+      const img = document.createElement("img");
+      img.src = node.attrs.src;
+      if (node.attrs.alt) img.alt = node.attrs.alt;
+      img.style.maxWidth = "100%";
+      img.style.height = "auto";
+      img.style.display = "block";
+      if (node.attrs.width) img.style.width = toPx(node.attrs.width);
+      container.appendChild(img);
+
+      const handle = document.createElement("span");
+      handle.contentEditable = "false";
+      handle.style.cssText =
+        "position:absolute;right:-5px;bottom:-5px;width:12px;height:12px;background:#1a73e8;border:2px solid #fff;border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.25);cursor:nwse-resize;opacity:0;transition:opacity .12s;";
+      container.appendChild(handle);
+      container.addEventListener("mouseenter", () => (handle.style.opacity = "1"));
+      container.addEventListener("mouseleave", () => { if (!resizing) handle.style.opacity = "0"; });
+
+      let resizing = false;
+      let startX = 0;
+      let startWidth = 0;
+      const onMove = (e: MouseEvent) => {
+        if (!resizing) return;
+        const max = container.parentElement?.clientWidth || 800;
+        const next = Math.max(40, Math.min(startWidth + (e.clientX - startX), max));
+        img.style.width = `${Math.round(next)}px`;
+      };
+      const onUp = () => {
+        if (!resizing) return;
+        resizing = false;
+        handle.style.opacity = "0";
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        if (typeof getPos !== "function") return;
+        const pos = getPos();
+        if (pos == null) return;
+        const current = editor.state.doc.nodeAt(pos);
+        if (!current) return;
+        const width = Math.round(img.getBoundingClientRect().width);
+        editor.view.dispatch(
+          editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, width })
+        );
+      };
+      const onDown = (e: MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        resizing = true;
+        startX = e.clientX;
+        startWidth = img.getBoundingClientRect().width;
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      };
+      handle.addEventListener("mousedown", onDown);
+
+      return {
+        dom: container,
+        update: (updated) => {
+          if (updated.type.name !== node.type.name) return false;
+          if (updated.attrs.src !== img.src) img.src = updated.attrs.src;
+          img.style.width = updated.attrs.width ? toPx(updated.attrs.width) : "";
+          return true;
+        },
+        destroy: () => {
+          handle.removeEventListener("mousedown", onDown);
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        },
+      };
+    };
+  },
+});
+
 export type ComposeRichEditorHandle = {
   focus: () => void;
   promptInsertLink: () => void;
@@ -133,7 +229,7 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
       Color,
       Highlight.configure({ multicolor: true }),
       Placeholder.configure({ placeholder }),
-      Image.configure({ allowBase64: true, inline: false }),
+      ResizableImage.configure({ allowBase64: true, inline: false }),
     ],
     [placeholder]
   );
