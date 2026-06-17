@@ -1,17 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 
 function asStr(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireSession(req, res);
-  if (!session) {
-    res.status(401).json({ message: "Not authenticated" });
-    return;
-  }
+  const session = await requireRole(req, res);
+  if (!session) return;
   const userId = Number((session.user as any).id);
 
   if (req.method === "GET") {

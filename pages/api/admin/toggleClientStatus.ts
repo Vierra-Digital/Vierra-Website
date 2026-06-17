@@ -1,15 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "PUT") return res.status(405).json({ message: "Method not allowed" });
 
-  const session = await requireSession(req, res);
-  if (!session) return res.status(401).json({ message: "Not authenticated" });
-  
-  const role = (session.user as any)?.role;
-  if (role !== "admin") return res.status(403).json({ message: "Forbidden" });
+  const session = await requireRole(req, res, ["admin"]);
+  if (!session) return;
 
   const { clientId, isActive } = req.body;
   

@@ -19,6 +19,7 @@ import {
   FiCalendar,
 } from "react-icons/fi";
 import ProfileImage from "../ProfileImage";
+import Modal from "@/components/ui/Modal";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -646,14 +647,13 @@ function ConfirmDeleteTaskModal({
   onCancel: () => void;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      onClick={onCancel}
+    <Modal
+      onClose={onCancel}
+      zIndexClass="z-[70]"
+      backdropClassName="bg-black/50 backdrop-blur-sm"
+      cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+      closeOnBackdrop={true}
     >
-      <div
-        className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
-        onClick={(e) => e.stopPropagation()}
-      >
         <div className="flex items-center gap-3 mb-4">
           <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
             <FiTrash2 className="w-6 h-6 text-red-600" />
@@ -679,8 +679,7 @@ function ConfirmDeleteTaskModal({
             Delete Task
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -715,14 +714,13 @@ function AddTaskModal({
   const isLastStep = step === 3;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-      onClick={onClose}
+    <Modal
+      onClose={onClose}
+      zIndexClass="z-50"
+      backdropClassName="bg-black/40 backdrop-blur-sm"
+      cardClassName="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-[#E5E7EB]"
+      closeOnBackdrop={true}
     >
-      <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-[#E5E7EB]"
-        onClick={(e) => e.stopPropagation()}
-      >
         <div className="flex items-center gap-3 px-6 py-5 border-b border-[#E5E7EB]">
           <div className="w-10 h-10 rounded-xl bg-[#701CC0]/10 flex items-center justify-center">
             <FiPlus className="w-5 h-5 text-[#701CC0]" />
@@ -899,8 +897,7 @@ function AddTaskModal({
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -937,15 +934,14 @@ function TaskDetailModal({
     .filter(Boolean) as BoardMember[];
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-      onClick={onClose}
+    <Modal
+      onClose={onClose}
+      zIndexClass="z-50"
+      backdropClassName="bg-black/40 backdrop-blur-sm"
+      cardClassName="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-[#E5E7EB] max-h-[90vh] overflow-hidden flex flex-col"
+      closeOnBackdrop={true}
     >
-      <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-[#E5E7EB] max-h-[90vh] overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        
+
         <div className="flex-shrink-0 flex items-center gap-3 px-6 py-5 border-b border-[#E5E7EB]">
           <div className="min-w-0 flex-1">
             <h2 className="text-lg font-semibold text-[#111827] leading-snug truncate">{task.name}</h2>
@@ -1158,8 +1154,7 @@ function TaskDetailModal({
             </button>
           </div>
         )}
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -1219,14 +1214,13 @@ function EditTaskModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
-      onClick={onClose}
+    <Modal
+      onClose={onClose}
+      zIndexClass="z-[60]"
+      backdropClassName="bg-black/40 backdrop-blur-sm"
+      cardClassName="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-[#E5E7EB]"
+      closeOnBackdrop={true}
     >
-      <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-[#E5E7EB]"
-        onClick={(e) => e.stopPropagation()}
-      >
         <div className="flex items-center gap-3 px-6 py-5 border-b border-[#E5E7EB]">
           <div className="w-10 h-10 rounded-xl bg-[#701CC0]/10 flex items-center justify-center">
             <FiEdit3 className="w-5 h-5 text-[#701CC0]" />
@@ -1411,7 +1405,6 @@ function EditTaskModal({
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

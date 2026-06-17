@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
 
 function asStr(v: unknown) {
@@ -13,11 +13,8 @@ function getId(req: NextApiRequest) {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireSession(req, res);
-  if (!session) {
-    res.status(401).json({ message: "Not authenticated" });
-    return;
-  }
+  const session = await requireRole(req, res);
+  if (!session) return;
   const userId = Number((session.user as any).id);
   const id = getId(req);
   if (!id) {

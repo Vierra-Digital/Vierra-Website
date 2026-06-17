@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 
 function normalizeEmail(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -12,11 +12,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  const session = await requireSession(req, res);
-  if (!session) {
-    res.status(401).json({ message: "Not authenticated" });
-    return;
-  }
+  const session = await requireRole(req, res);
+  if (!session) return;
 
   const userId = Number((session.user as any).id);
   if (!userId || Number.isNaN(userId)) {

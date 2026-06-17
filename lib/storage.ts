@@ -57,23 +57,7 @@ export async function downloadObject(bucket: string, path: string): Promise<Buff
   return Buffer.from(await data.arrayBuffer());
 }
 
-export function getPublicUrl(bucket: string, path: string): string {
-  return getStorage().storage.from(bucket).getPublicUrl(path).data.publicUrl;
-}
-
-export async function getSignedUrl(
-  bucket: string,
-  path: string,
-  expiresInSeconds = 60
-): Promise<string> {
-  const { data, error } = await getStorage()
-    .storage.from(bucket)
-    .createSignedUrl(path, expiresInSeconds);
-  if (error || !data) throw error || new Error(`Could not sign URL: ${bucket}/${path}`);
-  return data.signedUrl;
-}
-
-export async function deleteObject(bucket: string, path: string): Promise<void> {
+async function deleteObject(bucket: string, path: string): Promise<void> {
   const { error } = await getStorage().storage.from(bucket).remove([path]);
   if (error) throw error;
 }

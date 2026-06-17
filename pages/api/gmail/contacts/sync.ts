@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { fetchGoogleContacts } from "@/lib/gmail/people";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
@@ -14,11 +14,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(405).json({ message: "Method Not Allowed" });
     return;
   }
-  const session = await requireSession(req, res);
-  if (!session) {
-    res.status(401).json({ message: "Not authenticated" });
-    return;
-  }
+  const session = await requireRole(req, res);
+  if (!session) return;
 
   const userId = Number((session.user as any).id);
   const accountEmail = asStr(req.body?.accountEmail).toLowerCase();

@@ -5,6 +5,7 @@ import ProfileImage from "../ProfileImage";
 import { Inter } from "next/font/google";
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
+import Modal from "@/components/ui/Modal";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -673,22 +674,17 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
 
     if (showSuccess) {
         return (
-            <div 
-                className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4" 
-                role="dialog" 
-                aria-modal="true"
-                onClick={(e) => {
-                    if (e.target === e.currentTarget) {
-                        setShowSuccess(false)
-                        onCreated()
-                        onClose()
-                    }
+            <Modal
+                zIndexClass="z-[200]"
+                backdropClassName="bg-black/50 backdrop-blur-sm"
+                cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+                label="Staff Added"
+                onClose={() => {
+                    setShowSuccess(false)
+                    onCreated()
+                    onClose()
                 }}
             >
-                <div 
-                    className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" 
-                    onClick={(e) => e.stopPropagation()}
-                >
                     <div className="flex flex-col items-center text-center">
                         <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
                             <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
@@ -713,8 +709,7 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
                             Done
                         </button>
                     </div>
-                </div>
-            </div>
+            </Modal>
         )
     }
 
@@ -754,8 +749,13 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
     ]
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <Modal
+            zIndexClass="z-50"
+            backdropClassName="bg-black/50 backdrop-blur-sm"
+            cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4"
+            label="Add Staff Member"
+            onClose={onClose}
+        >
                 <div className="flex items-center gap-3 mb-6">
                     <div className="w-12 h-12 rounded-full bg-[#701CC0]/10 flex items-center justify-center">
                         <FiPlus className="w-6 h-6 text-[#701CC0]" />
@@ -942,8 +942,7 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
                         )}
                     </div>
                 </div>
-            </div>
-        </div>
+        </Modal>
     )
 }
 const ManageStaffModal: React.FC<{
@@ -951,7 +950,6 @@ const ManageStaffModal: React.FC<{
     onClose: () => void
     onUpdate: (data: Partial<TeamRow>) => void
 }> = ({ staff, onClose, onUpdate }) => {
-    const modalRef = useRef<HTMLDivElement>(null)
     const [formData, setFormData] = useState({
         name: staff.name || "",
         email: staff.email || "",
@@ -963,17 +961,6 @@ const ManageStaffModal: React.FC<{
         strikes: staff.strikes || "0/3"
     })
     const [isSubmitting, setIsSubmitting] = useState(false)
-
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (modalRef.current && !modalRef.current.contains(event.target as Node)) {
-                onClose()
-            }
-        }
-
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [onClose])
 
     const handleInputChange = (field: string, value: string) => {
         setFormData(prev => ({ ...prev, [field]: value }))
@@ -1013,8 +1000,13 @@ const ManageStaffModal: React.FC<{
     ]
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 w-full max-w-2xl mx-4" ref={modalRef}>
+        <Modal
+            zIndexClass="z-50"
+            backdropClassName="bg-black/50"
+            cardClassName="bg-white rounded-xl p-6 w-full max-w-2xl mx-4"
+            label="Edit Staff Member"
+            onClose={onClose}
+        >
                 <div className="flex items-center gap-3 mb-4">
                     <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
                         <FiEdit3 className="w-6 h-6 text-blue-600" />
@@ -1138,8 +1130,7 @@ const ManageStaffModal: React.FC<{
                         {isSubmitting ? "Saving..." : "Save Changes"}
                     </button>
                 </div>
-            </div>
-        </div>
+        </Modal>
     )
 }
 

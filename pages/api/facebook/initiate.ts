@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { asStr, issueOauthStateCookie } from "@/lib/api/oauth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -24,8 +24,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.redirect(authUrl);
   }
-  const session = await requireSession(req, res);
-  if (!session) return res.status(401).json({ message: "Not authenticated" });
+  const session = await requireRole(req, res);
+  if (!session) return;
   const state = issueOauthStateCookie(res, "fb_oauth_state", "/api/facebook/callback");
 
   const authUrl =

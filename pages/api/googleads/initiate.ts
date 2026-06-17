@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma"; 
-import { requireSession } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { asStr, issueOauthStateCookie } from "@/lib/api/oauth";
 
 const SCOPES = ["https://www.googleapis.com/auth/adwords"];
@@ -29,8 +29,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.redirect(authUrl);
     return;
   }
-  const session = await requireSession(req, res);
-  if (!session) { res.status(401).json({ message: "Not authenticated" }); return; }
+  const session = await requireRole(req, res);
+  if (!session) return;
 
   const state = issueOauthStateCookie(res, "ga_oauth_state", "/api/googleads/callback");
 

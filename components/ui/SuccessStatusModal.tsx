@@ -1,5 +1,6 @@
 import React from "react";
 import { FiCheck } from "react-icons/fi";
+import Modal from "@/components/ui/Modal";
 
 type SuccessStatusModalProps = {
   isOpen: boolean;
@@ -19,8 +20,13 @@ const SuccessStatusModal: React.FC<SuccessStatusModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+    <Modal
+      onClose={onClose}
+      zIndexClass="z-50"
+      backdropClassName="bg-black/50 backdrop-blur-sm"
+      cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+      closeOnBackdrop={true}
+    >
         <div className="flex flex-col items-center text-center">
           <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
             <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
@@ -39,8 +45,7 @@ const SuccessStatusModal: React.FC<SuccessStatusModalProps> = ({
             {buttonLabel}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

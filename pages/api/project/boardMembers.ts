@@ -1,17 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { canAccessBoard } from "@/lib/projectBoards";
 import { parseProjectBoard } from "@/lib/api/projectAccess";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireSession(req, res);
-  if (!session) return res.status(401).json({ message: "Not authenticated" });
-
-  const role = (session.user as { role?: string })?.role;
-  if (role !== "admin" && role !== "staff") {
-    return res.status(403).json({ message: "Forbidden" });
-  }
+  const session = await requireRole(req, res, ["admin", "staff"]);
+  if (!session) return;
 
   if (req.method !== "GET") {
     return res.status(405).json({ message: "Method Not Allowed" });

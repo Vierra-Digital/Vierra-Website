@@ -1,17 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import type { ProjectTaskStatus } from "@prisma/client";
 import { getSessionPosition, requireBoardAccessOrRespond403 } from "@/lib/api/projectAccess";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireSession(req, res);
-  if (!session) return res.status(401).json({ message: "Not authenticated" });
+  const session = await requireRole(req, res, ["admin", "staff"]);
+  if (!session) return;
 
   const role = (session.user as { role?: string })?.role;
-  if (role !== "admin" && role !== "staff") {
-    return res.status(403).json({ message: "Forbidden" });
-  }
 
   const id = req.query.id as string;
   if (!id) return res.status(400).json({ message: "Task id required" });

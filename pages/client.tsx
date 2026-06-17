@@ -3,6 +3,7 @@ import Head from "next/head"
 import { Inter } from "next/font/google"
 import Image from "next/image"
 import ProfileImage from "@/components/ProfileImage"
+import { profileImageSrc } from "@/lib/profileImage"
 import Link from "next/link"
 import { FiLogOut, FiFolder } from "react-icons/fi"
 import { AiOutlineAppstore } from "react-icons/ai"
@@ -193,7 +194,7 @@ const ClientPage = () => {
                   onClick={() => setShowSettings((prev) => !prev)}
                 >
                   <ProfileImage
-                    src={imageVersion > 0 ? `/api/profile/getImage?v=${imageVersion}` : null}
+                    src={profileImageSrc(imageVersion)}
                     alt="Profile"
                     name={currentUserName || session?.user?.name || "User"}
                     size={32}
@@ -220,7 +221,7 @@ const ClientPage = () => {
                 user={{
                   name: currentUserName,
                   email: session?.user?.email || "",
-                  image: imageVersion > 0 ? `/api/profile/getImage?v=${imageVersion}` : null,
+                  image: profileImageSrc(imageVersion),
                 }}
                 onNameUpdate={setCurrentUserName}
                 onImageUpdate={async () => {

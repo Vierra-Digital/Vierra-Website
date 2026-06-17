@@ -10,6 +10,7 @@ import type { GetServerSideProps } from "next"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/pages/api/auth/[...nextauth]"
 import UserSettingsPage from "@/components/UserSettingsPage"
+import { profileImageSrc } from "@/lib/profileImage"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -147,11 +148,10 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
             >
               <Image
                 src={
-                  imageVersion > 0
-                    ? `/api/profile/getImage?v=${imageVersion}`
-                    : typeof session?.user?.image === "string" && session?.user?.image?.length > 0
+                  profileImageSrc(imageVersion) ??
+                  (typeof session?.user?.image === "string" && session?.user?.image?.length > 0
                     ? session.user.image
-                    : "/assets/vierra-logo.png"
+                    : "/assets/vierra-logo.png")
                 }
                 alt="Profile"
                 width={48}
@@ -170,7 +170,7 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
                 user={{
                   name: session?.user?.name ?? "Test User",
                   email: session?.user?.email ?? "test@vierra.com",
-                  image: imageVersion > 0 ? `/api/profile/getImage?v=${imageVersion}` : (typeof session?.user?.image === "string" && session.user.image ? session.user.image : null),
+                  image: profileImageSrc(imageVersion) ?? (typeof session?.user?.image === "string" && session.user.image ? session.user.image : null),
                 }}
                 onImageUpdate={async () => {
                   const r = await fetch("/api/profile/getUser")

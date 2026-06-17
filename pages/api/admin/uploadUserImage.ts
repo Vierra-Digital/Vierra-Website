@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { decodeBase64Image, putImageAsset } from "@/lib/api/image";
 import { STORAGE_BUCKETS } from "@/lib/storage";
 
@@ -13,10 +13,8 @@ export const config = {
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireSession(req, res);
-  if (!session) return res.status(401).json({ message: "Not authenticated" });
-  const role = (session.user as any)?.role;
-  if (role !== "admin") return res.status(403).json({ message: "Forbidden" });
+  const session = await requireRole(req, res, ["admin"]);
+  if (!session) return;
 
   if (req.method !== "POST") {
     return res.status(405).json({ message: "Method Not Allowed" });

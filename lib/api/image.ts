@@ -32,12 +32,7 @@ export async function sendImageAsset(
   return true;
 }
 
-/** Prisma `Bytes` fields expect `Uint8Array` (not `Buffer`) with strict ArrayBuffer typing. */
-export function toPrismaBytes(buf: Buffer): Uint8Array<ArrayBuffer> {
-  return new Uint8Array(buf);
-}
-
-export function sendImageBuffer(
+function sendImageBuffer(
   res: NextApiResponse,
   image: Buffer | Uint8Array | number[],
   mimeType: string | null | undefined,

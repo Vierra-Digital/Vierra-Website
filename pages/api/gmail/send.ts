@@ -4,7 +4,7 @@ import nodemailer from "nodemailer";
 import sanitizeHtml from "sanitize-html";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { requireSession } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 
 function asString(value: unknown) {
@@ -264,11 +264,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  const session = await requireSession(req, res);
-  if (!session) {
-    res.status(401).json({ message: "Not authenticated" });
-    return;
-  }
+  const session = await requireRole(req, res);
+  if (!session) return;
 
   const userId = Number((session.user as any).id);
   const accountEmail = normalizeEmail(asString(req.body?.accountEmail));

@@ -102,5 +102,3 @@ export function CaseStudies() {
     </div>
   )
 }
-
-export default CaseStudies

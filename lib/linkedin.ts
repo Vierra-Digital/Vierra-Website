@@ -25,21 +25,6 @@ function buildHeaders(token: string, version: string, extra?: Record<string, str
   };
 }
 
-export async function getUserLinkedInToken(userId: number) {
-  const tokenRow = await prisma.userToken.findUnique({
-    where: {
-      userId_platform: {
-        userId,
-        platform: "linkedin",
-      } as any,
-    },
-    select: { accessToken: true },
-  });
-
-  if (!tokenRow) return null;
-  return decrypt(tokenRow.accessToken);
-}
-
 async function getEncryptedUserLinkedInToken(userId: number) {
   return prisma.userToken.findUnique({
     where: {

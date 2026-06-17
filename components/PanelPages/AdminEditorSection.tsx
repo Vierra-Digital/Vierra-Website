@@ -9,6 +9,7 @@ import Image from "next/image"
 import { motion } from "framer-motion"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
+import Modal from "@/components/ui/Modal"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -559,22 +560,17 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
 
     if (showSuccess) {
     return (
-            <div 
-                className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4" 
-                role="dialog" 
-                aria-modal="true"
-                onClick={(e) => {
-                    if (e.target === e.currentTarget) {
-                        setShowSuccess(false)
-                        onCreated()
-                        onClose()
-                    }
+            <Modal
+                zIndexClass="z-[200]"
+                backdropClassName="bg-black/50 backdrop-blur-sm"
+                cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+                label="User Created"
+                onClose={() => {
+                    setShowSuccess(false)
+                    onCreated()
+                    onClose()
                 }}
             >
-                <div 
-                    className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" 
-                    onClick={(e) => e.stopPropagation()}
-                >
                     <div className="flex flex-col items-center text-center">
                         <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
                             <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
@@ -599,21 +595,18 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                             Done
                     </button>
                 </div>
-            </div>
-        </div>
+            </Modal>
     )
     }
 
     return (
-        <div 
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4" 
-            role="dialog" 
-            aria-modal="true"
-            onClick={(e) => {
-                if (e.target === e.currentTarget) onClose()
-            }}
+        <Modal
+            zIndexClass="z-[200]"
+            backdropClassName="bg-black/50 backdrop-blur-sm"
+            cardClassName="w-full max-w-2xl rounded-lg bg-white shadow-xl border border-[#E5E7EB] p-6"
+            label="Create User"
+            onClose={onClose}
         >
-            <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl border border-[#E5E7EB] p-6" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-5">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-[#701CC0]/10 text-[#701CC0] inline-flex items-center justify-center">
@@ -742,8 +735,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                         )}
                     </button>
                 </div>
-            </div>
-        </div>
+        </Modal>
     )
 }
 
@@ -1455,8 +1447,13 @@ const ConfirmDeleteSessionModal: React.FC<{
     if (!isOpen) return null
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onCancel}>
-            <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <Modal
+            zIndexClass="z-50"
+            backdropClassName="bg-black/50 backdrop-blur-sm"
+            cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+            label="Delete Session"
+            onClose={onCancel}
+        >
                 <div className="flex items-center gap-3 mb-4">
                     <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
                         <FiTrash2 className="w-6 h-6 text-red-600" />
@@ -1486,8 +1483,7 @@ const ConfirmDeleteSessionModal: React.FC<{
                         Delete Session
                     </button>
                 </div>
-            </div>
-        </div>
+        </Modal>
     )
 }
 
@@ -1512,8 +1508,13 @@ const GetLinkModal: React.FC<{
     if (!isOpen) return null
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <Modal
+            zIndexClass="z-50"
+            backdropClassName="bg-black/50 backdrop-blur-sm"
+            cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+            label="Session Link"
+            onClose={onClose}
+        >
                 <div className="flex items-center gap-3 mb-4">
                     <div className="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center">
                         <LinkIcon className="w-6 h-6 text-[#701CC0]" />
@@ -1570,8 +1571,7 @@ const GetLinkModal: React.FC<{
                         Done
                     </button>
                 </div>
-            </div>
-        </div>
+        </Modal>
     )
 }
 
@@ -1583,8 +1583,13 @@ const RenewSessionModal: React.FC<{
     if (!isOpen) return null
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <Modal
+            zIndexClass="z-50"
+            backdropClassName="bg-black/50 backdrop-blur-sm"
+            cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+            label="Renew Session"
+            onClose={onClose}
+        >
                 {success ? (
                     <>
                         <div className="flex flex-col items-center text-center mb-6">
@@ -1628,7 +1633,6 @@ const RenewSessionModal: React.FC<{
                         Done
                     </button>
                 </div>
-            </div>
-        </div>
+        </Modal>
     )
 }

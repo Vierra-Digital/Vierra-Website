@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { asStr, issueOauthStateCookie } from "@/lib/api/oauth";
 import { serialize as serializeCookie } from "cookie";
 
@@ -52,8 +52,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.redirect(authUrl);
     return;
   }
-  const session = await requireSession(req, res);
-  if (!session) { res.status(401).json({ message: "Not authenticated" }); return; }
+  const session = await requireRole(req, res);
+  if (!session) return;
 
   const baseState = issueOauthStateCookie(res, "li_oauth_state", "/api/linkedin/callback");
   appendSetCookie(

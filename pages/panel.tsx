@@ -3,6 +3,7 @@ import Head from "next/head"
 import { Inter } from "next/font/google"
 import Image from "next/image"
 import ProfileImage from "@/components/ProfileImage"
+import { profileImageSrc } from "@/lib/profileImage"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
@@ -383,7 +384,7 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
                   onClick={() => setShowSettings((prev) => !prev)}
                 >
                 <ProfileImage
-                  src={imageVersion > 0 ? `/api/profile/getImage?v=${imageVersion}` : null}
+                  src={profileImageSrc(imageVersion)}
                   alt="Profile"
                   name={currentUserName || session?.user?.name || "User"}
                   size={32}
@@ -409,7 +410,7 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
                 user={{
                   name: currentUserName,
                   email: session?.user?.email || "test@vierra.com",
-                  image: imageVersion > 0 ? `/api/profile/getImage?v=${imageVersion}` : null,
+                  image: profileImageSrc(imageVersion),
                 }}
                 onNameUpdate={setCurrentUserName}
                 onImageUpdate={async () => {

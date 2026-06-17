@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { requireSession } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { asStr, issueOauthStateCookie } from "@/lib/api/oauth";
 import { serialize as serializeCookie } from "cookie";
 import { resolveGoogleWebClientCredentials } from "@/lib/googleOAuthClient";
@@ -36,11 +36,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  const session = await requireSession(req, res);
-  if (!session) {
-    res.status(401).json({ message: "Not authenticated" });
-    return;
-  }
+  const session = await requireRole(req, res);
+  if (!session) return;
 
   const source = asStr(req.query.from)?.trim().toLowerCase() || "settings";
   const { clientId } = resolveGoogleWebClientCredentials();

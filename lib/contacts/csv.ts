@@ -47,19 +47,6 @@ function parseCsvLine(line: string) {
   return values.map((v) => v.trim());
 }
 
-export function parseContactsCsv(text: string): CsvContactRow[] {
-  return parseContactsCsvWithValidation(text).rows.map((row) => ({
-    firstName: row.firstName,
-    lastName: row.lastName,
-    email: row.email,
-    phone: row.phone,
-    business: row.business,
-    website: row.website,
-    address: row.address,
-    tags: row.tags,
-  }));
-}
-
 export function parseContactsCsvWithValidation(text: string): ContactsCsvValidationResult {
   const lines = text
     .split(/\r?\n/)

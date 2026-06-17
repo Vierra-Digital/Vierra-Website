@@ -1,5 +1,6 @@
 import React from "react";
 import { FiAlertTriangle } from "react-icons/fi";
+import Modal from "@/components/ui/Modal";
 
 type ConfirmActionModalProps = {
   isOpen: boolean;
@@ -25,8 +26,13 @@ const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onCancel}>
-      <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
+    <Modal
+      onClose={onCancel}
+      zIndexClass="z-50"
+      backdropClassName="bg-black/50 backdrop-blur-sm"
+      cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+      closeOnBackdrop={true}
+    >
         <div className="flex items-center gap-3 mb-4">
           <div className={`w-12 h-12 rounded-full flex items-center justify-center ${danger ? "bg-red-100" : "bg-amber-100"}`}>
             <FiAlertTriangle className={`w-6 h-6 ${danger ? "text-red-600" : "text-amber-600"}`} />
@@ -50,8 +56,7 @@ const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
             {confirmLabel}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

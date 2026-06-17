@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next"
 import fs from "fs"
 import path from "path"
 import { v4 as uuidv4 } from "uuid"
-import { requireSession } from "@/lib/auth"
+import { requireRole } from "@/lib/auth"
 import { saveSessionData } from "@/lib/sessionStore"
 import { getPresetById } from "@/lib/presets"
 import { getPresetFieldsOverride } from "@/lib/presetOverrides"
@@ -16,11 +16,8 @@ export default async function handler(
     return res.status(405).json({ message: `Method ${req.method} Not Allowed` })
   }
 
-  const session = await requireSession(req, res)
-  if (!session) return res.status(401).json({ message: "Not authenticated" })
-  const role = (session.user as { role?: string })?.role
-  if (role !== "admin" && role !== "staff")
-    return res.status(403).json({ message: "Forbidden" })
+  const session = await requireRole(req, res, ["admin", "staff"])
+  if (!session) return
 
   const presetId =
     typeof req.body?.presetId === "string"

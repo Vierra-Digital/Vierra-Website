@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { requireSession } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { prisma } from "@/lib/prisma";
 
@@ -96,11 +96,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  const session = await requireSession(req, res);
-  if (!session) {
-    res.status(401).json({ message: "Not authenticated" });
-    return;
-  }
+  const session = await requireRole(req, res);
+  if (!session) return;
 
   const action = asString(req.body?.action) as ActionType;
   const items = normalizeItems(req.body?.items);

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Inter } from "next/font/google";
 import PanelSectionHeader from "@/components/ui/PanelSectionHeader";
+import Modal from "@/components/ui/Modal";
 import { FiGlobe, FiHeart, FiMail, FiMessageCircle, FiMoreHorizontal, FiRepeat, FiSend, FiThumbsUp } from "react-icons/fi";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -773,8 +774,13 @@ const RegenerateModal: React.FC<{ onClose: () => void; onSubmit: (instructions: 
 }) => {
   const [instructions, setInstructions] = useState("");
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-lg rounded-xl border border-[#E5E7EB] bg-white p-5 shadow-xl">
+    <Modal
+      onClose={onClose}
+      zIndexClass="z-50"
+      backdropClassName="bg-black/40 backdrop-blur-sm"
+      cardClassName="w-full max-w-lg rounded-xl border border-[#E5E7EB] bg-white p-5 shadow-xl"
+      closeOnBackdrop={false}
+    >
         <h3 className="text-base font-semibold text-[#111827]">Regenerate Post</h3>
         <p className="mt-1 text-sm text-[#6B7280]">Describe how you want the next version changed.</p>
         <textarea
@@ -792,8 +798,7 @@ const RegenerateModal: React.FC<{ onClose: () => void; onSubmit: (instructions: 
             Regenerate
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 };
 

@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Inter as InterFont } from "next/font/google";
 import { FiUser, FiCheck } from 'react-icons/fi'
 import type { SessionItem } from "@/types/session";
+import Modal from "@/components/ui/Modal";
 
 const inter = InterFont({ subsets: ["latin"] });
 
@@ -20,8 +21,6 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const modalRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     if (typeof window !== "undefined") setOrigin(window.location.origin);
   }, []);
@@ -33,18 +32,6 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
       setErr(null);
     }
   }, [isOpen]);
-
-  useEffect(() => {
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    if (isOpen) document.addEventListener("keydown", onEsc);
-    return () => document.removeEventListener("keydown", onEsc);
-  }, [isOpen, onClose]);
-
-  const handleOutsideClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (modalRef.current && !modalRef.current.contains(e.target as Node)) onClose();
-  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setClientData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -168,15 +155,14 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={handleOutsideClick}>
-      <div
-        ref={modalRef}
-        className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="add-client-title"
-      >
+    <Modal
+      onClose={onClose}
+      zIndexClass="z-50"
+      backdropClassName="bg-black/50 backdrop-blur-sm"
+      cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4"
+      closeOnBackdrop={true}
+      label="Add Client"
+    >
 
         <div className="flex items-center gap-3 mb-6">
           {(step === 1 || step === 2) && (
@@ -416,8 +402,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
           </>
         )}
 
-      </div>
-    </div>
+    </Modal>
   );
 };
 
