@@ -19,6 +19,52 @@
   animation: gradient-horizontal 10s ease infinite;
 }
 
+/* Animated glowing trim that travels around the nav "Free Audit Call" button */
+@property --vierra-glow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes vierra-glow-spin {
+  to {
+    --vierra-glow-angle: 360deg;
+  }
+}
+
+.audit-glow {
+  position: relative;
+  isolation: isolate;
+}
+
+/* Sharp gradient ring masked to the border */
+.audit-glow::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 9999px;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--vierra-glow-angle),
+    #701cc0,
+    #8f42ff,
+    #d4a5ff,
+    #8f42ff,
+    #701cc0
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: vierra-glow-spin 6s linear infinite;
+  z-index: -1;
+}
+
+/* On hover: spin the trim faster and make it brighter */
+.audit-glow:hover::before {
+  animation-duration: 2s;
+  filter: brightness(1.6) saturate(1.2);
+}
+
 body {
   font-family: Arial, Helvetica, sans-serif;
 }

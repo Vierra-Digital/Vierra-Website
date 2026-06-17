@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { FaEnvelope, FaFacebookF, FaLinkedinIn } from "react-icons/fa";
 import { Figtree, Inter } from "next/font/google";
 
@@ -6,44 +7,49 @@ const figtree = Figtree({ subsets: ["latin"] });
 const inter = Inter({ subsets: ["latin"] });
 
 const Footer = () => {
-
   const socialLinks = [
-    { icon: <FaEnvelope size={20} />, text: "Send Us An Email", link: "mailto:business@alexshick.com" },
-    { icon: <FaLinkedinIn size={20} />, text: "Connect On LinkedIn", link: "https://www.linkedin.com/company/vierra/?viewAsMember=true" },
+    { icon: <FaEnvelope size={20} />, text: "Send Us An Email", link: "mailto:business@vierradev.com" },
+    { icon: <FaLinkedinIn size={20} />, text: "Connect On LinkedIn", link: "https://www.linkedin.com/company/vierra/" },
     { icon: <FaFacebookF size={20} />, text: "Friend Us On Facebook", link: "https://www.facebook.com/profile.php?viewas=100000686899395&id=61572460110348" },
   ];
 
+  const platforms: { label: string; link: string | null }[] = [
+    { label: "LinkedIn", link: "https://www.linkedin.com/company/vierra/" },
+    { label: "Instagram", link: null },
+    { label: "Facebook", link: "https://www.facebook.com/share/1GXE6s4NSX/" },
+    { label: "GitHub", link: "https://github.com/Vierra-Digital" },
+  ];
+
   return (
-    <footer className="bg-[#18042A] text-white pt-32 max-sm:pt-44 pb-8 px-5 md:px-20 md:relative md:overflow-hidden">
-      <div className="hidden md:block md:absolute inset-0">
+    <footer className="relative overflow-hidden bg-[#18042A] text-white pt-32 max-sm:pt-44 pb-8 px-5 md:px-20">
+      {/* Concentric circle accent (Figma footer element) */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 hidden md:block">
         {[925, 1185, 1434].map((size, i) => (
-          <div key={i} className={`absolute w-[${size}px] h-[${size}px] rounded-full left-1/2 top-1/2 -translate-x-1/3 -translate-y-1/2 bg-gradient-to-b from-[#701CC000] to-[#701CC000] border-[1.58px] border-[#701CC099]`} />
+          <div
+            key={i}
+            className="absolute left-[50%] top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-[1.58px] border-[#701CC04D]"
+            style={{ width: size, height: size }}
+          />
         ))}
       </div>
-      <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row justify-between items-center md:items-start gap-10 px-5 md:px-20 relative">
+
+      <div className="relative z-10 max-w-[1400px] mx-auto flex flex-col md:flex-row justify-between items-center md:items-start gap-10 px-5 md:px-20">
         <div className="mb-6 md:mb-0 flex justify-center md:justify-start w-full md:w-auto">
-          <Image src="/assets/vierra-logo-panel.png" alt="Vierra" width={152} height={56} className="h-10 w-auto" />
+          <Link href="/" aria-label="Go to homepage" className="inline-flex">
+            <Image src="/assets/vierra-logo-panel.png" alt="Vierra" width={152} height={56} className="h-10 w-auto" />
+          </Link>
         </div>
         <div className="flex flex-col md:flex-row gap-10 md:gap-16 text-center md:text-left w-full md:w-auto">
           <div>
             <h3 className={`text-lg font-medium mb-4 md:mb-6 ${figtree.className}`}>Company</h3>
             <ul className={`space-y-3 md:space-y-4 text-white/80 ${inter.className}`}>
               <li>
-                <a 
-                  href="#" 
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                  className="hover:text-white transition-colors"
-                >
-                  About
-                </a>
+                <Link href="/#about" className="hover:text-white transition-colors">About</Link>
               </li>
               <li>
-                <a href="#" className="hover:text-white transition-colors flex items-center justify-center md:justify-start gap-2">
-                  Careers <span className="bg-[#701CC0] text-xs px-2 py-0.5 rounded-[12px] text-white">HIRING</span>
-                </a>
+                <span className="cursor-default inline-flex items-center justify-center md:justify-start gap-2 text-white/40">
+                  Careers <span className="bg-[#701CC0]/60 text-xs px-2 py-0.5 rounded-[12px] text-white/80">HIRING</span>
+                </span>
               </li>
             </ul>
           </div>
@@ -51,28 +57,44 @@ const Footer = () => {
             <h3 className={`text-lg font-medium mb-4 md:mb-6 ${figtree.className}`}>Legal</h3>
             <ul className={`space-y-3 md:space-y-4 text-white/80 ${inter.className}`}>
               <li>
-                <a href="https://vierradev.com/terms-of-service" className="hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">Terms of Service</a>
+                <Link href="/terms-of-service" className="hover:text-white transition-colors">Terms of Service</Link>
               </li>
               <li>
-                <a href="https://vierradev.com/privacy-policy" className="hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">Privacy Policy</a>
+                <Link href="/privacy-policy" className="hover:text-white transition-colors">Privacy Policy</Link>
               </li>
               <li>
-                <a href="https://vierradev.com/work-policy" className="hover:text-white transition-colors" target="_blank" rel="noopener noreferrer">Work Policy</a>
+                <Link href="/work-policy" className="hover:text-white transition-colors">Work Policy</Link>
               </li>
+            </ul>
+          </div>
+          <div>
+            <h3 className={`text-lg font-medium mb-4 md:mb-6 ${figtree.className}`}>Connect</h3>
+            <ul className={`space-y-3 md:space-y-4 text-white/80 ${inter.className}`}>
+              {platforms.map((p) => (
+                <li key={p.label}>
+                  {p.link ? (
+                    <a href={p.link} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+                      {p.label}
+                    </a>
+                  ) : (
+                    <span className="cursor-default text-white/50">{p.label}</span>
+                  )}
+                </li>
+              ))}
             </ul>
           </div>
         </div>
         <div className="flex flex-col gap-4 w-full md:w-auto text-center md:text-left">
           {socialLinks.map((item, i) => (
-            <a key={i} href={item.link} target="_blank" className="flex items-center justify-start gap-4 bg-[#1F0F2D] pl-4 pr-6 py-3 rounded-full hover:bg-[#2A1539] transition-colors">
+            <a key={i} href={item.link} target="_blank" rel="noopener noreferrer" className="flex items-center justify-start gap-4 bg-[#1F0F2D] pl-4 pr-6 py-3 rounded-full hover:bg-[#2A1539] transition-colors">
               <div className="bg-[#701CC0] p-2.5 rounded-full">{item.icon}</div>
               <span className={`text-sm font-medium ${figtree.className}`}>{item.text}</span>
             </a>
           ))}
         </div>
       </div>
-      <div className="flex flex-col md:flex-row justify-center md:justify-end items-center gap-4 mt-14 px-5 md:px-20">
-        <a href="https://vierradev.com/privacy-policy" className={`text-[#FFFFFFCC] text-sm hover:text-white transition-colors ${inter.className}`}>Privacy Policy</a>
+      <div className="relative z-10 flex flex-col md:flex-row justify-center md:justify-end items-center gap-4 mt-14 px-5 md:px-20">
+        <Link href="/privacy-policy" className={`text-[#FFFFFFCC] text-sm hover:text-white transition-colors ${inter.className}`}>Privacy Policy</Link>
         <p className={`text-[#FFFFFFCC] text-sm ${inter.className}`}>© 2026 Vierra Digital Inc, All rights reserved</p>
       </div>
     </footer>

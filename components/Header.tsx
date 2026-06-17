@@ -45,45 +45,37 @@ export function Header() {
           <nav className={`hidden md:flex items-center gap-8 text-[16px] ${bricolage.className}`}>
             <Link
               href="/#about"
-              className="hover:text-[#8F42FF] transition-colors relative group"
+              className="relative group transition-colors duration-300 hover:text-white"
               onClick={(event) => handleSectionClick(event, "about")}
             >
               About us
-              <span className="absolute left-0 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-full" />
+              <span className="absolute -bottom-1 left-1/2 h-[2px] w-0 -translate-x-1/2 rounded-full bg-gradient-to-r from-[#8F42FF] to-[#D4A5FF] shadow-[0_0_10px_#8F42FF99] transition-all duration-300 ease-out group-hover:w-full" />
             </Link>
             <Link
               href="/#services"
-              className="hover:text-[#8F42FF] transition-colors relative group"
+              className="relative group transition-colors duration-300 hover:text-white"
               onClick={(event) => handleSectionClick(event, "services")}
             >
               Services
-              <span className="absolute left-0 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-full" />
-            </Link>
-            <Link
-              href="/#solutions"
-              className="hover:text-[#8F42FF] transition-colors relative group"
-              onClick={(event) => handleSectionClick(event, "solutions")}
-            >
-              Solutions
-              <span className="absolute left-0 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-full" />
+              <span className="absolute -bottom-1 left-1/2 h-[2px] w-0 -translate-x-1/2 rounded-full bg-gradient-to-r from-[#8F42FF] to-[#D4A5FF] shadow-[0_0_10px_#8F42FF99] transition-all duration-300 ease-out group-hover:w-full" />
             </Link>
             <Link
               href="/#cases"
-              className="hover:text-[#8F42FF] transition-colors relative group"
+              className="relative group transition-colors duration-300 hover:text-white"
               onClick={(event) => handleSectionClick(event, "cases")}
             >
               Case Studies
-              <span className="absolute left-0 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-full" />
+              <span className="absolute -bottom-1 left-1/2 h-[2px] w-0 -translate-x-1/2 rounded-full bg-gradient-to-r from-[#8F42FF] to-[#D4A5FF] shadow-[0_0_10px_#8F42FF99] transition-all duration-300 ease-out group-hover:w-full" />
             </Link>
-            <Link href="/blog" className="hover:text-[#8F42FF] transition-colors relative group">
+            <Link href="/blog" className="relative group transition-colors duration-300 hover:text-white">
               Blog
-              <span className="absolute left-0 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-full" />
+              <span className="absolute -bottom-1 left-1/2 h-[2px] w-0 -translate-x-1/2 rounded-full bg-gradient-to-r from-[#8F42FF] to-[#D4A5FF] shadow-[0_0_10px_#8F42FF99] transition-all duration-300 ease-out group-hover:w-full" />
             </Link>
           </nav>
         </div>
         <Button
           variant="secondary"
-          className={`hidden md:flex items-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] transform transition-all duration-300 hover:scale-105 ${inter.className}`}
+          className={`audit-glow hidden md:flex items-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-transparent text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] transition-all duration-300 hover:border-[#8F42FF] ${inter.className}`}
           onClick={() => setIsModalOpen(true)}
         >
           Free Audit Call <ArrowUpRight className="w-4 h-4" />
@@ -124,13 +116,6 @@ export function Header() {
                     onClick={(event) => handleSectionClick(event, "services", true)}
                   >
                     Services
-                  </Link>
-                  <Link
-                    href="/#solutions"
-                    className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors"
-                    onClick={(event) => handleSectionClick(event, "solutions", true)}
-                  >
-                    Solutions
                   </Link>
                   <Link
                     href="/#cases"
