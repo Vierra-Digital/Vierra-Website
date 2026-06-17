@@ -209,7 +209,7 @@ export default function Page() {
                 width={750}
                 height={685}
                 priority
-                quality={100}
+                quality={80}
               />
             </motion.div>
           </motion.div>

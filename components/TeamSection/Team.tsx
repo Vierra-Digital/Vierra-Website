@@ -38,7 +38,7 @@ export default function TeamSection() {
                   src={image}
                   alt={name}
                   fill
-                  quality={100}
+                  quality={80}
                   className="object-cover rounded-full transition-all duration-300 md:group-hover:drop-shadow-[0_0_80px_#701cc0]"
                 />
               </div>

@@ -86,7 +86,7 @@ export default function TestimonialsSection() {
                   alt={testimonials[currentTestimonial].name}
                   width={100}
                   height={100}
-                  quality={100}
+                  quality={80}
                   className="w-[60px] h-[60px] md:w-[80px] md:h-[80px] object-cover rounded-full"
                 />
                 <div>
