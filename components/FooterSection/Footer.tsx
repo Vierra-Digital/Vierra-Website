@@ -65,6 +65,9 @@ const Footer = () => {
               <li>
                 <Link href="/work-policy" className="hover:text-white transition-colors">Work Policy</Link>
               </li>
+              <li>
+                <Link href="/branding" className="hover:text-white transition-colors">Brand Kit</Link>
+              </li>
             </ul>
           </div>
           <div>
