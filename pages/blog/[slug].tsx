@@ -338,8 +338,14 @@ const BlogViewPage = ({
 
 export const getStaticPaths: GetStaticPaths = async () => {
     try {
+    // Prerender only the most recent posts at build time; older and newly-added
+    // posts are generated on-demand via fallback: 'blocking'. This keeps Netlify
+    // build time bounded as the post count grows (each prerender is a remote
+    // Supabase round-trip, serialized by connection_limit=1).
     const posts = await prisma.blogPost.findMany({
         select: { slug: true },
+        orderBy: { published_date: 'desc' },
+        take: 25,
     });
 
     interface BlogPostPath {
@@ -415,8 +421,11 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
         revalidate: 60,
     };
     } catch (error) {
-        console.warn('Database unavailable during static props generation:', error);
-        return { notFound: true };
+        // Transient DB failure (e.g. Supabase pooler saturation during a GSC crawl
+        // burst). Rethrow so Next returns a non-cached 500 and retries on the next
+        // request — NEVER cache a 404 for a post that actually exists.
+        console.error('blog/[slug] getStaticProps DB error (retryable, not cached):', error);
+        throw error;
     }
 };
 

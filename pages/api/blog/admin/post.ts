@@ -9,6 +9,20 @@ function slugify(title: string) {
     .replace(/\s+/g, "-");
 }
 
+/**
+ * On-demand ISR revalidation: regenerate the affected blog post page(s) immediately
+ * so a newly published/edited post is live at once (no 404 window, no waiting for the
+ * 60s revalidate). Best-effort — a revalidation failure must not fail the write.
+ */
+async function revalidateBlog(res: NextApiResponse, slugs: Array<string | null | undefined>) {
+  const unique = Array.from(new Set(slugs.filter((s): s is string => Boolean(s))));
+  await Promise.all(
+    unique.map((s) =>
+      res.revalidate(`/blog/${s}`).catch((e) => console.warn(`revalidate /blog/${s} failed`, e))
+    )
+  );
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "POST" || req.method === "PUT") {
     try {
@@ -20,6 +34,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const slug = slugify(String(title || "untitled"));
 
       if (req.method === "PUT" && id) {
+        // Capture the previous slug so we can also revalidate the old URL if the title/slug changed.
+        const prev = await prisma.blogPost.findUnique({ where: { id: Number(id) }, select: { slug: true } });
         const post = await prisma.blogPost.update({
           where: { id: Number(id) },
           data: {
@@ -32,6 +48,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             slug,
           },
         });
+        await revalidateBlog(res, [post.slug, prev?.slug]);
         return res.status(200).json({ id: post.id });
       }
 
@@ -47,6 +64,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
       });
 
+      await revalidateBlog(res, [post.slug]);
       return res.status(200).json({ id: post.id, link: `/blog/${post.slug}` });
     } catch (e) {
       console.error("blog admin post", e);
@@ -58,7 +76,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const id = Number(req.query.id);
       if (!id) return res.status(400).json({ message: "Missing id" });
-      await prisma.blogPost.delete({ where: { id } });
+      const deleted = await prisma.blogPost.delete({ where: { id }, select: { slug: true } });
+      // Regenerate the (now-removed) page so it correctly serves a 404 going forward.
+      await revalidateBlog(res, [deleted.slug]);
       return res.status(200).json({ ok: true });
     } catch (e) {
       console.error("blog admin delete", e);

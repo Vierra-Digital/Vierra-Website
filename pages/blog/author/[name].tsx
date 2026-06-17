@@ -184,7 +184,9 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
       },
       revalidate: 60,
     }
-  } catch {
-    return { notFound: true }
+  } catch (error) {
+    // Transient DB failure — rethrow (non-cached 500 + retry) instead of caching a 404.
+    console.error("blog/author/[name] getStaticProps DB error (retryable, not cached):", error)
+    throw error
   }
 }
