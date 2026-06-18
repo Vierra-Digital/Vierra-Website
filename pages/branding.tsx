@@ -447,7 +447,7 @@ const BrandingPage: React.FC = () => {
                       <span className="relative z-10 text-[12px] font-medium uppercase tracking-wide text-[#C99DFF]">Concentric Rings</span>
                     </div>
                     <div className="relative flex h-40 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-[#18042A]">
-                      <span className="audit-glow inline-flex items-center gap-2 rounded-full border-2 border-[#701CC0] bg-transparent px-6 py-3 text-sm text-white">
+                      <span className="audit-glow inline-flex items-center gap-2 rounded-lg border-2 border-[#701CC0] bg-transparent px-6 py-3 text-sm text-white">
                         Glowing Trim
                       </span>
                     </div>
@@ -469,7 +469,7 @@ const BrandingPage: React.FC = () => {
                         key={a.file}
                         href={a.file}
                         download
-                        className="group flex items-center justify-between gap-3 rounded-2xl border border-[#701CC0]/12 bg-white p-4 !no-underline shadow-[0_8px_30px_-22px_rgba(112,28,192,0.4)] transition-all hover:border-[#8F42FF]/40 hover:shadow-[0_12px_36px_-20px_rgba(112,28,192,0.5)]"
+                        className="group flex items-center justify-between gap-3 rounded-2xl border border-[#701CC0]/10 bg-white p-4 !no-underline shadow-[0_8px_30px_-20px_rgba(112,28,192,0.4)] transition-shadow duration-300 hover:shadow-[0_18px_50px_-18px_rgba(112,28,192,0.35)]"
                       >
                         <span className="flex items-center gap-3">
                           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-[#701CC0] to-[#8F42FF] text-white">
