@@ -48,7 +48,7 @@
     "lucide-react": "^0.474.0",
     "next": "^15.5.18",
     "next-auth": "^4.24.13",
-    "nodemailer": "^8.0.4",
+    "nodemailer": "^9.0.1",
     "pdf-lib": "^1.17.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
