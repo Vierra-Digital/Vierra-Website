@@ -174,108 +174,60 @@ const BlogViewPage = ({
             </div>
 
             <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden z-0">
-                {Array.from({ length: 7 }).map((_, index) => (
+                {/* Hero band — blobs are confined here so they don't bleed into the body */}
+                <div className="relative overflow-hidden">
+                {/* Animated gradient blobs — same format as the rest of the site */}
+                <div aria-hidden className="pointer-events-none absolute inset-0">
                     <motion.div
-                        key={index}
-                        className="absolute top-0 h-full border-l border-white opacity-5 -z-10"
-                        style={{ left: `${(index + 1) * (100 / 8)}%` }}
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "100%", opacity: 0.05, x: [0, 10, 0] }}
-                        transition={{
-                            duration: 3,
-                            delay: index * 0.2,
-                            ease: "easeInOut",
-                            x: { duration: 4, repeat: Infinity, ease: "easeInOut" },
-                        }}
+                        className="absolute -top-28 left-[6%] h-[440px] w-[440px] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A] opacity-70 blur-[70px]"
+                        animate={{ x: [0, 70, -30, 0], y: [0, 40, 80, 0], scale: [1, 1.12, 0.94, 1] }}
+                        transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
                     />
-                ))}
+                    <motion.div
+                        className="absolute top-[18%] right-[2%] h-[480px] w-[480px] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A] opacity-60 blur-[80px]"
+                        animate={{ x: [0, -60, 25, 0], y: [0, -35, -70, 0], scale: [1, 0.93, 1.12, 1] }}
+                        transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
+                    />
+                </div>
 
-                <motion.div
-                    initial="hidden"
-                    animate="visible"
-                    variants={{
-                        hidden: { opacity: 0, y: -20 },
-                        visible: { opacity: 1, y: 0 },
-                    }}
-                >
+                <div className="relative z-20">
                     <Header />
-                </motion.div>
+                </div>
 
-                <main className="relative px-6 max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
-                    <motion.div
-                        initial={{ x: 0, y: 0 }}
-                        animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
-                        transition={{
-                            duration: 5,
-                            repeat: Infinity,
-                            repeatType: "loop",
-                            ease: "easeInOut",
-                        }}
-                        className="absolute top-[7%] left-[10%] w-[470px] h-[470px] max-w-[475px] max-h-[475px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A] -z-20"
-                    />
-                    <motion.div
-                        initial={{ x: 0, y: 0 }}
-                        animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
-                        transition={{
-                            duration: 5,
-                            repeat: Infinity,
-                            repeatType: "loop",
-                            ease: "easeInOut",
-                        }}
-                        className="absolute -bottom-[32%] -right-[3%] w-[545px] h-[545px] max-w-[550px] max-h-[550px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A] -z-20"
-                    />
-
-                    <motion.div
-                        initial="hidden"
-                        animate="visible"
-                        variants={{
-                            hidden: { opacity: 0, y: 20 },
-                            visible: {
-                                opacity: 1,
-                                y: 0,
-                                transition: { staggerChildren: 0.2, ease: "easeOut" },
-                            },
-                        }}
-                        className=""
-                    >
-
-
-                        <div id="control-section" className="p-8 w-full lg:p-20">
-                            <div id="header-text-holder" className="my-4 max-w-3xl mb-5">
-                                <h1 className={`text-4xl md:text-5xl lg:text-6xl font-bold leading-tight lg:mb-6 text-[#EFF3FF] ${bricolage.className}`}>
-                                    {title ? title : "Blog not found."}
-                                </h1>
-                            </div>
-                            <div id="blog-description" className="max-w-3xl">
-                                <p className={`text-white/70 text-base md:text-lg ${inter.className}`}>{description ?? ""}</p>
-                            </div>
-                            <div id="metadata-row" className="w-full h-auto mt-5 flex flex-wrap md:flex-row items-center gap-3 text-sm md:text-base">
-                                <p className={`text-white/60 ${bricolage.className}`}>
-                                    By{" "}
-                                    <Link href={`/blog/author/${encodeURIComponent(author.name)}`} className="font-medium text-[#C99DFF] transition-colors hover:text-white">
-                                        {author.name}
-                                    </Link>
-                                </p>
+                <header className="relative z-10 mx-auto w-full max-w-7xl px-8 pb-16 pt-10 lg:px-20">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]">Article</span>
+                    <h1 className={`mt-4 max-w-4xl text-4xl font-bold leading-tight tracking-tight text-[#EFF3FF] md:text-5xl lg:text-6xl ${bricolage.className}`}>
+                        {title ? title : "Blog not found."}
+                    </h1>
+                    {description && (
+                        <p className={`mt-5 max-w-3xl text-base text-white/70 md:text-lg ${inter.className}`}>{description}</p>
+                    )}
+                    <div id="metadata-row" className="mt-6 flex flex-wrap items-center gap-3 text-sm md:text-base">
+                        <p className={`text-white/60 ${bricolage.className}`}>
+                            By{" "}
+                            <Link href={`/blog/author/${encodeURIComponent(author.name)}`} className="font-medium text-[#C99DFF] transition-colors hover:text-white">
+                                {author.name}
+                            </Link>
+                        </p>
+                        <div className="h-[4px] w-[4px] bg-white/30 rounded-full"></div>
+                        <p className={`text-white/60 ${bricolage.className}`}>{formatDate(publishedDate)}</p>
+                        {tag && (
+                            <>
                                 <div className="h-[4px] w-[4px] bg-white/30 rounded-full"></div>
-                                <p className={`text-white/60 ${bricolage.className}`}>{formatDate(publishedDate)}</p>
-                                {tag && (
-                                    <>
-                                        <div className="h-[4px] w-[4px] bg-white/30 rounded-full"></div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {tag.split(',').map((t, index) => (
-                                                <Link key={index} href={`/blog/tag/${encodeURIComponent(t.trim())}`}>
-                                                    <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs md:text-sm font-medium text-[#D4A5FF] backdrop-blur-md transition-colors hover:border-[#8F42FF]/50 hover:text-white">
-                                                        {t.trim()}
-                                                    </span>
-                                                </Link>
-                                            ))}
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        </div>
-                    </motion.div>
-                </main>
+                                <div className="flex flex-wrap gap-2">
+                                    {tag.split(',').map((t, index) => (
+                                        <Link key={index} href={`/blog/tag/${encodeURIComponent(t.trim())}`}>
+                                            <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs md:text-sm font-medium text-[#D4A5FF] backdrop-blur-md transition-colors hover:border-[#8F42FF]/50 hover:text-white">
+                                                {t.trim()}
+                                            </span>
+                                        </Link>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </header>
+                </div>
                 <div id="view-section" className="bg-white px-6 md:px-8 lg:px-20">
                     <div id="blog-text" className="flex flex-col pb-16 md:pb-20 items-center pt-12 md:pt-16 lg:pt-20">
                         <div id="blog-text-content" className="w-full max-w-3xl">
@@ -283,6 +235,10 @@ const BlogViewPage = ({
                                 <style jsx global>{`
                                   html { scroll-behavior: smooth; scrollbar-width: none !important; -ms-overflow-style: none !important; }
                                   html::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
+                                  /* Normalize legacy <font> tags and inline fonts from pasted content */
+                                  #blog-text-content font { font-family: inherit !important; font-size: inherit !important; }
+                                  #blog-text-content [style*="font-family"] { font-family: inherit !important; }
+                                  #blog-text-content [style*="font-size"] { font-size: inherit !important; }
                                   #blog-text-content a { color: #2563eb; text-decoration: underline; }
                                   #blog-text-content img { 
                                     display: block; 
@@ -324,16 +280,21 @@ const BlogViewPage = ({
                         </div>
                     </div>
                 </div>
+                <SocialShareBar
+                    url={blogUrl}
+                    title={title}
+                    description={description || undefined}
+                />
                 {relatedPosts.length > 0 && (
-                    <div className="bg-[#F3F4F6] px-6 md:px-8 lg:px-20">
+                    <div className="bg-[#F3F3F3] px-6 md:px-8 lg:px-20">
                         <div className="max-w-5xl mx-auto py-16">
-                            <h2 className={`text-2xl md:text-3xl font-semibold text-[#111827] mb-6 ${bricolage.className}`}>Related Posts</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <h2 className={`text-2xl md:text-3xl font-semibold text-[#111827] mb-8 ${bricolage.className}`}>Related Posts</h2>
+                            <div className="columns-1 gap-6 md:columns-2 lg:columns-3 [column-fill:balance]">
                                 {relatedPosts.map((post) => (
                                     <Link
                                         key={post.slug}
                                         href={`/blog/${post.slug}`}
-                                        className="group relative flex flex-col rounded-2xl border border-[#ECE6F5] bg-white p-6 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-all duration-300 hover:-translate-y-1 hover:border-[#701CC0]/30 hover:shadow-[0_16px_40px_-16px_rgba(112,28,192,0.35)]"
+                                        className="group relative mb-6 flex break-inside-avoid flex-col rounded-2xl border border-[#ECE6F5] bg-white p-6 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-all duration-300 hover:-translate-y-1 hover:border-[#701CC0]/30 hover:shadow-[0_16px_40px_-16px_rgba(112,28,192,0.35)]"
                                     >
                                         {post.tag && (
                                             <div className="mb-4 flex flex-wrap gap-2">
@@ -366,12 +327,6 @@ const BlogViewPage = ({
                         </div>
                     </div>
                 )}
-                
-                <SocialShareBar
-                  url={blogUrl}
-                  title={title}
-                  description={description || undefined}
-                />
             </div>
             <Footer />
         </>
@@ -439,7 +394,7 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
         },
         include: { author: true },
         orderBy: { published_date: 'desc' },
-        take: 4,
+        take: 3,
     });
 
     return {

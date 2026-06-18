@@ -16,7 +16,18 @@ export function FooterSection() {
 
   return (
     <>
-      <div className="mx-auto max-sm:my-6 max-w-full md:px-32 max-sm:py-10 md:pb-32">
+      <div className="relative overflow-hidden bg-[#18042A]">
+        {/* Concentric rings spanning the CTA box + footer together (desktop) */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 z-0 hidden md:block">
+          {[925, 1185, 1434].map((size, i) => (
+            <div
+              key={i}
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-[1.58px] border-[#701CC04D]"
+              style={{ width: size, height: size }}
+            />
+          ))}
+        </div>
+      <div className="relative z-20 mx-auto max-sm:my-6 max-w-full md:px-32 max-sm:py-10 md:pb-32">
         <div className="flex gap-5 max-md:flex-col bg-[#7A13D0] rounded-[60px] relative z-10">
           <div className="flex flex-col w-[69%] max-md:w-full px-20 max-md:px-8 max-sm:px-5">
             <div className="flex flex-col items-start mt-20 max-md:mt-10 max-sm:text-center">
@@ -60,10 +71,11 @@ export function FooterSection() {
           </div>
         </div>
       </div>
-      {isModalOpen && <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />}
-      <div className="relative -mt-52">
-        <Footer />
+        <div className="relative z-10 -mt-52">
+          <Footer bare />
+        </div>
       </div>
+      {isModalOpen && <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />}
     </>
   );
 }

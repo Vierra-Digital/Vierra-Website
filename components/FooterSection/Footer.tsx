@@ -6,7 +6,7 @@ import { Figtree, Inter } from "next/font/google";
 const figtree = Figtree({ subsets: ["latin"] });
 const inter = Inter({ subsets: ["latin"] });
 
-const Footer = () => {
+const Footer = ({ bare = false }: { bare?: boolean }) => {
   const socialLinks = [
     { icon: <FaEnvelope size={20} />, text: "Send Us An Email", link: "mailto:alex@vierradev.com" },
     { icon: <FaLinkedinIn size={20} />, text: "Connect On LinkedIn", link: "https://www.linkedin.com/company/vierra/" },
@@ -21,17 +21,20 @@ const Footer = () => {
   ];
 
   return (
-    <footer className="relative overflow-hidden bg-[#18042A] text-white pt-32 max-sm:pt-44 pb-8 px-5 md:px-20">
-      {/* Concentric circle accent (Figma footer element) */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 hidden md:block">
-        {[925, 1185, 1434].map((size, i) => (
-          <div
-            key={i}
-            className="absolute left-[50%] top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-[1.58px] border-[#701CC04D]"
-            style={{ width: size, height: size }}
-          />
-        ))}
-      </div>
+    <footer className={`relative ${bare ? "" : "overflow-hidden bg-[#18042A] "}text-white pt-32 max-sm:pt-44 pb-8 px-5 md:px-20`}>
+      {/* Concentric circle accent (Figma footer element). Omitted when `bare` — the
+          parent section renders rings that span the CTA box and footer together. */}
+      {!bare && (
+        <div aria-hidden className="pointer-events-none absolute inset-0 hidden md:block">
+          {[925, 1185, 1434].map((size, i) => (
+            <div
+              key={i}
+              className="absolute left-[50%] top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-[1.58px] border-[#701CC04D]"
+              style={{ width: size, height: size }}
+            />
+          ))}
+        </div>
+      )}
 
       <div className="relative z-10 max-w-[1400px] mx-auto flex flex-col md:flex-row justify-between items-center md:items-start gap-10 px-5 md:px-20">
         <div className="mb-6 md:mb-0 flex justify-center md:justify-start w-full md:w-auto">

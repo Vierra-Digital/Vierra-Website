@@ -40,6 +40,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async ({ res }) => 
             latestPosts: latestPosts.map(post => ({
                 ...post,
                 published_date: post.published_date.toISOString(),
+                updated_date: post.updated_date ? post.updated_date.toISOString() : null,
                 author: { name: post.author.name },
             })),
             hasFetchError: false,
