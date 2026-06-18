@@ -1,6 +1,5 @@
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
-import Script from 'next/script';
 import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
 import Footer from "@/components/FooterSection/Footer";
@@ -76,7 +75,7 @@ const BlogViewPage = ({
                 <meta name="twitter:creator" content="@vierradev" />
                 <meta name="twitter:image" content="https://vierradev.com/assets/meta-banner.png" />
             </Head>
-            <Script
+            <script
                 id="schema-org-breadcrumbs"
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
@@ -106,7 +105,7 @@ const BlogViewPage = ({
                     }),
                 }}
             />
-            <Script
+            <script
                 id="schema-org-article"
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{

@@ -124,35 +124,8 @@ export default function RootLayout({
             </Script>
           </>
         ) : null}
-        <meta charSet="utf-8" />
-        <meta
-          name="description"
-          content="Scale your business effortlessly. Fill in your sales calendar and eliminate risky marketing investments."
-          key="meta-description"
-        />
-        <meta
-          name="keywords"
-          content="marketing, lead generation, business growth, digital optimization, business scaling, risk-averse marketing"
-        />
-        <meta property="og:type" content="website" />
-        <meta property="og:title" content="Vierra" />
-        <meta
-          property="og:description"
-          content="Scale your business effortlessly. Fill in your sales calendar and eliminate risky marketing investments."
-        />
-        <meta property="og:url" content={SITE_URL} />
-        <meta property="og:site_name" content="Vierra" />
-        <meta property="og:image" content={META_IMAGE_URL} />
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:creator" content="@vierradev" />
-        <meta name="twitter:site" content="@vierradev" />
-        <meta name="twitter:title" content="Vierra" />
-        <meta
-          name="twitter:description"
-          content="Scale your business effortlessly. Fill in your sales calendar and eliminate risky marketing investments."
-        />
-        <meta name="twitter:image" content={META_IMAGE_URL} />
-        <link rel="canonical" href={SITE_URL} />
+        {/* SEO meta (title, description, canonical, OpenGraph, Twitter) is
+            generated from the `metadata` export above — do not duplicate it here. */}
         <link rel="manifest" href="/manifest.json" />
         
         
@@ -164,7 +137,7 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://www.youtube.com" />
         <link rel="dns-prefetch" href="https://www.youtube-nocookie.com" />
 
-        <Script
+        <script
           id="schema-org-organization"
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -183,11 +156,14 @@ export default function RootLayout({
               description: "Scale your business effortlessly with guaranteed leads. Fill in your sales calendar and eliminate risky marketing investments.",
               address: {
                 "@type": "PostalAddress",
+                addressLocality: "Cambridge",
+                addressRegion: "MA",
+                postalCode: "02138",
                 addressCountry: "US",
               },
               contactPoint: {
                 "@type": "ContactPoint",
-                telephone: "+1-781-496-8867",
+                telephone: "+1-339-333-0929",
                 contactType: "Sales",
                 email: "alex@vierradev.com",
                 areaServed: "US",
@@ -206,7 +182,7 @@ export default function RootLayout({
             }),
           }}
         />
-        <Script
+        <script
           id="schema-org-website"
           type="application/ld+json"
           dangerouslySetInnerHTML={{

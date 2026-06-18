@@ -8,9 +8,9 @@ const inter = Inter({ subsets: ["latin"] });
 
 const Footer = () => {
   const socialLinks = [
-    { icon: <FaEnvelope size={20} />, text: "Send Us An Email", link: "mailto:business@vierradev.com" },
+    { icon: <FaEnvelope size={20} />, text: "Send Us An Email", link: "mailto:alex@vierradev.com" },
     { icon: <FaLinkedinIn size={20} />, text: "Connect On LinkedIn", link: "https://www.linkedin.com/company/vierra/" },
-    { icon: <FaFacebookF size={20} />, text: "Friend Us On Facebook", link: "https://www.facebook.com/profile.php?viewas=100000686899395&id=61572460110348" },
+    { icon: <FaFacebookF size={20} />, text: "Friend Us On Facebook", link: "https://www.facebook.com/share/1GXE6s4NSX/" },
   ];
 
   const platforms: { label: string; link: string | null }[] = [

@@ -53,18 +53,16 @@ const LazyBusinessSolutions = dynamic(
     import("@/components/BusinessSection/BusinessSolutions").then(
       (mod) => mod.BusinessSolutions
     ),
-  { ssr: false, loading: () => <div className="min-h-[320px] bg-[#F3F3F3]" /> }
+  { loading: () => <div className="min-h-[320px] bg-[#F3F3F3]" /> }
 )
 const LazyServices = dynamic(() => import("@/components/ServicesSection/Main"), {
-  ssr: false,
   loading: () => <div className="min-h-screen bg-[#010205]" />,
 })
 const LazyTestimonials = dynamic(
   () => import("@/components/TestimonialSection/Testimonials"),
-  { ssr: false, loading: () => <div className="min-h-[480px] bg-[#010205]" /> }
+  { loading: () => <div className="min-h-[480px] bg-[#010205]" /> }
 )
 const LazyTeam = dynamic(() => import("@/components/TeamSection/Team"), {
-  ssr: false,
   loading: () => <div className="min-h-[480px] bg-[#010205]" />,
 })
 const LazyFooter = dynamic(
@@ -72,7 +70,7 @@ const LazyFooter = dynamic(
     import("@/components/FooterSection/MainComponent").then(
       (mod) => mod.FooterSection
     ),
-  { ssr: false, loading: () => <div className="min-h-[240px] bg-[#7A13D0]" /> }
+  { loading: () => <div className="min-h-[240px] bg-[#7A13D0]" /> }
 )
 
 export default function Page() {
@@ -205,7 +203,7 @@ export default function Page() {
             <motion.div initial={{ y: 0 }} animate={{ y: [0, -10, 0] }} transition={heroImageTransition}>
               <Image
                 src="/assets/image1.png"
-                alt="Vierra"
+                alt="Vierra guaranteed lead generation platform for scaling businesses"
                 width={750}
                 height={685}
                 priority
@@ -231,7 +229,7 @@ export default function Page() {
                 >
                   <Image
                     src="/assets/Partners/Isenberg.png"
-                    alt="Partner Logo"
+                    alt="UMass Isenberg School of Management logo"
                     width={112}
                     height={24}
                   />

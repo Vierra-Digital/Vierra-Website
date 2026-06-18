@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import {
   initializeAnalytics,
   storeAnalyticsData,
@@ -60,20 +60,16 @@ export default function RootLayoutClient({
   geistSansVariable,
   geistMonoVariable,
 }: ClientLayoutProps) {
-  const [isLoading, setIsLoading] = useState(true);
-
-  const validateAnalytics = async () => {
-    setIsLoading(true);
-    if (checkAnalyticsStatus()) {
-      setIsLoading(false);
-      return;
-    }
-    const result = await initializeAnalytics();
-    storeAnalyticsData(result);
-    setIsLoading(false);
-  };
-
+  // Analytics validation runs in the background as a side effect. It must NOT
+  // gate rendering: blocking children behind this client-only fetch left every
+  // App Router page server-rendering only a spinner (no <h1>, no content) until
+  // JS executed and the request resolved — invisible to crawlers and slow for users.
   useEffect(() => {
+    const validateAnalytics = async () => {
+      if (checkAnalyticsStatus()) return;
+      const result = await initializeAnalytics();
+      storeAnalyticsData(result);
+    };
     validateAnalytics();
     const intervalId = setInterval(validateAnalytics, 3600000);
     return () => clearInterval(intervalId);
@@ -102,16 +98,8 @@ export default function RootLayoutClient({
   }, []);
 
   return (
-    <>
-      <div className={`${geistSansVariable} ${geistMonoVariable} antialiased`}>
-        {isLoading ? (
-          <div className="flex h-screen w-full items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#8F42FF]"></div>
-          </div>
-        ) : (
-          <>{children}</>
-        )}
-      </div>
-    </>
+    <div className={`${geistSansVariable} ${geistMonoVariable} antialiased`}>
+      {children}
+    </div>
   );
 }

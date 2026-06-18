@@ -16,10 +16,10 @@ Location: Cambridge, MA 02138, United States
 Founded: 2024
 
 # Contact Information
-Contact-Email: business@vierradev.com
+Contact-Email: alex@vierradev.com
 Contact-Phone: +1-339-333-0929
-Sales-Email: business@vierradev.com
-Support-Email: business@vierradev.com
+Sales-Email: alex@vierradev.com
+Support-Email: alex@vierradev.com
 
 # Sitemap and Discovery
 Sitemap: https://vierradev.com/sitemap.xml
@@ -75,6 +75,6 @@ Content-Region: United States
 Content-Focus: Business-to-Business (B2B) digital marketing, lead generation, guaranteed leads, marketing automation, business growth
 
 # Last Updated
-Last-Modified: 2025-01-15
-Version: 1.0
+Last-Modified: 2026-06-18
+Version: 1.1
 
