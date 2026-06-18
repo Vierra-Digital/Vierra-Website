@@ -1,10 +1,13 @@
+import { useEffect, useState } from "react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
 import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
 import Footer from "@/components/FooterSection/Footer";
 import SocialShareBar from "@/components/Blog/SocialShareBar";
+import { authorSameAs } from "@/lib/authorProfiles";
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { prisma } from '@/lib/prisma';
 import { GetStaticPaths, GetStaticProps } from 'next';
 
@@ -14,6 +17,7 @@ type BlogPostProps = {
     content: string;
     author: { name: string };
     publishedDate: string;
+    updatedDate?: string | null;
     tag?: string | null;
     slug: string;
     relatedPosts: { title: string; slug: string; publishedDate: string; author: { name: string }; tag?: string | null; description?: string | null }[];
@@ -35,6 +39,7 @@ const BlogViewPage = ({
     content,
     author,
     publishedDate,
+    updatedDate,
     tag,
     slug,
     relatedPosts
@@ -43,7 +48,20 @@ const BlogViewPage = ({
     const blogUrl = `https://vierradev.com/blog/${slug}`;
     const authorPageUrl = `https://vierradev.com/blog/author/${encodeURIComponent(author.name)}`;
     const publishedDateISO = new Date(publishedDate).toISOString();
-    const modifiedDateISO = new Date(publishedDate).toISOString();
+    const modifiedDateISO = new Date(updatedDate ?? publishedDate).toISOString();
+
+    const [progress, setProgress] = useState(0);
+
+    useEffect(() => {
+        const onScroll = () => {
+            const doc = document.documentElement;
+            const scrollable = doc.scrollHeight - doc.clientHeight;
+            setProgress(scrollable > 0 ? (doc.scrollTop / scrollable) * 100 : 0);
+        };
+        onScroll();
+        window.addEventListener("scroll", onScroll, { passive: true });
+        return () => window.removeEventListener("scroll", onScroll);
+    }, []);
 
     return (
         <>
@@ -121,6 +139,8 @@ const BlogViewPage = ({
                             "@type": "Person",
                             name: author.name,
                             url: authorPageUrl,
+                            sameAs: authorSameAs(author.name),
+                            worksFor: { "@id": "https://vierradev.com/#organization" },
                         },
                         publisher: {
                             "@type": "Organization",
@@ -145,6 +165,14 @@ const BlogViewPage = ({
                     }),
                 }}
             />
+            {/* Reading progress bar */}
+            <div className="fixed inset-x-0 top-0 z-50 h-[3px] bg-transparent">
+                <div
+                    className="h-full bg-gradient-to-r from-[#701CC0] via-[#B366FF] to-[#8F42FF] transition-[width] duration-150 ease-out"
+                    style={{ width: `${progress}%` }}
+                />
+            </div>
+
             <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden z-0">
                 {Array.from({ length: 7 }).map((_, index) => (
                     <motion.div
@@ -219,24 +247,24 @@ const BlogViewPage = ({
                                 </h1>
                             </div>
                             <div id="blog-description" className="max-w-3xl">
-                                <p className={`text-[#C7D2FE] text-base md:text-lg ${inter.className}`}>{description ?? ""}</p>
+                                <p className={`text-white/70 text-base md:text-lg ${inter.className}`}>{description ?? ""}</p>
                             </div>
                             <div id="metadata-row" className="w-full h-auto mt-5 flex flex-wrap md:flex-row items-center gap-3 text-sm md:text-base">
-                                <p className={`text-[#E5E7EB] ${bricolage.className}`}>
+                                <p className={`text-white/60 ${bricolage.className}`}>
                                     By{" "}
-                                    <Link href={`/blog/author/${encodeURIComponent(author.name)}`} className="hover:text-[#C7D2FE]">
+                                    <Link href={`/blog/author/${encodeURIComponent(author.name)}`} className="font-medium text-[#C99DFF] transition-colors hover:text-white">
                                         {author.name}
                                     </Link>
                                 </p>
-                                <div className="h-[4px] w-[4px] bg-[#9BAFC3] rounded-full"></div>
-                                <p className={`text-[#E5E7EB] ${bricolage.className}`}>{formatDate(publishedDate)}</p>
+                                <div className="h-[4px] w-[4px] bg-white/30 rounded-full"></div>
+                                <p className={`text-white/60 ${bricolage.className}`}>{formatDate(publishedDate)}</p>
                                 {tag && (
                                     <>
-                                        <div className="h-[4px] w-[4px] bg-[#9BAFC3] rounded-full"></div>
-                                        <div className="flex flex-wrap gap-1">
+                                        <div className="h-[4px] w-[4px] bg-white/30 rounded-full"></div>
+                                        <div className="flex flex-wrap gap-2">
                                             {tag.split(',').map((t, index) => (
                                                 <Link key={index} href={`/blog/tag/${encodeURIComponent(t.trim())}`}>
-                                                    <span className="bg-purple-600/90 text-white px-3 py-1 rounded-md text-xs md:text-sm font-medium hover:bg-purple-600">
+                                                    <span className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs md:text-sm font-medium text-[#D4A5FF] backdrop-blur-md transition-colors hover:border-[#8F42FF]/50 hover:text-white">
                                                         {t.trim()}
                                                     </span>
                                                 </Link>
@@ -253,6 +281,8 @@ const BlogViewPage = ({
                         <div id="blog-text-content" className="w-full max-w-3xl">
                             <div className={`text-[#1F2937] text-base md:text-lg leading-relaxed ${inter.className}`}>
                                 <style jsx global>{`
+                                  html { scroll-behavior: smooth; scrollbar-width: none !important; -ms-overflow-style: none !important; }
+                                  html::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
                                   #blog-text-content a { color: #2563eb; text-decoration: underline; }
                                   #blog-text-content img { 
                                     display: block; 
@@ -300,25 +330,36 @@ const BlogViewPage = ({
                             <h2 className={`text-2xl md:text-3xl font-semibold text-[#111827] mb-6 ${bricolage.className}`}>Related Posts</h2>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {relatedPosts.map((post) => (
-                                    <Link key={post.slug} href={`/blog/${post.slug}`} className="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm hover:shadow-md transition-shadow">
-                                        <div className={`text-lg font-semibold text-[#111827] ${bricolage.className}`}>{post.title}</div>
-                                        <div className="mt-2 text-xs text-[#6B7280] flex items-center gap-2">
-                                            <span>By {post.author?.name ?? "Unknown"}</span>
-                                            <div className="h-1 w-1 bg-gray-400 rounded-full"></div>
-                                            <span>{formatDate(post.publishedDate)}</span>
-                                        </div>
-                                        <p className={`mt-3 text-sm text-[#475569] ${inter.className}`}>
-                                            {post.description || ""}
-                                        </p>
+                                    <Link
+                                        key={post.slug}
+                                        href={`/blog/${post.slug}`}
+                                        className="group relative flex flex-col rounded-2xl border border-[#ECE6F5] bg-white p-6 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-all duration-300 hover:-translate-y-1 hover:border-[#701CC0]/30 hover:shadow-[0_16px_40px_-16px_rgba(112,28,192,0.35)]"
+                                    >
                                         {post.tag && (
-                                            <div className="mt-3 flex flex-wrap gap-1">
-                                                {post.tag.split(',').map((t, index) => (
-                                                    <span key={index} className="text-[10px] md:text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded-full">
+                                            <div className="mb-4 flex flex-wrap gap-2">
+                                                {post.tag.split(',').slice(0, 3).map((t, index) => (
+                                                    <span key={index} className={`rounded-full bg-[#F4EEFC] px-3 py-1 text-[11px] font-semibold text-[#701CC0] ${inter.className}`}>
                                                         {t.trim()}
                                                     </span>
                                                 ))}
                                             </div>
                                         )}
+                                        <h3 className={`text-xl font-bold leading-snug tracking-tight text-[#18042A] transition-colors group-hover:text-[#701CC0] ${bricolage.className}`}>
+                                            {post.title}
+                                        </h3>
+                                        <p className={`mt-2 flex flex-wrap items-center gap-1.5 text-xs text-[#9A93AE] ${inter.className}`}>
+                                            <span className="font-semibold text-[#18042A]">{post.author?.name ?? "Vierra"}</span>
+                                            <span className="inline-block h-1 w-1 rounded-full bg-[#9A93AE]" />
+                                            <span>{formatDate(post.publishedDate)}</span>
+                                        </p>
+                                        <p className={`mt-3 text-sm leading-relaxed text-[#64607D] ${inter.className}`}>
+                                            {post.description || ""}
+                                        </p>
+                                        <div className="mt-6 flex items-center justify-end border-t border-[#F1EDF8] pt-4">
+                                            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#F4EEFC] text-[#701CC0] transition-all duration-300 group-hover:bg-[#701CC0] group-hover:text-white">
+                                                <ChevronRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+                                            </span>
+                                        </div>
                                     </Link>
                                 ))}
                             </div>
@@ -408,6 +449,7 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
             content: post.content,
             author: { name: post.author.name },
             publishedDate: post.published_date.toISOString(),
+            updatedDate: (post as any).updated_date ? (post as any).updated_date.toISOString() : null,
             tag: post.tag,
             slug: post.slug,
             relatedPosts: relatedPosts.map(p => ({

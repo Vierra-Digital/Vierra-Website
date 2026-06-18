@@ -46,6 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             tag,
             author_id: author.id,
             published_date,
+            updated_date: new Date(),
             slug,
           },
         });
