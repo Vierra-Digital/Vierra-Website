@@ -1,6 +1,11 @@
 import { MetadataRoute } from 'next';
 import { prisma } from '@/lib/prisma';
 
+// Regenerate at most hourly (ISR). Without this the sitemap is built once at
+// deploy time, so posts published later via the admin panel never appear in it
+// until the next deploy.
+export const revalidate = 3600;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = 'https://vierradev.com';
   const now = new Date();

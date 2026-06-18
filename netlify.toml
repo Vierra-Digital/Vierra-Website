@@ -17,3 +17,10 @@
 
 [context.production.environment]
   NEXT_PUBLIC_SITE_URL = "https://vierradev.com"
+
+# Static files (robots.txt, IndexNow key, etc.) are served by Netlify's edge and
+# bypass the Next.js headers() config, so set HSTS here to match the app routes.
+[[headers]]
+  for = "/*.txt"
+  [headers.values]
+    Strict-Transport-Security = "max-age=63072000; includeSubDomains"

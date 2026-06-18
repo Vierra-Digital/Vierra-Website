@@ -17,7 +17,10 @@ const headerVariants = {
   visible: { opacity: 1, y: 0 },
 }
 const heroVariants = {
-  hidden: { opacity: 0, y: 20 },
+  // No opacity fade on the hero text block — it holds the LCP <h1>, so it must
+  // paint immediately in SSR HTML rather than waiting on JS. The slide (y) is a
+  // GPU transform: it animates without blocking paint or causing layout shift.
+  hidden: { y: 20 },
   visible: {
     opacity: 1,
     y: 0,
@@ -137,8 +140,8 @@ export default function Page() {
 
           <motion.div initial="hidden" animate="visible" variants={heroVariants} className="max-w-2xl">
             <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{ y: 20 }}
+              animate={{ y: 0 }}
               transition={heroTitleTransition}
               className={`text-5xl md:text-6xl font-bold leading-tight mb-6 text-[#EFF3FF] ${bricolage.className}`}
             >
@@ -195,8 +198,8 @@ export default function Page() {
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ scale: 0.96 }}
+            animate={{ scale: 1 }}
             transition={{ duration: 0.8, ease: "easeOut" as const }}
             className="flex-shrink-0"
           >

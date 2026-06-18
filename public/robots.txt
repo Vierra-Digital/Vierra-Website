@@ -24,5 +24,21 @@ Allow: /blog/
 # Crawl-delay for respectful crawling
 Crawl-delay: 1
 
+# AI search crawlers — explicitly allowed (signals intent; they answer/cite, not just train)
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
 # Sitemap location
 Sitemap: https://vierradev.com/sitemap.xml

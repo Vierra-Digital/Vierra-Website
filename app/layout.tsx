@@ -138,6 +138,10 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://www.youtube.com" />
         <link rel="dns-prefetch" href="https://www.youtube-nocookie.com" />
 
+        <meta name="geo.region" content="US-MA" />
+        <meta name="geo.placename" content="Cambridge, Massachusetts" />
+        <meta name="ICBM" content="42.3736, -71.1097" />
+
         <script
           id="schema-org-organization"
           type="application/ld+json"
@@ -145,6 +149,7 @@ export default function RootLayout({
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "Organization",
+              "@id": `${SITE_URL}/#organization`,
               name: "Vierra Digital",
               legalName: "Vierra Digital LLC",
               url: SITE_URL,
@@ -178,8 +183,8 @@ export default function RootLayout({
               foundingDate: "2024",
               numberOfEmployees: {
                 "@type": "QuantitativeValue",
-                minValue: 10,
-                maxValue: 50,
+                minValue: 5,
+                maxValue: 10,
               },
             }),
           }}
@@ -191,13 +196,11 @@ export default function RootLayout({
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebSite",
+              "@id": `${SITE_URL}/#website`,
               name: "Vierra",
               url: SITE_URL,
               description: "Risk-Averse Guaranteed Leads For Your Business",
-              publisher: {
-                "@type": "Organization",
-                name: "Vierra Digital",
-              },
+              publisher: { "@id": `${SITE_URL}/#organization` },
               potentialAction: {
                 "@type": "SearchAction",
                 target: {
