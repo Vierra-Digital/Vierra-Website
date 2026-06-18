@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
-import Script from 'next/script';
 import { prisma } from "@/lib/prisma"
 import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
 import { Search, ChevronRight } from "lucide-react";
 import Footer from "@/components/FooterSection/Footer";
 import { GetServerSideProps } from "next";
@@ -88,7 +86,11 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
     const [tagSelected, setTagSelected] = useState(0);
     const [tagSelectedName, setTagSelectedName] = useState("All Blog Posts");
     const [searchQuery, setSearchQuery] = useState("");
-    const [filteredLatestPosts, setFilteredLatestPosts] = useState<BlogPostType[]>([])
+    // Seed from the server-fetched posts so the initial (SSR) render already
+    // contains the post list. Initializing to [] left the server HTML showing
+    // the empty "Stories In The Making" state until client-side JS re-filtered,
+    // making every post invisible to non-JS / first-pass crawlers.
+    const [filteredLatestPosts, setFilteredLatestPosts] = useState<BlogPostType[]>(latestPosts)
     const [loading, setLoading] = useState(false);
     const [visibleCount, setVisibleCount] = useState(9);
     const batchSize = 9;
@@ -183,7 +185,7 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                 <meta name="twitter:description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients." />
                 <meta name="twitter:image" content="https://vierradev.com/assets/meta-banner.png" />
             </Head>
-            <Script
+            <script
                 id="schema-org-breadcrumbs"
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
@@ -207,7 +209,7 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                     }),
                 }}
             />
-            <Script
+            <script
                 id="schema-org-blog"
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
@@ -223,7 +225,9 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                             name: "Vierra Digital",
                             logo: {
                                 "@type": "ImageObject",
-                                url: "https://vierradev.com/assets/meta-banner.png",
+                                url: "https://vierradev.com/assets/vierra-logo.png",
+                                width: 464,
+                                height: 188,
                             },
                         },
                         blogPost: latestPosts.slice(0, 10).map(post => ({
@@ -327,53 +331,43 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                             </div>
                         )}
                         {filteredLatestPosts.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-20 px-4">
-                                <motion.div 
-                                    className="w-24 h-24 md:w-32 md:h-32 mb-6 rounded-full bg-gradient-to-br from-[#701CC0] to-[#8F42FF] flex items-center justify-center"
-                                    animate={{ 
-                                        rotate: [0, 10, -10, 0],
-                                        scale: [1, 1.05, 1]
-                                    }}
-                                    transition={{ 
-                                        duration: 2,
-                                        repeat: Infinity,
-                                        ease: "easeInOut"
-                                    }}
-                                >
+                            <div className="flex flex-col items-center justify-center px-4 py-24 text-center">
+                                {/* Elegant search motif — soft sonar rings around a floating gem */}
+                                <div className="relative mb-10 flex h-36 w-36 items-center justify-center">
+                                    {[0, 1, 2].map((i) => (
+                                        <motion.span
+                                            key={i}
+                                            className="absolute inset-0 rounded-full border border-[#701CC0]/25"
+                                            animate={{ scale: [0.7, 1.7], opacity: [0.55, 0] }}
+                                            transition={{ duration: 3.6, repeat: Infinity, delay: i * 1.2, ease: "easeOut" }}
+                                        />
+                                    ))}
                                     <motion.div
-                                        animate={{ 
-                                            rotate: [0, 360]
-                                        }}
-                                        transition={{ 
-                                            duration: 3,
-                                            repeat: Infinity,
-                                            ease: "linear"
-                                        }}
+                                        className="relative flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#18042A] to-[#3A1466] shadow-[0_12px_40px_-8px_rgba(112,28,192,0.6)] ring-1 ring-[#701CC0]/40"
+                                        animate={{ y: [0, -7, 0] }}
+                                        transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
                                     >
-                                        <Search className="w-12 h-12 md:w-16 md:h-16 text-white opacity-80" />
+                                        <Search className="h-8 w-8 text-[#D4A5FF]" />
                                     </motion.div>
-                                </motion.div>
-                                <h2 className={`text-2xl md:text-3xl font-bold text-[#18042A] mb-4 text-center ${bricolage.className}`}>
-                                    No Blog Posts Found
+                                </div>
+
+                                <span className="mb-4 text-[11px] font-semibold uppercase tracking-[0.35em] text-[#A98FD1]">
+                                    {searchQuery || tagSelectedName !== "All Blog Posts" ? "No Results" : "Coming Soon"}
+                                </span>
+                                <h2 className={`text-3xl font-bold tracking-tight text-[#18042A] md:text-4xl ${bricolage.className}`}>
+                                    {searchQuery || tagSelectedName !== "All Blog Posts" ? "No Matches Found" : "Stories In The Making"}
                                 </h2>
-                                <p className={`text-[#475569] text-base md:text-lg text-center max-w-md mb-8 ${inter.className}`}>
-                                    {latestPosts.length === 0 
-                                        ? "We're working on creating amazing content for you. Check back soon!"
-                                        : searchQuery || tagSelectedName !== "All Blog Posts"
-                                        ? `No posts match your ${searchQuery ? 'search' : 'filter'} criteria. Try adjusting your search or selecting a different tag.`
-                                        : "We're working on creating amazing content for you. Check back soon!"}
-                                </p>
                                 {(searchQuery || tagSelectedName !== "All Blog Posts") && (
-                                    <Button
+                                    <button
                                         onClick={() => {
                                             setSearchQuery("");
                                             setTagSelected(0);
                                             setTagSelectedName("All Blog Posts");
                                         }}
-                                        className={`bg-[#701CC0] hover:bg-[#8F42FF] text-white rounded-full px-8 py-6 shadow-[0px_4px_15.9px_0px_#701CC0B8] transform transition-transform duration-300 hover:scale-105 ${inter.className}`}
+                                        className={`mt-10 inline-flex items-center gap-2 rounded-lg border-2 border-[#701CC0] bg-transparent px-6 py-2.5 text-[13px] font-semibold text-[#701CC0] transition-all duration-300 hover:bg-[#701CC0] hover:text-white hover:shadow-[0_12px_30px_-10px_rgba(112,28,192,0.55)] ${inter.className}`}
                                     >
                                         Clear Filters
-                                    </Button>
+                                    </button>
                                 )}
                             </div>
                         ) : (
@@ -401,30 +395,31 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                                                 )}
                                             </div>
 
-                                            <h3 className={`text-lg font-bold leading-snug text-[#18042A] transition-colors group-hover:text-[#701CC0] ${bricolage.className}`}>
+                                            <h3 className={`text-xl font-bold leading-snug tracking-tight text-[#18042A] transition-colors group-hover:text-[#701CC0] ${bricolage.className}`}>
                                                 {blog.title}
                                             </h3>
+
+                                            <p className={`mt-2 flex flex-wrap items-center gap-1.5 text-xs text-[#9A93AE] ${inter.className}`}>
+                                                {blog.author?.name ? (
+                                                    <Link href={`/blog/author/${encodeURIComponent(blog.author.name)}`} className="relative z-20 font-semibold text-[#18042A] hover:text-[#701CC0]">
+                                                        {blog.author.name}
+                                                    </Link>
+                                                ) : (
+                                                    <span className="font-semibold text-[#18042A]">Vierra</span>
+                                                )}
+                                                {blog.published_date && (
+                                                    <>
+                                                        <span className="inline-block h-1 w-1 rounded-full bg-[#9A93AE]" />
+                                                        <span>{formatDate(blog.published_date)}</span>
+                                                    </>
+                                                )}
+                                            </p>
 
                                             <p className={`mt-3 text-sm leading-relaxed text-[#64607D] ${inter.className}`}>
                                                 {blog.description || getExcerpt(blog.content)}
                                             </p>
 
-                                            <div className="mt-6 flex items-center justify-between border-t border-[#F1EDF8] pt-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#701CC0] to-[#8F42FF] text-xs font-bold text-white ${bricolage.className}`}>
-                                                        {(blog.author?.name || "V").charAt(0).toUpperCase()}
-                                                    </div>
-                                                    <div className="leading-tight">
-                                                        {blog.author?.name ? (
-                                                            <Link href={`/blog/author/${encodeURIComponent(blog.author.name)}`} className={`relative z-20 block text-xs font-semibold text-[#18042A] hover:text-[#701CC0] ${inter.className}`}>
-                                                                {blog.author.name}
-                                                            </Link>
-                                                        ) : (
-                                                            <span className={`block text-xs font-semibold text-[#18042A] ${inter.className}`}>Vierra</span>
-                                                        )}
-                                                        <span className={`block text-[11px] text-[#9A93AE] ${inter.className}`}>{blog.published_date ? formatDate(blog.published_date) : ''}</span>
-                                                    </div>
-                                                </div>
+                                            <div className="mt-6 flex items-center justify-end border-t border-[#F1EDF8] pt-4">
                                                 <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#F4EEFC] text-[#701CC0] transition-all duration-300 group-hover:bg-[#701CC0] group-hover:text-white">
                                                     <ChevronRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
                                                 </span>
