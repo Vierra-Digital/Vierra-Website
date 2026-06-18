@@ -15,6 +15,7 @@ const nextConfig = {
   outputFileTracingIncludes: {
     "/api/presets": ["./data/presets/**/*"],
     "/api/generateSignLinkFromPreset": ["./data/presets/**/*"],
+    "/api/md/[[...slug]]": ["./content/md/**/*"],
   },
   images: {
     remotePatterns: [
