@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
 import Script from 'next/script';
@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Search } from "lucide-react";
+import { Search, ChevronRight } from "lucide-react";
 import Footer from "@/components/FooterSection/Footer";
 import { GetServerSideProps } from "next";
 import Link from "next/link";
@@ -33,7 +33,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async ({ res }) => 
     try {
     const latestPosts = await prisma.blogPost.findMany({
         orderBy: { published_date: "desc" },
-        take: 10,
+        take: 90,
         include: { author: { select: { name: true } } },
     });
 
@@ -90,8 +90,9 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
     const [searchQuery, setSearchQuery] = useState("");
     const [filteredLatestPosts, setFilteredLatestPosts] = useState<BlogPostType[]>([])
     const [loading, setLoading] = useState(false);
-    const [currentPage, setCurrentPage] = useState(1);
-    const pageSize = 6;
+    const [visibleCount, setVisibleCount] = useState(9);
+    const batchSize = 9;
+    const sentinelRef = useRef<HTMLDivElement | null>(null);
 
     const filterPostsByTag = (tagName: string, posts: BlogPostType[]) => {
         if (tagName === "All Blog Posts") {
@@ -123,7 +124,7 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
             const byTag = filterPostsByTag(name, latestPosts);
             const bySearch = filterPostsByQuery(searchQuery, byTag);
             setFilteredLatestPosts(bySearch);
-            setCurrentPage(1);
+            setVisibleCount(batchSize);
         } catch (error) {
             console.error("Error filtering posts:", error);
             setFilteredLatestPosts([]);
@@ -137,16 +138,31 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
         const byTag = filterPostsByTag(tagSelectedName, latestPosts);
         const bySearch = filterPostsByQuery(searchQuery, byTag);
         setFilteredLatestPosts(bySearch);
-        setCurrentPage(1);
+        setVisibleCount(batchSize);
     }, [latestPosts, tagSelectedName, searchQuery]);
 
-    const totalPages = Math.ceil(filteredLatestPosts.length / pageSize) || 1;
-    const paginatedPosts = filteredLatestPosts.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    const visiblePosts = filteredLatestPosts.slice(0, visibleCount);
+    const hasMore = visibleCount < filteredLatestPosts.length;
+
+    // Infinite scroll: reveal another batch when the sentinel scrolls into view
+    useEffect(() => {
+        if (!hasMore) return;
+        const node = sentinelRef.current;
+        if (!node) return;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0].isIntersecting) {
+                    setVisibleCount((c) => c + batchSize);
+                }
+            },
+            { rootMargin: "400px" }
+        );
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [hasMore, filteredLatestPosts.length]);
 
     const baseUrl = "https://vierradev.com";
-    const canonicalUrl = currentPage > 1 ? `${baseUrl}/blog?page=${currentPage}` : `${baseUrl}/blog`;
-    const prevUrl = currentPage > 1 ? `${baseUrl}/blog?page=${currentPage - 1}` : null;
-    const nextUrl = currentPage < totalPages ? `${baseUrl}/blog?page=${currentPage + 1}` : null;
+    const canonicalUrl = `${baseUrl}/blog`;
 
     return (
         <>
@@ -157,8 +173,6 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                 <meta name="keywords" content="marketing blog, business growth strategies, lead generation tips, digital marketing insights, case studies, business scaling, marketing automation" />
                 {hasFetchError && <meta name="robots" content="noindex, nofollow" />}
                 <link rel="canonical" href={canonicalUrl} />
-                {prevUrl && <link rel="prev" href={prevUrl} />}
-                {nextUrl && <link rel="next" href={nextUrl} />}
                 <meta property="og:title" content="Vierra | Blog" />
                 <meta property="og:description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients." />
                 <meta property="og:url" content={canonicalUrl} />
@@ -235,129 +249,84 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                     }),
                 }}
             />
-            <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden z-0">
-                {Array.from({ length: 7 }).map((_, index) => (
-                    <motion.div
-                        key={index}
-                        className="absolute top-0 h-full border-l border-white opacity-5 -z-10"
-                        style={{ left: `${(index + 1) * (100 / 8)}%` }}
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "100%", opacity: 0.05, x: [0, 10, 0] }}
-                        transition={{
-                            duration: 3,
-                            delay: index * 0.2,
-                            ease: "easeInOut",
-                            x: { duration: 4, repeat: Infinity, ease: "easeInOut" },
-                        }}
-                    />
-                ))}
+            <div className="bg-[#18042A] text-white relative overflow-hidden z-0">
+                {/* Hide the main page scrollbar (scrolling still works) */}
+                <style jsx global>{`
+                    html { scroll-behavior: smooth; scrollbar-width: none !important; -ms-overflow-style: none !important; }
+                    html::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
+                `}</style>
 
-                <motion.div
-                    initial="hidden"
-                    animate="visible"
-                    variants={{
-                        hidden: { opacity: 0, y: -20 },
-                        visible: { opacity: 1, y: 0 },
-                    }}
-                >
-                    <Header />
-                </motion.div>
+                {/* Dark hero band — same format as the legal pages */}
+                <div className="relative flex min-h-[60vh] flex-col overflow-hidden bg-[#18042A] text-white">
+                    <div aria-hidden className="pointer-events-none absolute inset-0">
+                        <motion.div
+                            className="absolute -top-28 left-[6%] h-[440px] w-[440px] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A] opacity-70 blur-[70px]"
+                            animate={{ x: [0, 70, -30, 0], y: [0, 40, 80, 0], scale: [1, 1.12, 0.94, 1] }}
+                            transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+                        />
+                        <motion.div
+                            className="absolute -bottom-44 right-[2%] h-[480px] w-[480px] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A] opacity-60 blur-[80px]"
+                            animate={{ x: [0, -60, 25, 0], y: [0, -35, -70, 0], scale: [1, 0.93, 1.12, 1] }}
+                            transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
+                        />
+                    </div>
 
-                <main className="relative px-6 max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start gap-10">
-                    <motion.div
-                        initial={{ x: 0, y: 0 }}
-                        animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
-                        transition={{
-                            duration: 5,
-                            repeat: Infinity,
-                            repeatType: "loop",
-                            ease: "easeInOut",
-                        }}
-                        className="absolute top-[7%] left-[10%] w-[470px] h-[470px] max-w-[475px] max-h-[475px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A] -z-20"
-                    />
-                    <motion.div
-                        initial={{ x: 0, y: 0 }}
-                        animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
-                        transition={{
-                            duration: 5,
-                            repeat: Infinity,
-                            repeatType: "loop",
-                            ease: "easeInOut",
-                        }}
-                        className="absolute -bottom-[32%] -right-[3%] w-[545px] h-[545px] max-w-[550px] max-h-[550px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A] -z-20"
-                    />
+                    <div className="relative z-20">
+                        <Header />
+                    </div>
 
-                    <motion.div
-                        initial="hidden"
-                        animate="visible"
-                        variants={{
-                            hidden: { opacity: 0, y: 20 },
-                            visible: {
-                                opacity: 1,
-                                y: 0,
-                                transition: { staggerChildren: 0.2, ease: "easeOut" },
-                            },
-                        }}
-                        className=""
-                    >
+                    <header className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center px-6 pb-20 text-center">
+                        <div className="relative flex flex-col items-center">
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]">Insights</span>
+                            <h1 className={`mt-4 text-5xl font-bold tracking-tight md:text-7xl ${bricolage.className}`}>
+                                Blog &amp;{" "}
+                                <span className="bg-gradient-to-r from-[#8F42FF] via-[#D4A5FF] to-[#8F42FF] bg-[length:200%_auto] bg-clip-text text-transparent animate-gradient">
+                                    Case Studies
+                                </span>
+                            </h1>
 
-
-                        <div id="control-section" className="p-8 w-full lg:p-20">
-                            <div id="header-text-holder" className="my-4 max-w-2xl mb-5">
-                                <h1 className={`text-4xl md:text-5xl lg:text-6xl font-bold leading-tight lg:mb-6 text-[#EFF3FF] ${bricolage.className}`}>Blog And</h1>
-                                <h1 className={`text-4xl md:text-5xl lg:text-6xl font-bold leading-tight lg:mb-6 text-[#EFF3FF] ${bricolage.className}`}>Case Studies</h1>
-                            </div>
-                            <div id="subtext-search-row" className="w-full h-auto flex flex-col sm:flex-col md:flex-col lg:flex-row xl:flex-row justify-between">
-                                <div id="subtext-holder" className={`text-[#9BAFC3] text-base md:text-lg mb-10 max-w-2xl ${inter.className}`}>
-                                    <p>Check out the latest insights, case studies, analytics,<br />and projects from Vierra.</p>
-                                </div>
-
-                                <div id="search-holder" className="flex w-full lg:w-[556px]">
-                                    <div className="w-full h-12 md:h-14 rounded-lg bg-white border border-gray-200 flex items-center px-4 gap-3 shadow-sm hover:shadow-md transition-shadow">
-                                        <Search className="h-5 w-5 text-gray-400" />
-                                        <input
-                                            type="text"
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            placeholder="Search articles, topics, authors..."
-                                            className={`w-full bg-transparent outline-none text-gray-900 placeholder:text-gray-500 text-sm md:text-base ${inter.className}`}
-                                            aria-label="Search blog posts"
-                                        />
-                                    </div>
+                            {/* Square search bar anchored directly below the title (absolute, so the title placement is unchanged) */}
+                            <div className="absolute left-1/2 top-full mt-8 w-[90vw] max-w-2xl -translate-x-1/2">
+                                <div className="w-full h-12 md:h-14 rounded-lg bg-white border border-gray-200 flex items-center px-4 gap-3 shadow-sm focus-within:ring-2 focus-within:ring-[#701CC0] transition">
+                                    <Search className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                                    <input
+                                        type="search"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        placeholder="Search articles, topics, authors..."
+                                        className={`w-full bg-transparent outline-none text-gray-900 placeholder:text-gray-500 text-sm md:text-base ${inter.className}`}
+                                        aria-label="Search blog posts"
+                                    />
                                 </div>
                             </div>
-                            <div id="tag-row" className="w-full h-auto mt-5 flex flex-wrap gap-3">
-                                {tags.map((tag, index) => (
-                                    <Button
-                                        key={index}
-                                        id="tag-holder"
-                                        className={
-                                            index === tagSelected
-                                                ? `bg-[#701CC0] hover:bg-[#5a1799] text-[#EFF3FF] border-none px-4 py-2`
-                                                : `bg-transparent text-[#F3F3F3] border rounded-lg border-[#F3F3F3] hover:text-[#EFF3FF] hover:bg-[#701CC0] hover:border-[#701CC0] px-4 py-2`
-                                        }
-                                        onClick={() => handleTagSwitch(index)}
-                                        disabled={loading}
-                                    >
-                                        <p className={`text-sm md:text-base ${bricolage.className}`}>{tag}</p>
-                                    </Button>
-                                ))}
-                            </div>
-                            {loading && (
-                                <div className="mt-4 text-center">
-                                    <p className={`text-[#9BAFC3] ${inter.className}`}>Loading posts...</p>
-                                </div>
-                            )}
-
                         </div>
-                    </motion.div>
-
-
-                </main>
+                    </header>
+                </div>
                 <div id="view-section" className="bg-[#F3F3F3] px-8 lg:px-20">
                     <div className="max-w-7xl mx-auto py-20">
-                        <h1 id="part-1-header" className={`text-xl md:text-2xl lg:text-3xl font-bold leading-tight mb-6 text-[#18042A] ${bricolage.className}`}>All Blog Posts</h1>
-                        {paginatedPosts.length === 0 ? (
+                        {/* Categories */}
+                        <div className="mb-10 flex flex-wrap gap-2.5">
+                            {tags.map((tag, index) => (
+                                <button
+                                    key={index}
+                                    onClick={() => handleTagSwitch(index)}
+                                    disabled={loading}
+                                    className={`rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 ${inter.className} ${
+                                        index === tagSelected
+                                            ? "bg-[#701CC0] text-white shadow-[0px_4px_14px_0px_#701CC04D]"
+                                            : "bg-white text-[#475569] border border-[#E2E8F0] hover:border-[#701CC0]/40 hover:text-[#701CC0]"
+                                    }`}
+                                >
+                                    {tag}
+                                </button>
+                            ))}
+                        </div>
+                        {loading && (
+                            <div className="mb-8 text-center">
+                                <p className={`text-[#475569] ${inter.className}`}>Loading posts...</p>
+                            </div>
+                        )}
+                        {filteredLatestPosts.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 px-4">
                                 <motion.div 
                                     className="w-24 h-24 md:w-32 md:h-32 mb-6 rounded-full bg-gradient-to-br from-[#701CC0] to-[#8F42FF] flex items-center justify-center"
@@ -409,61 +378,63 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                             </div>
                         ) : (
                             <>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6">
-                                    {paginatedPosts.map((blog) => (
-                                        <div key={blog.id}>
-                                            <Link href={`/blog/${blog.slug}`} passHref>
-                                                <div className="rounded-2xl bg-white p-5 md:p-6 shadow-sm hover:shadow-md hover:scale-105 transition-all duration-200 cursor-pointer">
-                                                    <h3 className={`text-base md:text-lg font-bold text-[#0F172A] ${bricolage.className}`}>{blog.title}</h3>
-                                                    <div className="mt-1 text-[11px] md:text-xs text-[#334155] flex items-center gap-2">
-                                                        <span>
-                                                            By{" "}
-                                                            {blog.author?.name ? (
-                                                                <Link href={`/blog/author/${encodeURIComponent(blog.author.name)}`} className="hover:text-[#701CC0]">
-                                                                    {blog.author.name}
-                                                                </Link>
-                                                            ) : "Unknown"}
-                                                        </span>
-                                                        <div className="h-1 w-1 bg-gray-400 rounded-full"></div>
-                                                        <span>{blog.published_date ? formatDate(blog.published_date) : ''}</span>
+                                <div className="columns-1 gap-6 md:columns-2 lg:columns-3 [column-fill:balance]">
+                                    {visiblePosts.map((blog) => (
+                                        <article
+                                            key={blog.id}
+                                            className="group relative mb-6 flex break-inside-avoid flex-col rounded-2xl border border-[#ECE6F5] bg-white p-6 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-all duration-300 hover:-translate-y-1 hover:border-[#701CC0]/30 hover:shadow-[0_16px_40px_-16px_rgba(112,28,192,0.35)]"
+                                        >
+                                            {/* Stretched link makes the whole card clickable without nesting anchors */}
+                                            <Link href={`/blog/${blog.slug}`} aria-label={blog.title} className="absolute inset-0 z-10 rounded-2xl" />
+
+                                            <div className="mb-4 flex flex-wrap gap-2">
+                                                {blog.tag ? blog.tag.split(',').slice(0, 3).map((tag, index) => (
+                                                    <Link
+                                                        key={index}
+                                                        href={`/blog/tag/${encodeURIComponent(tag.trim())}`}
+                                                        className={`relative z-20 rounded-full bg-[#F4EEFC] px-3 py-1 text-[11px] font-semibold text-[#701CC0] transition-colors hover:bg-[#701CC0] hover:text-white ${inter.className}`}
+                                                    >
+                                                        {tag.trim()}
+                                                    </Link>
+                                                )) : (
+                                                    <span className={`relative z-20 rounded-full bg-[#F4EEFC] px-3 py-1 text-[11px] font-semibold text-[#701CC0] ${inter.className}`}>Blog</span>
+                                                )}
+                                            </div>
+
+                                            <h3 className={`text-lg font-bold leading-snug text-[#18042A] transition-colors group-hover:text-[#701CC0] ${bricolage.className}`}>
+                                                {blog.title}
+                                            </h3>
+
+                                            <p className={`mt-3 text-sm leading-relaxed text-[#64607D] ${inter.className}`}>
+                                                {blog.description || getExcerpt(blog.content)}
+                                            </p>
+
+                                            <div className="mt-6 flex items-center justify-between border-t border-[#F1EDF8] pt-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#701CC0] to-[#8F42FF] text-xs font-bold text-white ${bricolage.className}`}>
+                                                        {(blog.author?.name || "V").charAt(0).toUpperCase()}
                                                     </div>
-                                                    <p className={`mt-3 text-sm md:text-base text-[#475569] ${inter.className}`}>{blog.description || getExcerpt(blog.content)}</p>
-                                                    <div className="flex flex-wrap gap-1 mt-3">
-                                                        {blog.tag ? blog.tag.split(',').map((tag, index) => (
-                                                            <Link key={index} href={`/blog/tag/${encodeURIComponent(tag.trim())}`}>
-                                                                <span className="text-[10px] md:text-xs font-semibold text-purple-600 bg-purple-50 px-2 py-1 rounded-full hover:bg-purple-100">
-                                                                    {tag.trim()}
-                                                                </span>
+                                                    <div className="leading-tight">
+                                                        {blog.author?.name ? (
+                                                            <Link href={`/blog/author/${encodeURIComponent(blog.author.name)}`} className={`relative z-20 block text-xs font-semibold text-[#18042A] hover:text-[#701CC0] ${inter.className}`}>
+                                                                {blog.author.name}
                                                             </Link>
-                                                        )) : (
-                                                            <span className="text-[10px] md:text-xs font-semibold text-purple-600">Blog</span>
+                                                        ) : (
+                                                            <span className={`block text-xs font-semibold text-[#18042A] ${inter.className}`}>Vierra</span>
                                                         )}
-                                                    </div>
-                                                    <div className="mt-4 flex items-center justify-between">
-                                                        <span className="text-[#701CC0] font-semibold text-sm md:text-base">Read More</span>
+                                                        <span className={`block text-[11px] text-[#9A93AE] ${inter.className}`}>{blog.published_date ? formatDate(blog.published_date) : ''}</span>
                                                     </div>
                                                 </div>
-                                            </Link>
-                                        </div>
+                                                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[#F4EEFC] text-[#701CC0] transition-all duration-300 group-hover:bg-[#701CC0] group-hover:text-white">
+                                                    <ChevronRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+                                                </span>
+                                            </div>
+                                        </article>
                                     ))}
                                 </div>
-                                {totalPages > 1 && (
-                                    <div className="flex items-center justify-center gap-3 mt-10">
-                                        <button
-                                            onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-                                            disabled={currentPage === 1}
-                                            className="px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm md:text-base shadow-[0px_4px_15.9px_0px_#701CC061] hover:bg-[#5f17a5] disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#701CC0]/50"
-                                        >
-                                            Previous
-                                        </button>
-                                        <span className="text-[#9BAFC3] text-sm md:text-base">{currentPage} / {totalPages}</span>
-                                        <button
-                                            onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-                                            disabled={currentPage === totalPages}
-                                            className="px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm md:text-base shadow-[0px_4px_15.9px_0px_#701CC061] hover:bg-[#5f17a5] disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-[#701CC0]/50"
-                                        >
-                                            Next
-                                        </button>
+                                {hasMore && (
+                                    <div ref={sentinelRef} className="flex justify-center py-12">
+                                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#701CC0]/25 border-t-[#701CC0]" />
                                     </div>
                                 )}
                             </>
