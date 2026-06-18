@@ -75,7 +75,7 @@ export function Header() {
         </div>
         <Button
           variant="secondary"
-          className={`audit-glow hidden md:flex items-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-transparent text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] transition-all duration-300 hover:border-[#8F42FF] ${inter.className}`}
+          className={`audit-glow hidden md:flex items-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-transparent text-white rounded-lg px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] transition-all duration-300 hover:border-[#8F42FF] ${inter.className}`}
           onClick={() => setIsModalOpen(true)}
         >
           Free Audit Call <ArrowUpRight className="w-4 h-4" />
@@ -129,7 +129,7 @@ export function Header() {
                 <div className="mt-auto p-4 border-t border-white/10">
                   <Button
                     variant="secondary"
-                    className={`w-full flex items-center justify-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] ${inter.className}`}
+                    className={`w-full flex items-center justify-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-[#8F42FF] text-white rounded-lg px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] ${inter.className}`}
                     onClick={() => {
                       setIsMobileMenuOpen(false);
                       setIsModalOpen(true);
