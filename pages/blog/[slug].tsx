@@ -127,7 +127,9 @@ const BlogViewPage = ({
                             name: "Vierra Digital",
                             logo: {
                                 "@type": "ImageObject",
-                                url: "https://vierradev.com/assets/meta-banner.png",
+                                url: "https://vierradev.com/assets/vierra-logo.png",
+                                width: 464,
+                                height: 188,
                             },
                         },
                         mainEntityOfPage: {
@@ -324,8 +326,8 @@ const BlogViewPage = ({
                     </div>
                 )}
                 
-                <SocialShareBar 
-                  url={`${process.env.NODE_ENV === 'production' ? 'https://vierra.com' : 'http://localhost:3000'}/blog/${slug}`}
+                <SocialShareBar
+                  url={blogUrl}
                   title={title}
                   description={description || undefined}
                 />

@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
+import { notifyIndexNow } from "@/lib/indexnow";
 
 function slugify(title: string) {
   return title
@@ -49,6 +50,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           },
         });
         await revalidateBlog(res, [post.slug, prev?.slug]);
+        await notifyIndexNow(["/blog", `/blog/${post.slug}`]);
         return res.status(200).json({ id: post.id });
       }
 
@@ -65,6 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
 
       await revalidateBlog(res, [post.slug]);
+      await notifyIndexNow(["/blog", `/blog/${post.slug}`]);
       return res.status(200).json({ id: post.id, link: `/blog/${post.slug}` });
     } catch (e) {
       console.error("blog admin post", e);

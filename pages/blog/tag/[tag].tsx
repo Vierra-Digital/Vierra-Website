@@ -1,6 +1,5 @@
 import { GetStaticPaths, GetStaticProps } from "next"
 import Head from "next/head"
-import Script from "next/script"
 import Link from "next/link"
 import { Bricolage_Grotesque, Inter } from "next/font/google"
 import { prisma } from "@/lib/prisma"
@@ -38,6 +37,9 @@ export default function TagPage({ tag, posts }: TagPageProps) {
           name="description"
           content={`Browse Vierra blog posts tagged with ${tag}.`}
         />
+        {/* Thin, near-duplicate listing pages — keep out of the index but let
+            link equity flow to the posts they list. */}
+        <meta name="robots" content="noindex, follow" />
         <meta name="author" content="Vierra Digital" />
         <link rel="canonical" href={pageUrl} />
         <meta property="og:title" content={`Vierra | ${tag} Blog Posts`} />
@@ -50,7 +52,7 @@ export default function TagPage({ tag, posts }: TagPageProps) {
         <meta name="twitter:description" content={`Browse Vierra blog posts tagged with ${tag}.`} />
         <meta name="twitter:image" content="https://vierradev.com/assets/meta-banner.png" />
       </Head>
-      <Script
+      <script
         id="schema-org-breadcrumbs-tag"
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -65,7 +67,7 @@ export default function TagPage({ tag, posts }: TagPageProps) {
           }),
         }}
       />
-      <Script
+      <script
         id="schema-org-tag-collection"
         type="application/ld+json"
         dangerouslySetInnerHTML={{
@@ -79,7 +81,9 @@ export default function TagPage({ tag, posts }: TagPageProps) {
               name: "Vierra Digital",
               logo: {
                 "@type": "ImageObject",
-                url: "https://vierradev.com/assets/meta-banner.png",
+                url: "https://vierradev.com/assets/vierra-logo.png",
+                width: 464,
+                height: 188,
               },
             },
             hasPart: posts.map((p) => ({
@@ -97,7 +101,9 @@ export default function TagPage({ tag, posts }: TagPageProps) {
                 name: "Vierra Digital",
                 logo: {
                   "@type": "ImageObject",
-                  url: "https://vierradev.com/assets/meta-banner.png",
+                  url: "https://vierradev.com/assets/vierra-logo.png",
+                  width: 464,
+                  height: 188,
                 },
               },
             })),

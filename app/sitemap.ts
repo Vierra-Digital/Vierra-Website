@@ -35,6 +35,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'yearly',
       priority: 0.3,
     },
+    {
+      url: `${baseUrl}/branding`,
+      lastModified: now,
+      changeFrequency: 'monthly',
+      priority: 0.4,
+    },
   ];
   let blogPages: MetadataRoute.Sitemap = [];
   let tagPages: MetadataRoute.Sitemap = [];
@@ -99,5 +105,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.warn('Database unavailable during sitemap generation, skipping blog posts:', error);
   }
 
-  return [...staticPages, ...blogPages, ...tagPages, ...authorPages];
+  // Tag archives are intentionally excluded — they are thin, near-duplicate
+  // listing pages and carry `noindex, follow`. Author pages stay (E-E-A-T).
+  void tagPages;
+  return [...staticPages, ...blogPages, ...authorPages];
 }

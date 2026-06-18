@@ -11,6 +11,7 @@ const geistMono = Geist_Mono({
 
 const SITE_URL = "https://vierradev.com"
 const META_IMAGE_URL = `${SITE_URL}/assets/meta-banner.png`
+const LOGO_URL = `${SITE_URL}/assets/vierra-logo.png`
 const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID
 
 export const metadata = {
@@ -149,9 +150,9 @@ export default function RootLayout({
               url: SITE_URL,
               logo: {
                 "@type": "ImageObject",
-                url: META_IMAGE_URL,
-                width: 1200,
-                height: 630,
+                url: LOGO_URL,
+                width: 464,
+                height: 188,
               },
               description: "Scale your business effortlessly with guaranteed leads. Fill in your sales calendar and eliminate risky marketing investments.",
               address: {
@@ -164,7 +165,7 @@ export default function RootLayout({
               contactPoint: {
                 "@type": "ContactPoint",
                 telephone: "+1-339-333-0929",
-                contactType: "Sales",
+                contactType: "sales",
                 email: "alex@vierradev.com",
                 areaServed: "US",
                 availableLanguage: "English",
@@ -177,7 +178,8 @@ export default function RootLayout({
               foundingDate: "2024",
               numberOfEmployees: {
                 "@type": "QuantitativeValue",
-                value: "10-50",
+                minValue: 10,
+                maxValue: 50,
               },
             }),
           }}
@@ -204,6 +206,71 @@ export default function RootLayout({
                 },
                 "query-input": "required name=search_term_string",
               },
+            }),
+          }}
+        />
+        <script
+          id="schema-org-localbusiness"
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": ["ProfessionalService", "LocalBusiness"],
+              "@id": `${SITE_URL}/#localbusiness`,
+              name: "Vierra Digital",
+              legalName: "Vierra Digital LLC",
+              url: SITE_URL,
+              logo: {
+                "@type": "ImageObject",
+                url: LOGO_URL,
+                width: 464,
+                height: 188,
+              },
+              image: META_IMAGE_URL,
+              description:
+                "B2B digital marketing and lead generation agency in Cambridge, MA. Risk-averse, guaranteed leads for scaling businesses.",
+              address: {
+                "@type": "PostalAddress",
+                addressLocality: "Cambridge",
+                addressRegion: "MA",
+                postalCode: "02138",
+                addressCountry: "US",
+              },
+              geo: {
+                "@type": "GeoCoordinates",
+                latitude: 42.3736,
+                longitude: -71.1097,
+              },
+              telephone: "+1-339-333-0929",
+              email: "alex@vierradev.com",
+              priceRange: "$$$",
+              founder: {
+                "@type": "Person",
+                name: "Alex Shick",
+              },
+              foundingDate: "2024",
+              areaServed: [
+                { "@type": "City", name: "Cambridge" },
+                { "@type": "City", name: "Medford" },
+                { "@type": "Country", name: "United States" },
+              ],
+              openingHoursSpecification: {
+                "@type": "OpeningHoursSpecification",
+                dayOfWeek: [
+                  "Monday",
+                  "Tuesday",
+                  "Wednesday",
+                  "Thursday",
+                  "Friday",
+                ],
+                opens: "09:00",
+                closes: "17:00",
+              },
+              sameAs: [
+                "https://www.linkedin.com/company/vierra/",
+                "https://www.instagram.com/vierra.dev",
+                "https://www.facebook.com/share/1GXE6s4NSX/",
+              ],
             }),
           }}
         />
