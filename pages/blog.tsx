@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
-import { prisma } from "@/lib/prisma"
+import { getLatestPosts } from "@/lib/blog"
 import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
 import { Search, ChevronRight } from "lucide-react";
@@ -10,7 +10,7 @@ import { GetServerSideProps } from "next";
 import Link from "next/link";
 
 type BlogPostType = {
-    id: number;
+    id: string;
     title: string;
     description?: string | null;
     content: string;
@@ -29,20 +29,11 @@ type Props = {
 
 export const getServerSideProps: GetServerSideProps<Props> = async ({ res }) => {
     try {
-    const latestPosts = await prisma.blogPost.findMany({
-        orderBy: { published_date: "desc" },
-        take: 90,
-        include: { author: { select: { name: true } } },
-    });
+    const latestPosts = await getLatestPosts(90);
 
     return {
         props: {
-            latestPosts: latestPosts.map(post => ({
-                ...post,
-                published_date: post.published_date.toISOString(),
-                updated_date: post.updated_date ? post.updated_date.toISOString() : null,
-                author: { name: post.author.name },
-            })),
+            latestPosts,
             hasFetchError: false,
         },
     };

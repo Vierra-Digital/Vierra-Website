@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import TurndownService from "turndown";
 import { prisma } from "@/lib/prisma";
+import { JOB_ROLES, getJobRole, type JobRole } from "@/lib/careers";
 
 const SITE_URL = "https://vierradev.com";
 
@@ -174,6 +175,78 @@ export async function getTagMarkdown(tag: string): Promise<string | null> {
   ].join("\n");
 }
 
+/** One-line meta strip shown under a role's title (type · dept · location · pay · experience). */
+function jobMetaLine(role: JobRole): string {
+  return [role.typeLabel, role.department, role.location, role.compensation, role.experience]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** A single career posting rendered as Markdown, sourced from lib/careers. */
+export function getJobMarkdown(slug: string): string | null {
+  const role = getJobRole(slug);
+  if (!role) return null;
+
+  const canonical = `${SITE_URL}/careers/${role.slug}`;
+  const bullets = (items: string[]) => items.map((i) => `- ${i}`).join("\n");
+  const parts = [
+    header({
+      title: `${role.title} — Careers at Vierra`,
+      description: role.summary,
+      canonical,
+    }),
+    `_${jobMetaLine(role)}_`,
+    "",
+    `> ${role.summary}`,
+    "",
+    "## About the Role",
+    "",
+    role.about.join("\n\n"),
+    "",
+    "## Responsibilities",
+    "",
+    bullets(role.responsibilities),
+    "",
+    "## Qualifications",
+    "",
+    bullets(role.qualifications),
+  ];
+  if (role.niceToHave?.length) {
+    parts.push("", "## Nice to Have", "", bullets(role.niceToHave));
+  }
+  parts.push(
+    "",
+    "## What We Offer",
+    "",
+    bullets(role.benefits),
+    "",
+    "---",
+    `[Apply for this role on vierradev.com](${canonical})`
+  );
+  return parts.join("\n");
+}
+
+/** The careers index rendered as Markdown — lists every open role with its mirror link. */
+export function getCareersIndexMarkdown(): string {
+  const roleLines = JOB_ROLES.map(
+    (role) =>
+      `- [${role.title}](${SITE_URL}/careers/${role.slug}.md) _(${jobMetaLine(role)})_\n  ${role.summary}`
+  ).join("\n");
+  return [
+    header({
+      title: "Careers at Vierra",
+      description:
+        "Open roles at Vierra. Join a small, fast-moving team building the products that power our growth platform.",
+      canonical: `${SITE_URL}/careers`,
+    }),
+    "> Vierra is hiring across engineering, sales, marketing, operations, and design. All roles are in-person in NYC.",
+    "",
+    "## Open Roles",
+    "",
+    JOB_ROLES.length ? roleLines : "_No open roles at this time._",
+  ].join("\n");
+}
+
 /**
  * The /llms.txt index — points AI agents and tools at the Markdown mirrors.
  * Follows the https://llmstxt.org convention: H1 title, blockquote summary,
@@ -197,6 +270,14 @@ export async function getLlmsTxt(): Promise<string> {
     `- [Terms of Service](${SITE_URL}/terms-of-service.md)`,
     `- [Privacy Policy](${SITE_URL}/privacy-policy.md)`,
     `- [Work Policy](${SITE_URL}/work-policy.md)`,
+    "",
+    "## Careers",
+    "",
+    `- [Careers at Vierra](${SITE_URL}/careers.md): Open roles across engineering, sales, marketing, operations, and design.`,
+    ...JOB_ROLES.map(
+      (role) =>
+        `- [${role.title}](${SITE_URL}/careers/${role.slug}.md): ${role.summary.replace(/\s+/g, " ").trim()}`
+    ),
     "",
     "## Blog",
     "",

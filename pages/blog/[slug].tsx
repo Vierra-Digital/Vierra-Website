@@ -8,7 +8,7 @@ import SocialShareBar from "@/components/Blog/SocialShareBar";
 import { authorSameAs } from "@/lib/authorProfiles";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { prisma } from '@/lib/prisma';
+import { getPostBySlug, getRelatedPosts, getAllSlugs } from '@/lib/blog';
 import { GetStaticPaths, GetStaticProps } from 'next';
 
 type BlogPostProps = {
@@ -339,21 +339,8 @@ export const getStaticPaths: GetStaticPaths = async () => {
     // posts are generated on-demand via fallback: 'blocking'. This keeps Netlify
     // build time bounded as the post count grows (each prerender is a remote
     // Supabase round-trip, serialized by connection_limit=1).
-    const posts = await prisma.blogPost.findMany({
-        select: { slug: true },
-        orderBy: { published_date: 'desc' },
-        take: 25,
-    });
-
-    interface BlogPostPath {
-        params: {
-            slug: string;
-        };
-    }
-
-    const paths: BlogPostPath[] = posts.map((post: { slug: string }) => ({
-        params: { slug: post.slug },
-    }));
+    const slugs = await getAllSlugs(25);
+    const paths = slugs.map((slug) => ({ params: { slug } }));
 
     return { paths, fallback: 'blocking' };
     } catch (error) {
@@ -370,50 +357,34 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
     }
 
     try {
-    const post = await prisma.blogPost.findUnique({
-        where: { slug },
-        include: { author: true },
-    });
+    const post = await getPostBySlug(slug);
 
     if (!post) {
         return { notFound: true };
     }
 
-    const tagList = post.tag ? post.tag.split(',').map(t => t.trim()).filter(Boolean) : [];
-    const relatedPosts = await prisma.blogPost.findMany({
-        where: {
-            AND: [
-                { slug: { not: post.slug } },
-                {
-                    OR: [
-                        ...(tagList.length ? tagList.map(t => ({ tag: { contains: t, mode: 'insensitive' as const } })) : []),
-                        { author: { name: post.author.name } }
-                    ]
-                }
-            ]
-        },
-        include: { author: true },
-        orderBy: { published_date: 'desc' },
-        take: 3,
-    });
+    const relatedPosts = await getRelatedPosts(
+        { slug: post.slug, tag: post.tag, authorName: post.author.name },
+        3
+    );
 
     return {
         props: {
             title: post.title,
-            description: (post as any).description ?? null,
+            description: post.description,
             content: post.content,
             author: { name: post.author.name },
-            publishedDate: post.published_date.toISOString(),
-            updatedDate: (post as any).updated_date ? (post as any).updated_date.toISOString() : null,
+            publishedDate: post.published_date,
+            updatedDate: post.updated_date,
             tag: post.tag,
             slug: post.slug,
             relatedPosts: relatedPosts.map(p => ({
                 title: p.title,
                 slug: p.slug,
-                publishedDate: p.published_date.toISOString(),
+                publishedDate: p.published_date,
                 author: { name: p.author.name },
                 tag: p.tag ?? null,
-                description: (p as any).description ?? null,
+                description: p.description,
             }))
         },
         revalidate: 60,

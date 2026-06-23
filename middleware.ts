@@ -19,9 +19,10 @@ const SITE_URL = "https://vierradev.com";
 /** Returns the `.md` mirror path for a content page, or null if none exists. */
 function mirrorPathFor(pathname: string): string | null {
   if (pathname === "/") return "/index.md";
-  const STATIC = ["/branding", "/terms-of-service", "/privacy-policy", "/work-policy", "/blog"];
+  const STATIC = ["/branding", "/terms-of-service", "/privacy-policy", "/work-policy", "/blog", "/careers"];
   if (STATIC.includes(pathname)) return `${pathname}.md`;
   if (pathname.startsWith("/blog/")) return `${pathname}.md`;
+  if (pathname.startsWith("/careers/")) return `${pathname}.md`;
   return null;
 }
 

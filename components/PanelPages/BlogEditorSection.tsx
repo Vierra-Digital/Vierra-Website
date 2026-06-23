@@ -8,7 +8,7 @@ import RichTextEditor from "@/components/ui/RichTextEditor"
 const inter = Inter({ subsets: ["latin"] })
 
 type Post = {
-  id: number
+  id: string
   title: string
   description?: string | null
   content: string
@@ -22,7 +22,7 @@ export default function BlogEditorSection() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [postToDelete, setPostToDelete] = useState<{ id: number; title: string } | null>(null)
+  const [postToDelete, setPostToDelete] = useState<{ id: string; title: string } | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 6
   const [filterOpen, setFilterOpen] = useState(false)
@@ -31,7 +31,7 @@ export default function BlogEditorSection() {
   const [tagFilter, setTagFilter] = useState<string>('all')
   const [authorFilter, setAuthorFilter] = useState<string>('all')
   const [form, setForm] = useState({
-    id: 0,
+    id: "",
     title: "",
     description: "",
     content: "",
@@ -41,7 +41,7 @@ export default function BlogEditorSection() {
   })
   const [mode, setMode] = useState<"list" | "edit">("list")
   const [search, setSearch] = useState("")
-  const isEditing = useMemo(() => form.id > 0, [form.id])
+  const isEditing = useMemo(() => form.id !== "", [form.id])
 
   useEffect(() => {
     ;(async () => {
@@ -69,7 +69,7 @@ export default function BlogEditorSection() {
   }, [search, dateSort, tagFilter, authorFilter])
 
   const resetForm = () =>
-    setForm({ id: 0, title: "", description: "", content: "", tag: "", date: "", authorName: "" })
+    setForm({ id: "", title: "", description: "", content: "", tag: "", date: "", authorName: "" })
 
   const savePost = async () => {
     try {
@@ -97,7 +97,7 @@ export default function BlogEditorSection() {
     }
   }
 
-  const deletePost = async (id: number) => {
+  const deletePost = async (id: string) => {
     try {
       const r = await fetch(`/api/blog/admin/post?id=${id}`, { method: "DELETE" })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
@@ -109,7 +109,7 @@ export default function BlogEditorSection() {
     }
   }
 
-  const openDeleteModal = (post: { id: number; title: string }) => {
+  const openDeleteModal = (post: { id: string; title: string }) => {
     setPostToDelete(post)
     setDeleteModalOpen(true)
   }

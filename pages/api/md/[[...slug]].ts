@@ -5,6 +5,8 @@ import {
   getBlogIndexMarkdown,
   getTagMarkdown,
   getAuthorMarkdown,
+  getCareersIndexMarkdown,
+  getJobMarkdown,
   getLlmsTxt,
 } from "@/lib/markdownMirror";
 
@@ -97,6 +99,13 @@ async function resolve(segments: string[]): Promise<string | null> {
     if (segments.length === 3 && segments[1] === "tag") return getTagMarkdown(segments[2]);
     if (segments.length === 3 && segments[1] === "author") return getAuthorMarkdown(segments[2]);
     if (segments.length === 2) return getBlogPostMarkdown(segments[1]);
+    return null;
+  }
+
+  // Careers routes: /careers.md and /careers/[slug].md
+  if (segments[0] === "careers") {
+    if (segments.length === 1) return getCareersIndexMarkdown();
+    if (segments.length === 2) return getJobMarkdown(segments[1]);
     return null;
   }
 

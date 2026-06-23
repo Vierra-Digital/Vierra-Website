@@ -1,5 +1,5 @@
 import { GetServerSideProps } from "next"
-import { prisma } from "@/lib/prisma"
+import { getLatestPosts } from "@/lib/blog"
 
 const escapeXml = (unsafe: string) =>
   unsafe
@@ -11,18 +11,14 @@ const escapeXml = (unsafe: string) =>
 
 export const getServerSideProps: GetServerSideProps = async ({ res }) => {
   const baseUrl = "https://vierradev.com"
-  const posts = await prisma.blogPost.findMany({
-    include: { author: true },
-    orderBy: { published_date: "desc" },
-    take: 50,
-  })
+  const posts = await getLatestPosts(50)
 
   const items = posts
     .map((post) => {
       const title = escapeXml(post.title)
       const link = `${baseUrl}/blog/${post.slug}`
-      const description = escapeXml((post as any).description ?? "")
-      const pubDate = post.published_date.toUTCString()
+      const description = escapeXml(post.description ?? "")
+      const pubDate = new Date(post.published_date).toUTCString()
       const author = escapeXml(post.author.name)
       return `
         <item>

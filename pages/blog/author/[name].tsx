@@ -2,7 +2,7 @@ import { GetStaticPaths, GetStaticProps } from "next"
 import Head from "next/head"
 import Link from "next/link"
 import { Bricolage_Grotesque, Inter } from "next/font/google"
-import { prisma } from "@/lib/prisma"
+import { getPostsByAuthor, getAllAuthorNames } from "@/lib/blog"
 import { Header } from "@/components/Header"
 import Footer from "@/components/FooterSection/Footer"
 import { authorSameAs } from "@/lib/authorProfiles"
@@ -202,8 +202,8 @@ export default function AuthorPage({ authorName, posts }: AuthorPageProps) {
 
 export const getStaticPaths: GetStaticPaths = async () => {
   try {
-    const authors = await prisma.author.findMany({ select: { name: true } })
-    const paths = authors.map((a) => ({ params: { name: a.name } }))
+    const names = await getAllAuthorNames()
+    const paths = names.map((name) => ({ params: { name } }))
     return { paths, fallback: "blocking" }
   } catch {
     return { paths: [], fallback: "blocking" }
@@ -218,12 +218,7 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
   }
 
   try {
-    const posts = await prisma.blogPost.findMany({
-      where: { author: { name: authorName } },
-      include: { author: true },
-      orderBy: { published_date: "desc" },
-      take: 50,
-    })
+    const posts = await getPostsByAuthor(authorName, 50)
 
     if (posts.length === 0) {
       return { notFound: true }
@@ -235,8 +230,8 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
         posts: posts.map(p => ({
           title: p.title,
           slug: p.slug,
-          publishedDate: p.published_date.toISOString(),
-          description: (p as any).description ?? null,
+          publishedDate: p.published_date,
+          description: p.description,
           tag: p.tag ?? null,
         })),
       },

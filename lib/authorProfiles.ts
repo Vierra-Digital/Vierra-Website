@@ -3,7 +3,6 @@
 // (an E-E-A-T / authorship signal). Add new authors here as profiles are known.
 export const AUTHOR_LINKEDIN: Record<string, string> = {
   "Alex Shick": "https://www.linkedin.com/in/alexshick/",
-  "Adriana Caraeni": "https://www.linkedin.com/in/adriana-caraeni/",
   "Paul Wahba": "https://www.linkedin.com/in/paul-wahba-2306b2279/",
 }
 

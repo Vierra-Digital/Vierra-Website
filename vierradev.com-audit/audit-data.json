@@ -1,0 +1,106 @@
+{
+  "summary": {
+    "health_score": 82,
+    "business_type": "B2B digital marketing / lead-generation agency",
+    "url": "https://vierradev.com",
+    "audit_date": "2026-06-23",
+    "stack": "Next.js (App + Pages Router) on Netlify Edge + Cloudflare, Brotli",
+    "top_findings": [
+      "/blog returns HTTP 503 (Retry-After: 3600), persistent",
+      "Sitemap lists /blog at priority 0.9 but page is noindex+503",
+      "Blog has no live posts (blog.md: 'No posts found')",
+      "OG image /assets/meta-banner.png is 1.26 MB PNG",
+      "JobPosting schema missing validThrough"
+    ],
+    "quick_wins": [
+      "Add validThrough to JobPosting schema",
+      "Compress meta-banner.png to WebP ~150-250KB",
+      "Remove /blog from sitemap until live (or fix 503/noindex)",
+      "De-duplicate 'How Does It Work?' h2",
+      "Add 180x180 apple-touch-icon PNG"
+    ]
+  },
+  "categories": [
+    {
+      "name": "Technical SEO",
+      "score": 78,
+      "what_works": [
+        "HTTP->HTTPS and www->apex redirects (1 hop each)",
+        "Proper 404 status on unknown URLs",
+        "CSP, HSTS (2yr), X-Content-Type-Options, Referrer-Policy, Permissions-Policy",
+        "robots.txt disallows app/admin/auth, allows AI crawlers, declares sitemap",
+        "Brotli compression; prerendered HTML"
+      ],
+      "findings": [
+        {"title": "/blog returns HTTP 503", "severity": "Critical", "description": "Reproducible across 3 requests with Retry-After: 3600 and no X-Nextjs headers; fails at data/SSR layer (likely external blog API vierra-server.vercel.app).", "recommendation": "Degrade gracefully to a 200 empty-state page instead of 503."},
+        {"title": "Sitemap vs index conflict on /blog", "severity": "Critical", "description": "/blog is in sitemap.xml (priority 0.9, daily) but emits noindex,nofollow and 503.", "recommendation": "Remove /blog from sitemap until live, or fix the 503 and drop noindex once posts exist."},
+        {"title": "Mixed Next.js routers", "severity": "Low", "description": "Homepage/careers use App Router; /blog uses Pages Router.", "recommendation": "Consolidate routing to reduce regression risk."}
+      ]
+    },
+    {
+      "name": "Content Quality",
+      "score": 72,
+      "what_works": ["Clear benefit-led value proposition", "E-E-A-T signals: named clients, testimonial authors, leadership team, foundingDate", "Server-rendered content mirrored in index.md"],
+      "findings": [
+        {"title": "Empty blog", "severity": "High", "description": "blog.md returns 'No posts found.' Zero topical content published.", "recommendation": "Publish 3-5 cornerstone articles (case studies, lead-gen guides)."},
+        {"title": "Thin homepage body (~635 words)", "severity": "Medium", "description": "Acceptable for a landing page but limits keyword coverage.", "recommendation": "Add substantive query-targeted copy or supporting pages."}
+      ]
+    },
+    {
+      "name": "On-Page SEO",
+      "score": 90,
+      "what_works": ["Branded keyword-rich title", "Meta description present", "Self-referential canonicals verified", "Single H1, logical heading hierarchy", "100% image alt coverage"],
+      "findings": [
+        {"title": "Duplicate 'How Does It Work?' h2", "severity": "Low", "description": "Two identical h2 headings render on the homepage.", "recommendation": "De-duplicate or differentiate."}
+      ]
+    },
+    {
+      "name": "Schema / Structured Data",
+      "score": 88,
+      "what_works": ["Organization, WebSite+SearchAction, ProfessionalService/LocalBusiness on homepage", "JobPosting + BreadcrumbList on career pages with salary, employmentType, jobLocation"],
+      "findings": [
+        {"title": "JobPosting missing validThrough", "severity": "High", "description": "Google for Jobs recommends an expiry date.", "recommendation": "Add validThrough to every JobPosting."},
+        {"title": "Verify LocalBusiness accuracy", "severity": "Low", "description": "Vierra reads as a B2B service, not a walk-in location.", "recommendation": "Confirm address/geo/telephone or narrow to ProfessionalService."}
+      ]
+    },
+    {
+      "name": "Performance (CWV)",
+      "score": 80,
+      "what_works": ["Lean head (4 scripts, 1 CSS)", "preconnect/preload/dns-prefetch hints", "Brotli", "14/15 images lazy + next/image", "self-hosted woff2 fonts"],
+      "findings": [
+        {"title": "Field data unavailable", "severity": "Info", "description": "PageSpeed Insights API returned 429 (no API key); CrUX/lab metrics not retrieved.", "recommendation": "Confirm CWV via GSC or configure a PSI/CrUX API key (seo-google)."},
+        {"title": "Heavy images inflate transfer", "severity": "Medium", "description": "meta-banner.png 1.26MB; PNG team photos ~206KB even after next/image.", "recommendation": "Convert photos to WebP/AVIF."}
+      ]
+    },
+    {
+      "name": "AI Search Readiness",
+      "score": 95,
+      "what_works": ["llms.txt present and structured", "Per-page .md mirrors advertised via Link: alternate header", "AI crawlers explicitly allowed in robots.txt", "Passage-friendly content with named entities"],
+      "findings": [
+        {"title": "Citable content is shallow", "severity": "Medium", "description": "Excellent GEO infrastructure but little substantive content to cite while the blog is empty.", "recommendation": "Publish articles to realize the GEO foundation."}
+      ]
+    },
+    {
+      "name": "Images",
+      "score": 78,
+      "what_works": ["100% alt coverage", "lazy loading + next/image srcset", "OG image declares width/height/alt/type"],
+      "findings": [
+        {"title": "OG image oversized (1.26MB PNG)", "severity": "High", "description": "/assets/meta-banner.png is 1,287,476 bytes.", "recommendation": "Convert to WebP/optimized PNG ~150-250KB."},
+        {"title": "apple-touch-icon reuses favicon.ico", "severity": "Low", "description": "16x16 x-icon used for apple-touch-icon.", "recommendation": "Provide a 180x180 PNG."},
+        {"title": "Michael.png 404s on production", "severity": "Info", "description": "Matches uncommitted working tree (Team.tsx modified, Michael.png untracked).", "recommendation": "Commit/deploy the asset with the Team change."}
+      ]
+    }
+  ],
+  "action_plan": {
+    "phases": [
+      {"name": "Phase 1: Critical Fixes", "timeframe": "Week 1", "items": ["Fix /blog 503 (degrade to 200 empty-state)", "Resolve sitemap vs noindex conflict on /blog"]},
+      {"name": "Phase 2: High-Impact Improvements", "timeframe": "Weeks 2-3", "items": ["Add validThrough to JobPosting", "Optimize OG image to WebP", "Publish initial blog content"]},
+      {"name": "Phase 3: Content & Authority", "timeframe": "Month 2", "items": ["Convert PNG photos to WebP/AVIF", "De-duplicate h2", "Add apple-touch-icon 180x180", "Verify LocalBusiness data", "Expand homepage content", "Ship Michael.png"]},
+      {"name": "Phase 4: Monitoring & Iteration", "timeframe": "Ongoing", "items": ["Configure Google API key + seo-google", "Capture seo-drift baseline", "Re-run audit after Phase 1-2", "Build topic clusters once posts exist"]}
+    ]
+  },
+  "artifacts": {
+    "findings_dir": "findings/",
+    "screenshots_dir": "screenshots/"
+  }
+}
