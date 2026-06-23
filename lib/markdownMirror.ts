@@ -3,6 +3,7 @@ import path from "path";
 import TurndownService from "turndown";
 import { prisma } from "@/lib/prisma";
 import { JOB_ROLES, getJobRole, type JobRole } from "@/lib/careers";
+import { FAQ_ITEMS } from "@/lib/faq";
 
 const SITE_URL = "https://vierradev.com";
 
@@ -226,6 +227,23 @@ export function getJobMarkdown(slug: string): string | null {
   return parts.join("\n");
 }
 
+/** The FAQ page rendered as Markdown — Q&A blocks for AI answer engines. */
+export function getFaqMarkdown(): string {
+  const qa = FAQ_ITEMS.map((item) => `## ${item.question}\n\n${item.answer}`).join("\n\n");
+  return [
+    header({
+      title: "Frequently Asked Questions — Vierra",
+      description:
+        "Answers about Vierra Digital: what we do, how risk-averse guaranteed lead generation works, who we serve, location, and how to get started.",
+      canonical: `${SITE_URL}/faq`,
+    }),
+    qa,
+    "",
+    "---",
+    `[Read on vierradev.com](${SITE_URL}/faq)`,
+  ].join("\n");
+}
+
 /** The careers index rendered as Markdown — lists every open role with its mirror link. */
 export function getCareersIndexMarkdown(): string {
   const roleLines = JOB_ROLES.map(
@@ -270,6 +288,10 @@ export async function getLlmsTxt(): Promise<string> {
     `- [Terms of Service](${SITE_URL}/terms-of-service.md)`,
     `- [Privacy Policy](${SITE_URL}/privacy-policy.md)`,
     `- [Work Policy](${SITE_URL}/work-policy.md)`,
+    "",
+    "## Support",
+    "",
+    `- [Frequently Asked Questions](${SITE_URL}/faq.md): What Vierra does, how guaranteed lead generation works, who we serve, and how to start.`,
     "",
     "## Careers",
     "",

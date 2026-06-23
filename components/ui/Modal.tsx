@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 type ModalProps = {
   /** Defaults to true so callers that already gate on their own condition can omit it. */
@@ -36,6 +37,13 @@ export default function Modal({
   closeOnBackdrop = true,
   closeOnEscape = true,
 }: ModalProps) {
+  // Portal to <body> so the backdrop is always a top-level fixed layer. Mounted
+  // deep in the tree, an ancestor's overflow/transform/stacking context can break
+  // `position: fixed` and `backdrop-filter` (the blur silently fails). Rendering
+  // into body sidesteps all of that. Client-only (modals only open on interaction).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   useEffect(() => {
     if (!isOpen || !closeOnEscape) return;
     const onKey = (e: KeyboardEvent) => {
@@ -45,9 +53,9 @@ export default function Modal({
     return () => document.removeEventListener("keydown", onKey);
   }, [isOpen, closeOnEscape, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  const overlay = (
     <div
       className={`fixed inset-0 ${zIndexClass} flex items-center justify-center p-4 ${backdropClassName}`}
       onClick={closeOnBackdrop ? onClose : undefined}
@@ -68,4 +76,6 @@ export default function Modal({
       )}
     </div>
   );
+
+  return createPortal(overlay, document.body);
 }

@@ -58,7 +58,7 @@ export default function TestimonialsSection() {
   }, [])
 
   return (
-    <section className="w-full min-h-screen bg-[#010205] text-white px-4 md:mt-32 relative overflow-hidden">
+    <section id="cases" className="w-full min-h-screen bg-[#010205] text-white px-4 md:mt-32 relative overflow-hidden scroll-mt-24">
       <div className="text-center mt-10 md:mt-20 max-w-[800px] mx-auto">
         <h2
           className={`text-2xl md:text-[2.6rem] md:leading-[3rem] font-bold ${bricolage.className}`}

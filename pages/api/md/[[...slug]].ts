@@ -7,6 +7,7 @@ import {
   getAuthorMarkdown,
   getCareersIndexMarkdown,
   getJobMarkdown,
+  getFaqMarkdown,
   getLlmsTxt,
 } from "@/lib/markdownMirror";
 
@@ -107,6 +108,11 @@ async function resolve(segments: string[]): Promise<string | null> {
     if (segments.length === 1) return getCareersIndexMarkdown();
     if (segments.length === 2) return getJobMarkdown(segments[1]);
     return null;
+  }
+
+  // FAQ: /faq.md
+  if (key === "faq") {
+    return getFaqMarkdown();
   }
 
   // Static content pages: /branding.md, /terms-of-service.md, etc.

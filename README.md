@@ -430,7 +430,7 @@ If `migrate dev` fails on shadow DB issues, `db:push` can sync schema in develop
 
 ### Google Analytics
 
-- **Site tag**: `G-6SGW30MKNX` — injected in `app/layout.tsx` locally; on **Netlify**, `netlify/edge-functions/inject-ga.ts` inserts the snippet immediately after `<head>`
+- **Site tag**: configured via `NEXT_PUBLIC_GA_MEASUREMENT_ID` — loaded via `next/script` (`afterInteractive`) in `app/layout.tsx` (app router) and `pages/_app.tsx` (pages router), so the tag is part of React's tree and hydration-safe on every environment
 - **Dashboard Website Visits**: `GA4_PROPERTY_ID` (numeric property ID) + `GA4_OAUTH_REFRESH_TOKEN` from `npm run connect-ga4`
 
 ### Stripe
@@ -450,7 +450,6 @@ If `migrate dev` fails on shadow DB issues, `db:push` can sync schema in develop
 - Config: [`netlify.toml`](./netlify.toml)
 - Build: `npx prisma generate && npm run build`
 - Publish: `.next` (Next.js Netlify plugin)
-- **Edge**: `inject-ga` on `/*` for analytics tag placement
 - Set all production env vars in the Netlify UI (mirror `.env.example`)
 - `NEXTAUTH_URL` must match the deployed origin (e.g. `https://vierradev.com`)
 

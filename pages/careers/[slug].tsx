@@ -67,7 +67,7 @@ const parseSalary = (compensation: string): { value: number; unitText: string } 
   return { value, unitText: unit };
 };
 
-const RolePage: React.FC<{ role: JobRole; datePosted: string }> = ({ role, datePosted }) => {
+const RolePage: React.FC<{ role: JobRole; datePosted: string; validThrough: string }> = ({ role, datePosted, validThrough }) => {
   const router = useRouter();
   const [modalOpen, setModalOpen] = useState(false);
   const [alreadyApplied, setAlreadyApplied] = useState(false);
@@ -113,6 +113,7 @@ const RolePage: React.FC<{ role: JobRole; datePosted: string }> = ({ role, dateP
     title: role.title,
     description: [role.summary, ...role.about, ...role.responsibilities].join(' '),
     datePosted,
+    validThrough,
     employmentType: SCHEMA_EMPLOYMENT_TYPE[role.employmentType],
     hiringOrganization: {
       '@type': 'Organization',
@@ -309,7 +310,18 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
     return { notFound: true };
   }
   // Build-time timestamp used for JobPosting structured data (datePosted).
-  return { props: { role, datePosted: new Date().toISOString() } };
+  // validThrough is required-recommended by Google for Jobs — without it a
+  // posting can be silently expired/de-prioritized. We use a rolling 90-day
+  // window from build time; each deploy refreshes it so listings stay valid.
+  const now = new Date();
+  const validThrough = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+  return {
+    props: {
+      role,
+      datePosted: now.toISOString(),
+      validThrough: validThrough.toISOString(),
+    },
+  };
 };
 
 export default RolePage;

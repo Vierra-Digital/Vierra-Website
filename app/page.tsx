@@ -84,21 +84,30 @@ export default function Page() {
     const hash = window.location.hash
     if (!hash) return
     const sectionId = hash.replace("#", "")
-    let attempts = 0
-    const maxAttempts = 30
-    const tryScroll = () => {
+    // Sections below the fold are lazy-loaded, so the target (and sections above
+    // it) may mount after this runs and shift layout. Re-align repeatedly for a
+    // few seconds: the first scroll is smooth, later ones snap to correct for any
+    // shift from late-mounting siblings. Clean the hash from the URL at the end.
+    let cancelled = false
+    let scrolledOnce = false
+    const start = Date.now()
+    const settle = () => {
+      if (cancelled) return
       const target = document.getElementById(sectionId)
       if (target) {
-        target.scrollIntoView({ behavior: "smooth" })
-        window.history.replaceState(null, "", window.location.pathname)
-        return
+        target.scrollIntoView({ behavior: scrolledOnce ? "auto" : "smooth" })
+        scrolledOnce = true
       }
-      attempts += 1
-      if (attempts < maxAttempts) {
-        window.setTimeout(tryScroll, 100)
+      if (Date.now() - start < 4000) {
+        window.setTimeout(settle, 250)
+      } else if (scrolledOnce) {
+        window.history.replaceState(null, "", window.location.pathname)
       }
     }
-    tryScroll()
+    settle()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   return (
@@ -211,6 +220,7 @@ export default function Page() {
                 height={685}
                 priority
                 quality={80}
+                sizes="(max-width: 768px) 90vw, 750px"
               />
             </motion.div>
           </motion.div>

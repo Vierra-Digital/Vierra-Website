@@ -20,7 +20,7 @@ export const STORAGE_BUCKETS = {
   docs: process.env.SUPABASE_STORAGE_BUCKET_DOCS || "documents",
 };
 
-export function isStorageConfigured(): boolean {
+function isStorageConfigured(): boolean {
   return Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
 }
 

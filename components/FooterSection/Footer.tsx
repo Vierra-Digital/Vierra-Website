@@ -54,6 +54,9 @@ const Footer = ({ bare = false }: { bare?: boolean }) => {
                   Careers <span className="bg-[#701CC0]/60 text-xs px-2 py-0.5 rounded-[12px] text-white/80">HIRING</span>
                 </Link>
               </li>
+              <li>
+                <Link href="/faq" className="hover:text-white transition-colors">FAQ</Link>
+              </li>
             </ul>
           </div>
           <div>

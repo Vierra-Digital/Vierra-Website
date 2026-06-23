@@ -3,7 +3,7 @@ import type { ProjectBoard } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { canAccessBoard } from "@/lib/projectBoards";
 
-export const VALID_PROJECT_BOARDS: ProjectBoard[] = ["Design", "Development", "Outreach", "Leadership"];
+const VALID_PROJECT_BOARDS: ProjectBoard[] = ["Design", "Development", "Outreach", "Leadership"];
 
 export function parseProjectBoard(value: string | string[] | undefined): ProjectBoard | null {
   const board = Array.isArray(value) ? value[0] : value;

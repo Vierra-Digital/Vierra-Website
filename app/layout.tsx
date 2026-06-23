@@ -86,7 +86,7 @@ export const metadata = {
   },
   icons: {
     icon: "/favicon.ico",
-    apple: "/favicon.ico",
+    apple: "/apple-touch-icon.png",
   },
   alternates: {
     canonical: SITE_URL,
@@ -109,13 +109,18 @@ export default function RootLayout({
   return (
     <html lang="en" style={{ scrollBehavior: "smooth" }}>
       <head>
-        {!process.env.NETLIFY && GA_MEASUREMENT_ID ? (
+        {/* Google Analytics — rendered by next/script on every environment so the
+            tag is part of React's tree (hydration-safe). `afterInteractive` loads
+            it after hydration, non-blocking. This replaces the Netlify edge function
+            that injected the snippet into <head> post-render, which caused a
+            hydration mismatch (React error #418) on app-router pages. */}
+        {GA_MEASUREMENT_ID ? (
           <>
             <Script
               src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
-              strategy="beforeInteractive"
+              strategy="afterInteractive"
             />
-            <Script id="google-analytics" strategy="beforeInteractive">
+            <Script id="google-analytics" strategy="afterInteractive">
               {`
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
@@ -179,8 +184,9 @@ export default function RootLayout({
                 "https://www.linkedin.com/company/vierra/",
                 "https://www.instagram.com/vierra.dev",
                 "https://www.facebook.com/share/1GXE6s4NSX/",
+                "https://x.com/vierradev",
               ],
-              foundingDate: "2024",
+              foundingDate: "2019",
               numberOfEmployees: {
                 "@type": "QuantitativeValue",
                 minValue: 5,
@@ -251,7 +257,7 @@ export default function RootLayout({
                 "@type": "Person",
                 name: "Alex Shick",
               },
-              foundingDate: "2024",
+              foundingDate: "2019",
               areaServed: [
                 { "@type": "City", name: "Cambridge" },
                 { "@type": "City", name: "Medford" },
@@ -273,6 +279,7 @@ export default function RootLayout({
                 "https://www.linkedin.com/company/vierra/",
                 "https://www.instagram.com/vierra.dev",
                 "https://www.facebook.com/share/1GXE6s4NSX/",
+                "https://x.com/vierradev",
               ],
             }),
           }}

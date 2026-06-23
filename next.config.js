@@ -18,6 +18,11 @@ const nextConfig = {
     "/api/md/[[...slug]]": ["./content/md/**/*"],
   },
   images: {
+    // Prefer AVIF (smaller than WebP) then WebP for the optimizer output — improves
+    // image transfer size / LCP. Browsers that support neither fall back to the original.
+    formats: ['image/avif', 'image/webp'],
+    // Quality levels used via <Image quality={...} /> must be declared (required in Next 16).
+    qualities: [80],
     remotePatterns: [
       {
         protocol: 'https',

@@ -15,10 +15,6 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
-[[edge_functions]]
-  function = "inject-ga"
-  path = "/*"
-
 [context.production.environment]
   NEXT_PUBLIC_SITE_URL = "https://vierradev.com"
 

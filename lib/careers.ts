@@ -1,4 +1,4 @@
-export type EmploymentType = 'Full-Time' | 'Part-Time' | 'Internship';
+type EmploymentType = 'Full-Time' | 'Part-Time' | 'Internship';
 
 export interface JobRole {
   /** URL slug used for /careers/[slug] */
