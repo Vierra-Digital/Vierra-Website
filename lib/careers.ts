@@ -25,7 +25,7 @@ export interface JobRole {
   niceToHave?: string[];
 }
 
-export const CAREERS_LOCATION = 'In-Person NYC';
+const CAREERS_LOCATION = 'In-Person NYC';
 
 export const JOB_ROLES: JobRole[] = [
   {

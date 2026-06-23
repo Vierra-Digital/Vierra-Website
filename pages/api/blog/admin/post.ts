@@ -8,11 +8,13 @@ import { createPost, updatePost, deletePost } from "@/lib/blog";
  * 60s revalidate). Best-effort — a revalidation failure must not fail the write.
  */
 async function revalidateBlog(res: NextApiResponse, slugs: Array<string | null | undefined>) {
-  const unique = Array.from(new Set(slugs.filter((s): s is string => Boolean(s))));
+  // Always refresh the index (it's ISR now) plus each affected post page.
+  const targets = [
+    "/blog",
+    ...Array.from(new Set(slugs.filter((s): s is string => Boolean(s)))).map((s) => `/blog/${s}`),
+  ];
   await Promise.all(
-    unique.map((s) =>
-      res.revalidate(`/blog/${s}`).catch((e) => console.warn(`revalidate /blog/${s} failed`, e))
-    )
+    targets.map((p) => res.revalidate(p).catch((e) => console.warn(`revalidate ${p} failed`, e)))
   );
 }
 

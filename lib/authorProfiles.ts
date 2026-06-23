@@ -1,7 +1,7 @@
 // Public LinkedIn profiles for blog authors. Used to attach `sameAs` to the
 // Person schema so search engines and LLMs can disambiguate the author entity
 // (an E-E-A-T / authorship signal). Add new authors here as profiles are known.
-export const AUTHOR_LINKEDIN: Record<string, string> = {
+const AUTHOR_LINKEDIN: Record<string, string> = {
   "Alex Shick": "https://www.linkedin.com/in/alexshick/",
   "Paul Wahba": "https://www.linkedin.com/in/paul-wahba-2306b2279/",
 }

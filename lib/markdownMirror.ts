@@ -26,7 +26,7 @@ const turndown = new TurndownService({
 turndown.remove(["script", "style", "noscript"]);
 
 /** Convert a rich-text/HTML body (as stored for blog posts) into clean Markdown. */
-export function htmlToMarkdown(html: string): string {
+function htmlToMarkdown(html: string): string {
   if (!html) return "";
   return turndown
     .turndown(html)

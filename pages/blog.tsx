@@ -6,7 +6,7 @@ import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
 import { Search, ChevronRight } from "lucide-react";
 import Footer from "@/components/FooterSection/Footer";
-import { GetServerSideProps } from "next";
+import { GetStaticProps } from "next";
 import Link from "next/link";
 
 type BlogPostType = {
@@ -27,26 +27,21 @@ type Props = {
     hasFetchError?: boolean;
 };
 
-export const getServerSideProps: GetServerSideProps<Props> = async ({ res }) => {
+// ISR: the index is statically cached and regenerated at most every 60s (and
+// on-demand when a post is created/edited/deleted — see the blog admin API).
+// This serves /blog from the CDN instead of a per-request DB round-trip.
+export const getStaticProps: GetStaticProps<Props> = async () => {
     try {
-    const latestPosts = await getLatestPosts(90);
-
-    return {
-        props: {
-            latestPosts,
-            hasFetchError: false,
-        },
-    };
-    } catch (error) {
-        console.warn('Database unavailable during blog page request, using empty data:', error);
-        res.statusCode = 503;
-        res.setHeader("Retry-After", "3600");
+        const latestPosts = await getLatestPosts(90);
         return {
-            props: {
-                latestPosts: [],
-                hasFetchError: true,
-            },
+            props: { latestPosts, hasFetchError: false },
+            revalidate: 60,
         };
+    } catch (error) {
+        // Never cache an empty/errored index — rethrow so Next keeps serving the
+        // last good static page and retries on the next revalidation.
+        console.error('blog index getStaticProps DB error (retryable, not cached):', error);
+        throw error;
     }
 };
 
