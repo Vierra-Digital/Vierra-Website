@@ -147,7 +147,7 @@ export async function getAllAuthorNames(): Promise<string[]> {
 
 /* --------------------------- Mutations --------------------------- */
 
-export function slugify(title: string): string {
+function slugify(title: string): string {
   return title
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, "")
@@ -155,7 +155,7 @@ export function slugify(title: string): string {
     .replace(/\s+/g, "-");
 }
 
-export async function findOrCreateAuthor(name: string) {
+async function findOrCreateAuthor(name: string) {
   const clean = name || "Unknown";
   const existing = await prisma.author.findFirst({ where: { name: clean } });
   return existing ?? prisma.author.create({ data: { name: clean } });
