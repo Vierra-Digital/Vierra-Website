@@ -1,5 +1,9 @@
 [build]
-  command = "npx prisma generate && npx prisma migrate deploy && npm run build"
+  # The database schema is managed out-of-band (Supabase), not via Prisma
+  # Migrate — the prisma/migrations history is not in sync with the live DB, so
+  # `migrate deploy` fails (e.g. "relation users already exists"). The build only
+  # needs the generated client; schema changes are applied to the DB directly.
+  command = "npx prisma generate && npm run build"
   publish = ".next"
 
 [build.environment]
