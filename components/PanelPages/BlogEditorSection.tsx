@@ -15,6 +15,7 @@ type Post = {
   tag?: string | null
   published_date: string
   author: { name: string }
+  visits?: number | null
 }
 
 export default function BlogEditorSection() {
@@ -363,6 +364,7 @@ export default function BlogEditorSection() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Title</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Author</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Views</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Tags</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-[#6B7280] uppercase tracking-wider">Manage</th>
                     </tr>
@@ -383,6 +385,9 @@ export default function BlogEditorSection() {
                             const [year, month, day] = dateStr.split('-')
                             return `${month}/${day}/${year}`
                           })()}
+                        </td>
+                        <td className="px-4 py-4 text-sm text-[#111827] tabular-nums">
+                          {(p.visits ?? 0).toLocaleString()}
                         </td>
                         <td className="px-4 py-4 text-sm">
                           {p.tag ? (

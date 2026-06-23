@@ -207,3 +207,11 @@ export async function updatePost(id: string, input: PostWriteInput) {
 export async function deletePost(id: string) {
   return prisma.blogPost.delete({ where: { id }, select: { slug: true } });
 }
+
+/** Atomically increment a post's view counter. No-ops if the slug doesn't exist. */
+export async function incrementVisits(slug: string): Promise<void> {
+  await prisma.blogPost.update({
+    where: { slug },
+    data: { visits: { increment: 1 } },
+  });
+}

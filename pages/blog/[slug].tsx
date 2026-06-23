@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
 import { Header } from "@/components/Header";
@@ -62,6 +62,20 @@ const BlogViewPage = ({
         window.addEventListener("scroll", onScroll, { passive: true });
         return () => window.removeEventListener("scroll", onScroll);
     }, []);
+
+    // Record a view once per page load (the ref guards against React's
+    // double-invoke in dev). Fire-and-forget — never block or surface errors.
+    const viewCounted = useRef(false);
+    useEffect(() => {
+        if (viewCounted.current) return;
+        viewCounted.current = true;
+        fetch("/api/blog/view", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ slug }),
+            keepalive: true,
+        }).catch(() => {});
+    }, [slug]);
 
     return (
         <>
