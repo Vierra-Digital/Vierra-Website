@@ -1,14 +1,15 @@
 "use client";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import { motion, AnimatePresence } from "framer-motion";
-import { FiX, FiArrowLeft, FiArrowRight } from "react-icons/fi";
-import ModalShell from "@/components/ui/Modal";
+import { FiUploadCloud, FiFileText, FiX, FiArrowLeft, FiArrowRight } from "react-icons/fi";
+import Modal from "@/components/ui/Modal";
 import {
   inputClass,
+  labelClass,
   Field,
   PrimaryButton,
-  ThemedSelect,
+  OptionButtons,
   useLockBodyScroll,
   formatPhone,
 } from "@/components/ui/modalForm";
@@ -16,134 +17,118 @@ import {
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
 const inter = Inter({ subsets: ["latin"] });
 
-interface ModalProps {
+interface CareerApplicationModalProps {
   isOpen: boolean;
   onClose: () => void;
+  roleSlug: string;
+  roleTitle: string;
+  /** True when the visitor has already applied for this role */
+  alreadyApplied: boolean;
+  /** Called after a successful submission so the parent can persist state */
+  onSubmitted: () => void;
 }
 
 interface FormState {
   fullName: string;
   email: string;
   phoneNumber: string;
-  website: string;
-  socialMedia: string;
-  monthlyRevenue: string;
-  desiredRevenue: string;
-  startTimeline: string;
-  agencyExperience: string;
-  uniqueTraits: string;
-  businessIssues: string;
+  currentLocation: string;
+  needRelocate: string;
+  usCitizen: string;
+  additionalNotes: string;
 }
 
 const EMPTY_FORM: FormState = {
   fullName: "",
   email: "",
   phoneNumber: "",
-  website: "",
-  socialMedia: "",
-  monthlyRevenue: "",
-  desiredRevenue: "",
-  startTimeline: "",
-  agencyExperience: "",
-  uniqueTraits: "",
-  businessIssues: "",
+  currentLocation: "",
+  needRelocate: "",
+  usCitizen: "",
+  additionalNotes: "",
 };
 
-const STEP_TITLES = ["Your details", "Business information", "A few more details"];
+const STEP_TITLES = ["Basic information", "Resume & cover letter", "Additional notes"];
 const TOTAL_STEPS = STEP_TITLES.length;
 
-const REVENUE_OPTIONS = [
-  { value: "$10k - $25k", label: "$10k - $25k" },
-  { value: "$25k - $50k", label: "$25k - $50k" },
-  { value: "$50k - $100k", label: "$50k - $100k" },
-  { value: "$100k - $250k", label: "$100k - $250k" },
-  { value: "$250k - $500k", label: "$250k - $500k" },
-  { value: "$500k+", label: "$500k+" },
-];
-
-export function Modal({ isOpen, onClose }: ModalProps) {
+export function CareerApplicationModal({
+  isOpen,
+  onClose,
+  roleSlug,
+  roleTitle,
+  alreadyApplied,
+  onSubmitted,
+}: CareerApplicationModalProps) {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<FormState>(EMPTY_FORM);
+  const [resume, setResume] = useState<File | null>(null);
+  const [coverLetter, setCoverLetter] = useState<File | null>(null);
   const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
 
   useLockBodyScroll(isOpen);
 
+  // Reset transient state whenever the modal is opened for a (possibly new) role.
   useEffect(() => {
     if (isOpen) {
       setStep(1);
       setFormData(EMPTY_FORM);
+      setResume(null);
+      setCoverLetter(null);
       setSubmitted(false);
-      setSubmitting(false);
     }
-  }, [isOpen]);
+  }, [isOpen, roleSlug]);
 
   const setField = (key: keyof FormState) => (value: string) =>
     setFormData((prev) => ({ ...prev, [key]: value }));
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     const { id, value } = e.target;
     setFormData((prev) => ({ ...prev, [id]: id === "phoneNumber" ? formatPhone(value) : value }));
   };
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim());
   const phoneValid = formData.phoneNumber.replace(/\D/g, "").length === 10;
-  const websiteValid = /^(https?:\/\/)?([\w-]+\.)+[a-zA-Z]{2,}$/.test(formData.website.trim());
-  const desiredValid = /^\$?\d[\d,]*(\+)?$/.test(formData.desiredRevenue.trim());
 
-  const step1Valid =
+  const basicInfoValid =
     !!formData.fullName.trim() &&
     !!formData.email.trim() &&
     emailValid &&
     !!formData.phoneNumber.trim() &&
-    phoneValid;
+    phoneValid &&
+    !!formData.currentLocation.trim() &&
+    !!formData.needRelocate &&
+    !!formData.usCitizen;
 
-  const step2Valid =
-    !!formData.website.trim() &&
-    websiteValid &&
-    !!formData.monthlyRevenue &&
-    !!formData.desiredRevenue.trim() &&
-    desiredValid;
+  const attachmentsValid = !!resume && !!coverLetter;
 
   const nextStep = () => setStep((s) => Math.min(TOTAL_STEPS, s + 1));
   const prevStep = () => setStep((s) => Math.max(1, s - 1));
 
-  const handleSubmit = async () => {
-    if (submitting || !step1Valid || !step2Valid) return;
-    setSubmitting(true);
-    try {
-      const response = await fetch("/api/sendEmail", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-      if (!response.ok) {
-        alert("Failed to submit the form. Please try again.");
-        return;
-      }
-      setSubmitted(true);
-    } catch (error) {
-      console.error("Error submitting form:", error);
-      alert("An error occurred. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
+  const handleSubmit = () => {
+    if (alreadyApplied || submitted || !basicInfoValid || !attachmentsValid) return;
+    // The application is intentionally not sent anywhere for now.
+    setSubmitted(true);
+    onSubmitted();
   };
 
   if (!isOpen) return null;
 
+  const showSuccess = submitted || alreadyApplied;
   const progress = (step / TOTAL_STEPS) * 100;
 
   return (
-    <ModalShell
+    <Modal
       onClose={onClose}
       zIndexClass="z-[200]"
       backdropClassName="bg-[#1A1033]/50 backdrop-blur-md"
       cardClassName={`relative flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ${inter.className}`}
       closeOnBackdrop={true}
-      label="Book your free audit"
+      label={`Apply for ${roleTitle}`}
     >
-      {!submitted && (
+      {/* Progress bar — inset rounded pill so it reads cleanly inside the rounded card */}
+      {!showSuccess && (
         <div className="px-6 pt-4 sm:px-8">
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
             <motion.div
@@ -156,18 +141,18 @@ export function Modal({ isOpen, onClose }: ModalProps) {
         </div>
       )}
 
-      {submitted ? (
-        <SuccessView onClose={onClose} />
+      {showSuccess ? (
+        <SuccessView roleTitle={roleTitle} firstTime={submitted} onClose={onClose} />
       ) : (
         <>
           {/* Header */}
           <div className="flex items-start justify-between gap-4 px-6 pb-5 pt-4 sm:px-8">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8F42FF]">
-                Free Audit · Step {step} of {TOTAL_STEPS}
+                Application · Step {step} of {TOTAL_STEPS}
               </p>
               <h2 className={`mt-1.5 text-xl font-semibold tracking-tight text-[#1A1033] sm:text-2xl ${bricolage.className}`}>
-                Get Your Free Audit
+                {roleTitle}
               </h2>
             </div>
             <button
@@ -188,10 +173,9 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -12 }}
                 transition={{ duration: 0.2 }}
-                className="space-y-4"
               >
                 {step === 1 && (
-                  <>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <Field label="Full Name" htmlFor="fullName">
                       <input
                         id="fullName"
@@ -203,7 +187,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                       />
                     </Field>
                     <Field
-                      label="Email"
+                      label="Email Address"
                       htmlFor="email"
                       error={formData.email && !emailValid ? "Enter a valid email address." : undefined}
                     >
@@ -231,106 +215,57 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                         placeholder="(555) 123-4567"
                       />
                     </Field>
-                  </>
+                    <Field label="Current Location" htmlFor="currentLocation">
+                      <input
+                        id="currentLocation"
+                        type="text"
+                        value={formData.currentLocation}
+                        onChange={handleChange}
+                        className={`${inputClass} border-gray-200`}
+                        placeholder="City, State / Country"
+                      />
+                    </Field>
+                    <Field label="Need to Relocate?">
+                      <OptionButtons
+                        value={formData.needRelocate}
+                        onChange={setField("needRelocate")}
+                        options={[
+                          { value: "Yes", label: "Yes" },
+                          { value: "No", label: "No" },
+                        ]}
+                      />
+                    </Field>
+                    <Field label="US Citizen?">
+                      <OptionButtons
+                        value={formData.usCitizen}
+                        onChange={setField("usCitizen")}
+                        options={[
+                          { value: "Yes", label: "Yes" },
+                          { value: "No", label: "No" },
+                        ]}
+                      />
+                    </Field>
+                  </div>
                 )}
 
                 {step === 2 && (
-                  <>
-                    <Field
-                      label="Website"
-                      htmlFor="website"
-                      error={formData.website && !websiteValid ? "Enter a valid website." : undefined}
-                    >
-                      <input
-                        id="website"
-                        type="url"
-                        value={formData.website}
-                        onChange={handleChange}
-                        className={`${inputClass} ${formData.website && !websiteValid ? "border-red-400 bg-red-50/50" : "border-gray-200"}`}
-                        placeholder="https://yourwebsite.com"
-                      />
-                    </Field>
-                    <Field label="Social Media" htmlFor="socialMedia" optional>
-                      <input
-                        id="socialMedia"
-                        type="text"
-                        value={formData.socialMedia}
-                        onChange={handleChange}
-                        className={`${inputClass} border-gray-200`}
-                        placeholder="Instagram, LinkedIn, Facebook handles"
-                      />
-                    </Field>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                      <Field label="Current Monthly Revenue" htmlFor="monthlyRevenue">
-                        <ThemedSelect
-                          id="monthlyRevenue"
-                          value={formData.monthlyRevenue}
-                          onChange={setField("monthlyRevenue")}
-                          options={REVENUE_OPTIONS}
-                          placeholder="Select revenue range"
-                        />
-                      </Field>
-                      <Field
-                        label="Desired Revenue (12 months)"
-                        htmlFor="desiredRevenue"
-                        error={formData.desiredRevenue && !desiredValid ? "Enter a valid amount." : undefined}
-                      >
-                        <input
-                          id="desiredRevenue"
-                          type="text"
-                          value={formData.desiredRevenue}
-                          onChange={handleChange}
-                          className={`${inputClass} ${formData.desiredRevenue && !desiredValid ? "border-red-400 bg-red-50/50" : "border-gray-200"}`}
-                          placeholder="$50,000+"
-                        />
-                      </Field>
-                    </div>
-                  </>
+                  <div className="space-y-4">
+                    <FileField id="resume" label="Resume" required file={resume} onSelect={setResume} />
+                    <FileField id="coverLetter" label="Cover Letter" required file={coverLetter} onSelect={setCoverLetter} />
+                  </div>
                 )}
 
                 {step === 3 && (
-                  <>
-                    <Field label="How soon can you get started?" htmlFor="startTimeline" optional>
-                      <input
-                        id="startTimeline"
-                        type="text"
-                        value={formData.startTimeline}
-                        onChange={handleChange}
-                        className={`${inputClass} border-gray-200`}
-                        placeholder="e.g. Within 2 weeks, Next month"
-                      />
-                    </Field>
-                    <Field label="Agency Experience" htmlFor="agencyExperience" optional>
-                      <textarea
-                        id="agencyExperience"
-                        value={formData.agencyExperience}
-                        onChange={handleChange}
-                        rows={2}
-                        className={`${inputClass} resize-none border-gray-200`}
-                        placeholder="Have you worked with agencies before? Share your experience..."
-                      />
-                    </Field>
-                    <Field label="What sets you apart?" htmlFor="uniqueTraits" optional>
-                      <textarea
-                        id="uniqueTraits"
-                        value={formData.uniqueTraits}
-                        onChange={handleChange}
-                        rows={2}
-                        className={`${inputClass} resize-none border-gray-200`}
-                        placeholder="What makes your business unique?"
-                      />
-                    </Field>
-                    <Field label="Industry Challenges" htmlFor="businessIssues" optional>
-                      <textarea
-                        id="businessIssues"
-                        value={formData.businessIssues}
-                        onChange={handleChange}
-                        rows={2}
-                        className={`${inputClass} resize-none border-gray-200`}
-                        placeholder="What are the biggest challenges in your industry?"
-                      />
-                    </Field>
-                  </>
+                  <Field label="Additional Notes" htmlFor="additionalNotes" optional>
+                    <textarea
+                      id="additionalNotes"
+                      value={formData.additionalNotes}
+                      onChange={handleChange}
+                      rows={5}
+                      className={`${inputClass} resize-none border-gray-200`}
+                      placeholder="Anything else you'd like us to know?"
+                    />
+                  </Field>
                 )}
               </motion.div>
             </AnimatePresence>
@@ -352,7 +287,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
             {step < TOTAL_STEPS ? (
               <PrimaryButton
                 onClick={nextStep}
-                disabled={(step === 1 && !step1Valid) || (step === 2 && !step2Valid)}
+                disabled={(step === 1 && !basicInfoValid) || (step === 2 && !attachmentsValid)}
               >
                 Continue
                 <motion.span
@@ -363,18 +298,79 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                 </motion.span>
               </PrimaryButton>
             ) : (
-              <PrimaryButton onClick={handleSubmit} disabled={submitting || !step1Valid || !step2Valid}>
-                {submitting ? "Submitting..." : "Submit"}
+              <PrimaryButton onClick={handleSubmit} disabled={!basicInfoValid || !attachmentsValid}>
+                Submit Application
               </PrimaryButton>
             )}
           </div>
         </>
       )}
-    </ModalShell>
+    </Modal>
   );
 }
 
-const SuccessView: React.FC<{ onClose: () => void }> = ({ onClose }) => (
+/* ---------- Local sub-components ---------- */
+
+interface FileFieldProps {
+  id: string;
+  label: string;
+  file: File | null;
+  onSelect: (f: File | null) => void;
+  required?: boolean;
+}
+
+const FileField: React.FC<FileFieldProps> = ({ id, label, file, onSelect, required }) => (
+  <div>
+    <label className={labelClass}>
+      {label}
+      {!required && <span className="ml-1 font-normal text-gray-400">(Optional)</span>}
+    </label>
+    {file ? (
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-[#701CC0]/20 bg-[#701CC0]/[0.04] px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-[#701CC0] shadow-sm">
+            <FiFileText className="h-5 w-5" />
+          </span>
+          <span className="truncate text-sm font-medium text-[#1A1033]">{file.name}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => onSelect(null)}
+          aria-label={`Remove ${label}`}
+          className="shrink-0 rounded-md p-1 text-gray-400 transition-colors hover:bg-white hover:text-red-500"
+        >
+          <FiX className="h-4 w-4" />
+        </button>
+      </div>
+    ) : (
+      <label
+        htmlFor={id}
+        className="group flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50 px-4 py-7 text-center transition-colors hover:border-[#701CC0]/50 hover:bg-[#701CC0]/[0.03]"
+      >
+        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#701CC0]/10 text-[#701CC0] transition-transform duration-200 group-hover:scale-110">
+          <FiUploadCloud className="h-5 w-5" />
+        </span>
+        <span className="text-sm font-medium text-[#3A3352]">
+          Click To Upload <span className="text-[#701CC0]">{label}</span>
+        </span>
+        <span className="text-xs text-gray-400">PDF, DOC, or DOCX</span>
+        <input
+          id={id}
+          type="file"
+          accept=".pdf,.doc,.docx"
+          className="hidden"
+          onChange={(e) => onSelect(e.target.files?.[0] ?? null)}
+        />
+      </label>
+    )}
+  </div>
+);
+
+const SuccessView: React.FC<{ roleTitle: string; firstTime: boolean; onClose: () => void }> = ({
+  roleTitle,
+  firstTime,
+  onClose,
+}) => (
   <div className="relative flex flex-col items-center px-6 py-12 text-center sm:px-10">
     <button
       onClick={onClose}
@@ -389,12 +385,16 @@ const SuccessView: React.FC<{ onClose: () => void }> = ({ onClose }) => (
       animate={{ scale: 1, rotate: 0 }}
       transition={{ duration: 0.5, type: "spring", bounce: 0.45 }}
     >
-      <motion.span
-        className="absolute inset-0 rounded-full bg-[#8F42FF]/40"
-        initial={{ scale: 1, opacity: 0.6 }}
-        animate={{ scale: 1.6, opacity: 0 }}
-        transition={{ duration: 1, ease: "easeOut", delay: 0.2 }}
-      />
+      {/* Continuously pulsating glow rings */}
+      {[0, 1].map((i) => (
+        <motion.span
+          key={i}
+          className="absolute inset-0 rounded-full border-2 border-[#8F42FF]"
+          initial={{ scale: 1, opacity: 0.5 }}
+          animate={{ scale: 1.85, opacity: 0 }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeOut", delay: i }}
+        />
+      ))}
       <svg className="h-9 w-9 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
         <motion.path
           d="M5 13l4 4L19 7"
@@ -405,10 +405,12 @@ const SuccessView: React.FC<{ onClose: () => void }> = ({ onClose }) => (
       </svg>
     </motion.div>
     <h2 className={`text-2xl font-semibold tracking-tight text-[#1A1033] ${bricolage.className}`}>
-      Audit requested
+      {firstTime ? "Application Submitted" : "Application Received"}
     </h2>
     <p className="mx-auto mt-2 max-w-sm text-[15px] leading-7 text-[#6B6480]">
-      Thanks for your interest in Vierra. We’ve received your details and our team will be in touch within 24 to 48 hours.
+      {firstTime
+        ? "We’ve received your application and our team will review it shortly."
+        : `You’ve already applied for the ${roleTitle} role. Our team will be in touch if there’s a fit.`}
     </p>
     <motion.button
       type="button"

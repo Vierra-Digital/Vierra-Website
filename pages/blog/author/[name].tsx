@@ -142,10 +142,8 @@ export default function AuthorPage({ authorName, posts }: AuthorPageProps) {
           </div>
           <header className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center px-6 pb-20 text-center">
             <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]">Author</span>
-            <h1 className={`mt-4 text-5xl font-bold tracking-tight md:text-7xl ${bricolage.className}`}>
-              <span className="bg-gradient-to-r from-[#8F42FF] via-[#D4A5FF] to-[#8F42FF] bg-[length:200%_auto] bg-clip-text text-transparent animate-gradient">
-                {authorName}
-              </span>
+            <h1 className={`mt-4 text-5xl font-bold tracking-tight text-white md:text-7xl ${bricolage.className}`}>
+              {authorName}
             </h1>
             <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs text-white/70 backdrop-blur-md">
               <span className="h-1.5 w-1.5 rounded-full bg-[#8F42FF]" />

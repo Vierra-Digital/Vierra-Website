@@ -1,5 +1,6 @@
 import { MetadataRoute } from 'next';
 import { prisma } from '@/lib/prisma';
+import { JOB_ROLES } from '@/lib/careers';
 
 // Regenerate at most hourly (ISR). Without this the sitemap is built once at
 // deploy time, so posts published later via the admin panel never appear in it
@@ -21,6 +22,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: 'daily',
       priority: 0.9,
+    },
+    {
+      url: `${baseUrl}/careers`,
+      lastModified: now,
+      changeFrequency: 'weekly',
+      priority: 0.8,
     },
     {
       url: `${baseUrl}/privacy-policy`,
@@ -110,8 +117,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.warn('Database unavailable during sitemap generation, skipping blog posts:', error);
   }
 
+  // Individual career role pages — static, generated from the careers data.
+  const careerPages: MetadataRoute.Sitemap = JOB_ROLES.map((role) => ({
+    url: `${baseUrl}/careers/${role.slug}`,
+    lastModified: now,
+    changeFrequency: 'weekly' as const,
+    priority: 0.7,
+  }));
+
   // Tag archives are intentionally excluded — they are thin, near-duplicate
   // listing pages and carry `noindex, follow`. Author pages stay (E-E-A-T).
   void tagPages;
-  return [...staticPages, ...blogPages, ...authorPages];
+  return [...staticPages, ...careerPages, ...blogPages, ...authorPages];
 }

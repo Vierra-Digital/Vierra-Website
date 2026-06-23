@@ -50,9 +50,9 @@ const Footer = ({ bare = false }: { bare?: boolean }) => {
                 <Link href="/#about" className="hover:text-white transition-colors">About</Link>
               </li>
               <li>
-                <span className="cursor-default inline-flex items-center justify-center md:justify-start gap-2 text-white/40">
+                <Link href="/careers" className="inline-flex items-center justify-center md:justify-start gap-2 text-white/80 transition-colors hover:text-white">
                   Careers <span className="bg-[#701CC0]/60 text-xs px-2 py-0.5 rounded-[12px] text-white/80">HIRING</span>
-                </span>
+                </Link>
               </li>
             </ul>
           </div>
