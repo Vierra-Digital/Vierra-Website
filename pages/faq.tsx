@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Bricolage_Grotesque, Inter } from 'next/font/google';
 import Head from 'next/head';
-import { HelpCircle } from 'lucide-react';
+import { HelpCircle, ChevronDown } from 'lucide-react';
 import { Header } from '@/components/Header';
 import Footer from '@/components/FooterSection/Footer';
 import { Modal } from '@/components/Modal';
@@ -66,10 +66,27 @@ const FaqPage: React.FC = () => {
         <style jsx global>{`
           html { scroll-behavior: smooth; scrollbar-width: none !important; -ms-overflow-style: none !important; }
           html::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
+
+          /* Collapsible FAQ via native <details> — answers stay in the DOM
+             (crawlable / indexable) even while visually collapsed. */
+          .faq-item summary { list-style: none; }
+          .faq-item summary::-webkit-details-marker { display: none; }
+          .faq-item summary:focus-visible { outline: 2px solid #8F42FF; outline-offset: 2px; border-radius: 26px; }
+          .faq-chevron { transition: transform 0.3s ease; }
+          .faq-item[open] .faq-chevron { transform: rotate(180deg); }
+          .faq-item[open] .faq-answer { animation: faqReveal 0.28s ease; }
+          @keyframes faqReveal {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .faq-chevron { transition: none; }
+            .faq-item[open] .faq-answer { animation: none; }
+          }
         `}</style>
 
         {/* Dark hero band — same centered format as the careers and legal pages */}
-        <div className="relative flex min-h-[48vh] flex-col overflow-hidden bg-[#18042A] text-white">
+        <div className="relative flex min-h-[60vh] flex-col overflow-hidden bg-[#18042A] text-white">
           <div aria-hidden className="pointer-events-none absolute inset-0">
             <motion.div
               className="absolute -top-28 left-[6%] h-[440px] w-[440px] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A] opacity-70 blur-[70px]"
@@ -93,10 +110,6 @@ const FaqPage: React.FC = () => {
             <h1 className={`mt-4 text-5xl font-bold tracking-tight md:text-7xl ${bricolage.className}`}>
               Frequently Asked Questions
             </h1>
-            <p className="mt-6 max-w-2xl text-[15px] leading-7 text-white/70">
-              Everything you need to know about how Vierra delivers risk-averse, guaranteed lead
-              generation for your business.
-            </p>
           </header>
         </div>
 
@@ -104,33 +117,38 @@ const FaqPage: React.FC = () => {
         <div className="relative z-10 mx-auto max-w-4xl px-5 pb-24 pt-14 md:px-8">
           <div className="space-y-5">
             {FAQ_ITEMS.map((item, i) => (
-              <section
+              <details
                 key={i}
-                className="rounded-[26px] border border-[#701CC0]/10 bg-white/90 p-6 shadow-[0_10px_40px_-18px_rgba(112,28,192,0.25)] ring-1 ring-black/[0.02] backdrop-blur-sm md:p-9"
+                className="faq-item rounded-[26px] border border-[#701CC0]/10 bg-white/90 shadow-[0_10px_40px_-18px_rgba(112,28,192,0.25)] ring-1 ring-black/[0.02] backdrop-blur-sm"
               >
-                <h2 className={`text-lg md:text-xl font-semibold tracking-tight text-[#1A1033] ${bricolage.className}`}>
-                  {item.question}
-                </h2>
-                <div className="mt-4 mb-5 h-px w-full bg-gradient-to-r from-[#8F42FF]/50 via-[#701CC0]/15 to-transparent" />
-                <p className="text-[15px] leading-7 text-[#4B4460]">{item.answer}</p>
-              </section>
+                <summary className="flex cursor-pointer items-center justify-between gap-4 p-6 md:p-8">
+                  <h2 className={`text-lg md:text-xl font-semibold tracking-tight text-[#1A1033] ${bricolage.className}`}>
+                    {item.question}
+                  </h2>
+                  <ChevronDown
+                    size={22}
+                    aria-hidden
+                    className="faq-chevron shrink-0 text-[#701CC0]"
+                  />
+                </summary>
+                <div className="faq-answer px-6 pb-6 md:px-8 md:pb-8">
+                  <div className="mb-5 h-px w-full bg-gradient-to-r from-[#8F42FF]/50 via-[#701CC0]/15 to-transparent" />
+                  <p className="text-[15px] leading-7 text-[#4B4460]">{item.answer}</p>
+                </div>
+              </details>
             ))}
 
             {/* CTA */}
             <section className="overflow-hidden rounded-[26px] border border-[#701CC0]/30 bg-[#18042A] p-8 text-center md:p-12">
               <h2 className={`text-2xl font-semibold tracking-tight text-white md:text-3xl ${bricolage.className}`}>
-                Still have questions?
+                Still Have Questions?
               </h2>
-              <p className="mx-auto mt-3 max-w-xl text-[15px] leading-7 text-white/70">
-                Book a free audit call and we&apos;ll show you exactly how Vierra can fill your sales
-                calendar with qualified leads.
-              </p>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(true)}
                 className="audit-glow mt-7 inline-flex items-center gap-2 rounded-lg border-2 border-[#701CC0] bg-transparent px-8 py-4 font-medium text-white transition-all duration-300 hover:border-[#8F42FF]"
               >
-                Book a Free Audit Call
+                Claim Your Free Audit Call
               </button>
             </section>
           </div>
