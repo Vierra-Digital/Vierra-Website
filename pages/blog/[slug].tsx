@@ -288,6 +288,65 @@ const BlogViewPage = ({
                                     margin: 16px 0;
                                     border-radius: 8px;
                                   }
+                                  /* Block-level spacing — content is raw HTML with no inline
+                                     margins, and Tailwind preflight zeroes them, so set them here. */
+                                  #blog-text-content p { margin: 0 0 1.25rem; }
+                                  #blog-text-content h2,
+                                  #blog-text-content h3,
+                                  #blog-text-content h4 {
+                                    font-weight: 700;
+                                    color: #111827;
+                                    line-height: 1.25;
+                                    scroll-margin-top: 90px;
+                                  }
+                                  #blog-text-content h2 { font-size: 1.6rem; margin: 2.5rem 0 1rem; }
+                                  #blog-text-content h3 { font-size: 1.25rem; margin: 1.9rem 0 0.6rem; }
+                                  #blog-text-content h4 { font-size: 1.1rem; margin: 1.5rem 0 0.5rem; }
+                                  #blog-text-content > :first-child { margin-top: 0; }
+                                  #blog-text-content ul,
+                                  #blog-text-content ol { margin: 0 0 1.25rem; padding-left: 1.5rem; }
+                                  #blog-text-content ul { list-style: disc; }
+                                  #blog-text-content ol { list-style: decimal; }
+                                  #blog-text-content li { margin: 0.4rem 0; padding-left: 0.25rem; }
+                                  #blog-text-content strong { font-weight: 700; color: #111827; }
+                                  #blog-text-content blockquote {
+                                    margin: 1.5rem 0;
+                                    padding: 0.5rem 1.25rem;
+                                    border-left: 4px solid #8F42FF;
+                                    background: #faf7ff;
+                                    color: #4B4460;
+                                    border-radius: 0 8px 8px 0;
+                                  }
+                                  /* Tables — branded, readable, horizontally scrollable on small screens */
+                                  #blog-text-content table {
+                                    width: 100%;
+                                    margin: 1.9rem 0;
+                                    border-collapse: collapse;
+                                    font-size: 0.95rem;
+                                    line-height: 1.45;
+                                    display: block;
+                                    overflow-x: auto;
+                                    -webkit-overflow-scrolling: touch;
+                                  }
+                                  #blog-text-content thead th {
+                                    background: #18042A;
+                                    color: #fff;
+                                    text-align: left;
+                                    font-weight: 600;
+                                  }
+                                  #blog-text-content th,
+                                  #blog-text-content td {
+                                    border: 1px solid #E5E0EC;
+                                    padding: 0.65rem 0.9rem;
+                                    vertical-align: top;
+                                  }
+                                  #blog-text-content tbody tr:nth-child(even) { background: #faf8fd; }
+                                  #blog-text-content table a { color: #2563eb; }
+                                  @media (max-width: 640px) {
+                                    #blog-text-content table { font-size: 0.85rem; }
+                                    #blog-text-content th,
+                                    #blog-text-content td { padding: 0.45rem 0.55rem; }
+                                  }
                                 `}</style>
                                 <div dangerouslySetInnerHTML={{ __html: content }} />
                             </div>
