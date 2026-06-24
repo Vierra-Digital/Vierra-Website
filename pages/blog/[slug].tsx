@@ -189,8 +189,10 @@ const BlogViewPage = ({
             </div>
 
             <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden z-0">
-                {/* Hero band — blobs are confined here so they don't bleed into the body */}
-                <div className="relative overflow-hidden">
+                {/* Hero band — blobs are confined here so they don't bleed into the body.
+                    min-h-[60vh] keeps this band the same length as the blog listing,
+                    tag, author and legal pages. */}
+                <div className="relative flex min-h-[60vh] flex-col overflow-hidden">
                 {/* Animated gradient blobs — same format as the rest of the site */}
                 <div aria-hidden className="pointer-events-none absolute inset-0">
                     <motion.div
@@ -209,13 +211,13 @@ const BlogViewPage = ({
                     <Header />
                 </div>
 
-                <header className="relative z-10 mx-auto w-full max-w-7xl px-8 pb-16 pt-10 lg:px-20">
+                <header className="relative z-10 mx-auto flex w-full max-w-7xl flex-1 flex-col justify-center px-8 pb-16 pt-10 lg:px-20">
                     <span className="text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]">Article</span>
-                    <h1 className={`mt-4 max-w-4xl text-4xl font-bold leading-tight tracking-tight text-[#EFF3FF] md:text-5xl lg:text-6xl ${bricolage.className}`}>
+                    <h1 className={`mt-4 max-w-6xl text-4xl font-bold leading-tight tracking-tight text-[#EFF3FF] md:text-5xl lg:text-6xl ${bricolage.className}`}>
                         {title ? title : "Blog not found."}
                     </h1>
                     {description && (
-                        <p className={`mt-5 max-w-3xl text-base text-white/70 md:text-lg ${inter.className}`}>{description}</p>
+                        <p className={`mt-5 line-clamp-3 max-w-3xl text-base text-white/70 md:text-lg ${inter.className}`}>{description}</p>
                     )}
                     <div id="metadata-row" className="mt-6 flex flex-wrap items-center gap-3 text-sm md:text-base">
                         <p className={`text-white/60 ${bricolage.className}`}>
