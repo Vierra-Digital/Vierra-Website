@@ -25,17 +25,17 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'What makes Vierra "risk-averse" and "guaranteed"?',
     answer:
-      'Our model is built around case studies and measurable ROI. We focus your budget only on the activities proven to generate leads that pay back the investment, so you eliminate wasted, speculative marketing spend and maximize return on ad spend.',
+      'Our model is built around case studies and measurable ROI. We focus your budget only on the activities proven to generate leads that pay back the investment, so you eliminate wasted, speculative marketing spend and maximize return on ad spend. You only pay for the leads who convert to high-paying clients.',
   },
   {
     question: 'What kinds of businesses does Vierra work with?',
     answer:
-      'We work with small and large business owners on high-ticket engagements across many industries — from local service businesses like dental practices to product and service companies — who want a reliable, scalable source of qualified leads.',
+      'We work with small and large business owners on high-ticket engagements across many industries from local service businesses like dental practices to product and service companies who want a reliable, scalable source of qualified leads.',
   },
   {
     question: 'What services does Vierra offer?',
     answer:
-      'Warm outreach through our connections, automated client- and partner-acquisition systems, results-based targeted ad campaigns built to maximize return on ad spend, and Google Analytics-driven optimization that turns your data into more leads and conversions.',
+      'Warm outreach through our connections, automated client and partner-acquisition systems, results-based targeted ad campaigns built to maximize return on ad spend, and Google Analytics-driven optimization that turns your data into more leads and conversions.',
   },
   {
     question: 'How quickly can we get started?',
@@ -45,11 +45,11 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'Where is Vierra located?',
     answer:
-      'Vierra Digital is a digital marketing agency based in Cambridge, Massachusetts. We serve clients across the United States, working remotely with businesses wherever they operate.',
+      'Vierra Digital is a lead generation agency based in Cambridge, Massachusetts with a NYC office. We serve clients across the United States, working remotely with businesses wherever they operate.',
   },
   {
     question: 'How do I get a free audit or quote?',
     answer:
-      'Book a free audit call through our website. We review your current systems and outreach, then show you exactly how Vierra can drive more qualified leads and fill your sales calendar.',
+      'Book a free audit call through our website. We review your current systems and outreach, improve your value ladder and outbound efforts, then show you exactly how Vierra can drive more qualified leads and fill your sales calendar.',
   },
 ];
