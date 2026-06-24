@@ -85,8 +85,9 @@ const BlogViewPage = ({
                 <meta name="author" content={author.name} />
                 <meta name="keywords" content={tag ? tag.split(',').map(t => t.trim()).join(', ') : 'marketing, lead generation, business growth, digital marketing'} />
                 <link rel="canonical" href={blogUrl} />
-                
-                
+                <link rel="alternate" type="application/rss+xml" title="Vierra Blog RSS Feed" href="https://vierradev.com/blog/rss.xml" />
+
+
                 <meta property="og:type" content="article" />
                 <meta property="og:title" content={title} />
                 <meta property="og:description" content={description || `${title} - Insights and strategies from Vierra.`} />
@@ -460,7 +461,8 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
                 description: p.description,
             }))
         },
-        revalidate: 60,
+        // 5-minute ISR window (on-demand revalidation still fires on publish/edit).
+        revalidate: 300,
     };
     } catch (error) {
         // Transient DB failure (e.g. Supabase pooler saturation during a GSC crawl

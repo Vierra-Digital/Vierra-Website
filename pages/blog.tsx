@@ -35,7 +35,10 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
         const latestPosts = await getBlogCatalog(90);
         return {
             props: { latestPosts, hasFetchError: false },
-            revalidate: 60,
+            // 5-minute ISR window: posts rarely change minute-to-minute, and the
+            // blog admin triggers on-demand revalidation on publish/edit/delete,
+            // so this mainly cuts how often the (cold) regeneration runs.
+            revalidate: 300,
         };
     } catch (error) {
         // Never cache an empty/errored index — rethrow so Next keeps serving the
@@ -162,6 +165,7 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                 <meta name="keywords" content="marketing blog, business growth strategies, lead generation tips, digital marketing insights, case studies, business scaling, marketing automation" />
                 {hasFetchError && <meta name="robots" content="noindex, nofollow" />}
                 <link rel="canonical" href={canonicalUrl} />
+                <link rel="alternate" type="application/rss+xml" title="Vierra Blog RSS Feed" href="https://vierradev.com/blog/rss.xml" />
                 <meta property="og:title" content="Vierra | Blog" />
                 <meta property="og:description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients." />
                 <meta property="og:url" content={canonicalUrl} />

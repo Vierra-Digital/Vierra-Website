@@ -133,6 +133,7 @@ export default function RootLayout({
         {/* SEO meta (title, description, canonical, OpenGraph, Twitter) is
             generated from the `metadata` export above — do not duplicate it here. */}
         <link rel="manifest" href="/manifest.json" />
+        <link rel="alternate" type="application/rss+xml" title="Vierra Blog RSS Feed" href="https://vierradev.com/blog/rss.xml" />
         
         
         <link rel="preconnect" href="https://fonts.googleapis.com" />
