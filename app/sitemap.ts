@@ -16,6 +16,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: 'weekly',
       priority: 1.0,
+      images: [`${baseUrl}/assets/image1.png`, `${baseUrl}/assets/meta-banner.png`],
     },
     {
       url: `${baseUrl}/blog`,
@@ -89,6 +90,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: post.published_date ? new Date(post.published_date) : now,
       changeFrequency: 'monthly' as const,
       priority: 0.7,
+      images: [`${baseUrl}/assets/meta-banner.png`],
     }));
 
     const tagSet = new Set<string>();

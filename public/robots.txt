@@ -15,11 +15,11 @@ Disallow: /blog/%5B
 Disallow: /blog/[
 Disallow: /_next/
 Disallow: /favicon.ico
-Disallow: /blog/rss.xml
 
-# Allow blog and public pages
+# Allow blog, public pages, and the RSS feed
 Allow: /blog
 Allow: /blog/
+Allow: /blog/rss.xml
 
 # Crawl-delay for respectful crawling
 Crawl-delay: 1
