@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import Head from 'next/head';
-import { getLatestPosts } from "@/lib/blog"
+import { getBlogCatalog } from "@/lib/blog"
 import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
 import { Search, ChevronRight } from "lucide-react";
@@ -32,7 +32,7 @@ type Props = {
 // This serves /blog from the CDN instead of a per-request DB round-trip.
 export const getStaticProps: GetStaticProps<Props> = async () => {
     try {
-        const latestPosts = await getLatestPosts(90);
+        const latestPosts = await getBlogCatalog(90);
         return {
             props: { latestPosts, hasFetchError: false },
             revalidate: 60,

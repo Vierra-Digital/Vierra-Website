@@ -73,6 +73,52 @@ export async function getPostsPage(page = 1, limit = 20): Promise<SerializedPost
   return posts.map(serialize);
 }
 
+/**
+ * Lightweight feed for the /blog catalog page. Cards display the description
+ * and never the full body, so we ship a short plain-text excerpt instead of
+ * each post's full HTML `content`. This keeps the catalog identical visually
+ * while cutting the serialized payload (and ISR regen/transfer time) from tens
+ * of KB of HTML per post to a few hundred characters. `content` here is the
+ * plain-text excerpt, used only for the excerpt fallback and client search.
+ */
+export type CatalogPost = Pick<
+  SerializedPost,
+  "id" | "title" | "description" | "content" | "slug" | "tag" | "published_date" | "author"
+>;
+
+const EXCERPT_CHARS = 300;
+
+export async function getBlogCatalog(limit = 90): Promise<CatalogPost[]> {
+  const posts = await prisma.blogPost.findMany({
+    orderBy: { published_date: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      content: true,
+      slug: true,
+      tag: true,
+      published_date: true,
+      author: { select: { name: true } },
+    },
+  });
+  return posts.map((p) => ({
+    id: p.id,
+    title: p.title,
+    description: p.description ?? null,
+    content: p.content
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, EXCERPT_CHARS),
+    slug: p.slug,
+    tag: p.tag ?? null,
+    published_date: p.published_date.toISOString(),
+    author: { name: p.author?.name ?? "Vierra" },
+  }));
+}
+
 export async function getPostBySlug(slug: string): Promise<SerializedPost | null> {
   const post = await prisma.blogPost.findUnique({ where: { slug }, ...withAuthorName });
   return post ? serialize(post) : null;
