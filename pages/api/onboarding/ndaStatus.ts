@@ -13,8 +13,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const stored = await prisma.storedFile.findFirst({
-    where: { signingTokenId: tokenId },
-    select: { id: true, signingTokenId: true },
+    where: { signing_token_id: tokenId },
+    select: { id: true, signing_token_id: true },
   })
 
   if (!stored) {

@@ -1,7 +1,6 @@
 import React from "react"
 import Head from "next/head"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/pages/api/auth/[...nextauth]"
+import { requireSession } from "@/lib/auth"
 import type { GetServerSideProps } from "next"
 
 type Props = {
@@ -26,7 +25,7 @@ export default function FilePreviewPage({ tokenId, name }: Props) {
 }
 
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
-  const session = await getServerSession(ctx.req, ctx.res, authOptions)
+  const session = await requireSession(ctx.req, ctx.res)
   if (!session) {
     return { redirect: { destination: "/login", permanent: false } }
   }

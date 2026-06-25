@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
+import { resolveAccountId } from "@/lib/api/emailAccounts";
 
 function asStr(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -9,7 +10,7 @@ function asStr(value: unknown) {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireRole(req, res);
   if (!session) return;
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
 
   if (req.method === "GET") {
     const draftKey = asStr(req.query.draftKey);
@@ -19,9 +20,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const draft = await prisma.emailComposeDraft.findUnique({
       where: {
-        email_compose_drafts_userId_draftKey_key: {
-          userId,
-          draftKey,
+        user_id_draft_key: {
+          user_id: userId,
+          draft_key: draftKey,
         },
       },
     });
@@ -36,33 +37,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return;
     }
 
+    const accountEmail = asStr(req.body?.accountEmail) || null;
+    const accountId = accountEmail ? await resolveAccountId(userId, accountEmail) : null;
+
     const payload = {
-      accountEmail: asStr(req.body?.accountEmail) || null,
-      toText: asStr(req.body?.to),
-      ccText: asStr(req.body?.cc) || null,
-      bccText: asStr(req.body?.bcc) || null,
-      showCc: Boolean(req.body?.showCc),
-      showBcc: Boolean(req.body?.showBcc),
+      account_id: accountId,
+      to_text: asStr(req.body?.to),
+      cc_text: asStr(req.body?.cc) || null,
+      bcc_text: asStr(req.body?.bcc) || null,
+      show_cc: Boolean(req.body?.showCc),
+      show_bcc: Boolean(req.body?.showBcc),
       subject: asStr(req.body?.subject),
-      bodyText: asStr(req.body?.bodyText),
-      bodyHtml: asStr(req.body?.bodyHtml) || null,
-      previewHtml: asStr(req.body?.previewHtml) || null,
-      threadId: asStr(req.body?.threadId) || null,
-      inReplyTo: asStr(req.body?.inReplyTo) || null,
+      body_text: asStr(req.body?.bodyText),
+      body_html: asStr(req.body?.bodyHtml) || null,
+      preview_html: asStr(req.body?.previewHtml) || null,
+      thread_id: asStr(req.body?.threadId) || null,
+      in_reply_to: asStr(req.body?.inReplyTo) || null,
       references: asStr(req.body?.references) || null,
     };
 
     const draft = await prisma.emailComposeDraft.upsert({
       where: {
-        email_compose_drafts_userId_draftKey_key: {
-          userId,
-          draftKey,
+        user_id_draft_key: {
+          user_id: userId,
+          draft_key: draftKey,
         },
       },
       update: payload,
       create: {
-        userId,
-        draftKey,
+        user_id: userId,
+        draft_key: draftKey,
         ...payload,
       },
     });
@@ -78,7 +82,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return;
     }
     await prisma.emailComposeDraft.deleteMany({
-      where: { userId, draftKey },
+      where: { user_id: userId, draft_key: draftKey },
     });
     res.status(200).json({ ok: true });
     return;
@@ -86,4 +90,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   res.status(405).json({ message: "Method Not Allowed" });
 }
-

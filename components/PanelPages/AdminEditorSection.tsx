@@ -36,13 +36,12 @@ const AdminEditorSection = () => {
 export default AdminEditorSection
 
 type ListedUser = {
-    id: number
+    id: string
     name: string | null
     email: string | null
     image: boolean
     role: string
     clientName: string | null
-    hasPassword: boolean
 }
 
 function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
@@ -50,9 +49,10 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     const [loading, setLoading] = useState<boolean>(false)
     const [error, setError] = useState<string>("")
     const [showCreate, setShowCreate] = useState<boolean>(false)
-    const [revealed, setRevealed] = useState<Record<number, string>>({})
+    const [resetSent, setResetSent] = useState<Record<string, boolean>>({})
+    const [resetSending, setResetSending] = useState<Record<string, boolean>>({})
     const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
-    const [userToDelete, setUserToDelete] = useState<{ id: number; name: string | null; email: string | null } | null>(null)
+    const [userToDelete, setUserToDelete] = useState<{ id: string; name: string | null; email: string | null } | null>(null)
     const [searchQuery, setSearchQuery] = useState<string>("")
     const [currentPage, setCurrentPage] = useState<number>(0)
     const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'staff' | 'user'>('all')
@@ -80,29 +80,22 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
         load()
     }, [])
 
-    const revealPassword = async (userId: number) => {
-        if (revealed[userId]) return
+    const sendPasswordReset = async (userId: string) => {
+        setResetSending((prev) => ({ ...prev, [userId]: true }))
         try {
-            const r = await fetch(`/api/admin/userPassword?id=${userId}`)
-            if (!r.ok) return
-            const data = await r.json()
-            if (data?.password) {
-                setRevealed((prev) => ({ ...prev, [userId]: data.password }))
-            } else if (data?.error) {
-                setRevealed((prev) => ({ ...prev, [userId]: data.error }))
-            }
-        } catch {}
+            const r = await fetch("/api/admin/userPassword", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: userId }),
+            })
+            if (r.ok) setResetSent((prev) => ({ ...prev, [userId]: true }))
+        } catch {
+        } finally {
+            setResetSending((prev) => ({ ...prev, [userId]: false }))
+        }
     }
 
-    const hidePassword = (userId: number) => {
-        setRevealed((prev) => {
-            const next = { ...prev }
-            delete next[userId]
-            return next
-        })
-    }
-
-    const updateRole = async (userId: number, role: string) => {
+    const updateRole = async (userId: string, role: string) => {
         try {
             await fetch("/api/admin/users", {
                 method: "PUT",
@@ -115,7 +108,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
 
 
 
-    const deleteUser = async (userId: number) => {
+    const deleteUser = async (userId: string) => {
         const user = users.find(u => u.id === userId)
         if (!user) return
         if (user.email?.toLowerCase() === "business@alexshick.com") {
@@ -155,7 +148,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
         const sorted = [...filtered].sort((a, b) => {
             let comparison = 0
             if (sortBy === 'id') {
-                comparison = a.id - b.id
+                comparison = a.id.localeCompare(b.id)
             } else if (sortBy === 'name') {
                 comparison = (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
             } else if (sortBy === 'email') {
@@ -383,14 +376,13 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">ID</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Name</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Email</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Password</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Password Reset</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Role</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Manage</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-[#E5E7EB]">
                                         {paginatedUsers.map((u) => {
-                            const masked = revealed[u.id] ? revealed[u.id] : (u.hasPassword ? "••••••••" : "N/A")
                             return (
                                                 <tr key={u.id} className="hover:bg-purple-50">
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{u.id}</td>
@@ -398,13 +390,14 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{u.email ?? "-"}</td>
                                                     <td className="px-4 py-4">
                                         <div className="flex items-center gap-3">
-                                                            <span className="text-sm text-[#6B7280] font-mono">{masked}</span>
-                                            {u.hasPassword && !revealed[u.id] && (
-                                                                <button onClick={() => revealPassword(u.id)} className="px-2 py-1 rounded-md text-xs bg-gray-100 hover:bg-gray-200 text-[#374151]">Reveal</button>
-                                            )}
-                                            {revealed[u.id] && (
-                                                                <button onClick={() => hidePassword(u.id)} className="px-2 py-1 rounded-md text-xs bg-gray-100 hover:bg-gray-200 text-[#374151]">Hide</button>
-                                            )}
+                                            <button
+                                                onClick={() => sendPasswordReset(u.id)}
+                                                disabled={resetSending[u.id]}
+                                                className="px-2 py-1 rounded-md text-xs bg-gray-100 hover:bg-gray-200 text-[#374151] disabled:opacity-50"
+                                            >
+                                                {resetSending[u.id] ? "Sending…" : "Send reset email"}
+                                            </button>
+                                            {resetSent[u.id] && <span className="text-xs text-green-600">Sent</span>}
                                         </div>
                                     </td>
                                                     <td className="px-4 py-4">

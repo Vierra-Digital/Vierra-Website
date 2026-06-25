@@ -7,664 +7,769 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// =============================================================================
-// Auth & Users
-// =============================================================================
-
-model User {
-  id                             Int                             @id @default(autoincrement())
-  email                          String?                         @unique
-  role                           String                          @default("user")
-  passwordEnc                    String?
-  passwordResetTokens            PasswordResetToken[]
-  name                           String?
-  imageMimeType                  String?
-  imageStorageKey                String?
-  imageUpdatedAt                 DateTime?
-  emailNotifications             Boolean                         @default(true)
-  twoFactorEnabled               Boolean                         @default(false)
-  theme                          String                          @default("auto")
-  language                       String                          @default("en")
-  position                       String?
-  country                        String?
-  company_email                  String?
-  mentor                         String?
-  strikes                        String?                         @default("0/3")
-  time_zone                      String?
-  status                         String                          @default("offline")
-  lastActiveAt                   DateTime?
-  client                         Client?                         @relation("UserClient")
-  marketingTrackers              MarketingTracker[]
-  marketingYearlySummaries       MarketingYearlySummary[]
-  signedDocuments                SignedDocuments[]
-  storedFiles                    StoredFile[]
-  tokens                         UserToken[]
-  emailAccountSettings           EmailAccountSetting[]
-  emailSignatures                EmailSignature[]
-  emailTemplates                 EmailTemplate[]
-  emailOutboundMessages          EmailOutboundMessage[]
-  emailBlockedSenders            EmailBlockedSender[]
-  emailComposeDrafts             EmailComposeDraft[]
-  contacts                       Contact[]
-  contactTags                    ContactTag[]
-  contactFieldVisibilitySettings ContactFieldVisibilitySetting[]
-  gmailContactSyncStates         GmailContactSyncState[]
-  emailProviderAccounts          EmailProviderAccount[]
-
-  @@map("users")
-}
-
-model PasswordResetToken {
-  id        Int      @id @default(autoincrement())
-  token     String   @unique
-  userId    Int
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([token])
-  @@index([userId])
-  @@map("password_reset_tokens")
-}
-
-model UserToken {
-  id           Int       @id @default(autoincrement())
-  platform     String
-  accessToken  String
-  createdAt    DateTime  @default(now())
-  userId       Int
-  refreshToken String?
-  expiresAt    DateTime?
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, platform], name: "userId_platform")
-  @@map("user_tokens")
-}
-
-// =============================================================================
-// Clients & Onboarding
-// =============================================================================
-
-model Client {
-  id                       String              @id @default(cuid())
-  name                     String
-  email                    String              @unique
-  businessName             String
-  monthlyRetainerCents     Int?
-  clientGoal               Int?
-  imageMimeType            String?
-  imageStorageKey          String?
-  emailNotifications       Boolean             @default(true)
-  twoFactorEnabled         Boolean             @default(false)
-  theme                    String              @default("auto")
-  language                 String              @default("en")
-  createdAt                DateTime            @default(now())
-  updatedAt                DateTime            @updatedAt
-  isActive                 Boolean             @default(true)
-  stripeCustomerId         String?             @unique
-  stripeConnected          Boolean             @default(false)
-  stripePaymentMethodId    String?
-  stripeSubscriptionId     String?
-  stripeSubscriptionStatus String?
-  stripeCardBrand          String?
-  stripeCardLast4          String?
-  stripeConnectedAt        DateTime?
-  userId                   Int?                @unique
-  user                     User?               @relation("UserClient", fields: [userId], references: [id])
-  onboardingSessions       OnboardingSession[]
-  storedFiles              StoredFile[]
-
-  @@map("clients")
-}
-
-model OnboardingSession {
-  id              String                    @id @default(uuid())
-  clientId        String
-  createdAt       DateTime                  @default(now())
-  firstAccessedAt DateTime?
-  lastUpdatedAt   DateTime?
-  submittedAt     DateTime?
-  status          OnboardingStatus          @default(pending)
-  answers         Json?
-  expiresAt       DateTime?
-  consumedAt      DateTime?
-  tokens          OnboardingPlatformToken[]
-  client          Client                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-
-  @@index([clientId, status])
-  @@index([createdAt])
-  @@map("onboarding_sessions")
-}
-
-model OnboardingPlatformToken {
-  id           Int               @id @default(autoincrement())
-  sessionId    String
-  platform     Platform
-  accessToken  String
-  refreshToken String?
-  expiresAt    DateTime?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  session      OnboardingSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-
-  @@unique([sessionId, platform], name: "sessionId_platform")
-  @@map("onboarding_platform_tokens")
-}
-
-// =============================================================================
-// Email — Accounts, Settings & Composition
-// =============================================================================
-
-model EmailProviderAccount {
-  id              String   @id @default(cuid())
-  userId          Int
-  accountEmail    String
-  providerLabel   String?
-  smtpHost        String
-  smtpPort        Int
-  smtpSecure      Boolean  @default(true)
-  smtpUsername    String
-  smtpPasswordEnc String
-  imapHost        String?
-  imapPort        Int?
-  imapSecure      Boolean?
-  popHost         String?
-  popPort         Int?
-  popSecure       Boolean?
-  isDefaultSender Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, accountEmail], name: "email_provider_userId_accountEmail")
-  @@index([userId])
-  @@map("email_provider_accounts")
-}
-
-model EmailAccountSetting {
-  id                          String                     @id @default(cuid())
-  userId                      Int
-  accountEmail                String
-  trackingEnabled             Boolean                    @default(false)
-  openTrackingEnabled         Boolean                    @default(true)
-  clickTrackingEnabled        Boolean                    @default(true)
-  vacationResponderEnabled    Boolean                    @default(false)
-  vacationSubject             String?
-  vacationBodyHtml            String?                    @db.Text
-  vacationBodyText            String?                    @db.Text
-  vacationStartAt             DateTime?
-  vacationEndAt               DateTime?
-  vacationReplyFrequencyHours Int                        @default(24)
-  createdAt                   DateTime                   @default(now())
-  updatedAt                   DateTime                   @updatedAt
-  user                        User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  vacationResponseLogs        EmailVacationResponseLog[]
-
-  @@unique([userId, accountEmail], name: "userId_accountEmail")
-  @@index([userId])
-  @@map("email_account_settings")
-}
-
-model EmailSignature {
-  id            String   @id @default(cuid())
-  userId        Int
-  accountEmail  String?
-  name          String
-  signatureHtml String?  @db.Text
-  signatureText String?  @db.Text
-  isDefault     Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, accountEmail])
-  @@map("email_signatures")
-}
-
-model EmailTemplate {
-  id           String   @id @default(cuid())
-  userId       Int
-  accountEmail String?
-  name         String
-  subject      String?
-  bodyHtml     String?  @db.Text
-  bodyText     String?  @db.Text
-  isDefault    Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, accountEmail])
-  @@map("email_templates")
-}
-
-model EmailVacationResponseLog {
-  id                    String              @id @default(cuid())
-  emailAccountSettingId String
-  senderEmail           String
-  lastSentAt            DateTime
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  emailAccountSetting   EmailAccountSetting @relation(fields: [emailAccountSettingId], references: [id], onDelete: Cascade)
-
-  @@unique([emailAccountSettingId, senderEmail], name: "emailAccountSetting_sender")
-  @@map("email_vacation_response_logs")
-}
-
-model EmailBlockedSender {
-  id           String   @id @default(cuid())
-  userId       Int
-  accountEmail String?
-  email        String
-  name         String?
-  createdAt    DateTime @default(now())
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, accountEmail, email], name: "email_blocked_sender_unique")
-  @@index([userId, accountEmail])
-  @@map("email_blocked_senders")
-}
-
-model EmailComposeDraft {
-  id           String   @id @default(cuid())
-  userId       Int
-  draftKey     String
-  accountEmail String?
-  toText       String   @db.Text
-  ccText       String?  @db.Text
-  bccText      String?  @db.Text
-  showCc       Boolean  @default(false)
-  showBcc      Boolean  @default(false)
-  subject      String
-  bodyText     String   @db.Text
-  bodyHtml     String?  @db.Text
-  previewHtml  String?  @db.Text
-  threadId     String?
-  inReplyTo    String?
-  references   String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, draftKey], name: "email_compose_drafts_userId_draftKey_key")
-  @@index([userId, accountEmail])
-  @@map("email_compose_drafts")
-}
-
-// =============================================================================
-// Email — Outbound Messages & Tracking
-// =============================================================================
-
-model EmailOutboundMessage {
-  id              String                   @id @default(cuid())
-  userId          Int
-  accountEmail    String
-  gmailMessageId  String?
-  threadId        String?
-  subject         String?
-  bodyHtml        String?                  @db.Text
-  bodyText        String?                  @db.Text
-  trackingEnabled Boolean                  @default(false)
-  openToken       String?                  @unique
-  createdAt       DateTime                 @default(now())
-  user            User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  recipients      EmailOutboundRecipient[]
-  trackingLinks   EmailTrackingLink[]
-  trackingEvents  EmailTrackingEvent[]
-
-  @@index([userId, accountEmail, createdAt])
-  @@index([gmailMessageId])
-  @@map("email_outbound_messages")
-}
-
-model EmailOutboundRecipient {
-  id                String               @id @default(cuid())
-  outboundMessageId String
-  email             String
-  recipientType     EmailRecipientType
-  createdAt         DateTime             @default(now())
-  outboundMessage   EmailOutboundMessage @relation(fields: [outboundMessageId], references: [id], onDelete: Cascade)
-
-  @@index([outboundMessageId, email])
-  @@map("email_outbound_recipients")
-}
-
-model EmailTrackingLink {
-  id                String               @id @default(cuid())
-  outboundMessageId String
-  token             String               @unique
-  originalUrl       String               @db.Text
-  createdAt         DateTime             @default(now())
-  outboundMessage   EmailOutboundMessage @relation(fields: [outboundMessageId], references: [id], onDelete: Cascade)
-  events            EmailTrackingEvent[]
-
-  @@index([outboundMessageId])
-  @@map("email_tracking_links")
-}
-
-model EmailTrackingEvent {
-  id                String                 @id @default(cuid())
-  outboundMessageId String
-  trackingLinkId    String?
-  eventType         EmailTrackingEventType
-  recipientEmail    String?
-  ipHash            String?
-  userAgent         String?
-  occurredAt        DateTime               @default(now())
-  outboundMessage   EmailOutboundMessage   @relation(fields: [outboundMessageId], references: [id], onDelete: Cascade)
-  trackingLink      EmailTrackingLink?     @relation(fields: [trackingLinkId], references: [id], onDelete: SetNull)
-
-  @@index([outboundMessageId, occurredAt])
-  @@index([eventType, occurredAt])
-  @@map("email_tracking_events")
-}
-
-// =============================================================================
-// Contacts
-// =============================================================================
-
-model Contact {
-  id                String                 @id @default(cuid())
-  userId            Int
-  accountEmail      String?
-  source            ContactSource          @default(MANUAL)
-  firstName         String?
-  lastName          String?
-  email             String
-  phone             String?
-  business          String?
-  website           String?
-  address           String?
-  gmailResourceName String?
-  gmailEtag         String?
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
-  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tags              ContactTagAssignment[]
-
-  @@unique([userId, accountEmail, email], name: "userId_accountEmail_email")
-  @@index([userId, accountEmail])
-  @@index([userId, source])
-  @@map("contacts")
-}
-
-model ContactTag {
-  id          String                 @id @default(cuid())
-  userId      Int
-  name        String
-  color       String                 @default("#701CC0")
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
-  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  assignments ContactTagAssignment[]
-
-  @@unique([userId, name], name: "userId_name")
-  @@index([userId])
-  @@map("contact_tags")
-}
-
-model ContactTagAssignment {
-  id        String     @id @default(cuid())
-  contactId String
-  tagId     String
-  createdAt DateTime   @default(now())
-  contact   Contact    @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  tag       ContactTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
-
-  @@unique([contactId, tagId], name: "contactId_tagId")
-  @@index([tagId])
-  @@map("contact_tag_assignments")
-}
-
-model ContactFieldVisibilitySetting {
-  id           String   @id @default(cuid())
-  userId       Int
-  accountEmail String?
-  showPhone    Boolean  @default(true)
-  showBusiness Boolean  @default(true)
-  showWebsite  Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, accountEmail], name: "contact_visibility_userId_accountEmail")
-  @@index([userId])
-  @@map("contact_field_visibility_settings")
-}
-
-model GmailContactSyncState {
-  id             String    @id @default(cuid())
-  userId         Int
-  accountEmail   String
-  nextSyncToken  String?
-  lastSyncAt     DateTime?
-  lastFullSyncAt DateTime?
-  lastSyncStatus String?
-  lastError      String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, accountEmail], name: "gmail_contact_sync_userId_accountEmail")
-  @@index([userId])
-  @@map("gmail_contact_sync_states")
-}
-
-// =============================================================================
-// Blog
-// =============================================================================
-
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model Author {
-  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name      String
-  email     String?
-  bio       String?
-  blogPosts BlogPost[]
+  id         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  email      String?
+  bio        String?
+  blog_posts BlogPost[]
 
   @@map("authors")
 }
 
-model BlogPost {
-  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  author_id      String    @db.Uuid
-  title          String
-  description    String?
-  content        String
-  published_date DateTime  @default(now()) @db.Timestamptz(6)
-  updated_date   DateTime? @db.Timestamptz(6)
-  created_at     DateTime  @default(now()) @db.Timestamptz(6)
-  slug           String    @unique
-  visits         Int?      @default(0)
-  tag            String?
-  author         Author    @relation(fields: [author_id], references: [id])
-
-  @@index([author_id])
-  @@map("blog_posts")
-}
-
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model BlogImage {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  storageKey String?  @map("storage_key")
-  mimeType   String   @map("mime_type")
-  filename   String?
-  createdAt  DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  mime_type   String
+  filename    String?
+  storage_key String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
 
   @@map("blog_images")
 }
 
-// =============================================================================
-// Marketing
-// =============================================================================
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model BlogPostTag {
+  post_id    String     @db.Uuid
+  tag_id     String     @db.Uuid
+  blog_posts BlogPost @relation(fields: [post_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  blog_tags  BlogTag  @relation(fields: [tag_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
+  @@map("blog_post_tags")
+  @@id([post_id, tag_id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model BlogPostView {
+  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  post_id    String     @db.Uuid
+  ip_hash    String?
+  user_agent String?
+  viewed_at  DateTime   @default(now()) @db.Timestamptz(6)
+  blog_posts BlogPost @relation(fields: [post_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("blog_post_views")
+  @@index([post_id], map: "idx_blog_post_views_post_id")
+  @@index([viewed_at], map: "idx_blog_post_views_viewed_at")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model BlogPost {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  author_id       String            @db.Uuid
+  title           String
+  slug            String            @unique
+  content         String
+  description     String?
+  published_date  DateTime          @default(now()) @db.Timestamptz(6)
+  updated_date    DateTime?         @db.Timestamptz(6)
+  created_at      DateTime          @default(now()) @db.Timestamptz(6)
+  tag             String?
+  visits          Int?              @default(0)
+  blog_post_tags  BlogPostTag[]
+  blog_post_views BlogPostView[]
+  authors         Author           @relation(fields: [author_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("blog_posts")
+  @@index([author_id], map: "idx_blog_posts_author_id")
+  @@index([slug], map: "idx_blog_posts_slug")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model BlogTag {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String           @unique
+  blog_post_tags BlogPostTag[]
+
+  @@map("blog_tags")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ClientBilling {
+  client_id                  String    @id @db.Uuid
+  stripe_customer_id         String?
+  stripe_card_brand          String?
+  stripe_card_last4          String?
+  stripe_connected           Boolean   @default(false)
+  stripe_connected_at        DateTime? @db.Timestamptz(6)
+  stripe_payment_method_id   String?
+  stripe_subscription_id     String?
+  stripe_subscription_status String?
+  monthly_retainer_cents     Int?
+  updated_at                 DateTime  @default(now()) @db.Timestamptz(6)
+  clients                    Client   @relation(fields: [client_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("client_billing")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Client {
+  id                               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id                       String                @db.Uuid
+  assigned_to                      String?               @db.Uuid
+  name                             String
+  email                            String
+  business_name                    String
+  is_active                        Boolean               @default(true)
+  client_goal                      Int?
+  language                         String                @default("en")
+  theme                            String                @default("auto")
+  two_factor_enabled               Boolean               @default(false)
+  email_notifications              Boolean               @default(true)
+  image_storage_key                String?
+  image_mime_type                  String?
+  created_at                       DateTime              @default(now()) @db.Timestamptz(6)
+  updated_at                       DateTime              @default(now()) @db.Timestamptz(6)
+  user_id                          String?               @unique @db.Uuid
+  client_billing                   ClientBilling?
+  users_clients_assigned_toTousers User?         @relation("clients_assigned_toTousers", fields: [assigned_to], references: [id], onUpdate: NoAction)
+  companies                        Company             @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_clients_user_idTousers     User?         @relation("clients_user_idTousers", fields: [user_id], references: [id], onUpdate: NoAction)
+  onboarding_sessions              OnboardingSession[]
+  stored_files                     StoredFile[]
+
+  @@map("clients")
+  @@index([assigned_to], map: "idx_clients_assigned_to")
+  @@index([company_id], map: "idx_clients_company_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Company {
+  id                      String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                    String
+  slug                    String                    @unique
+  plan                    String                    @default("free")
+  created_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  clients                 Client[]
+  company_memberships     CompanyMembership[]
+  email_provider_accounts EmailProviderAccount[]
+  invitations             Invitation[]
+  login_attempts          LoginAttempt[]
+  marketing_tracker       MarketingTracker[]
+  onboarding_sessions     OnboardingSession[]
+  project_boards          ProjectBoard[]
+  project_tasks           ProjectTask[]
+  signed_documents        SignedDocument[]
+  stored_files            StoredFile[]
+
+  @@map("companies")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model CompanyMembership {
+  id                                         String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id                                 String        @db.Uuid
+  user_id                                    String        @unique(map: "one_company_per_user") @db.Uuid
+  role                                       String        @default("member")
+  position                                   String?
+  mentor_id                                  String?       @db.Uuid
+  status                                     String        @default("offline")
+  strikes                                    Int           @default(0)
+  joined_at                                  DateTime      @default(now()) @db.Timestamptz(6)
+  companies                                  Company     @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users_company_memberships_mentor_idTousers User? @relation("company_memberships_mentor_idTousers", fields: [mentor_id], references: [id], onUpdate: NoAction)
+  users_company_memberships_user_idTousers   User  @relation("company_memberships_user_idTousers", fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("company_memberships")
+  @@unique([company_id, user_id], map: "uq_company_user")
+  @@index([company_id], map: "idx_company_memberships_company_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ContactFieldVisibilitySetting {
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                 String                   @db.Uuid
+  account_id              String?                  @db.Uuid
+  show_phone              Boolean                  @default(true)
+  show_business           Boolean                  @default(true)
+  show_website            Boolean                  @default(true)
+  created_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  email_provider_accounts EmailProviderAccount? @relation(fields: [account_id], references: [id], onUpdate: NoAction)
+  users                   User             @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("contact_field_visibility_settings")
+  @@index([user_id], map: "idx_contact_field_visibility_user_id")
+  @@unique([user_id, account_id], map: "uq_contact_field_visibility_user_account")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ContactTagAssignment {
+  contact_id   String       @db.Uuid
+  tag_id       String       @db.Uuid
+  created_at   DateTime     @default(now()) @db.Timestamptz(6)
+  contacts     Contact     @relation(fields: [contact_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  contact_tags ContactTag @relation(fields: [tag_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("contact_tag_assignments")
+  @@id([contact_id, tag_id])
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ContactTag {
+  id                      String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                 String                    @db.Uuid
+  name                    String
+  color                   String                    @default("#701CC0")
+  created_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  contact_tag_assignments ContactTagAssignment[]
+  users                   User              @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("contact_tags")
+  @@index([user_id], map: "idx_contact_tags_user_id")
+  @@unique([user_id, name], map: "uq_contact_tags_user_name")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Contact {
+  id                      String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                 String                    @db.Uuid
+  account_id              String?                   @db.Uuid
+  source                  String                    @default("manual")
+  first_name              String?
+  last_name               String?
+  email                   String
+  phone                   String?
+  business                String?
+  website                 String?
+  address                 String?
+  gmail_resource_name     String?
+  gmail_etag              String?
+  created_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                  @default(now()) @db.Timestamptz(6)
+  contact_tag_assignments ContactTagAssignment[]
+  email_provider_accounts EmailProviderAccount?  @relation(fields: [account_id], references: [id], onUpdate: NoAction)
+  users                   User              @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("contacts")
+  @@index([user_id], map: "idx_contacts_user_id")
+  @@unique([user_id, account_id, email], map: "uq_contacts_user_account_email")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model EmailAccountSetting {
+  id                             String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  account_id                     String                         @db.Uuid
+  tracking_enabled               Boolean                        @default(false)
+  open_tracking_enabled          Boolean                        @default(true)
+  click_tracking_enabled         Boolean                        @default(true)
+  vacation_responder_enabled     Boolean                        @default(false)
+  vacation_subject               String?
+  vacation_body_html             String?
+  vacation_body_text             String?
+  vacation_start_at              DateTime?                      @db.Timestamptz(6)
+  vacation_end_at                DateTime?                      @db.Timestamptz(6)
+  vacation_reply_frequency_hours Int                            @default(24)
+  created_at                     DateTime                       @default(now()) @db.Timestamptz(6)
+  updated_at                     DateTime                       @default(now()) @db.Timestamptz(6)
+  email_provider_accounts        EmailProviderAccount        @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  email_vacation_response_logs   EmailVacationResponseLog[]
+
+  @@map("email_account_settings")
+  @@unique([account_id], map: "uq_email_account_settings_account_id")
+  @@index([account_id], map: "idx_email_account_settings_account_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model EmailBlockedSender {
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                 String                   @db.Uuid
+  account_id              String?                  @db.Uuid
+  email                   String
+  name                    String?
+  created_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  email_provider_accounts EmailProviderAccount? @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                   User             @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("email_blocked_senders")
+  @@index([user_id], map: "idx_email_blocked_senders_user_id")
+  @@unique([user_id, account_id, email], map: "uq_email_blocked_senders_user_account_email")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model EmailComposeDraft {
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                 String                   @db.Uuid
+  account_id              String?                  @db.Uuid
+  draft_key               String
+  to_text                 String
+  cc_text                 String?
+  bcc_text                String?
+  show_cc                 Boolean                  @default(false)
+  show_bcc                Boolean                  @default(false)
+  subject                 String
+  body_text               String
+  body_html               String?
+  preview_html            String?
+  thread_id               String?
+  in_reply_to             String?
+  references              String?
+  created_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  email_provider_accounts EmailProviderAccount? @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                   User             @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("email_compose_drafts")
+  @@unique([user_id, draft_key], map: "uq_email_compose_drafts")
+  @@index([user_id], map: "idx_email_compose_drafts_user_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model EmailOutboundMessage {
+  id                        String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                   String                      @db.Uuid
+  account_id                String                      @db.Uuid
+  gmail_message_id          String?
+  thread_id                 String?
+  subject                   String?
+  body_html                 String?
+  body_text                 String?
+  tracking_enabled          Boolean                     @default(false)
+  open_token                String?
+  created_at                DateTime                    @default(now()) @db.Timestamptz(6)
+  campaign_id               String?                     @db.Uuid
+  campaign_contact_id       String?                     @db.Uuid
+  step_id                   String?                     @db.Uuid
+  email_provider_accounts   EmailProviderAccount     @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                     User                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  email_outbound_recipients EmailOutboundRecipient[]
+  email_tracking_events     EmailTrackingEvent[]
+  email_tracking_links      EmailTrackingLink[]
+
+  @@map("email_outbound_messages")
+  @@index([account_id], map: "idx_email_outbound_messages_account_id")
+  @@index([campaign_id], map: "idx_email_outbound_messages_campaign_id")
+  @@index([user_id], map: "idx_email_outbound_messages_user_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model EmailOutboundRecipient {
+  id                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  outbound_message_id     String                  @db.Uuid
+  email                   String
+  recipient_type          String
+  created_at              DateTime                @default(now()) @db.Timestamptz(6)
+  email_outbound_messages EmailOutboundMessage @relation(fields: [outbound_message_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("email_outbound_recipients")
+  @@index([outbound_message_id], map: "idx_email_outbound_recipients_message_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model EmailProviderAccount {
+  id                                String                              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id                        String                              @db.Uuid
+  user_id                           String                              @db.Uuid
+  account_email                     String
+  provider_label                    String?
+  smtp_host                         String
+  smtp_port                         Int
+  smtp_secure                       Boolean                             @default(true)
+  smtp_username                     String
+  smtp_password_enc                 String
+  imap_host                         String?
+  imap_port                         Int?
+  imap_secure                       Boolean?
+  pop_host                          String?
+  pop_port                          Int?
+  pop_secure                        Boolean?
+  is_default_sender                 Boolean                             @default(false)
+  created_at                        DateTime                            @default(now()) @db.Timestamptz(6)
+  updated_at                        DateTime                            @default(now()) @db.Timestamptz(6)
+  contact_field_visibility_settings ContactFieldVisibilitySetting[]
+  contacts                          Contact[]
+  email_account_settings            EmailAccountSetting[]
+  email_blocked_senders             EmailBlockedSender[]
+  email_compose_drafts              EmailComposeDraft[]
+  email_outbound_messages           EmailOutboundMessage[]
+  companies                         Company                           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                             User                        @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  email_signatures                  EmailSignature[]
+  email_templates                   EmailTemplate[]
+  gmail_contact_sync_states         GmailContactSyncState[]
+
+  @@map("email_provider_accounts")
+  @@unique([user_id, account_email], map: "uq_email_provider_accounts")
+  @@index([user_id], map: "idx_email_provider_accounts_user_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model EmailSignature {
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                 String                   @db.Uuid
+  account_id              String?                  @db.Uuid
+  name                    String
+  signature_html          String?
+  signature_text          String?
+  is_default              Boolean                  @default(false)
+  created_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  email_provider_accounts EmailProviderAccount? @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                   User             @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("email_signatures")
+  @@index([user_id], map: "idx_email_signatures_user_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model EmailTemplate {
+  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                 String                   @db.Uuid
+  account_id              String?                  @db.Uuid
+  name                    String
+  subject                 String?
+  body_html               String?
+  body_text               String?
+  is_default              Boolean                  @default(false)
+  created_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                 @default(now()) @db.Timestamptz(6)
+  email_provider_accounts EmailProviderAccount? @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                   User             @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("email_templates")
+  @@index([user_id], map: "idx_email_templates_user_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model EmailTrackingEvent {
+  id                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  outbound_message_id     String                  @db.Uuid
+  tracking_link_id        String?                 @db.Uuid
+  event_type              String
+  recipient_email         String?
+  ip_hash                 String?
+  user_agent              String?
+  occurred_at             DateTime                @default(now()) @db.Timestamptz(6)
+  email_outbound_messages EmailOutboundMessage @relation(fields: [outbound_message_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  email_tracking_links    EmailTrackingLink?   @relation(fields: [tracking_link_id], references: [id], onUpdate: NoAction)
+
+  @@map("email_tracking_events")
+  @@index([outbound_message_id], map: "idx_email_tracking_events_message_id")
+  @@index([occurred_at], map: "idx_email_tracking_events_occurred_at")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model EmailTrackingLink {
+  id                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  outbound_message_id     String                  @db.Uuid
+  token                   String                  @unique
+  original_url            String
+  created_at              DateTime                @default(now()) @db.Timestamptz(6)
+  email_tracking_events   EmailTrackingEvent[]
+  email_outbound_messages EmailOutboundMessage @relation(fields: [outbound_message_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("email_tracking_links")
+  @@index([outbound_message_id], map: "idx_email_tracking_links_message_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model EmailVacationResponseLog {
+  id                       String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email_account_setting_id String                 @db.Uuid
+  sender_email             String
+  last_sent_at             DateTime               @db.Timestamptz(6)
+  created_at               DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at               DateTime               @default(now()) @db.Timestamptz(6)
+  email_account_settings   EmailAccountSetting @relation(fields: [email_account_setting_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("email_vacation_response_logs")
+  @@index([email_account_setting_id], map: "idx_email_vacation_logs_setting_id")
+  @@unique([email_account_setting_id, sender_email], map: "uq_email_vacation_logs_setting_sender")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model GmailContactSyncState {
+  id                      String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                 String                  @db.Uuid
+  account_id              String                  @db.Uuid
+  next_sync_token         String?
+  last_sync_at            DateTime?               @db.Timestamptz(6)
+  last_full_sync_at       DateTime?               @db.Timestamptz(6)
+  last_sync_status        String?
+  last_error              String?
+  created_at              DateTime                @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime                @default(now()) @db.Timestamptz(6)
+  email_provider_accounts EmailProviderAccount @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                   User            @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("gmail_contact_sync_states")
+  @@index([user_id], map: "idx_gmail_contact_sync_states_user_id")
+  @@unique([user_id, account_id], map: "uq_gmail_contact_sync_user_account")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model Invitation {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id  String        @db.Uuid
+  email       String
+  role        String        @default("member")
+  token       String        @unique
+  invited_by  String?       @db.Uuid
+  expires_at  DateTime      @db.Timestamptz(6)
+  accepted_at DateTime?     @db.Timestamptz(6)
+  created_at  DateTime      @default(now()) @db.Timestamptz(6)
+  companies   Company     @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users       User? @relation(fields: [invited_by], references: [id], onUpdate: NoAction)
+
+  @@map("invitations")
+  @@index([company_id], map: "idx_invitations_company_id")
+  @@index([token], map: "idx_invitations_token")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model LoginAttempt {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id   String       @db.Uuid
+  user_id      String       @db.Uuid
+  success      Boolean
+  ip_address   String?      @db.Inet
+  user_agent   String?
+  attempted_at DateTime     @default(now()) @db.Timestamptz(6)
+  companies    Company    @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users        User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("login_attempts")
+  @@index([attempted_at], map: "idx_login_attempts_attempted_at")
+  @@index([company_id], map: "idx_login_attempts_company_id")
+  @@index([user_id], map: "idx_login_attempts_user_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model MarketingTracker {
-  id                    String   @id
-  year                  Int
-  month                 Int
-  outreach              Outreach
-  attempt               Int      @default(0)
-  meetingsSet           Int      @default(0)
-  clientsClosed         Int      @default(0)
-  revenue               Float    @default(0)
-  attemptsToMeetingsPct Float    @default(0)
-  meetingsToClientsPct  Float    @default(0)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @default(now())
-  userId                Int
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id     String       @db.Uuid
+  user_id        String       @db.Uuid
+  year           Int
+  month          Int
+  outreach       String
+  attempt        Int          @default(0)
+  meetings_set   Int          @default(0)
+  clients_closed Int          @default(0)
+  revenue_cents  Int          @default(0)
+  created_at     DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime     @default(now()) @db.Timestamptz(6)
+  companies      Company    @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users          User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@unique([userId, year, month, outreach])
   @@map("marketing_tracker")
+  @@unique([user_id, year, month, outreach], map: "uq_marketing_tracker")
+  @@index([company_id], map: "idx_marketing_tracker_company_id")
+  @@index([user_id], map: "idx_marketing_tracker_user_id")
 }
 
-model MarketingYearlySummary {
-  id                    String   @id
-  year                  Int
-  totalAttempt          Int      @default(0)
-  totalMeetingsSet      Int      @default(0)
-  totalClientsLosed     Int      @default(0)
-  totalRevenue          Float    @default(0)
-  attemptsToMeetingsPct Float    @default(0)
-  meetingsToClientsPct  Float    @default(0)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @default(now())
-  userId                Int
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model OnboardingPlatformToken {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  session_id          String              @db.Uuid
+  platform            String
+  access_token        String
+  refresh_token       String?
+  expires_at          DateTime?           @db.Timestamptz(6)
+  created_at          DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime            @default(now()) @db.Timestamptz(6)
+  onboarding_sessions OnboardingSession @relation(fields: [session_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  @@unique([userId, year])
-  @@map("marketing_yearly_summary")
+  @@map("onboarding_platform_tokens")
+  @@index([session_id], map: "idx_onboarding_platform_tokens_session_id")
+  @@unique([session_id, platform], map: "uq_onboarding_platform_tokens_session_platform")
 }
 
-// =============================================================================
-// Documents & Signing
-// =============================================================================
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model OnboardingSession {
+  id                         String                       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id                 String                       @db.Uuid
+  client_id                  String                       @db.Uuid
+  status                     String                       @default("pending")
+  answers                    Json?
+  expires_at                 DateTime?                    @db.Timestamptz(6)
+  first_accessed_at          DateTime?                    @db.Timestamptz(6)
+  last_updated_at            DateTime?                    @db.Timestamptz(6)
+  submitted_at               DateTime?                    @db.Timestamptz(6)
+  consumed_at                DateTime?                    @db.Timestamptz(6)
+  created_at                 DateTime                     @default(now()) @db.Timestamptz(6)
+  onboarding_platform_tokens OnboardingPlatformToken[]
+  clients                    Client                      @relation(fields: [client_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  companies                  Company                    @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-model SignedDocuments {
-  id               String   @id
-  originalFilename String
-  signedPdfData    Bytes
-  fileSize         Int
-  signedAt         DateTime @default(now())
-  signerEmail      String?
-  sessionToken     String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime
-  userId           Int
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("onboarding_sessions")
+  @@index([client_id], map: "idx_onboarding_sessions_client_id")
+  @@index([company_id], map: "idx_onboarding_sessions_company_id")
+}
 
-  @@index([userId])
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model PlatformToken {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String       @db.Uuid
+  platform      String
+  access_token  String
+  refresh_token String?
+  expires_at    DateTime?    @db.Timestamptz(6)
+  created_at    DateTime     @default(now()) @db.Timestamptz(6)
+  users         User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("platform_tokens")
+  @@index([user_id], map: "idx_platform_tokens_user_id")
+  @@unique([user_id, platform], map: "uq_platform_tokens_user_platform")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ProjectBoard {
+  id            String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id    String          @db.Uuid
+  name          String
+  created_at    DateTime        @default(now()) @db.Timestamptz(6)
+  companies     Company       @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  project_tasks ProjectTask[]
+
+  @@map("project_boards")
+  @@index([company_id], map: "idx_project_boards_company_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ProjectTask {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id       String             @db.Uuid
+  board_id         String             @db.Uuid
+  name             String
+  description      String
+  status           String             @default("not_started")
+  checklist        Json?
+  deadline         DateTime?          @db.Timestamptz(6)
+  created_by       String?            @db.Uuid
+  created_at       DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime           @default(now()) @db.Timestamptz(6)
+  project_boards   ProjectBoard     @relation(fields: [board_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  companies        Company          @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users            User?      @relation(fields: [created_by], references: [id], onUpdate: NoAction)
+  task_assignments TaskAssignment[]
+
+  @@map("project_tasks")
+  @@index([board_id], map: "idx_project_tasks_board_id")
+  @@index([company_id], map: "idx_project_tasks_company_id")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model SignedDocument {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id        String            @db.Uuid
+  user_id           String            @db.Uuid
+  original_filename String
+  pdf_storage_key   String
+  file_size         Int
+  signer_email      String?
+  session_token     String?
+  signed_at         DateTime          @default(now()) @db.Timestamptz(6)
+  created_at        DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime          @default(now()) @db.Timestamptz(6)
+  companies         Company         @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  signing_sessions  SigningSession? @relation(fields: [session_token], references: [token], onUpdate: NoAction)
+  users             User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
   @@map("signed_documents")
+  @@index([company_id], map: "idx_signed_documents_company_id")
+  @@index([user_id], map: "idx_signed_documents_user_id")
 }
 
-model StoredFile {
-  id                  String   @id @default(cuid())
-  name                String
-  signingTokenId      String
-  fileType            String   @default("pdf")
-  storageKey          String? // Object-storage key in the private `documents` bucket
-  isDeletionProtected Boolean  @default(false)
-  createdAt           DateTime @default(now())
-  userId              Int?
-  user                User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  clientId            String?
-  client              Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([clientId])
-  @@map("stored_files")
-}
-
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model SigningSession {
-  token            String   @id
-  originalFilename String
-  pdfBase64        String?  @db.Text
-  fields           Json?
-  status           String   @default("pending")
-  signerEmail      String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  token             String             @id
+  original_filename String
+  pdf_storage_key   String?
+  fields            Json?
+  status            String             @default("pending")
+  signer_email      String?
+  created_at        DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime           @default(now()) @db.Timestamptz(6)
+  signed_documents  SignedDocument[]
 
   @@map("signing_sessions")
 }
 
-// =============================================================================
-// Project Management
-// =============================================================================
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model StoredFile {
+  id                    String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id            String        @db.Uuid
+  user_id               String?       @db.Uuid
+  client_id             String?       @db.Uuid
+  name                  String
+  signing_token_id      String?
+  file_type             String        @default("pdf")
+  storage_key           String?
+  is_deletion_protected Boolean       @default(false)
+  created_at            DateTime      @default(now()) @db.Timestamptz(6)
+  clients               Client?      @relation(fields: [client_id], references: [id], onUpdate: NoAction)
+  companies             Company     @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                 User? @relation(fields: [user_id], references: [id], onUpdate: NoAction)
 
-model ProjectTask {
-  id          String            @id @default(cuid())
-  board       ProjectBoard
-  name        String
-  description String            @db.Text
-  checklist   Json? // [{ text: string, completed: boolean }]
-  status      ProjectTaskStatus @default(NotStarted)
-  assignedTo  Json? // [userId: number]
-  deadline    DateTime?
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-
-  @@index([board])
-  @@map("project_tasks")
+  @@map("stored_files")
+  @@index([client_id], map: "idx_stored_files_client_id")
+  @@index([company_id], map: "idx_stored_files_company_id")
 }
 
-// =============================================================================
-// Enums
-// =============================================================================
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model TaskAssignment {
+  task_id       String        @db.Uuid
+  user_id       String        @db.Uuid
+  assigned_at   DateTime      @default(now()) @db.Timestamptz(6)
+  project_tasks ProjectTask @relation(fields: [task_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users         User  @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-enum OnboardingStatus {
-  pending
-  in_progress
-  completed
-  expired
-  canceled
+  @@map("task_assignments")
+  @@id([task_id, user_id])
+  @@index([user_id], map: "idx_task_assignments_user_id")
 }
 
-enum Platform {
-  facebook
-  googleads
-  linkedin
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model UserPreference {
+  user_id             String       @id @db.Uuid
+  language            String       @default("en")
+  theme               String       @default("auto")
+  time_zone           String?
+  country             String?
+  email_notifications Boolean      @default(true)
+  image_storage_key   String?
+  image_mime_type     String?
+  image_updated_at    DateTime?    @db.Timestamptz(6)
+  users               User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("user_preferences")
 }
 
-enum Outreach {
-  facebook
-  googleads
-  linkedin
-  emailingplatform
-  instagram
-  coldcall
-  coldmail
-  coldmessage
-  walkinnetworking
-  autoresponder
-  other
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model User {
+  id                                                            String                              @id @db.Uuid
+  email                                                         String                              @unique
+  name                                                          String?
+  created_at                                                    DateTime                            @default(now()) @db.Timestamptz(6)
+  updated_at                                                    DateTime                            @default(now()) @db.Timestamptz(6)
+  clients_clients_assigned_toTousers                            Client[]                           @relation("clients_assigned_toTousers")
+  clients_clients_user_idTousers                                Client?                            @relation("clients_user_idTousers")
+  company_memberships_company_memberships_mentor_idTousers      CompanyMembership[]               @relation("company_memberships_mentor_idTousers")
+  company_memberships_company_memberships_user_idTousers        CompanyMembership?                @relation("company_memberships_user_idTousers")
+  contact_field_visibility_settings                             ContactFieldVisibilitySetting[]
+  contact_tags                                                  ContactTag[]
+  contacts                                                      Contact[]
+  email_blocked_senders                                         EmailBlockedSender[]
+  email_compose_drafts                                          EmailComposeDraft[]
+  email_outbound_messages                                       EmailOutboundMessage[]
+  email_provider_accounts                                       EmailProviderAccount[]
+  email_signatures                                              EmailSignature[]
+  email_templates                                               EmailTemplate[]
+  gmail_contact_sync_states                                     GmailContactSyncState[]
+  invitations                                                   Invitation[]
+  login_attempts                                                LoginAttempt[]
+  marketing_tracker                                             MarketingTracker[]
+  platform_tokens                                               PlatformToken[]
+  project_tasks                                                 ProjectTask[]
+  signed_documents                                              SignedDocument[]
+  stored_files                                                  StoredFile[]
+  task_assignments                                              TaskAssignment[]
+  user_preferences                                              UserPreference?
+
+  @@map("users")
 }
 
-enum EmailRecipientType {
-  TO
-  CC
-  BCC
-}
-
-enum EmailTrackingEventType {
-  OPEN
-  CLICK
-}
-
-enum ContactSource {
-  MANUAL
-  GMAIL
-  CSV
-}
-
-enum ProjectBoard {
-  Design
-  Development
-  Outreach
-  Leadership
-}
-
-enum ProjectTaskStatus {
-  NotStarted
-  Ongoing
-  UnderReview
-  Completed
-}

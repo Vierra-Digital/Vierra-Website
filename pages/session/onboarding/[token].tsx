@@ -1014,7 +1014,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
 
   const sess = await prisma.onboardingSession.findUnique({
     where: { id: token },
-    include: { client: true },
+    include: { clients: { include: { client_billing: { select: { monthly_retainer_cents: true } } } } },
   });
 
   if (!sess) return { notFound: true };
@@ -1033,15 +1033,15 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   return {
     props: {
       initialSession: {
-        clientName: sess.client.name,
-        clientEmail: sess.client.email,
-        businessName: sess.client.businessName,
-        monthlyRetainer: typeof sess.client.monthlyRetainerCents === "number" ? sess.client.monthlyRetainerCents / 100 : null,
+        clientName: sess.clients.name,
+        clientEmail: sess.clients.email,
+        businessName: sess.clients.business_name,
+        monthlyRetainer: typeof sess.clients.client_billing?.monthly_retainer_cents === "number" ? sess.clients.client_billing.monthly_retainer_cents / 100 : null,
         token: sess.id,
-        createdAt: new Date(sess.createdAt).getTime(),
+        createdAt: new Date(sess.created_at).getTime(),
         answers: (sess.answers as any) || {},
         status: sess.status,
-        submittedAt: sess.submittedAt ? new Date(sess.submittedAt).getTime() : null,
+        submittedAt: sess.submitted_at ? new Date(sess.submitted_at).getTime() : null,
       },
     },
   };

@@ -10,53 +10,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ message: "Method Not Allowed" });
   }
 
+  const { companyId } = session;
+
   try {
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        lastActiveAt: true,
-        status: true,
-      },
+    // In v2, last_active_at is not tracked on the model; set all members offline as default.
+    const result = await prisma.companyMembership.updateMany({
+      where: { company_id: companyId, status: { not: "offline" } },
+      data: { status: "offline" },
     });
 
-    const now = new Date();
-    const updates = [];
-
-    for (const user of users) {
-      if (!user.lastActiveAt) {
-        if (user.status !== "offline") {
-          updates.push({ id: user.id, status: "offline" });
-        }
-        continue;
-      }
-
-      const lastActive = new Date(user.lastActiveAt);
-      const diffMinutes = (now.getTime() - lastActive.getTime()) / (1000 * 60);
-      
-      let newStatus = "offline";
-      if (diffMinutes <= 10) {
-        newStatus = "online";
-      } else if (diffMinutes <= 30) {
-        newStatus = "away";
-      }
-      if (user.status !== newStatus) {
-        updates.push({ id: user.id, status: newStatus });
-      }
-    }
-    if (updates.length > 0) {
-      await Promise.all(
-        updates.map(update =>
-          prisma.user.update({
-            where: { id: update.id },
-            data: { status: update.status },
-          })
-        )
-      );
-    }
-
-    return res.status(200).json({ 
-      message: "Status updated successfully", 
-      updatedCount: updates.length 
+    return res.status(200).json({
+      message: "Status updated successfully",
+      updatedCount: result.count,
     });
   } catch (e) {
     console.error("admin/updateUserStatus", e);

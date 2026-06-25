@@ -131,12 +131,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const session = await requireSession(req, res);
     if (!session) { res.redirect("/login"); return; }
-    const userId = Number((session.user as any).id);
+    const userId = (session.user as any).id;
 
-    await prisma.userToken.upsert({
-      where: { userId_platform: { userId, platform: "linkedin" } as any },
-      update: { accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
-      create: { userId, platform: "linkedin", accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
+    await prisma.platformToken.upsert({
+      where: { user_id_platform: { user_id: userId, platform: "linkedin" } },
+      update: { access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
+      create: { user_id: userId, platform: "linkedin", access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
     });
 
     res.redirect(connectedRedirect);
@@ -147,11 +147,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!sess) {
     const session = await requireSession(req, res);
     if (session) {
-      const userId = Number((session.user as any).id);
-      await prisma.userToken.upsert({
-        where: { userId_platform: { userId, platform: "linkedin" } as any },
-        update: { accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
-        create: { userId, platform: "linkedin", accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
+      const userId = (session.user as any).id;
+      await prisma.platformToken.upsert({
+        where: { user_id_platform: { user_id: userId, platform: "linkedin" } },
+        update: { access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
+        create: { user_id: userId, platform: "linkedin", access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
       });
       res.redirect(connectedRedirect);
       return;
@@ -165,9 +165,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   await prisma.onboardingPlatformToken.upsert({
-    where: { sessionId_platform: { sessionId: state, platform: "linkedin" } as any },
-    update: { accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
-    create: { sessionId: state, platform: "linkedin", accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
+    where: { session_id_platform: { session_id: state, platform: "linkedin" } },
+    update: { access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
+    create: { session_id: state, platform: "linkedin", access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
   });
   setOnboardingSessionCookie(res, state);
 

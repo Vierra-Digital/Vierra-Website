@@ -1,9 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
-import { Platform } from "@prisma/client";
+import { requireSession } from "@/lib/auth";
 import { asStr, clearOauthStateCookie, readCookies } from "@/lib/api/oauth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -41,14 +39,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const expiresAt = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
 
   if (hasStateCookie) {
-    const session = await getServerSession(req, res, authOptions);
+    const session = await requireSession(req, res);
     if (!session) return res.redirect("/login");
-    const userId = Number((session.user as any).id);
+    const userId = (session.user as any).id;
 
-    await prisma.userToken.upsert({
-      where: { userId_platform: { userId, platform: Platform.facebook } },
-      update: { accessToken: enc, ...(expiresAt && { expiresAt }) },
-      create: { userId, platform: Platform.facebook, accessToken: enc, ...(expiresAt && { expiresAt }) },
+    await prisma.platformToken.upsert({
+      where: { user_id_platform: { user_id: userId, platform: "facebook" } },
+      update: { access_token: enc, ...(expiresAt && { expires_at: expiresAt }) },
+      create: { user_id: userId, platform: "facebook", access_token: enc, ...(expiresAt && { expires_at: expiresAt }) },
     });
 
     return res.redirect("/connect?connected=facebook");
@@ -56,12 +54,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const sessionId = state;
 
     await prisma.onboardingPlatformToken.upsert({
-      where: { sessionId_platform: { sessionId, platform: Platform.facebook } },
-      update: { accessToken: enc, ...(expiresAt && { expiresAt }) },
-      create: { sessionId, platform: Platform.facebook, accessToken: enc, ...(expiresAt && { expiresAt }) },
+      where: { session_id_platform: { session_id: sessionId, platform: "facebook" } },
+      update: { access_token: enc, ...(expiresAt && { expires_at: expiresAt }) },
+      create: { session_id: sessionId, platform: "facebook", access_token: enc, ...(expiresAt && { expires_at: expiresAt }) },
     });
 
     return res.redirect(`/onboarding/${sessionId}?linked=facebook`);
-
   }
 }

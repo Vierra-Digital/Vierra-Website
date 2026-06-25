@@ -9,9 +9,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const expired = await prisma.onboardingSession.updateMany({
       where: {
         status: { in: ["pending", "in_progress"] },
-        expiresAt: { not: null, lt: now },
+        expires_at: { not: null, lt: now },
       },
-      data: { status: "expired", lastUpdatedAt: now },
+      data: { status: "expired", last_updated_at: now },
     });
 
     return res.status(200).json({ updated: expired.count });

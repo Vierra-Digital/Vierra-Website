@@ -79,57 +79,57 @@ async function refreshAccessToken(refreshToken: string) {
 }
 
 export async function getValidGmailAccessToken(
-  userId: number,
+  userId: string,
   accountEmail: string,
   options?: { forceRefresh?: boolean }
 ): Promise<GmailTokenResult> {
   const normalizedEmail = accountEmail.trim().toLowerCase();
-  const row = await prisma.userToken.findUnique({
+  const row = await prisma.platformToken.findUnique({
     where: {
-      userId_platform: {
-        userId,
+      user_id_platform: {
+        user_id: userId,
         platform: `gmail:${normalizedEmail}`,
-      } as any,
+      },
     },
     select: {
-      accessToken: true,
-      refreshToken: true,
-      expiresAt: true,
+      access_token: true,
+      refresh_token: true,
+      expires_at: true,
     },
   });
 
-  if (!row?.accessToken) {
+  if (!row?.access_token) {
     return { ok: false, reason: "account_not_found", message: "Gmail account token not found." };
   }
 
-  const currentAccessToken = decrypt(row.accessToken);
-  const expiresAt = row.expiresAt || null;
+  const currentAccessToken = decrypt(row.access_token);
+  const expiresAt = row.expires_at || null;
   if (!options?.forceRefresh && !isExpiringSoon(expiresAt)) {
     return { ok: true, accessToken: currentAccessToken, expiresAt };
   }
 
-  if (!row.refreshToken) {
+  if (!row.refresh_token) {
     return { ok: false, reason: "no_refresh_token", message: "No refresh token available. Reconnect required." };
   }
 
-  const refreshToken = decrypt(row.refreshToken);
+  const refreshToken = decrypt(row.refresh_token);
   const refreshed = await refreshAccessToken(refreshToken);
   if (!refreshed.ok) {
     return { ok: false, reason: "refresh_failed", message: `Failed to refresh token: ${refreshed.error}` };
   }
 
   const nextExpiresAt = new Date(nowMs() + refreshed.expiresIn * 1000);
-  await prisma.userToken.update({
+  await prisma.platformToken.update({
     where: {
-      userId_platform: {
-        userId,
+      user_id_platform: {
+        user_id: userId,
         platform: `gmail:${normalizedEmail}`,
-      } as any,
+      },
     },
     data: {
-      accessToken: encrypt(refreshed.accessToken),
-      expiresAt: nextExpiresAt,
-      ...(refreshed.refreshToken ? { refreshToken: encrypt(refreshed.refreshToken) } : {}),
+      access_token: encrypt(refreshed.accessToken),
+      expires_at: nextExpiresAt,
+      ...(refreshed.refreshToken ? { refresh_token: encrypt(refreshed.refreshToken) } : {}),
     },
   });
 

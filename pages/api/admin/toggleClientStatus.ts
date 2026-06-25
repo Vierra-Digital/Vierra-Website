@@ -28,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     await prisma.client.update({
       where: { id: clientId },
-      data: { isActive }
+      data: { is_active: isActive },
     });
 
     res.status(200).json({ 

@@ -14,34 +14,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const session = await requireSessionOrRespond401(req, res);
     const role = getSessionRole(session);
     requireRolesOrRespond403(res, role, ["admin"]);
+    const companyId = (session as any).companyId as string;
 
     const clients = await prisma.client.findMany({
+      where: { company_id: companyId },
       select: {
         id: true,
         name: true,
         email: true,
-        businessName: true,
-        monthlyRetainerCents: true,
-        clientGoal: true,
-        imageStorageKey: true,
-        createdAt: true,
-        isActive: true,
-        onboardingSessions: {
-          orderBy: { createdAt: "desc" },
+        business_name: true,
+        client_goal: true,
+        image_storage_key: true,
+        created_at: true,
+        is_active: true,
+        client_billing: { select: { monthly_retainer_cents: true } },
+        onboarding_sessions: {
+          orderBy: { created_at: "desc" },
           take: 1,
           select: {
             answers: true,
-            expiresAt: true,
+            expires_at: true,
             status: true,
           },
         },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { created_at: "desc" },
     });
 
     const now = new Date();
     const rows = clients.map((c) => {
-      const latest = c.onboardingSessions?.[0] ?? null;
+      const latest = c.onboarding_sessions?.[0] ?? null;
       const answers: any = (latest?.answers as any) ?? {};
       const website = answers.website ?? "";
       const targetAudience = answers.targetAudience ?? "";
@@ -49,11 +51,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const brandTone = answers.brandTone ?? "N/A";
       const industry = answers.industry ?? "";
       let displayStatus: string = latest?.status ?? "pending";
-      const isExpired = latest?.expiresAt && now > latest.expiresAt;
+      const isExpired = latest?.expires_at && now > latest.expires_at;
       if (isExpired && displayStatus !== "completed") {
         displayStatus = "expired";
       }
-      if (!c.isActive) {
+      if (!c.is_active) {
         displayStatus = "inactive";
       }
 
@@ -61,18 +63,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         id: c.id,
         name: c.name,
         email: c.email,
-        businessName: c.businessName,
+        businessName: c.business_name,
         website,
         targetAudience,
         adGoal,
-        clientGoal: typeof c.clientGoal === "number" ? c.clientGoal : null,
+        clientGoal: typeof c.client_goal === "number" ? c.client_goal : null,
         brandTone,
         industry,
-        monthlyRetainer: typeof c.monthlyRetainerCents === "number" ? c.monthlyRetainerCents / 100 : null,
+        monthlyRetainer:
+          typeof c.client_billing?.monthly_retainer_cents === "number"
+            ? c.client_billing.monthly_retainer_cents / 100
+            : null,
         status: displayStatus,
-        isActive: c.isActive,
+        isActive: c.is_active,
         isExpired: isExpired || false,
-        image: Boolean(c.imageStorageKey),
+        image: Boolean(c.image_storage_key),
       };
     });
 
@@ -81,5 +86,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     handleApiError(res, "/api/admin/clients error", err, "Failed to load clients");
   }
 }
-
-

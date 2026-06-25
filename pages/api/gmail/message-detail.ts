@@ -100,7 +100,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireRole(req, res);
   if (!session) return;
 
-  const userId = Number((session.user as any).id);
+  const userId = (session.user as any).id;
   const accountEmail = (asStr(req.query.accountEmail) || "").trim().toLowerCase();
   const messageId = (asStr(req.query.messageId) || "").trim();
   if (!accountEmail || !messageId) {

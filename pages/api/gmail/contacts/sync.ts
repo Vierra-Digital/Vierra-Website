@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth";
 import { fetchGoogleContacts } from "@/lib/gmail/people";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
+import { resolveAccountId } from "@/lib/api/emailAccounts";
 
 function asStr(v: unknown) {
   return typeof v === "string" ? v.trim() : "";
@@ -17,10 +18,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireRole(req, res);
   if (!session) return;
 
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
   const accountEmail = asStr(req.body?.accountEmail).toLowerCase();
   if (!accountEmail) {
     res.status(400).json({ message: "accountEmail is required." });
+    return;
+  }
+
+  const accountId = await resolveAccountId(userId, accountEmail);
+  if (!accountId) {
+    res.status(404).json({ message: "Email account not found." });
     return;
   }
 
@@ -32,15 +39,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const syncState = await prisma.gmailContactSyncState.findUnique({
     where: {
-      gmail_contact_sync_userId_accountEmail: {
-        userId,
-        accountEmail,
+      user_id_account_id: {
+        user_id: userId,
+        account_id: accountId,
       },
     },
   });
 
   const accessToken = tokenResult.accessToken;
-  let syncToken = syncState?.nextSyncToken || null;
+  let syncToken = syncState?.next_sync_token || null;
   let fullSync = false;
   let responseData: Awaited<ReturnType<typeof fetchGoogleContacts>>;
   try {
@@ -61,22 +68,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } else {
       await prisma.gmailContactSyncState.upsert({
         where: {
-          gmail_contact_sync_userId_accountEmail: {
-            userId,
-            accountEmail,
+          user_id_account_id: {
+            user_id: userId,
+            account_id: accountId,
           },
         },
         create: {
-          userId,
-          accountEmail,
-          lastSyncAt: new Date(),
-          lastSyncStatus: "error",
-          lastError: message,
+          user_id: userId,
+          account_id: accountId,
+          last_sync_at: new Date(),
+          last_sync_status: "error",
+          last_error: message,
         },
         update: {
-          lastSyncAt: new Date(),
-          lastSyncStatus: "error",
-          lastError: message,
+          last_sync_at: new Date(),
+          last_sync_status: "error",
+          last_error: message,
         },
       });
       res.status(502).json({ message });
@@ -89,36 +96,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!person.email) continue;
     await prisma.contact.upsert({
       where: {
-        userId_accountEmail_email: {
-          userId,
-          accountEmail,
+        user_id_account_id_email: {
+          user_id: userId,
+          account_id: accountId,
           email: person.email.toLowerCase(),
         },
       },
       create: {
-        userId,
-        accountEmail,
-        source: "GMAIL",
-        firstName: person.firstName || null,
-        lastName: person.lastName || null,
+        user_id: userId,
+        account_id: accountId,
+        source: "gmail",
+        first_name: person.firstName || null,
+        last_name: person.lastName || null,
         email: person.email.toLowerCase(),
         phone: person.phone || null,
         business: person.business || null,
         website: person.website || null,
         address: person.address || null,
-        gmailResourceName: person.resourceName || null,
-        gmailEtag: person.etag || null,
+        gmail_resource_name: person.resourceName || null,
+        gmail_etag: person.etag || null,
       },
       update: {
-        source: "GMAIL",
-        firstName: person.firstName || null,
-        lastName: person.lastName || null,
+        source: "gmail",
+        first_name: person.firstName || null,
+        last_name: person.lastName || null,
         phone: person.phone || null,
         business: person.business || null,
         website: person.website || null,
         address: person.address || null,
-        gmailResourceName: person.resourceName || null,
-        gmailEtag: person.etag || null,
+        gmail_resource_name: person.resourceName || null,
+        gmail_etag: person.etag || null,
       },
     });
     upserted += 1;
@@ -126,29 +133,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   await prisma.gmailContactSyncState.upsert({
     where: {
-      gmail_contact_sync_userId_accountEmail: {
-        userId,
-        accountEmail,
+      user_id_account_id: {
+        user_id: userId,
+        account_id: accountId,
       },
     },
     create: {
-      userId,
-      accountEmail,
-      nextSyncToken: responseData.nextSyncToken,
-      lastSyncAt: new Date(),
-      lastFullSyncAt: fullSync || !syncToken ? new Date() : null,
-      lastSyncStatus: "ok",
-      lastError: null,
+      user_id: userId,
+      account_id: accountId,
+      next_sync_token: responseData.nextSyncToken,
+      last_sync_at: new Date(),
+      last_full_sync_at: fullSync || !syncToken ? new Date() : null,
+      last_sync_status: "ok",
+      last_error: null,
     },
     update: {
-      nextSyncToken: responseData.nextSyncToken,
-      lastSyncAt: new Date(),
-      ...(fullSync || !syncToken ? { lastFullSyncAt: new Date() } : {}),
-      lastSyncStatus: "ok",
-      lastError: null,
+      next_sync_token: responseData.nextSyncToken,
+      last_sync_at: new Date(),
+      ...(fullSync || !syncToken ? { last_full_sync_at: new Date() } : {}),
+      last_sync_status: "ok",
+      last_error: null,
     },
   });
-  await syncContactsSpreadsheetForUser({ userId });
+  await syncContactsSpreadsheetForUser({ userId, companyId: session.companyId });
 
   res.status(200).json({
     ok: true,

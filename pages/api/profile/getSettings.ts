@@ -18,11 +18,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const user = await prisma.user.findUnique({
       where: { email: userEmail },
-      select: { 
-        emailNotifications: true,
-        twoFactorEnabled: true,
-        theme: true,
-        language: true
+      select: {
+        user_preferences: { select: { email_notifications: true, theme: true, language: true } },
       },
     });
 
@@ -30,7 +27,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ message: "User not found" });
     }
 
-    return res.status(200).json(user);
+    const prefs = user.user_preferences;
+    return res.status(200).json({
+      emailNotifications: prefs?.email_notifications ?? true,
+      theme: prefs?.theme ?? "auto",
+      language: prefs?.language ?? "en",
+    });
   } catch (e) {
     console.error("profile/getSettings", e);
     return res.status(500).json({ message: "Internal Server Error" });

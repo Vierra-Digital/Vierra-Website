@@ -1,8 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
+import { requireRole } from "@/lib/auth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
+
+  const session = await requireRole(req, res);
+  if (!session) return;
+  const { companyId } = session;
 
   const { clientName, clientEmail, businessName, industry, monthlyRetainer, clientGoal } = req.body ?? {};
   if (!clientName || !clientEmail || !businessName) {
@@ -20,38 +25,59 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const email = String(clientEmail).toLowerCase();
-
     const token = crypto.randomUUID();
-    const client = await prisma.client.upsert({
-      where: { email },
-      create: { name: clientName, email, businessName, monthlyRetainerCents, clientGoal: clientGoalAmount },
-      update: { name: clientName, businessName, monthlyRetainerCents, clientGoal: clientGoalAmount },
-      select: { id: true, name: true, email: true, businessName: true, createdAt: true, monthlyRetainerCents: true, clientGoal: true },
+
+    let client = await prisma.client.findFirst({ where: { company_id: companyId, email } });
+    if (client) {
+      client = await prisma.client.update({
+        where: { id: client.id },
+        data: { name: clientName, business_name: businessName, client_goal: clientGoalAmount },
+      });
+    } else {
+      client = await prisma.client.create({
+        data: {
+          company_id: companyId,
+          name: clientName,
+          email,
+          business_name: businessName,
+          client_goal: clientGoalAmount,
+        },
+      });
+    }
+    await prisma.clientBilling.upsert({
+      where: { client_id: client.id },
+      create: { client_id: client.id, monthly_retainer_cents: monthlyRetainerCents },
+      update: { monthly_retainer_cents: monthlyRetainerCents },
     });
-    const session = await prisma.onboardingSession.create({
+
+    const onboardingSession = await prisma.onboardingSession.create({
       data: {
         id: token,
-        clientId: client.id,
+        client_id: client.id,
+        company_id: companyId,
         status: "pending",
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+        expires_at: new Date(Date.now() + 60 * 60 * 1000),
         answers: { industry },
       },
-      select: { id: true, createdAt: true, submittedAt: true, status: true, answers: true },
+      select: { id: true, created_at: true, submitted_at: true, status: true, answers: true },
     });
 
     return res.status(200).json({
-      link: `/onboarding/${token}`, token,
+      link: `/onboarding/${token}`,
+      token,
       summary: {
-        token: session.id,
+        token: onboardingSession.id,
         clientName: client.name,
         clientEmail: client.email,
-        businessName: client.businessName,
-        monthlyRetainer: client.monthlyRetainerCents ? client.monthlyRetainerCents / 100 : null,
-        clientGoal: client.clientGoal ?? null,
-        createdAt: new Date(session.createdAt).getTime(),
-        submittedAt: session.submittedAt ? new Date(session.submittedAt).getTime() : null,
-        status: session.status ?? "pending",
-        hasAnswers: !!session.answers,
+        businessName: client.business_name,
+        monthlyRetainer: monthlyRetainerCents / 100,
+        clientGoal: client.client_goal ?? null,
+        createdAt: new Date(onboardingSession.created_at).getTime(),
+        submittedAt: onboardingSession.submitted_at
+          ? new Date(onboardingSession.submitted_at).getTime()
+          : null,
+        status: onboardingSession.status ?? "pending",
+        hasAnswers: !!onboardingSession.answers,
       },
     });
   } catch (err) {

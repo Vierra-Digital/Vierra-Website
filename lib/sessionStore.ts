@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getFileBuffer, putFileAsset, STORAGE_BUCKETS, toStorageKeySegment } from "@/lib/storage";
 
 type PdfFieldType = "signature" | "date" | "text";
 
@@ -34,15 +35,15 @@ export interface SessionData {
   signerEmail?: string;
 }
 
-function toSessionData(row: {
+async function toSessionData(row: {
   token: string;
-  originalFilename: string;
-  pdfBase64: string | null;
+  original_filename: string;
+  pdf_storage_key: string | null;
   fields: unknown;
   status: string;
-  signerEmail: string | null;
-  createdAt: Date;
-}): SessionData {
+  signer_email: string | null;
+  created_at: Date;
+}): Promise<SessionData> {
   const fields = (row.fields as PdfField[] | null) ?? undefined;
   const firstSig = fields?.find((f) => f.type === "signature");
   const coordinates = firstSig
@@ -55,16 +56,18 @@ function toSessionData(row: {
       }
     : undefined;
 
+  const pdfBuffer = await getFileBuffer(STORAGE_BUCKETS.docs, row.pdf_storage_key);
+
   return {
     token: row.token,
-    originalFilename: row.originalFilename,
+    originalFilename: row.original_filename,
     pdfPath: "",
-    pdfBase64: row.pdfBase64 ?? undefined,
+    pdfBase64: pdfBuffer ? pdfBuffer.toString("base64") : undefined,
     coordinates,
     fields,
     status: row.status as SessionData["status"],
-    createdAt: row.createdAt.getTime(),
-    signerEmail: row.signerEmail ?? undefined,
+    createdAt: row.created_at.getTime(),
+    signerEmail: row.signer_email ?? undefined,
   };
 }
 
@@ -74,7 +77,7 @@ export async function getSessionData(tokenId: string): Promise<SessionData | nul
       where: { token: tokenId },
     });
     if (!row) return null;
-    return toSessionData(row);
+    return await toSessionData(row);
   } catch (error) {
     console.error(`Error reading signing session ${tokenId}:`, error);
     return null;
@@ -83,24 +86,34 @@ export async function getSessionData(tokenId: string): Promise<SessionData | nul
 
 export async function saveSessionData(tokenId: string, data: SessionData): Promise<void> {
   try {
+    let pdfStorageKey: string | undefined;
+    if (data.pdfBase64) {
+      pdfStorageKey = await putFileAsset(
+        STORAGE_BUCKETS.docs,
+        `documents/signing/${toStorageKeySegment(tokenId)}.pdf`,
+        Buffer.from(data.pdfBase64, "base64"),
+        "application/pdf"
+      );
+    }
+
     await prisma.signingSession.upsert({
       where: { token: tokenId },
       create: {
         token: tokenId,
-        originalFilename: data.originalFilename,
-        pdfBase64: data.pdfBase64 ?? null,
+        original_filename: data.originalFilename,
+        pdf_storage_key: pdfStorageKey ?? null,
         fields: data.fields != null ? (data.fields as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
         status: data.status,
-        signerEmail: data.signerEmail ?? null,
-        updatedAt: new Date(),
+        signer_email: data.signerEmail ?? null,
+        updated_at: new Date(),
       },
       update: {
-        originalFilename: data.originalFilename,
-        pdfBase64: data.pdfBase64 ?? null,
+        original_filename: data.originalFilename,
+        ...(pdfStorageKey !== undefined ? { pdf_storage_key: pdfStorageKey } : {}),
         fields: data.fields != null ? (data.fields as unknown as Prisma.InputJsonValue) : Prisma.JsonNull,
         status: data.status,
-        signerEmail: data.signerEmail ?? null,
-        updatedAt: new Date(),
+        signer_email: data.signerEmail ?? null,
+        updated_at: new Date(),
       },
     });
   } catch (error) {

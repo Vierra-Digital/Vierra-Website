@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
 /**
  * Markdown mirror routing.
@@ -26,8 +27,35 @@ function mirrorPathFor(pathname: string): string | null {
   return null;
 }
 
-export function middleware(req: NextRequest) {
+/** Copies Set-Cookie entries from a source response onto a target response. */
+function carryCookies(from: NextResponse, to: NextResponse): NextResponse {
+  from.cookies.getAll().forEach((cookie) => to.cookies.set(cookie));
+  return to;
+}
+
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Refresh the Supabase session cookie on every matched request — required by
+  // @supabase/ssr so expiring tokens get renewed before any page/route reads them.
+  let refreshed = NextResponse.next({ request: req });
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return req.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value));
+          refreshed = NextResponse.next({ request: req });
+          cookiesToSet.forEach(({ name, value, options }) => refreshed.cookies.set(name, value, options));
+        },
+      },
+    }
+  );
+  await supabase.auth.getUser();
 
   // /llms.txt — index of Markdown mirrors for AI agents and tools.
   if (pathname === "/llms.txt") {
@@ -36,7 +64,7 @@ export function middleware(req: NextRequest) {
     url.search = "";
     const headers = new Headers(req.headers);
     headers.set("x-md-path", "__llms__");
-    return NextResponse.rewrite(url, { request: { headers } });
+    return carryCookies(refreshed, NextResponse.rewrite(url, { request: { headers } }));
   }
 
   if (pathname.endsWith(".md")) {
@@ -51,22 +79,21 @@ export function middleware(req: NextRequest) {
     url.search = "";
     const headers = new Headers(req.headers);
     headers.set("x-md-path", route === "" ? "index" : route);
-    return NextResponse.rewrite(url, { request: { headers } });
+    return carryCookies(refreshed, NextResponse.rewrite(url, { request: { headers } }));
   }
 
   // For content pages, advertise the Markdown mirror via a Link header so
   // crawlers and AI fetchers can discover it.
   const mdPath = mirrorPathFor(pathname);
   if (mdPath) {
-    const res = NextResponse.next();
-    res.headers.set(
+    refreshed.headers.set(
       "Link",
       `<${SITE_URL}${mdPath}>; rel="alternate"; type="text/markdown"`
     );
-    return res;
+    return refreshed;
   }
 
-  return NextResponse.next();
+  return refreshed;
 }
 
 export const config = {

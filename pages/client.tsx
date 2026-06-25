@@ -11,9 +11,8 @@ import { HiOutlineDocumentText } from "react-icons/hi"
 import { CiSearch } from "react-icons/ci"
 import { RiArrowDropDownLine } from "react-icons/ri"
 import { useRouter } from "next/router"
-import { useSession, signOut } from "next-auth/react"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/pages/api/auth/[...nextauth]"
+import { useSession, signOut } from "@/lib/session-client"
+import { requireSession } from "@/lib/auth"
 import type { GetServerSideProps } from "next"
 import dynamic from "next/dynamic"
 
@@ -259,7 +258,7 @@ const ClientPage = () => {
 }
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const session = await getServerSession(ctx.req, ctx.res, authOptions)
+  const session = await requireSession(ctx.req, ctx.res)
   if (!session) {
     return { redirect: { destination: "/login", permanent: false } }
   }

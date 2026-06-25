@@ -2,6 +2,8 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
+import { resolveAccountId } from "@/lib/api/emailAccounts";
+import { serializeContact } from "@/lib/api/contacts";
 
 function asStr(v: unknown) {
   return typeof v === "string" ? v.trim() : "";
@@ -14,12 +16,12 @@ function asQueryStr(v: string | string[] | undefined) {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireRole(req, res);
   if (!session) return;
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
 
   if (req.method === "GET") {
     const accountEmail = asQueryStr(req.query.accountEmail).trim().toLowerCase();
     const search = asQueryStr(req.query.search).trim();
-    const source = asQueryStr(req.query.source).trim().toUpperCase();
+    const source = asQueryStr(req.query.source).trim().toLowerCase();
     const tagIds = asQueryStr(req.query.tagIds)
       .split(",")
       .map((entry) => entry.trim())
@@ -29,21 +31,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 100) : 50;
 
-    const where: any = { userId };
-    if (accountEmail) where.accountEmail = accountEmail;
-    if (source && ["MANUAL", "GMAIL", "CSV"].includes(source)) where.source = source;
+    const where: any = { user_id: userId };
+    if (accountEmail) {
+      const accountId = await resolveAccountId(userId, accountEmail);
+      where.account_id = accountId ?? "__none__";
+    }
+    if (source && ["manual", "gmail", "csv"].includes(source)) where.source = source;
     if (search) {
       where.OR = [
-        { firstName: { contains: search, mode: "insensitive" } },
-        { lastName: { contains: search, mode: "insensitive" } },
+        { first_name: { contains: search, mode: "insensitive" } },
+        { last_name: { contains: search, mode: "insensitive" } },
         { email: { contains: search, mode: "insensitive" } },
         { business: { contains: search, mode: "insensitive" } },
       ];
     }
     if (tagIds.length > 0) {
-      where.tags = {
+      where.contact_tag_assignments = {
         some: {
-          tagId: { in: tagIds },
+          tag_id: { in: tagIds },
         },
       };
     }
@@ -53,13 +58,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       prisma.contact.findMany({
         where,
         include: {
-          tags: {
-            include: {
-              tag: true,
-            },
-          },
+          email_provider_accounts: { select: { account_email: true } },
+          contact_tag_assignments: { include: { contact_tags: true } },
         },
-        orderBy: [{ lastName: "asc" }, { firstName: "asc" }, { createdAt: "desc" }],
+        orderBy: [{ last_name: "asc" }, { first_name: "asc" }, { created_at: "desc" }],
         skip: (page - 1) * limit,
         take: limit,
       }),
@@ -67,8 +69,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     res.status(200).json({
       contacts: contacts.map((contact) => ({
-        ...contact,
-        tags: contact.tags.map((assignment) => assignment.tag),
+        ...serializeContact(contact),
+        tags: contact.contact_tag_assignments.map((assignment) => assignment.contact_tags),
       })),
       pagination: {
         page,
@@ -87,23 +89,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(400).json({ message: "Email is required." });
       return;
     }
+    const accountId = await resolveAccountId(userId, accountEmail);
 
     const created = await prisma.contact.create({
       data: {
-        userId,
-        accountEmail,
-        source: "MANUAL",
-        firstName: asStr(req.body?.firstName) || null,
-        lastName: asStr(req.body?.lastName) || null,
+        user_id: userId,
+        account_id: accountId,
+        source: "manual",
+        first_name: asStr(req.body?.firstName) || null,
+        last_name: asStr(req.body?.lastName) || null,
         email,
         phone: asStr(req.body?.phone) || null,
         business: asStr(req.body?.business) || null,
         website: asStr(req.body?.website) || null,
         address: asStr(req.body?.address) || null,
       },
+      include: { email_provider_accounts: { select: { account_email: true } } },
     });
-    await syncContactsSpreadsheetForUser({ userId });
-    res.status(201).json({ contact: created });
+    await syncContactsSpreadsheetForUser({ userId, companyId: session.companyId });
+    res.status(201).json({ contact: serializeContact(created) });
     return;
   }
 
