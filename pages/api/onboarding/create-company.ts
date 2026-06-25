@@ -24,6 +24,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // membership yet, so user_company_id() is null) — the admin client is
   // required here, with eligibility already verified above.
   const admin = getSupabaseAdmin();
+
+  // Ensure the auth user has a public.users row — the handle_new_auth_user
+  // trigger should do this on signup, but guard against trigger failures or
+  // users created before the trigger existed.
+  await admin.from("users").upsert(
+    { id: session.user.id, email: session.user.email },
+    { onConflict: "id", ignoreDuplicates: true }
+  );
+
   const baseSlug = slugify(companyName);
 
   for (let attempt = 0; attempt <= 5; attempt++) {
