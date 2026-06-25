@@ -500,8 +500,14 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   if (!session) {
     return { redirect: { destination: "/login", permanent: false } }
   }
-  if ((session.user as any).role !== "staff" && (session.user as any).role !== "admin") {
+  if (session.kind === "client") {
     return { redirect: { destination: "/client", permanent: false } }
+  }
+  if (session.kind !== "member") {
+    return { redirect: { destination: "/onboarding/start", permanent: false } }
+  }
+  if (session.user.role !== "staff" && session.user.role !== "admin") {
+    return { redirect: { destination: "/onboarding/start", permanent: false } }
   }
   return {
     props: {
