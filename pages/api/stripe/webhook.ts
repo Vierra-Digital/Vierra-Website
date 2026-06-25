@@ -25,14 +25,14 @@ async function savePaymentMethod(customerId: string) {
   const pm = paymentMethods.data[0]
   if (!pm) return
 
-  await prisma.client.updateMany({
-    where: { stripeCustomerId: customerId },
+  await prisma.clientBilling.updateMany({
+    where: { stripe_customer_id: customerId },
     data: {
-      stripeConnected: true,
-      stripePaymentMethodId: pm.id,
-      stripeCardBrand: pm.card?.brand ?? null,
-      stripeCardLast4: pm.card?.last4 ?? null,
-      stripeConnectedAt: new Date(),
+      stripe_connected: true,
+      stripe_payment_method_id: pm.id,
+      stripe_card_brand: pm.card?.brand ?? null,
+      stripe_card_last4: pm.card?.last4 ?? null,
+      stripe_connected_at: new Date(),
     },
   })
 }
@@ -52,16 +52,16 @@ async function saveSubscriptionFromCheckout(session: Stripe.Checkout.Session) {
   const defaultPaymentMethod = subscription.default_payment_method
   const pm = defaultPaymentMethod && typeof defaultPaymentMethod !== "string" ? defaultPaymentMethod : null
 
-  await prisma.client.updateMany({
-    where: { stripeCustomerId: customerId },
+  await prisma.clientBilling.updateMany({
+    where: { stripe_customer_id: customerId },
     data: {
-      stripeConnected: true,
-      stripeSubscriptionId: subscription.id,
-      stripeSubscriptionStatus: subscription.status,
-      stripePaymentMethodId: pm?.id ?? null,
-      stripeCardBrand: pm?.card?.brand ?? null,
-      stripeCardLast4: pm?.card?.last4 ?? null,
-      stripeConnectedAt: new Date(),
+      stripe_connected: true,
+      stripe_subscription_id: subscription.id,
+      stripe_subscription_status: subscription.status,
+      stripe_payment_method_id: pm?.id ?? null,
+      stripe_card_brand: pm?.card?.brand ?? null,
+      stripe_card_last4: pm?.card?.last4 ?? null,
+      stripe_connected_at: new Date(),
     },
   })
 }
@@ -109,12 +109,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const subscription = event.data.object as Stripe.Subscription
     const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id
 
-    await prisma.client.updateMany({
-      where: { stripeCustomerId: customerId },
+    await prisma.clientBilling.updateMany({
+      where: { stripe_customer_id: customerId },
       data: {
-        stripeSubscriptionId: subscription.id,
-        stripeSubscriptionStatus: subscription.status,
-        stripeConnected: subscription.status !== "canceled" && subscription.status !== "incomplete_expired",
+        stripe_subscription_id: subscription.id,
+        stripe_subscription_status: subscription.status,
+        stripe_connected: subscription.status !== "canceled" && subscription.status !== "incomplete_expired",
       },
     })
   }

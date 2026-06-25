@@ -45,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const token = normalizeOpenToken(asToken(req.query.token));
   if (token) {
     const outbound = await prisma.emailOutboundMessage.findFirst({
-      where: { openToken: token, trackingEnabled: true },
+      where: { open_token: token, tracking_enabled: true },
       select: { id: true },
     });
     if (outbound) {
@@ -65,26 +65,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const ipHash = hashIp(ip);
       const recentDuplicate = await prisma.emailTrackingEvent.findFirst({
         where: {
-          outboundMessageId: outbound.id,
-          eventType: "OPEN",
-          ipHash,
-          userAgent,
-          occurredAt: {
+          outbound_message_id: outbound.id,
+          event_type: "OPEN",
+          ip_hash: ipHash,
+          user_agent: userAgent,
+          occurred_at: {
             gte: new Date(Date.now() - DUPLICATE_OPEN_WINDOW_MS),
           },
         },
         select: { id: true },
       });
       if (!recentDuplicate) {
-      await prisma.emailTrackingEvent.create({
-        data: {
-          outboundMessageId: outbound.id,
-          eventType: "OPEN",
-          recipientEmail: typeof req.query.email === "string" ? req.query.email : null,
-          ipHash,
-          userAgent,
-        },
-      });
+        await prisma.emailTrackingEvent.create({
+          data: {
+            outbound_message_id: outbound.id,
+            event_type: "OPEN",
+            recipient_email: typeof req.query.email === "string" ? req.query.email : null,
+            ip_hash: ipHash,
+            user_agent: userAgent,
+          },
+        });
       }
     }
   }

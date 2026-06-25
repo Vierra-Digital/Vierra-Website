@@ -25,8 +25,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const role = ((session.user as { role?: SessionRole }).role || "user") as SessionRole;
   if (!["admin", "staff", "user"].includes(role)) return res.status(403).json({ message: "Forbidden" });
 
-  const userId = Number((session.user as { id?: string | number }).id);
-  if (Number.isNaN(userId)) return res.status(400).json({ message: "Invalid session user." });
+  const userId = (session.user as { id?: string }).id;
+  if (!userId) return res.status(400).json({ message: "Invalid session user." });
 
   const body = (req.body || {}) as PublishBody;
   const postText = (body.postText || "").trim();

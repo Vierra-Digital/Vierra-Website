@@ -22,18 +22,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const session = await prisma.onboardingSession.findUnique({
     where: { id: onboardingToken },
-    include: { client: true },
+    include: {
+      clients: {
+        include: { client_billing: true },
+      },
+    },
   })
-  if (!session || !session.client) {
+  if (!session || !session.clients) {
     return res.status(404).json({ message: "Onboarding session not found." })
   }
 
-  const client = session.client
-  if (!client.monthlyRetainerCents || client.monthlyRetainerCents <= 0) {
+  const client = session.clients
+  const billing = client.client_billing
+  const monthlyRetainerCents = billing?.monthly_retainer_cents ?? 0
+  if (!monthlyRetainerCents || monthlyRetainerCents <= 0) {
     return res.status(400).json({ message: "Monthly retainer amount is missing for this client." })
   }
 
-  let stripeCustomerId = client.stripeCustomerId
+  let stripeCustomerId = billing?.stripe_customer_id ?? null
 
   if (!stripeCustomerId) {
     const customer = await stripe.customers.create({
@@ -41,13 +47,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       email: client.email,
       metadata: {
         vierraClientId: client.id,
-        businessName: client.businessName,
+        businessName: client.business_name,
       },
     })
     stripeCustomerId = customer.id
-    await prisma.client.update({
-      where: { id: client.id },
-      data: { stripeCustomerId },
+    await prisma.clientBilling.upsert({
+      where: { client_id: client.id },
+      create: { client_id: client.id, stripe_customer_id: stripeCustomerId },
+      update: { stripe_customer_id: stripeCustomerId },
     })
   }
 
@@ -64,10 +71,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         quantity: 1,
         price_data: {
           currency: "usd",
-          unit_amount: client.monthlyRetainerCents,
+          unit_amount: monthlyRetainerCents,
           recurring: { interval: "month" },
           product_data: {
-            name: `${client.businessName} Monthly Retainer`,
+            name: `${client.business_name} Monthly Retainer`,
           },
         },
       },

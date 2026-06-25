@@ -1,19 +1,17 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import { requireRole } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { v4 as uuidv4 } from "uuid";
+
+function pct(numerator: number, denominator: number): number {
+  return denominator > 0 ? Math.round((numerator / denominator) * 100 * 100) / 100 : 0;
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await getServerSession(req, res, authOptions);
-  if (!session) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
-  }
-  const userId = Number((session.user as any).id);
+  const session = await requireRole(req, res);
+  if (!session) return;
+  const userId = session.user.id;
 
   if (req.method === "GET") {
-    
     const year = Number(req.query.year);
     const month = Number(req.query.month);
     if (!year || !month) {
@@ -21,18 +19,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return;
     }
     try {
-      const trackerData = await prisma.marketingTracker.findMany({
-        where: { userId, year, month },
+      const rows = await prisma.marketingTracker.findMany({
+        where: { user_id: userId, year, month },
         select: {
           outreach: true,
           attempt: true,
-          meetingsSet: true,
-          clientsClosed: true,
-          revenue: true,
-          attemptsToMeetingsPct: true,
-          meetingsToClientsPct: true,
+          meetings_set: true,
+          clients_closed: true,
+          revenue_cents: true,
         },
       });
+      const trackerData = rows.map((row) => ({
+        outreach: row.outreach,
+        attempt: row.attempt,
+        meetingsSet: row.meetings_set,
+        clientsClosed: row.clients_closed,
+        revenue: row.revenue_cents / 100,
+        attemptsToMeetingsPct: pct(row.meetings_set, row.attempt),
+        meetingsToClientsPct: pct(row.clients_closed, row.meetings_set),
+      }));
       res.status(200).json({ trackerData });
     } catch (e) {
       console.error("Error fetching marketing tracker:", e);
@@ -54,20 +59,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     for (const tracker of trackerData) {
-      const {
-        outreach,
-        attempt,
-        meetingsSet,
-        clientsClosed,
-        revenue,
-        attemptsToMeetingsPct,
-        meetingsToClientsPct,
-      } = tracker;
+      const { outreach, attempt, meetingsSet, clientsClosed, revenue } = tracker;
+      const revenueCents = Math.round(Number(revenue || 0) * 100);
 
       await prisma.marketingTracker.upsert({
         where: {
-          userId_year_month_outreach: {
-            userId,
+          user_id_year_month_outreach: {
+            user_id: userId,
             year,
             month,
             outreach,
@@ -75,27 +73,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
         update: {
           attempt,
-          meetingsSet,
-          clientsClosed,
-          revenue,
-          attemptsToMeetingsPct,
-          meetingsToClientsPct,
-          updatedAt: new Date(),
+          meetings_set: meetingsSet,
+          clients_closed: clientsClosed,
+          revenue_cents: revenueCents,
+          updated_at: new Date(),
         },
         create: {
-          id: uuidv4(),
-          userId,
+          company_id: session.companyId,
+          user_id: userId,
           year,
           month,
           outreach,
           attempt,
-          meetingsSet,
-          clientsClosed,
-          revenue,
-          attemptsToMeetingsPct,
-          meetingsToClientsPct,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          meetings_set: meetingsSet,
+          clients_closed: clientsClosed,
+          revenue_cents: revenueCents,
         },
       });
     }

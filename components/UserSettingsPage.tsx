@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { signOut } from "next-auth/react";
+import { signOut } from "@/lib/session-client";
 import ProfileImage from "./ProfileImage";
 import ImageCropModal from "./ImageCropModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";

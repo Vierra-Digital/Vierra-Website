@@ -123,12 +123,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
   const uniqueAccounts = Array.from(new Set(items.map((item) => item.accountEmail)));
   const tokenMap = new Map<string, string | null>();
   for (const accountEmail of uniqueAccounts) {
     const tokenResult = await getValidGmailAccessToken(userId, accountEmail);
     tokenMap.set(accountEmail, tokenResult.ok ? tokenResult.accessToken : null);
+  }
+  // Resolve accountEmail -> account_id for outbound message cleanup
+  const accountIdMap = new Map<string, string | null>();
+  if (uniqueAccounts.length > 0) {
+    const providerAccounts = await prisma.emailProviderAccount.findMany({
+      where: { user_id: userId, account_email: { in: uniqueAccounts } },
+      select: { id: true, account_email: true },
+    });
+    for (const pa of providerAccounts) {
+      accountIdMap.set(pa.account_email.toLowerCase(), pa.id);
+    }
   }
 
   const results = await Promise.all(
@@ -171,11 +182,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (successfulItems.length > 0) {
       await prisma.emailOutboundMessage.deleteMany({
         where: {
-          userId,
-          OR: successfulItems.map((item) => ({
-            accountEmail: item.accountEmail,
-            gmailMessageId: item.messageId,
-          })),
+          user_id: userId,
+          OR: successfulItems
+            .map((item) => {
+              const accountId = accountIdMap.get(item.accountEmail.toLowerCase());
+              if (!accountId) return null;
+              return { account_id: accountId, gmail_message_id: item.messageId };
+            })
+            .filter((c): c is { account_id: string; gmail_message_id: string } => c !== null),
         },
       });
     }

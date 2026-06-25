@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
+import { resolveAccountId } from "@/lib/api/emailAccounts";
 
 function asStr(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -9,16 +10,17 @@ function asStr(value: unknown) {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireRole(req, res);
   if (!session) return;
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
 
   if (req.method === "GET") {
     const accountEmail = asStr(req.query.accountEmail).toLowerCase();
+    const accountId = accountEmail ? await resolveAccountId(userId, accountEmail) : null;
     const rows = await prisma.emailBlockedSender.findMany({
       where: {
-        userId,
-        ...(accountEmail ? { accountEmail } : {}),
+        user_id: userId,
+        ...(accountId ? { account_id: accountId } : {}),
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { created_at: "desc" },
     });
     res.status(200).json({ blocked: rows });
     return;
@@ -31,8 +33,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(400).json({ message: "email is required." });
       return;
     }
+    const accountId = accountEmail ? await resolveAccountId(userId, accountEmail) : null;
     const existing = await prisma.emailBlockedSender.findFirst({
-      where: { userId, email, ...(accountEmail ? { accountEmail } : { accountEmail: null }) },
+      where: { user_id: userId, email, account_id: accountId },
       select: { id: true },
     });
     const row = existing
@@ -42,8 +45,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         })
       : await prisma.emailBlockedSender.create({
           data: {
-            userId,
-            accountEmail,
+            user_id: userId,
+            account_id: accountId,
             email,
             name: asStr(req.body?.name) || null,
           },
@@ -59,7 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return;
     }
     const row = await prisma.emailBlockedSender.findFirst({
-      where: { id, userId },
+      where: { id, user_id: userId },
       select: { id: true },
     });
     if (!row) {
@@ -73,4 +76,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   res.status(405).json({ message: "Method Not Allowed" });
 }
-

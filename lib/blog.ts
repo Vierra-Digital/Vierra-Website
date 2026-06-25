@@ -21,11 +21,9 @@ export type SerializedPost = {
 };
 
 // Always pull just the author name alongside a post.
-const withAuthorName = { include: { author: { select: { name: true } } } } as const;
+const withAuthorName = { include: { authors: { select: { name: true } } } } as const;
 
-// Convert a Prisma BlogPost (+author) into a JSON-serializable plain object.
-// Centralizing this prevents `Date` fields (e.g. created_at) from leaking into
-// getServerSideProps/getStaticProps props, which Next cannot serialize.
+// Convert a Prisma BlogPost (+authors relation) into a JSON-serializable plain object.
 function serialize(post: {
   id: string;
   title: string;
@@ -36,7 +34,7 @@ function serialize(post: {
   visits: number | null;
   published_date: Date;
   updated_date: Date | null;
-  author: { name: string };
+  authors: { name: string } | null;
 }): SerializedPost {
   return {
     id: post.id,
@@ -48,7 +46,7 @@ function serialize(post: {
     visits: post.visits ?? null,
     published_date: post.published_date.toISOString(),
     updated_date: post.updated_date ? post.updated_date.toISOString() : null,
-    author: { name: post.author?.name ?? "Vierra" },
+    author: { name: post.authors?.name ?? "Vierra" },
   };
 }
 
@@ -100,7 +98,7 @@ export async function getBlogCatalog(limit = 90): Promise<CatalogPost[]> {
       slug: true,
       tag: true,
       published_date: true,
-      author: { select: { name: true } },
+      authors: { select: { name: true } },
     },
   });
   return posts.map((p) => ({
@@ -115,7 +113,7 @@ export async function getBlogCatalog(limit = 90): Promise<CatalogPost[]> {
     slug: p.slug,
     tag: p.tag ?? null,
     published_date: p.published_date.toISOString(),
-    author: { name: p.author?.name ?? "Vierra" },
+    author: { name: p.authors?.name ?? "Vierra" },
   }));
 }
 
@@ -136,7 +134,7 @@ export async function getRelatedPosts(
         {
           OR: [
             ...tagList.map((t) => ({ tag: { contains: t, mode: "insensitive" as const } })),
-            { author: { name: opts.authorName } },
+            { authors: { name: opts.authorName } },
           ],
         },
       ],
@@ -160,7 +158,7 @@ export async function getPostsByTag(tag: string, limit = 50): Promise<Serialized
 
 export async function getPostsByAuthor(name: string, limit = 50): Promise<SerializedPost[]> {
   const posts = await prisma.blogPost.findMany({
-    where: { author: { name } },
+    where: { authors: { name } },
     orderBy: { published_date: "desc" },
     take: limit,
     ...withAuthorName,

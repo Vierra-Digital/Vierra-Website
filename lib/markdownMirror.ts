@@ -73,14 +73,14 @@ export async function getBlogPostMarkdown(slug: string): Promise<string | null> 
       content: true,
       published_date: true,
       tag: true,
-      author: { select: { name: true } },
+      authors: { select: { name: true } },
     },
   });
   if (!post) return null;
 
   const canonical = `${SITE_URL}/blog/${slug}`;
   const meta: string[] = [];
-  if (post.author?.name) meta.push(`By **${post.author.name}**`);
+  if (post.authors?.name) meta.push(`By **${post.authors.name}**`);
   if (post.published_date) meta.push(formatDate(post.published_date));
   const tags = (post.tag ?? "")
     .split(",")
@@ -101,7 +101,7 @@ type PostListItem = {
   title: string;
   description: string | null;
   published_date: Date;
-  author: { name: string } | null;
+  authors: { name: string } | null;
 };
 
 function renderPostList(posts: PostListItem[]): string {
@@ -109,7 +109,7 @@ function renderPostList(posts: PostListItem[]): string {
   return posts
     .map((p) => {
       const date = p.published_date ? formatDate(p.published_date) : "";
-      const by = p.author?.name ? ` — ${p.author.name}` : "";
+      const by = p.authors?.name ? ` — ${p.authors.name}` : "";
       const meta = [date, by.replace(/^ — /, "")].filter(Boolean).join(" · ");
       const desc = p.description ? `\n  ${p.description}` : "";
       return `- [${p.title}](${SITE_URL}/blog/${p.slug}.md)${meta ? ` _(${meta})_` : ""}${desc}`;
@@ -131,7 +131,7 @@ export async function getBlogIndexMarkdown(): Promise<string> {
       title: true,
       description: true,
       published_date: true,
-      author: { select: { name: true } },
+      authors: { select: { name: true } },
     },
     orderBy: { published_date: "desc" },
   });
@@ -154,7 +154,7 @@ export async function getTagMarkdown(tag: string): Promise<string | null> {
       description: true,
       published_date: true,
       tag: true,
-      author: { select: { name: true } },
+      authors: { select: { name: true } },
     },
     orderBy: { published_date: "desc" },
   });
@@ -324,13 +324,13 @@ export async function getLlmsTxt(): Promise<string> {
 
 export async function getAuthorMarkdown(name: string): Promise<string | null> {
   const posts = await prisma.blogPost.findMany({
-    where: { author: { name } },
+    where: { authors: { name } },
     select: {
       slug: true,
       title: true,
       description: true,
       published_date: true,
-      author: { select: { name: true } },
+      authors: { select: { name: true } },
     },
     orderBy: { published_date: "desc" },
   });

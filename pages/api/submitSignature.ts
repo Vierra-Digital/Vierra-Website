@@ -144,7 +144,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         try {
             const storedFiles = await prisma.storedFile.findMany({
-                where: { signingTokenId: tokenId },
+                where: { signing_token_id: tokenId },
                 select: { id: true },
             });
             if (storedFiles.length > 0) {
@@ -155,8 +155,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                     "application/pdf"
                 );
                 await prisma.storedFile.updateMany({
-                    where: { signingTokenId: tokenId },
-                    data: { storageKey },
+                    where: { signing_token_id: tokenId },
+                    data: { storage_key: storageKey },
                 });
                 console.log(`[submit-signature] Saved signed PDF to storage for ${storedFiles.length} stored file(s), token ${tokenId}`);
             }

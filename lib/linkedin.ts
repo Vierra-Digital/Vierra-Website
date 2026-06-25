@@ -25,94 +25,85 @@ function buildHeaders(token: string, version: string, extra?: Record<string, str
   };
 }
 
-async function getEncryptedUserLinkedInToken(userId: number) {
-  return prisma.userToken.findUnique({
-    where: {
-      userId_platform: {
-        userId,
-        platform: "linkedin",
-      } as any,
-    },
-    select: { accessToken: true },
+async function getEncryptedUserLinkedInToken(userId: string) {
+  return prisma.platformToken.findUnique({
+    where: { user_id_platform: { user_id: userId, platform: "linkedin" } },
+    select: { access_token: true },
   });
 }
 
 async function getLatestOnboardingLinkedInToken(clientId: string) {
   return prisma.onboardingPlatformToken.findFirst({
     where: {
-      platform: "linkedin" as any,
-      session: { clientId },
-    } as any,
-    orderBy: { updatedAt: "desc" },
-    select: {
-      accessToken: true,
-      refreshToken: true,
-      expiresAt: true,
+      platform: "linkedin",
+      onboarding_sessions: { client_id: clientId },
     },
+    orderBy: { updated_at: "desc" },
+    select: { access_token: true, refresh_token: true, expires_at: true },
   });
 }
 
-async function getClientForSessionUser(userId: number) {
+async function getClientForSessionUser(userId: string) {
   return prisma.client.findUnique({
-    where: { userId },
+    where: { user_id: userId },
     select: { id: true },
   });
 }
 
 export async function resolveLinkedInTokenForContext(params: {
-  sessionUserId: number;
+  sessionUserId: string;
   role: SessionRole;
   clientId?: string | null;
 }) {
   const { sessionUserId, role, clientId } = params;
 
   const ownToken = await getEncryptedUserLinkedInToken(sessionUserId);
-  if (ownToken && !clientId) return decrypt(ownToken.accessToken);
+  if (ownToken && !clientId) return decrypt(ownToken.access_token);
 
   if (role === "user") {
-    if (ownToken) return decrypt(ownToken.accessToken);
+    if (ownToken) return decrypt(ownToken.access_token);
     const client = await getClientForSessionUser(sessionUserId);
     if (!client) return null;
     const onboardingToken = await getLatestOnboardingLinkedInToken(client.id);
-    return onboardingToken ? decrypt(onboardingToken.accessToken) : null;
+    return onboardingToken ? decrypt(onboardingToken.access_token) : null;
   }
 
   if (clientId) {
     const client = await prisma.client.findUnique({
       where: { id: clientId },
-      select: { id: true, userId: true },
+      select: { id: true, user_id: true },
     });
     if (!client) return null;
 
-    if (client.userId) {
-      const clientUserToken = await getEncryptedUserLinkedInToken(client.userId);
-      if (clientUserToken) return decrypt(clientUserToken.accessToken);
+    if (client.user_id) {
+      const clientUserToken = await getEncryptedUserLinkedInToken(client.user_id);
+      if (clientUserToken) return decrypt(clientUserToken.access_token);
     }
 
     const onboardingToken = await getLatestOnboardingLinkedInToken(client.id);
     if (onboardingToken) {
-      if (client.userId) {
-        await prisma.userToken.upsert({
-          where: { userId_platform: { userId: client.userId, platform: "linkedin" } as any },
+      if (client.user_id) {
+        await prisma.platformToken.upsert({
+          where: { user_id_platform: { user_id: client.user_id, platform: "linkedin" } },
           update: {
-            accessToken: onboardingToken.accessToken,
-            refreshToken: onboardingToken.refreshToken || undefined,
-            expiresAt: onboardingToken.expiresAt || undefined,
+            access_token: onboardingToken.access_token,
+            refresh_token: onboardingToken.refresh_token ?? undefined,
+            expires_at: onboardingToken.expires_at ?? undefined,
           },
           create: {
-            userId: client.userId,
+            user_id: client.user_id,
             platform: "linkedin",
-            accessToken: onboardingToken.accessToken,
-            refreshToken: onboardingToken.refreshToken || undefined,
-            expiresAt: onboardingToken.expiresAt || undefined,
+            access_token: onboardingToken.access_token,
+            refresh_token: onboardingToken.refresh_token ?? undefined,
+            expires_at: onboardingToken.expires_at ?? undefined,
           },
         });
       }
-      return decrypt(onboardingToken.accessToken);
+      return decrypt(onboardingToken.access_token);
     }
   }
 
-  return ownToken ? decrypt(ownToken.accessToken) : null;
+  return ownToken ? decrypt(ownToken.access_token) : null;
 }
 
 export async function linkedInRequest<T>(
@@ -194,4 +185,3 @@ export async function resolveCompanyTargets(token: string) {
 
   return orgs;
 }
-

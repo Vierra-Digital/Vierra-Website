@@ -1,9 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { Platform } from "@prisma/client";
 
 const asStr = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 async function isFbTokenValid(token: string) {
@@ -31,12 +29,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (sessionId) {
     try {
       const row = await prisma.onboardingPlatformToken.findUnique({
-        where: { sessionId_platform: { sessionId, platform: Platform.facebook } },
-        select: { accessToken: true },
+        where: { session_id_platform: { session_id: sessionId, platform: "facebook" } },
+        select: { access_token: true },
       });
       if (!row) return res.status(200).json({ connected: false });
 
-      const token = decrypt(row.accessToken);
+      const token = decrypt(row.access_token);
       const connected = await isFbTokenValid(token);
       return res.status(200).json({ connected });
     } catch (e) {
@@ -44,18 +42,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(200).json({ connected: false });
     }
   }
-  const session = await getServerSession(req, res, authOptions);
+  const session = await requireSession(req, res);
   if (!session) return res.status(401).json({ connected: false });
 
-  const userId = Number((session.user as any).id);
+  const userId = (session.user as any).id;
   try {
-    const row = await prisma.userToken.findUnique({
-      where: { userId_platform: { userId, platform: Platform.facebook } },
-      select: { accessToken: true },
+    const row = await prisma.platformToken.findUnique({
+      where: { user_id_platform: { user_id: userId, platform: "facebook" } },
+      select: { access_token: true },
     });
     if (!row) return res.status(200).json({ connected: false });
 
-    const token = decrypt(row.accessToken);
+    const token = decrypt(row.access_token);
     const connected = await isFbTokenValid(token);
     return res.status(200).json({ connected });
   } catch (e) {

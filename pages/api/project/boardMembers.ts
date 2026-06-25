@@ -1,8 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { canAccessBoard } from "@/lib/projectBoards";
-import { parseProjectBoard } from "@/lib/api/projectAccess";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireRole(req, res, ["admin", "staff"]);
@@ -12,30 +10,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ message: "Method Not Allowed" });
   }
 
-  const board = parseProjectBoard(req.query.board);
-  if (!board) {
-    return res.status(400).json({ message: "Invalid or missing board" });
-  }
-
   try {
-    const users = await prisma.user.findMany({
-      where: {
-        OR: [{ role: "admin" }, { role: "staff" }],
-      },
+    const memberships = await prisma.companyMembership.findMany({
+      where: { company_id: session.companyId },
       select: {
-        id: true,
-        name: true,
-        email: true,
-        position: true,
         role: true,
+        position: true,
+        users_company_memberships_user_idTousers: {
+          select: { id: true, name: true, email: true },
+        },
       },
     });
 
-    const members = users.filter((u) => {
-      if (u.role === "admin") return true;
-      const pos = u.position ?? null;
-      return canAccessBoard(pos, board);
-    });
+    const members = memberships.map((m) => ({
+      id: m.users_company_memberships_user_idTousers.id,
+      name: m.users_company_memberships_user_idTousers.name,
+      email: m.users_company_memberships_user_idTousers.email,
+      role: m.role,
+      position: m.position,
+    }));
 
     return res.status(200).json(members);
   } catch (e) {

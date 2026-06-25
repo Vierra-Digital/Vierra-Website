@@ -36,10 +36,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const updated = await prisma.client.update({
       where: { id: String(clientId) },
       data: {
-        imageStorageKey: storageKey,
-        imageMimeType: mimeType
+        image_storage_key: storageKey,
+        image_mime_type: mimeType,
       },
-      select: { id: true, name: true, email: true, businessName: true },
+      select: { id: true, name: true, email: true, business_name: true },
     });
 
     return res.status(200).json(updated);

@@ -17,14 +17,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const onboardingSession = await prisma.onboardingSession.findUnique({
       where: { id: token },
-      select: { id: true, clientId: true }
+      select: { id: true, client_id: true }
     });
 
     if (!onboardingSession) {
       return res.status(404).json({ message: "Session not found" });
     }
 
-    const clientId = onboardingSession.clientId;
+    const clientId = onboardingSession.client_id;
     await prisma.$transaction(async (tx) => {
       await tx.onboardingSession.delete({
         where: { id: token }

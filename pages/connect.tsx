@@ -3,12 +3,11 @@ import Link from "next/link"
 import Head from "next/head"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useSession, signOut } from "next-auth/react"
+import { useSession, signOut } from "@/lib/session-client"
 import { Inter } from "next/font/google"
 import { FiFileText, FiLogOut, FiLink, FiChevronRight } from "react-icons/fi"
 import type { GetServerSideProps } from "next"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/pages/api/auth/[...nextauth]"
+import { requireSession } from "@/lib/auth"
 import UserSettingsPage from "@/components/UserSettingsPage"
 import { profileImageSrc } from "@/lib/profileImage"
 
@@ -147,12 +146,7 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
               onClick={() => setShowSettings((prev) => !prev)}
             >
               <Image
-                src={
-                  profileImageSrc(imageVersion) ??
-                  (typeof session?.user?.image === "string" && session?.user?.image?.length > 0
-                    ? session.user.image
-                    : "/assets/vierra-logo.png")
-                }
+                src={profileImageSrc(imageVersion) ?? "/assets/vierra-logo.png"}
                 alt="Profile"
                 width={48}
                 height={48}
@@ -170,7 +164,7 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
                 user={{
                   name: session?.user?.name ?? "Test User",
                   email: session?.user?.email ?? "test@vierra.com",
-                  image: profileImageSrc(imageVersion) ?? (typeof session?.user?.image === "string" && session.user.image ? session.user.image : null),
+                  image: profileImageSrc(imageVersion) ?? null,
                 }}
                 onImageUpdate={async () => {
                   const r = await fetch("/api/profile/getUser")
@@ -236,7 +230,7 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
 
 /** SSR guard: logged-in users only; admins bounce to /panel */
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const session = await getServerSession(ctx.req, ctx.res, authOptions)
+  const session = await requireSession(ctx.req, ctx.res)
   if (!session) return { redirect: { destination: "/login", permanent: false } }
   const role = (session.user as any).role
   if ((session.user as any).role !== "user") {

@@ -16,7 +16,7 @@ import { RiArrowDropDownLine, RiFolder3Line } from "react-icons/ri";
 import { FaRegFilePdf } from "react-icons/fa6";
 import { HiOutlineDocumentText } from "react-icons/hi";
 import { HiGlobeAlt } from "react-icons/hi2";
-import { useSession, signOut } from "next-auth/react"
+import { useSession, signOut } from "@/lib/session-client"
 const SignPdfSection = dynamic(
   () => import("@/components/PanelPages/SignPdfSection"),
   { ssr: false }
@@ -24,8 +24,7 @@ const SignPdfSection = dynamic(
 const AddClientModal = dynamic(() => import("@/components/ui/AddClientModal"), {
   ssr: false,
 })
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/pages/api/auth/[...nextauth]"
+import { requireSession } from "@/lib/auth"
 import type { GetServerSideProps } from "next"
 const DashboardSection = dynamic(
   () => import("@/components/PanelPages/DashboardSection"),
@@ -496,7 +495,7 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
 }
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const session = await getServerSession(ctx.req, ctx.res, authOptions)
+  const session = await requireSession(ctx.req, ctx.res)
 
   if (!session) {
     return { redirect: { destination: "/login", permanent: false } }

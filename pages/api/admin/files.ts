@@ -15,56 +15,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const { filter } = req.query
+  const companyId = (session as any).companyId as string | undefined
 
   try {
-    const rawId = (session.user as { id?: number | string })?.id
-    const uid = rawId != null ? Number(rawId) : undefined
+    const uid = (session.user as { id?: string })?.id ?? undefined
+    const NEVER_MATCH_USER_ID = "00000000-0000-0000-0000-000000000000"
 
-    const where: { userId?: number; clientId?: string } = {}
+    const where: Record<string, unknown> = {}
+    if (companyId) where.company_id = companyId
     if (role === "user") {
       const client = await prisma.client.findUnique({
-        where: { userId: uid != null && !Number.isNaN(uid) ? uid : -1 },
+        where: { user_id: uid ?? NEVER_MATCH_USER_ID },
         select: { id: true },
       })
       if (client) {
-        where.clientId = client.id
+        where.client_id = client.id
       } else {
-        where.clientId = "__none__"
+        where.client_id = "__none__"
       }
     } else if (filter === "me" || !filter) {
-      if (uid != null && !Number.isNaN(uid)) {
-        where.userId = uid
-      } else {
-        where.userId = -1
-      }
+      where.user_id = uid ?? NEVER_MATCH_USER_ID
     } else if (filter && typeof filter === "string") {
-      const num = Number(filter)
-      if (!Number.isNaN(num)) {
-        where.userId = num
-      } else {
-        where.clientId = filter
-      }
+      where.client_id = filter
     }
 
     const files = await prisma.storedFile.findMany({
       where: Object.keys(where).length ? where : undefined,
-      orderBy: { createdAt: "desc" },
+      orderBy: { created_at: "desc" },
       select: {
         id: true,
         name: true,
-        fileType: true,
-        signingTokenId: true,
-        isDeletionProtected: true,
-        createdAt: true,
-        userId: true,
-        clientId: true,
-        user: { select: { name: true } },
-        client: { select: { name: true } },
+        file_type: true,
+        signing_token_id: true,
+        is_deletion_protected: true,
+        created_at: true,
+        user_id: true,
+        client_id: true,
+        users: { select: { name: true } },
+        clients: { select: { name: true } },
       },
     })
 
     const rows = files.map((f) => {
-      const d = f.createdAt
+      const d = f.created_at
       const mm = String(d.getMonth() + 1).padStart(2, "0")
       const dd = String(d.getDate()).padStart(2, "0")
       const yyyy = d.getFullYear()
@@ -72,10 +65,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         id: f.id,
         name: f.name,
         date: `${mm}/${dd}/${yyyy}`,
-        fileType: f.fileType,
-        signingTokenId: f.signingTokenId,
-        isDeletionProtected: f.isDeletionProtected,
-        owner: f.user?.name ?? f.client?.name ?? "Unknown",
+        fileType: f.file_type,
+        signingTokenId: f.signing_token_id,
+        isDeletionProtected: f.is_deletion_protected,
+        owner: f.users?.name ?? f.clients?.name ?? "Unknown",
       }
     })
 

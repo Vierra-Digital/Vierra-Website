@@ -10,7 +10,7 @@ import Modal from "@/components/ui/Modal";
 const inter = Inter({ subsets: ["latin"] });
 
 const StaffActionsMenu: React.FC<{
-    staffId: number
+    staffId: string
     staffName: string
     onEdit: () => void
     onDelete: () => void
@@ -28,7 +28,7 @@ const StaffActionsMenu: React.FC<{
 }
 
 interface TeamRow {
-    id: number
+    id: string
     name: string
     email: string
     image: any
@@ -84,7 +84,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const [showManageModal, setShowManageModal] = useState(false)
     const [selectedStaff, setSelectedStaff] = useState<TeamRow | null>(null)
     const [showDeleteModal, setShowDeleteModal] = useState(false)
-    const [staffToDelete, setStaffToDelete] = useState<{ id: number; name: string } | null>(null)
+    const [staffToDelete, setStaffToDelete] = useState<{ id: string; name: string } | null>(null)
     const [searchTerm, setSearchTerm] = useState("")
     const [sortBy, setSortBy] = useState<"position" | "country" | "strikes" | "status">("position")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
@@ -111,7 +111,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         setShowManageModal(true)
     }
 
-    const handleDeleteStaff = (staffId: number, staffName: string) => {
+    const handleDeleteStaff = (staffId: string, staffName: string) => {
         setStaffToDelete({ id: staffId, name: staffName })
         setShowDeleteModal(true)
     }
@@ -445,7 +445,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                 className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium"
                             >
                                 <FiPlus className="w-4 h-4" />
-                                Add Staff
+                                Invite Teammate
                             </button>
                         )}
                         </div>
@@ -471,7 +471,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                                 className="inline-flex items-center px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
                                             >
                                                 <FiPlus className="w-4 h-4 mr-2" />
-                                                Add Staff
+                                                Invite Teammate
                                             </button>
                                         )}
                                     </div>
@@ -572,7 +572,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             </div>
 
             {showAddStaff && userRole === "admin" && (
-                <AddStaffModal
+                <InviteTeammateModal
                     onClose={() => setShowAddStaff(false)}
                     onCreated={() => {
                         setShowAddStaff(false)
@@ -614,59 +614,31 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         </div>
     )
 }
-const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = ({ onClose, onCreated }) => {
-    const [currentStep, setCurrentStep] = useState(1)
-    const [formData, setFormData] = useState({
-        name: "",
-        email: "",
-        position: "",
-        country: "",
-        company_email: "",
-        mentor: "",
-        time_zone: ""
-    })
+const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void }> = ({ onClose, onCreated }) => {
+    const [email, setEmail] = useState("")
+    const [role, setRole] = useState<"admin" | "staff">("staff")
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState("")
     const [showSuccess, setShowSuccess] = useState(false)
 
-    const steps = [
-        { number: 1, title: "Basic Information", fields: ["name", "email"] },
-        { number: 2, title: "Position & Location", fields: ["position", "country", "time_zone"] },
-        { number: 3, title: "Contact & Mentor", fields: ["company_email", "mentor"] }
-    ]
-
-    const handleInputChange = (field: string, value: string) => {
-        setFormData(prev => ({ ...prev, [field]: value }))
-    }
-
-    const nextStep = () => {
-        if (currentStep < 3) {
-            setCurrentStep(currentStep + 1)
-        }
-    }
-
-    const prevStep = () => {
-        if (currentStep > 1) {
-            setCurrentStep(currentStep - 1)
-        }
-    }
+    const isValidEmail = (value: string) => /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(value)
 
     const submit = async () => {
         setSubmitting(true)
         setError("")
         try {
-            const response = await fetch("/api/admin/addStaff", {
+            const response = await fetch("/api/admin/invitations", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(formData),
+                body: JSON.stringify({ email, role }),
             })
             if (!response.ok) {
                 const errorData = await response.json()
-                throw new Error(errorData.message || "Failed to create staff member")
+                throw new Error(errorData.message || "Failed to send invite")
             }
             setShowSuccess(true)
         } catch (e: any) {
-            setError(e?.message || "Failed to create staff member")
+            setError(e?.message || "Failed to send invite")
         } finally {
             setSubmitting(false)
         }
@@ -678,7 +650,7 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
                 zIndexClass="z-[200]"
                 backdropClassName="bg-black/50 backdrop-blur-sm"
                 cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
-                label="Staff Added"
+                label="Invite Sent"
                 onClose={() => {
                     setShowSuccess(false)
                     onCreated()
@@ -694,9 +666,9 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
                                 </span>
                             </span>
                         </div>
-                        <h3 className="text-xl font-semibold text-[#111827] mb-2">Staff Member Added Successfully!</h3>
+                        <h3 className="text-xl font-semibold text-[#111827] mb-2">Invite Sent!</h3>
                         <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
-                            The staff member has been added successfully and can now access the system.
+                            {email} will receive an email to set their password and join the team.
                         </p>
                         <button
                             className="w-full rounded-lg px-4 py-2 bg-[#701CC0] text-white hover:bg-[#5f17a5] text-sm font-medium transition-colors"
@@ -713,189 +685,50 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
         )
     }
 
-    const isStepValid = () => {
-        const currentStepData = steps[currentStep - 1]
-        return currentStepData.fields.every(field => formData[field as keyof typeof formData]?.trim())
-    }
-
-    const isValidEmail = (email: string) => {
-        const emailRegex = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i
-        return emailRegex.test(email)
-    }
-
-    const hasValidEmails = () => {
-        const mainEmailValid = formData.email ? isValidEmail(formData.email) : false
-        const companyEmailValid = formData.company_email ? isValidEmail(formData.company_email) : true
-        return mainEmailValid && companyEmailValid
-    }
-
-    const isCurrentStepEmailValid = () => {
-        if (currentStep === 1) {
-            return formData.email ? isValidEmail(formData.email) : false
-        }
-        if (currentStep === 3) {
-            return formData.company_email ? isValidEmail(formData.company_email) : true
-        }
-        return true
-    }
-
-    const positionOptions = [
-        "Founder",
-        "Leadership",
-        "Business Advisor",
-        "Developer",
-        "Designer",
-        "Outreach"
-    ]
-
     return (
         <Modal
             zIndexClass="z-50"
             backdropClassName="bg-black/50 backdrop-blur-sm"
-            cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4"
-            label="Add Staff Member"
+            cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+            label="Invite Teammate"
             onClose={onClose}
         >
                 <div className="flex items-center gap-3 mb-6">
                     <div className="w-12 h-12 rounded-full bg-[#701CC0]/10 flex items-center justify-center">
                         <FiPlus className="w-6 h-6 text-[#701CC0]" />
                     </div>
-                    <h3 className="text-xl font-semibold text-[#111827]">Add Staff Member</h3>
+                    <h3 className="text-xl font-semibold text-[#111827]">Invite Teammate</h3>
             </div>
 
-                
-                <div className="mb-6">
-                    <div className="flex items-center justify-between">
-                        {steps.map((step, index) => (
-                            <div key={step.number} className="flex items-center">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                                    currentStep >= step.number 
-                                        ? 'bg-[#701CC0] text-white' 
-                                        : 'bg-gray-200 text-gray-600'
-                                }`}>
-                                    {step.number}
-                                </div>
-                                <span className={`ml-2 text-sm ${
-                                    currentStep >= step.number ? 'text-[#701CC0] font-medium' : 'text-gray-600'
-                                }`}>
-                                    {step.title}
-                                </span>
-                                {index < steps.length - 1 && (
-                                    <div className={`w-16 h-0.5 mx-4 ${
-                                        currentStep > step.number ? 'bg-[#701CC0]' : 'bg-gray-200'
-                                    }`} />
-                                )}
-                            </div>
-                        ))}
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-[#374151] mb-2">Email</label>
+                        <input
+                            type="email"
+                            value={email}
+                            onChange={(e) => {
+                                setEmail(e.target.value)
+                                if (error) setError("")
+                            }}
+                            className={`w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
+                                email && !isValidEmail(email) ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB]'
+                            }`}
+                            placeholder="teammate@company.com"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-[#374151] mb-2">Role</label>
+                        <select
+                            value={role}
+                            onChange={(e) => setRole(e.target.value as "admin" | "staff")}
+                            className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent bg-white"
+                        >
+                            <option value="staff">Staff</option>
+                            <option value="admin">Admin</option>
+                        </select>
                     </div>
                 </div>
-
-                
-                {currentStep === 1 && (
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-[#374151] mb-2">Full Name</label>
-                            <input
-                                type="text"
-                                value={formData.name}
-                                onChange={(e) => handleInputChange("name", e.target.value)}
-                                className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                                placeholder="Enter Full Name"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-[#374151] mb-2">Email</label>
-                            <input
-                                type="email"
-                                value={formData.email}
-                                onChange={(e) => handleInputChange("email", e.target.value)}
-                                className={`w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
-                                    formData.email && !isValidEmail(formData.email) 
-                                        ? 'border-red-500 bg-red-50' 
-                                        : 'border-[#E5E7EB]'
-                                }`}
-                                placeholder="Enter Email Address"
-                                required
-                                pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
-                            />
-                        </div>
-                    </div>
-                )}
-
-                {currentStep === 2 && (
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-[#374151] mb-2">Position</label>
-                            <div className="relative">
-                                <select
-                                    value={formData.position}
-                                    onChange={(e) => handleInputChange("position", e.target.value)}
-                                    className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none bg-white"
-                                >
-                                    <option value="">Select position</option>
-                                    {positionOptions.map(option => (
-                                        <option key={option} value={option}>{option}</option>
-                                    ))}
-                                </select>
-                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                    <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </div>
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-[#374151] mb-2">Country</label>
-                            <input
-                                type="text"
-                                value={formData.country}
-                                onChange={(e) => handleInputChange("country", e.target.value)}
-                                className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                                placeholder="Enter Country"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-[#374151] mb-2">Timezone</label>
-                            <input
-                                type="text"
-                                value={formData.time_zone}
-                                onChange={(e) => handleInputChange("time_zone", e.target.value)}
-                                className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                                placeholder="E.g., EST, PST, GMT"
-                            />
-                        </div>
-                    </div>
-                )}
-
-                {currentStep === 3 && (
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-[#374151] mb-2">Company Email</label>
-                            <input
-                                type="email"
-                                value={formData.company_email}
-                                onChange={(e) => handleInputChange("company_email", e.target.value)}
-                                className={`w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
-                                    formData.company_email && !isValidEmail(formData.company_email) 
-                                        ? 'border-red-500 bg-red-50' 
-                                        : 'border-[#E5E7EB]'
-                                }`}
-                                placeholder="Company Email"
-                                pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-[#374151] mb-2">Mentor</label>
-                            <input
-                                type="text"
-                                value={formData.mentor}
-                                onChange={(e) => handleInputChange("mentor", e.target.value)}
-                                className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                                placeholder="Mentor Name"
-                            />
-                        </div>
-                    </div>
-                )}
 
                 {error && <div className="mt-4 text-sm text-red-600">{error}</div>}
 
@@ -906,41 +739,17 @@ const AddStaffModal: React.FC<{ onClose: () => void; onCreated: () => void }> = 
                     >
                         Cancel
                     </button>
-                    <div className="flex gap-3">
-                        {currentStep > 1 && (
-                            <button
-                                onClick={prevStep}
-                                className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 text-[#374151] hover:bg-gray-200"
-                            >
-                                Previous
-                            </button>
-                        )}
-                        {currentStep < 3 ? (
-                            <button
-                                onClick={nextStep}
-                                disabled={!isStepValid() || !isCurrentStepEmailValid()}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                                    !isStepValid() || !isCurrentStepEmailValid()
-                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                        : 'bg-[#701CC0] text-white hover:bg-[#5f17a5]'
-                                }`}
-                            >
-                                Next
-                            </button>
-                        ) : (
-                            <button
-                                onClick={submit}
-                                disabled={submitting || !isStepValid() || !hasValidEmails()}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                                    submitting || !isStepValid() || !hasValidEmails()
-                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                        : 'bg-[#701CC0] text-white hover:bg-[#5f17a5]'
-                                }`}
-                            >
-                                {submitting ? "Adding..." : "Add Staff Member"}
-                            </button>
-                        )}
-                    </div>
+                    <button
+                        onClick={submit}
+                        disabled={submitting || !isValidEmail(email)}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                            submitting || !isValidEmail(email)
+                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                : 'bg-[#701CC0] text-white hover:bg-[#5f17a5]'
+                        }`}
+                    >
+                        {submitting ? "Sending..." : "Send Invite"}
+                    </button>
                 </div>
         </Modal>
     )

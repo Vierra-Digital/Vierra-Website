@@ -26,12 +26,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
   try {
-    const rows = await prisma.userToken.findMany({
-      where: { userId, platform: { startsWith: "gmail:" } },
-      select: { platform: true, accessToken: true, expiresAt: true, createdAt: true },
-      orderBy: { createdAt: "desc" },
+    const rows = await prisma.platformToken.findMany({
+      where: { user_id: userId, platform: { startsWith: "gmail:" } },
+      select: { platform: true, access_token: true, expires_at: true, created_at: true },
+      orderBy: { created_at: "desc" },
     });
 
     const accounts: GmailConnection[] = await Promise.all(
@@ -45,8 +45,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           expiresAt:
             tokenResult.ok && tokenResult.expiresAt
               ? tokenResult.expiresAt.toISOString()
-              : row.expiresAt
-                ? row.expiresAt.toISOString()
+              : row.expires_at
+                ? row.expires_at.toISOString()
                 : null,
           reconnectReason: tokenResult.ok ? null : tokenResult.reason,
         };

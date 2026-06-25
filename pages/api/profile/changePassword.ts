@@ -1,8 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { prisma } from "@/lib/prisma";
+import { createClient } from "@supabase/supabase-js";
+import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
-import { encrypt, decrypt } from "@/lib/crypto";
-import crypto from "crypto";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     const session = await requireRole(req, res);
@@ -23,39 +22,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
 
         const userEmail = (session.user as any)?.email;
-        if (!userEmail) {
+        const userId = (session.user as any)?.id;
+        if (!userEmail || !userId) {
             return res.status(400).json({ message: "User email not found in session" });
         }
-        const user = await prisma.user.findUnique({
-            where: { email: userEmail },
-            select: { id: true, passwordEnc: true },
+
+        // Verify the current password with a throwaway client (not the shared admin
+        // singleton, so this sign-in attempt doesn't touch its in-memory session state).
+        const verifyClient = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            { auth: { persistSession: false, autoRefreshToken: false } }
+        );
+        const { error: verifyError } = await verifyClient.auth.signInWithPassword({
+            email: userEmail,
+            password: currentPassword,
         });
-
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        }
-
-        if (!user.passwordEnc) {
-            return res.status(400).json({ message: "User does not have a password set" });
-        }
-        let storedPlain: string;
-        try {
-            storedPlain = decrypt(user.passwordEnc);
-        } catch {
-            return res.status(400).json({ message: "Invalid stored password format" });
-        }
-        const isCurrentPasswordValid =
-            storedPlain.length === currentPassword.length &&
-            crypto.timingSafeEqual(Buffer.from(storedPlain), Buffer.from(currentPassword));
-
-        if (!isCurrentPasswordValid) {
+        if (verifyError) {
             return res.status(400).json({ message: "Current password is incorrect" });
         }
-        const encryptedNewPassword = encrypt(newPassword);
-        await prisma.user.update({
-            where: { email: userEmail },
-            data: { passwordEnc: encryptedNewPassword },
-        });
+
+        const { error: updateError } = await getSupabaseAdmin().auth.admin.updateUserById(userId, { password: newPassword });
+        if (updateError) {
+            return res.status(500).json({ message: "Failed to update password" });
+        }
 
         return res.status(200).json({ message: "Password changed successfully" });
     } catch (e) {

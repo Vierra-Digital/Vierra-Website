@@ -13,23 +13,22 @@ function asPort(value: unknown, fallback: number) {
   return Math.floor(numeric);
 }
 
+function serializeAccount<T extends { smtp_password_enc: string }>(row: T) {
+  const { smtp_password_enc, ...rest } = row;
+  return { ...rest, hasPassword: Boolean(smtp_password_enc) };
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireRole(req, res);
   if (!session) return;
 
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
   if (req.method === "GET") {
     const rows = await prisma.emailProviderAccount.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
+      where: { user_id: userId },
+      orderBy: { created_at: "desc" },
     });
-    res.status(200).json({
-      accounts: rows.map((row) => ({
-        ...row,
-        smtpPasswordEnc: undefined,
-        hasPassword: Boolean(row.smtpPasswordEnc),
-      })),
-    });
+    res.status(200).json({ accounts: rows.map(serializeAccount) });
     return;
   }
 
@@ -45,30 +44,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const created = await prisma.emailProviderAccount.create({
       data: {
-        userId,
-        accountEmail,
-        providerLabel: asStr(req.body?.providerLabel) || null,
-        smtpHost,
-        smtpPort: asPort(req.body?.smtpPort, 465),
-        smtpSecure: Boolean(req.body?.smtpSecure ?? true),
-        smtpUsername,
-        smtpPasswordEnc: encrypt(smtpPassword),
-        imapHost: asStr(req.body?.imapHost) || null,
-        imapPort: req.body?.imapPort ? asPort(req.body?.imapPort, 993) : null,
-        imapSecure: req.body?.imapSecure === undefined ? null : Boolean(req.body?.imapSecure),
-        popHost: asStr(req.body?.popHost) || null,
-        popPort: req.body?.popPort ? asPort(req.body?.popPort, 995) : null,
-        popSecure: req.body?.popSecure === undefined ? null : Boolean(req.body?.popSecure),
-        isDefaultSender: Boolean(req.body?.isDefaultSender),
+        company_id: session.companyId,
+        user_id: userId,
+        account_email: accountEmail,
+        provider_label: asStr(req.body?.providerLabel) || null,
+        smtp_host: smtpHost,
+        smtp_port: asPort(req.body?.smtpPort, 465),
+        smtp_secure: Boolean(req.body?.smtpSecure ?? true),
+        smtp_username: smtpUsername,
+        smtp_password_enc: encrypt(smtpPassword),
+        imap_host: asStr(req.body?.imapHost) || null,
+        imap_port: req.body?.imapPort ? asPort(req.body?.imapPort, 993) : null,
+        imap_secure: req.body?.imapSecure === undefined ? null : Boolean(req.body?.imapSecure),
+        pop_host: asStr(req.body?.popHost) || null,
+        pop_port: req.body?.popPort ? asPort(req.body?.popPort, 995) : null,
+        pop_secure: req.body?.popSecure === undefined ? null : Boolean(req.body?.popSecure),
+        is_default_sender: Boolean(req.body?.isDefaultSender),
       },
     });
-    if (created.isDefaultSender) {
+    if (created.is_default_sender) {
       await prisma.emailProviderAccount.updateMany({
-        where: { userId, id: { not: created.id } },
-        data: { isDefaultSender: false },
+        where: { user_id: userId, id: { not: created.id } },
+        data: { is_default_sender: false },
       });
     }
-    res.status(201).json({ account: { ...created, smtpPasswordEnc: undefined, hasPassword: true } });
+    res.status(201).json({ account: serializeAccount(created) });
     return;
   }
 
@@ -79,7 +79,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return;
     }
     const existing = await prisma.emailProviderAccount.findFirst({
-      where: { id, userId },
+      where: { id, user_id: userId },
     });
     if (!existing) {
       res.status(404).json({ message: "Provider account not found." });
@@ -90,29 +90,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const updated = await prisma.emailProviderAccount.update({
       where: { id },
       data: {
-        providerLabel: req.body?.providerLabel !== undefined ? asStr(req.body?.providerLabel) || null : existing.providerLabel,
-        accountEmail: req.body?.accountEmail !== undefined ? asStr(req.body?.accountEmail).toLowerCase() || existing.accountEmail : existing.accountEmail,
-        smtpHost: req.body?.smtpHost !== undefined ? asStr(req.body?.smtpHost) || existing.smtpHost : existing.smtpHost,
-        smtpPort: req.body?.smtpPort !== undefined ? asPort(req.body?.smtpPort, existing.smtpPort) : existing.smtpPort,
-        smtpSecure: req.body?.smtpSecure !== undefined ? Boolean(req.body?.smtpSecure) : existing.smtpSecure,
-        smtpUsername: req.body?.smtpUsername !== undefined ? asStr(req.body?.smtpUsername) || existing.smtpUsername : existing.smtpUsername,
-        smtpPasswordEnc: nextPassword ? encrypt(nextPassword) : existing.smtpPasswordEnc,
-        imapHost: req.body?.imapHost !== undefined ? asStr(req.body?.imapHost) || null : existing.imapHost,
-        imapPort: req.body?.imapPort !== undefined ? (req.body?.imapPort ? asPort(req.body?.imapPort, 993) : null) : existing.imapPort,
-        imapSecure: req.body?.imapSecure !== undefined ? (req.body?.imapSecure === null ? null : Boolean(req.body?.imapSecure)) : existing.imapSecure,
-        popHost: req.body?.popHost !== undefined ? asStr(req.body?.popHost) || null : existing.popHost,
-        popPort: req.body?.popPort !== undefined ? (req.body?.popPort ? asPort(req.body?.popPort, 995) : null) : existing.popPort,
-        popSecure: req.body?.popSecure !== undefined ? (req.body?.popSecure === null ? null : Boolean(req.body?.popSecure)) : existing.popSecure,
-        isDefaultSender: req.body?.isDefaultSender !== undefined ? Boolean(req.body?.isDefaultSender) : existing.isDefaultSender,
+        provider_label: req.body?.providerLabel !== undefined ? asStr(req.body?.providerLabel) || null : existing.provider_label,
+        account_email: req.body?.accountEmail !== undefined ? asStr(req.body?.accountEmail).toLowerCase() || existing.account_email : existing.account_email,
+        smtp_host: req.body?.smtpHost !== undefined ? asStr(req.body?.smtpHost) || existing.smtp_host : existing.smtp_host,
+        smtp_port: req.body?.smtpPort !== undefined ? asPort(req.body?.smtpPort, existing.smtp_port) : existing.smtp_port,
+        smtp_secure: req.body?.smtpSecure !== undefined ? Boolean(req.body?.smtpSecure) : existing.smtp_secure,
+        smtp_username: req.body?.smtpUsername !== undefined ? asStr(req.body?.smtpUsername) || existing.smtp_username : existing.smtp_username,
+        smtp_password_enc: nextPassword ? encrypt(nextPassword) : existing.smtp_password_enc,
+        imap_host: req.body?.imapHost !== undefined ? asStr(req.body?.imapHost) || null : existing.imap_host,
+        imap_port: req.body?.imapPort !== undefined ? (req.body?.imapPort ? asPort(req.body?.imapPort, 993) : null) : existing.imap_port,
+        imap_secure: req.body?.imapSecure !== undefined ? (req.body?.imapSecure === null ? null : Boolean(req.body?.imapSecure)) : existing.imap_secure,
+        pop_host: req.body?.popHost !== undefined ? asStr(req.body?.popHost) || null : existing.pop_host,
+        pop_port: req.body?.popPort !== undefined ? (req.body?.popPort ? asPort(req.body?.popPort, 995) : null) : existing.pop_port,
+        pop_secure: req.body?.popSecure !== undefined ? (req.body?.popSecure === null ? null : Boolean(req.body?.popSecure)) : existing.pop_secure,
+        is_default_sender: req.body?.isDefaultSender !== undefined ? Boolean(req.body?.isDefaultSender) : existing.is_default_sender,
       },
     });
-    if (updated.isDefaultSender) {
+    if (updated.is_default_sender) {
       await prisma.emailProviderAccount.updateMany({
-        where: { userId, id: { not: updated.id } },
-        data: { isDefaultSender: false },
+        where: { user_id: userId, id: { not: updated.id } },
+        data: { is_default_sender: false },
       });
     }
-    res.status(200).json({ account: { ...updated, smtpPasswordEnc: undefined, hasPassword: true } });
+    res.status(200).json({ account: serializeAccount(updated) });
     return;
   }
 
@@ -123,15 +123,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return;
     }
     const existing = await prisma.emailProviderAccount.findFirst({
-      where: { id, userId },
-      select: { id: true, smtpPasswordEnc: true },
+      where: { id, user_id: userId },
+      select: { id: true, smtp_password_enc: true },
     });
     if (!existing) {
       res.status(404).json({ message: "Provider account not found." });
       return;
     }
     // Validate decryption before delete to surface corrupted secrets early.
-    decrypt(existing.smtpPasswordEnc);
+    decrypt(existing.smtp_password_enc);
     await prisma.emailProviderAccount.delete({ where: { id } });
     res.status(200).json({ ok: true });
     return;
@@ -139,4 +139,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   res.status(405).json({ message: "Method Not Allowed" });
 }
-

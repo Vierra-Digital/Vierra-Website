@@ -21,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const client = await prisma.client.findUnique({
       where: { id: String(clientId) },
-      select: { imageStorageKey: true, imageMimeType: true },
+      select: { image_storage_key: true, image_mime_type: true },
     });
 
     if (!client) {
@@ -29,8 +29,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const sent = await sendImageAsset(res, {
       bucket: STORAGE_BUCKETS.avatars,
-      storageKey: client.imageStorageKey,
-      mimeType: client.imageMimeType,
+      storageKey: client.image_storage_key,
+      mimeType: client.image_mime_type,
       cacheControl: "no-cache, no-store, must-revalidate",
     });
     if (!sent) {

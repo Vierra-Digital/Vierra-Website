@@ -71,7 +71,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         title: true,
         published_date: true,
         tag: true,
-        author: { select: { name: true } },
+        authors: { select: { name: true } },
       },
       orderBy: {
         published_date: 'desc',
@@ -103,8 +103,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           .filter(Boolean)
           .forEach((t) => tagSet.add(t));
       }
-      if (post.author?.name) {
-        authorSet.add(post.author.name);
+      if (post.authors?.name) {
+        authorSet.add(post.authors.name);
       }
     });
 

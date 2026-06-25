@@ -40,8 +40,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const image = await prisma.blogImage.create({
       data: {
-        storageKey,
-        mimeType,
+        storage_key: storageKey,
+        mime_type: mimeType,
         filename: filename || null,
       },
     });

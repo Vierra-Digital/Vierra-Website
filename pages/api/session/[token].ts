@@ -13,12 +13,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const session = await prisma.onboardingSession.findUnique({
       where: { id: token },
-      include: { client: true },
+      include: { clients: true },
     });
     if (!session) return res.status(404).json({ message: "Session not found" });
 
     const now = new Date();
-    if (session.expiresAt && now > session.expiresAt) {
+    if (session.expires_at && now > session.expires_at) {
       if (session.status !== "expired") {
         try {
           await prisma.onboardingSession.update({
@@ -36,21 +36,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       return res.status(410).json({ message: "Session expired" });
     }
-    if (session.status === "completed" || session.submittedAt) {
+    if (session.status === "completed" || session.submitted_at) {
       return res.status(410).json({ message: "Session already submitted" });
     }
     const cookieName = `onb_${token}`;
     const cookies = parseCookie(req.headers.cookie ?? "");
     const hasCookie = Boolean(cookies[cookieName]);
 
-    if (!session.firstAccessedAt) {
+    if (!session.first_accessed_at) {
       const updated = await prisma.onboardingSession.update({
         where: { id: token },
-        data: { firstAccessedAt: now, status: "in_progress" },
-        include: { client: true },
+        data: { first_accessed_at: now, status: "in_progress" },
+        include: { clients: true },
       });
-      const secondsLeft = session.expiresAt
-        ? Math.max(1, Math.floor((session.expiresAt.getTime() - now.getTime()) / 1000))
+      const secondsLeft = session.expires_at
+        ? Math.max(1, Math.floor((session.expires_at.getTime() - now.getTime()) / 1000))
         : 60 * 60;
 
       const cookiesToSet = [

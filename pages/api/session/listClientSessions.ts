@@ -1,31 +1,37 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-
+import { requireRole } from "@/lib/auth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
     return res.status(405).json({ message: "Method Not Allowed" });
   }
 
+  const session = await requireRole(req, res);
+  if (!session) return;
+  const { companyId } = session;
+
   try {
     const sessions = await prisma.onboardingSession.findMany({
-      include: { client: true, tokens: { select: { platform: true } } },
-      orderBy: { createdAt: "desc" },
+      where: { company_id: companyId },
+      include: {
+        clients: true,
+        onboarding_platform_tokens: { select: { platform: true } },
+      },
+      orderBy: { created_at: "desc" },
     });
 
-    type SessionWithClient = (typeof sessions)[number];
-
-    const sessionList = sessions.map((session: SessionWithClient) => ({
-      token: session.id,
-      clientName: session.client.name,
-      clientEmail: session.client.email,
-      businessName: session.client.businessName,
-      createdAt: session.createdAt.getTime(),
-      submittedAt: session.submittedAt?.getTime() || null,
-      lastUpdatedAt: session.lastUpdatedAt?.getTime() || null,
-      status: session.status || "pending",
-      hasAnswers: !!session.answers,
-      platforms: (session.tokens || []).map(t => t.platform),
+    const sessionList = sessions.map((s) => ({
+      token: s.id,
+      clientName: s.clients.name,
+      clientEmail: s.clients.email,
+      businessName: s.clients.business_name,
+      createdAt: s.created_at.getTime(),
+      submittedAt: s.submitted_at?.getTime() || null,
+      lastUpdatedAt: s.last_updated_at?.getTime() || null,
+      status: s.status || "pending",
+      hasAnswers: !!s.answers,
+      platforms: s.onboarding_platform_tokens.map((t) => t.platform),
     }));
 
     res.status(200).json(sessionList);

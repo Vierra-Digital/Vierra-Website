@@ -28,9 +28,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const session = await prisma.onboardingSession.findUnique({
     where: { id: onboardingToken },
-    include: { client: true },
+    include: { clients: true },
   })
-  if (!session || !session.client) {
+  if (!session || !session.clients) {
     return res.status(404).json({ message: "Onboarding session not found." })
   }
 
@@ -70,10 +70,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   await prisma.storedFile.create({
     data: {
+      company_id: session.company_id,
       name: preset.originalFilename,
-      signingTokenId: tokenId,
-      fileType: "pdf",
-      clientId: session.client.id,
+      signing_token_id: tokenId,
+      file_type: "pdf",
+      client_id: session.clients.id,
     },
   })
 

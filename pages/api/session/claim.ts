@@ -20,10 +20,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  if (!sess.firstAccessedAt) {
+  if (!sess.first_accessed_at) {
     await prisma.onboardingSession.update({
       where: { id: token },
-      data: { firstAccessedAt: new Date() },
+      data: { first_accessed_at: new Date() },
     });
   }
 
