@@ -35,19 +35,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const { imageData, mimeType } = req.body;
     if (imageData === null && mimeType === null) {
-      const updated = await prisma.user.update({
-        where: { email: userEmail },
-        data: {
-          imageStorageKey: null,
-          imageMimeType: null,
-          imageUpdatedAt: null
-        },
-        select: { id: true, name: true, email: true },
+      await prisma.userPreference.upsert({
+        where: { user_id: existingUser.id },
+        create: { user_id: existingUser.id, image_storage_key: null, image_mime_type: null, image_updated_at: null },
+        update: { image_storage_key: null, image_mime_type: null, image_updated_at: null },
       });
-
-      return res.status(200).json(updated);
+      return res.status(200).json({ id: existingUser.id, name: existingUser.name, email: existingUser.email });
     }
-    
+
     if (!imageData || !mimeType) {
       return res.status(400).json({ message: "Image data and mime type are required" });
     }
@@ -58,17 +53,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       imageBuffer,
       mimeType
     );
-    const updated = await prisma.user.update({
-      where: { email: userEmail },
-      data: {
-        imageStorageKey: storageKey,
-        imageMimeType: mimeType,
-        imageUpdatedAt: new Date()
-      },
-      select: { id: true, name: true, email: true },
+    await prisma.userPreference.upsert({
+      where: { user_id: existingUser.id },
+      create: { user_id: existingUser.id, image_storage_key: storageKey, image_mime_type: mimeType, image_updated_at: new Date() },
+      update: { image_storage_key: storageKey, image_mime_type: mimeType, image_updated_at: new Date() },
     });
 
-    return res.status(200).json(updated);
+    return res.status(200).json({ id: existingUser.id, name: existingUser.name, email: existingUser.email });
   } catch (e) {
     console.error("profile/uploadImage", e);
     return res.status(500).json({ message: "Internal Server Error" });

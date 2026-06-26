@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 
@@ -15,49 +16,72 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireRole(req, res);
   if (!session) return;
 
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
   const accountEmail = asStr(req.query.accountEmail).trim().toLowerCase();
   const from = asStr(req.query.from).trim();
   const to = asStr(req.query.to).trim();
 
-  const where: any = { userId };
-  if (accountEmail) where.accountEmail = accountEmail;
-  if (from || to) {
-    where.createdAt = {
-      gte: from ? new Date(from) : undefined,
-      lte: to ? new Date(to) : undefined,
-    };
+  let accountId: string | null = null;
+  if (accountEmail) {
+    const account = await prisma.emailProviderAccount.findFirst({
+      where: { user_id: userId, account_email: accountEmail },
+      select: { id: true },
+    });
+    accountId = account?.id ?? null;
   }
+
+  const where: Prisma.EmailOutboundMessageWhereInput = {
+    user_id: userId,
+    ...(accountId ? { account_id: accountId } : {}),
+    ...(from || to
+      ? {
+          created_at: {
+            ...(from ? { gte: new Date(from) } : {}),
+            ...(to ? { lte: new Date(to) } : {}),
+          },
+        }
+      : {}),
+  };
 
   const messages = await prisma.emailOutboundMessage.findMany({
     where,
     select: {
       id: true,
-      gmailMessageId: true,
-      accountEmail: true,
+      gmail_message_id: true,
+      account_id: true,
       subject: true,
-      trackingEnabled: true,
-      createdAt: true,
-      trackingEvents: {
+      tracking_enabled: true,
+      created_at: true,
+      email_tracking_events: {
         select: {
-          eventType: true,
-          occurredAt: true,
+          event_type: true,
+          occurred_at: true,
         },
       },
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: { created_at: "desc" },
     take: 200,
   });
 
+  const uniqueAccountIds = [...new Set(messages.map((m) => m.account_id).filter((id): id is string => !!id))];
+  const accountMap = new Map<string, string>();
+  if (uniqueAccountIds.length > 0) {
+    const accounts = await prisma.emailProviderAccount.findMany({
+      where: { id: { in: uniqueAccountIds } },
+      select: { id: true, account_email: true },
+    });
+    for (const a of accounts) accountMap.set(a.id, a.account_email);
+  }
+
   const rows = messages.map((message) => {
-    const openCount = message.trackingEvents.filter((event) => event.eventType === "OPEN").length;
-    const clickCount = message.trackingEvents.filter((event) => event.eventType === "CLICK").length;
+    const openCount = message.email_tracking_events.filter((e) => e.event_type === "OPEN").length;
+    const clickCount = message.email_tracking_events.filter((e) => e.event_type === "CLICK").length;
     return {
-      messageId: message.gmailMessageId,
-      accountEmail: message.accountEmail,
+      messageId: message.gmail_message_id,
+      accountEmail: message.account_id ? (accountMap.get(message.account_id) ?? null) : null,
       subject: message.subject,
-      trackingEnabled: message.trackingEnabled,
-      createdAt: message.createdAt,
+      trackingEnabled: message.tracking_enabled,
+      createdAt: message.created_at,
       openCount,
       clickCount,
     };

@@ -1,12 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { prisma } from "@/lib/prisma"
-import {
-  getSessionRole,
-  handleApiError,
-  requireMethodOrRespond405,
-  requireRolesOrRespond403,
-  requireSessionOrRespond401,
-} from "@/lib/api/guards"
+import { requireRole } from "@/lib/auth"
 
 type GrowthDirection = "up" | "flat" | "down"
 
@@ -44,22 +38,27 @@ function getGrowthDirection(current: number, previous: number): GrowthDirection 
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  try {
-    requireMethodOrRespond405(req, res, ["GET"])
-    const session = await requireSessionOrRespond401(req, res)
-    const role = getSessionRole(session)
-    requireRolesOrRespond403(res, role, ["admin", "staff"])
+  if (req.method !== "GET") {
+    res.setHeader("Allow", ["GET"])
+    return res.status(405).json({ message: "Method Not Allowed" })
+  }
 
-    const userId = Number((session.user as any).id)
+  const session = await requireRole(req, res, ["admin", "staff"])
+  if (!session) return
+
+  try {
+    const userId = session.user.id
+    const companyId = session.companyId
     const now = new Date()
     const { start: currentMonthStart, end: currentMonthEnd } = getUtcMonthRange(now)
     const { start: previousMonthStart, end: previousMonthEnd } = getPreviousUtcMonthRange(now)
 
     const [clientsLifetime, currentMonthClients, previousMonthClients, meetingsAgg] = await Promise.all([
-      prisma.client.count(),
+      prisma.client.count({ where: { company_id: companyId } }),
       prisma.client.count({
         where: {
-          createdAt: {
+          company_id: companyId,
+          created_at: {
             gte: currentMonthStart,
             lt: currentMonthEnd,
           },
@@ -67,7 +66,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }),
       prisma.client.count({
         where: {
-          createdAt: {
+          company_id: companyId,
+          created_at: {
             gte: previousMonthStart,
             lt: previousMonthEnd,
           },
@@ -75,8 +75,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }),
       prisma.marketingTracker.groupBy({
         by: ["year", "month"],
-        where: { userId },
-        _sum: { meetingsSet: true },
+        where: { user_id: userId },
+        _sum: { meetings_set: true },
       }),
     ])
 
@@ -86,11 +86,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const previousYear = previousMonthDate.getUTCFullYear()
     const previousMonth = previousMonthDate.getUTCMonth() + 1
 
-    const meetingsLifetime = meetingsAgg.reduce((total, row) => total + (row._sum.meetingsSet ?? 0), 0)
+    const meetingsLifetime = meetingsAgg.reduce((total, row) => total + (row._sum.meetings_set ?? 0), 0)
     const currentMonthMeetings =
-      meetingsAgg.find((row) => row.year === currentYear && row.month === currentMonth)?._sum.meetingsSet ?? 0
+      meetingsAgg.find((row) => row.year === currentYear && row.month === currentMonth)?._sum.meetings_set ?? 0
     const previousMonthMeetings =
-      meetingsAgg.find((row) => row.year === previousYear && row.month === previousMonth)?._sum.meetingsSet ?? 0
+      meetingsAgg.find((row) => row.year === previousYear && row.month === previousMonth)?._sum.meetings_set ?? 0
 
     const clientsGrowth = calculateGrowth(currentMonthClients, previousMonthClients)
     const meetingsGrowth = calculateGrowth(currentMonthMeetings, previousMonthMeetings)
@@ -136,6 +136,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     res.status(200).json({ stats })
   } catch (error) {
-    handleApiError(res, "/api/dashboard/stats error", error, "Failed to load dashboard stats")
+    console.error("/api/dashboard/stats error", error)
+    res.status(500).json({ message: "Failed to load dashboard stats" })
   }
 }

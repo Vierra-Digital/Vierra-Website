@@ -22,23 +22,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const { userId, imageData, mimeType } = req.body;
-    
+
     if (!userId || !imageData || !mimeType) {
       return res.status(400).json({ message: "User ID, image data and mime type are required" });
     }
     const imageBuffer = decodeBase64Image(imageData);
     const storageKey = await putImageAsset(
       STORAGE_BUCKETS.avatars,
-      `user/${Number(userId)}`,
+      `user/${userId}`,
       imageBuffer,
       mimeType
     );
-    const updated = await prisma.user.update({
-      where: { id: Number(userId) },
-      data: {
-        imageStorageKey: storageKey,
-        imageMimeType: mimeType
+    await prisma.userPreference.upsert({
+      where: { user_id: String(userId) },
+      create: {
+        user_id: String(userId),
+        image_storage_key: storageKey,
+        image_mime_type: mimeType,
+        image_updated_at: new Date(),
       },
+      update: {
+        image_storage_key: storageKey,
+        image_mime_type: mimeType,
+        image_updated_at: new Date(),
+      },
+    });
+    const updated = await prisma.user.findUnique({
+      where: { id: String(userId) },
       select: { id: true, name: true, email: true },
     });
 

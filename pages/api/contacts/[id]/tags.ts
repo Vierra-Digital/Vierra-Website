@@ -19,7 +19,7 @@ function getContactId(req: NextApiRequest) {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireRole(req, res);
   if (!session) return;
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
   const contactId = getContactId(req);
   if (!contactId) {
     res.status(400).json({ message: "Contact id is required." });
@@ -27,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const contact = await prisma.contact.findFirst({
-    where: { id: contactId, userId },
+    where: { id: contactId, user_id: userId },
   });
   if (!contact) {
     res.status(404).json({ message: "Contact not found." });
@@ -36,11 +36,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === "GET") {
     const tags = await prisma.contactTagAssignment.findMany({
-      where: { contactId },
-      include: { tag: true },
-      orderBy: { createdAt: "asc" },
+      where: { contact_id: contactId },
+      include: { contact_tags: true },
+      orderBy: { created_at: "asc" },
     });
-    res.status(200).json({ tags: tags.map((row) => row.tag) });
+    res.status(200).json({ tags: tags.map((row) => row.contact_tags) });
     return;
   }
 
@@ -50,15 +50,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(400).json({ message: "tagId is required" });
       return;
     }
-    const tag = await prisma.contactTag.findFirst({ where: { id: tagId, userId } });
+    const tag = await prisma.contactTag.findFirst({ where: { id: tagId, user_id: userId } });
     if (!tag) {
       res.status(404).json({ message: "Tag not found." });
       return;
     }
     await prisma.contactTagAssignment.upsert({
-      where: { contactId_tagId: { contactId, tagId } },
+      where: { contact_id_tag_id: { contact_id: contactId, tag_id: tagId } },
       update: {},
-      create: { contactId, tagId },
+      create: { contact_id: contactId, tag_id: tagId },
     });
     res.status(200).json({ ok: true });
     return;
@@ -67,15 +67,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "PUT") {
     const tagIds = asArray(req.body?.tagIds);
     const validTags = await prisma.contactTag.findMany({
-      where: { userId, id: { in: tagIds } },
+      where: { user_id: userId, id: { in: tagIds } },
       select: { id: true },
     });
     const validTagIds = validTags.map((tag) => tag.id);
 
-    await prisma.contactTagAssignment.deleteMany({ where: { contactId } });
+    await prisma.contactTagAssignment.deleteMany({ where: { contact_id: contactId } });
     if (validTagIds.length > 0) {
       await prisma.contactTagAssignment.createMany({
-        data: validTagIds.map((tagId) => ({ contactId, tagId })),
+        data: validTagIds.map((tagId) => ({ contact_id: contactId, tag_id: tagId })),
       });
     }
     res.status(200).json({ ok: true });
@@ -89,7 +89,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return;
     }
     await prisma.contactTagAssignment.deleteMany({
-      where: { contactId, tagId },
+      where: { contact_id: contactId, tag_id: tagId },
     });
     res.status(200).json({ ok: true });
     return;

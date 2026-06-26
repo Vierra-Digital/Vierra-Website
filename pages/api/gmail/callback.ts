@@ -83,7 +83,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.redirect(loginCallbackUrl);
     return;
   }
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
 
   const { clientId, clientSecret } = resolveGoogleWebClientCredentials();
   if (!clientId || !clientSecret) {
@@ -136,19 +136,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const encRefresh = tokenJson.refresh_token ? encrypt(tokenJson.refresh_token) : undefined;
   const expiresAt = tokenJson.expires_in ? new Date(Date.now() + tokenJson.expires_in * 1000) : undefined;
 
-  await prisma.userToken.upsert({
-    where: { userId_platform: { userId, platform } as any },
+  await prisma.platformToken.upsert({
+    where: { user_id_platform: { user_id: userId, platform } },
     update: {
-      accessToken: encAccess,
-      ...(encRefresh && { refreshToken: encRefresh }),
-      ...(expiresAt && { expiresAt }),
+      access_token: encAccess,
+      ...(encRefresh && { refresh_token: encRefresh }),
+      ...(expiresAt && { expires_at: expiresAt }),
     },
     create: {
-      userId,
+      user_id: userId,
       platform,
-      accessToken: encAccess,
-      ...(encRefresh && { refreshToken: encRefresh }),
-      ...(expiresAt && { expiresAt }),
+      access_token: encAccess,
+      ...(encRefresh && { refresh_token: encRefresh }),
+      ...(expiresAt && { expires_at: expiresAt }),
     },
   });
 

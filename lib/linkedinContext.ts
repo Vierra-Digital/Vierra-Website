@@ -4,7 +4,7 @@ type SessionRole = "admin" | "staff" | "user";
 
 type SessionInfo = {
   role: SessionRole;
-  userId: number;
+  userId: string;
 };
 
 export type LinkedInContextPayload = {
@@ -59,7 +59,7 @@ function isImage(fileType: string, name: string) {
 export async function resolveClientIdForLinkedIn(session: SessionInfo, clientIdFromRequest?: string | null) {
   if (session.role === "user") {
     const client = await prisma.client.findUnique({
-      where: { userId: session.userId },
+      where: { user_id: session.userId },
       select: { id: true },
     });
     return client?.id ?? null;
@@ -72,17 +72,17 @@ export async function getLinkedInContext(clientId: string): Promise<LinkedInCont
   const [client, latestSession, assets] = await Promise.all([
     prisma.client.findUnique({
       where: { id: clientId },
-      select: { id: true, name: true, businessName: true },
+      select: { id: true, name: true, business_name: true },
     }),
     prisma.onboardingSession.findFirst({
-      where: { clientId },
-      orderBy: { createdAt: "desc" },
+      where: { client_id: clientId },
+      orderBy: { created_at: "desc" },
       select: { answers: true },
     }),
     prisma.storedFile.findMany({
-      where: { clientId },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, name: true, fileType: true, signingTokenId: true },
+      where: { client_id: clientId },
+      orderBy: { created_at: "desc" },
+      select: { id: true, name: true, file_type: true, signing_token_id: true },
     }),
   ]);
 
@@ -101,7 +101,7 @@ export async function getLinkedInContext(clientId: string): Promise<LinkedInCont
   return {
     clientId: client.id,
     clientName: client.name,
-    businessName: client.businessName,
+    businessName: client.business_name,
     onboarding: normalizeOnboardingAnswers(latestSession?.answers),
     overrides: {
       additionalBusinessInfo: asString(overridesObject.additionalBusinessInfo),
@@ -110,13 +110,12 @@ export async function getLinkedInContext(clientId: string): Promise<LinkedInCont
       notes: asString(overridesObject.notes),
     },
     imageAssets: assets
-      .filter((asset) => isImage(asset.fileType, asset.name))
+      .filter((asset) => isImage(asset.file_type, asset.name))
       .map((asset) => ({
         id: asset.id,
         name: asset.name,
-        fileType: asset.fileType,
-        tokenId: asset.signingTokenId,
+        fileType: asset.file_type,
+        tokenId: asset.signing_token_id ?? "",
       })),
   };
 }
-

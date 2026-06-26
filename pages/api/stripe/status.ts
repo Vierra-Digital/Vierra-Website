@@ -22,58 +22,65 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await prisma.onboardingSession.findUnique({
     where: { id: onboardingToken },
     include: {
-      client: {
+      clients: {
         select: {
-          stripeCustomerId: true,
-          stripeConnected: true,
-          stripeSubscriptionId: true,
-          stripeSubscriptionStatus: true,
-          stripeCardBrand: true,
-          stripeCardLast4: true,
-          stripeConnectedAt: true,
+          id: true,
+          client_billing: {
+            select: {
+              stripe_customer_id: true,
+              stripe_connected: true,
+              stripe_subscription_id: true,
+              stripe_subscription_status: true,
+              stripe_card_brand: true,
+              stripe_card_last4: true,
+              stripe_connected_at: true,
+            },
+          },
         },
       },
     },
   })
 
-  if (!session?.client?.stripeCustomerId) {
+  if (!session?.clients?.client_billing?.stripe_customer_id) {
     return res.status(200).json({ connected: false })
   }
 
-  if (session.client.stripeConnected) {
+  const billing = session.clients.client_billing
+
+  if (billing.stripe_connected) {
     return res.status(200).json({
       connected: true,
-      subscriptionId: session.client.stripeSubscriptionId,
-      subscriptionStatus: session.client.stripeSubscriptionStatus,
-      cardBrand: session.client.stripeCardBrand,
-      cardLast4: session.client.stripeCardLast4,
-      connectedAt: session.client.stripeConnectedAt,
+      subscriptionId: billing.stripe_subscription_id,
+      subscriptionStatus: billing.stripe_subscription_status,
+      cardBrand: billing.stripe_card_brand,
+      cardLast4: billing.stripe_card_last4,
+      connectedAt: billing.stripe_connected_at,
     })
   }
 
   const paymentMethods = await stripe.paymentMethods.list({
-    customer: session.client.stripeCustomerId,
+    customer: billing.stripe_customer_id!,
     type: "card",
     limit: 1,
   })
 
   if (paymentMethods.data.length > 0) {
     const pm = paymentMethods.data[0]
-    await prisma.client.updateMany({
-      where: { stripeCustomerId: session.client.stripeCustomerId },
+    await prisma.clientBilling.update({
+      where: { client_id: session.clients.id },
       data: {
-        stripeConnected: true,
-        stripePaymentMethodId: pm.id,
-        stripeCardBrand: pm.card?.brand ?? null,
-        stripeCardLast4: pm.card?.last4 ?? null,
-        stripeConnectedAt: new Date(),
+        stripe_connected: true,
+        stripe_payment_method_id: pm.id,
+        stripe_card_brand: pm.card?.brand ?? null,
+        stripe_card_last4: pm.card?.last4 ?? null,
+        stripe_connected_at: new Date(),
       },
     })
 
     return res.status(200).json({
       connected: true,
-      subscriptionId: session.client.stripeSubscriptionId,
-      subscriptionStatus: session.client.stripeSubscriptionStatus,
+      subscriptionId: billing.stripe_subscription_id,
+      subscriptionStatus: billing.stripe_subscription_status,
       cardBrand: pm.card?.brand,
       cardLast4: pm.card?.last4,
     })

@@ -11,7 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const sess = await prisma.onboardingSession.findUnique({
     where: { id: ob_session },
-    include: { client: true },
+    include: { clients: true },
   });
   if (!sess) { res.status(404).end(); return; }
 

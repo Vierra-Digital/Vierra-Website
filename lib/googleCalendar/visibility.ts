@@ -29,13 +29,13 @@ export function isCalendarVisibilityTableMissing(error: unknown) {
   return false
 }
 
-export async function getCalendarVisibilityPreferences(userId: number) {
-  const rows = await prisma.userToken.findMany({
+export async function getCalendarVisibilityPreferences(userId: string) {
+  const rows = await prisma.platformToken.findMany({
     where: {
-      userId,
+      user_id: userId,
       platform: { startsWith: PLATFORM_PREFIX },
     },
-    select: { platform: true, accessToken: true },
+    select: { platform: true, access_token: true },
   })
 
   return rows
@@ -45,14 +45,14 @@ export async function getCalendarVisibilityPreferences(userId: number) {
       return {
         accountEmail: parsed.accountEmail,
         calendarId: parsed.calendarId,
-        isEnabled: row.accessToken !== DISABLED_MARKER,
+        isEnabled: row.access_token !== DISABLED_MARKER,
       }
     })
     .filter((row): row is CalendarVisibilityPreference => Boolean(row))
 }
 
 export async function upsertCalendarVisibilityPreference(params: {
-  userId: number
+  userId: string
   accountEmail: string
   calendarId: string
   isEnabled: boolean
@@ -61,26 +61,26 @@ export async function upsertCalendarVisibilityPreference(params: {
   const platform = makePlatformKey(normalizedEmail, params.calendarId)
 
   if (params.isEnabled) {
-    await prisma.userToken.deleteMany({
-      where: { userId: params.userId, platform },
+    await prisma.platformToken.deleteMany({
+      where: { user_id: params.userId, platform },
     })
     return
   }
 
-  await prisma.userToken.upsert({
+  await prisma.platformToken.upsert({
     where: {
-      userId_platform: {
-        userId: params.userId,
+      user_id_platform: {
+        user_id: params.userId,
         platform,
-      } as any,
+      },
     },
     update: {
-      accessToken: DISABLED_MARKER,
+      access_token: DISABLED_MARKER,
     },
     create: {
-      userId: params.userId,
+      user_id: params.userId,
       platform,
-      accessToken: DISABLED_MARKER,
+      access_token: DISABLED_MARKER,
     },
   })
 }

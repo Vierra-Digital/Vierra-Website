@@ -1,8 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import { requireSession } from "@/lib/auth";
 import { asStr, clearOauthStateCookie, readCookies, setOnboardingSessionCookie } from "@/lib/api/oauth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -46,14 +45,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!state || cookies.ga_oauth_state !== state) { res.status(400).send("Invalid state"); return; }
     clearOauthStateCookie(res, "ga_oauth_state", "/api/googleads/callback");
 
-    const session = await getServerSession(req, res, authOptions);
+    const session = await requireSession(req, res);
     if (!session) { res.redirect("/login"); return; }
-    const userId = Number((session.user as any).id);
+    const userId = (session.user as any).id;
 
-    await prisma.userToken.upsert({
-      where: { userId_platform: { userId, platform: "googleads" } as any }, 
-      update: { accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
-      create: { userId, platform: "googleads", accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
+    await prisma.platformToken.upsert({
+      where: { user_id_platform: { user_id: userId, platform: "googleads" } },
+      update: { access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
+      create: { user_id: userId, platform: "googleads", access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
     });
 
     res.redirect("/connect?connected=googleads");
@@ -65,9 +64,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!sess) { res.status(400).send("Invalid onboarding session"); return; }
 
   await prisma.onboardingPlatformToken.upsert({
-    where: { sessionId_platform: { sessionId: state, platform: "googleads" } as any },
-    update: { accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
-    create: { sessionId: state, platform: "googleads", accessToken: encAccess, ...(encRefresh && { refreshToken: encRefresh }), ...(expiresAt && { expiresAt }) },
+    where: { session_id_platform: { session_id: state, platform: "googleads" } },
+    update: { access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
+    create: { session_id: state, platform: "googleads", access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
   });
   setOnboardingSessionCookie(res, state);
 

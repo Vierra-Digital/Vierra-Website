@@ -67,9 +67,9 @@ function parseManusJson(content: string): DraftResponse {
 async function getLinkedInMetrics(clientId: string) {
   const client = await prisma.client.findUnique({
     where: { id: clientId },
-    select: { userId: true },
+    select: { user_id: true },
   });
-  if (!client?.userId) {
+  if (!client?.user_id) {
     return {
       attempts: 0,
       meetings: 0,
@@ -81,25 +81,25 @@ async function getLinkedInMetrics(clientId: string) {
 
   const trackerRows = await prisma.marketingTracker.findMany({
     where: {
-      userId: client.userId,
+      user_id: client.user_id,
       outreach: "linkedin",
     },
-    orderBy: { updatedAt: "desc" },
+    orderBy: { updated_at: "desc" },
     take: 12,
     select: {
       attempt: true,
-      meetingsSet: true,
-      clientsClosed: true,
-      revenue: true,
+      meetings_set: true,
+      clients_closed: true,
+      revenue_cents: true,
     },
   });
 
   const summary = trackerRows.reduce(
     (acc, row) => {
       acc.attempts += row.attempt || 0;
-      acc.meetings += row.meetingsSet || 0;
-      acc.clientsClosed += row.clientsClosed || 0;
-      acc.revenue += row.revenue || 0;
+      acc.meetings += row.meetings_set || 0;
+      acc.clientsClosed += row.clients_closed || 0;
+      acc.revenue += (row.revenue_cents || 0) / 100;
       return acc;
     },
     { attempts: 0, meetings: 0, clientsClosed: 0, revenue: 0 }
@@ -121,8 +121,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const role = ((session.user as { role?: SessionRole }).role || "user") as SessionRole;
   if (!["admin", "staff", "user"].includes(role)) return res.status(403).json({ message: "Forbidden" });
 
-  const userId = Number((session.user as { id?: string | number }).id);
-  if (Number.isNaN(userId)) return res.status(400).json({ message: "Invalid session user." });
+  const userId = (session.user as { id?: string }).id;
+  if (!userId) return res.status(400).json({ message: "Invalid session user." });
 
   const body = (req.body || {}) as GenerateBody;
   const mode: Mode = body.mode === "market_research" ? "market_research" : "manual";

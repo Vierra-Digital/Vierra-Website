@@ -27,18 +27,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireRole(req, res)
   if (!session) return
 
-  const userId = Number((session.user as any).id)
-  if (!Number.isFinite(userId)) {
+  const userId = (session.user as any).id
+  if (!userId) {
     res.status(400).json({ message: "Invalid session user id" })
     return
   }
 
   if (req.method === "GET") {
     try {
-      const tokenRows = await prisma.userToken.findMany({
-        where: { userId, platform: { startsWith: "gmail:" } },
+      const tokenRows = await prisma.platformToken.findMany({
+        where: { user_id: userId, platform: { startsWith: "gmail:" } },
         select: { platform: true },
-        orderBy: { createdAt: "desc" },
+        orderBy: { created_at: "desc" },
       })
 
       if (!tokenRows.length) {

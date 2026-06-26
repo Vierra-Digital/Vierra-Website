@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const image = await prisma.blogImage.findUnique({
       where: { id },
-      select: { storageKey: true, mimeType: true },
+      select: { storage_key: true, mime_type: true },
     });
 
     if (!image) {
@@ -25,8 +25,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const sent = await sendImageAsset(res, {
       bucket: STORAGE_BUCKETS.blog,
-      storageKey: image.storageKey,
-      mimeType: image.mimeType,
+      storageKey: image.storage_key,
+      mimeType: image.mime_type,
       cacheControl: "public, max-age=31536000, immutable",
     });
     if (!sent) {

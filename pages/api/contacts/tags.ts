@@ -9,11 +9,11 @@ function asStr(v: unknown) {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireRole(req, res);
   if (!session) return;
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
 
   if (req.method === "GET") {
     const tags = await prisma.contactTag.findMany({
-      where: { userId },
+      where: { user_id: userId },
       orderBy: { name: "asc" },
     });
     res.status(200).json({ tags });
@@ -28,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const created = await prisma.contactTag.create({
       data: {
-        userId,
+        user_id: userId,
         name,
         color: asStr(req.body?.color) || "#701CC0",
       },
@@ -43,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(400).json({ message: "Tag id is required." });
       return;
     }
-    const existing = await prisma.contactTag.findFirst({ where: { id, userId } });
+    const existing = await prisma.contactTag.findFirst({ where: { id, user_id: userId } });
     if (!existing) {
       res.status(404).json({ message: "Tag not found." });
       return;
@@ -65,7 +65,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(400).json({ message: "Tag id is required." });
       return;
     }
-    await prisma.contactTag.deleteMany({ where: { id, userId } });
+    await prisma.contactTag.deleteMany({ where: { id, user_id: userId } });
     res.status(200).json({ ok: true });
     return;
   }

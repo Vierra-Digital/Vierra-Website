@@ -1,12 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { prisma } from "@/lib/prisma"
-import {
-  getSessionRole,
-  handleApiError,
-  requireMethodOrRespond405,
-  requireRolesOrRespond403,
-  requireSessionOrRespond401,
-} from "@/lib/api/guards"
+import { requireRole } from "@/lib/auth"
+import { handleApiError } from "@/lib/api/guards"
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens"
 import {
   getCalendarVisibilityPreferences,
@@ -103,17 +98,19 @@ function resolveMeetingLink(event: GoogleCalendarEvent) {
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  try {
-    requireMethodOrRespond405(req, res, ["GET"])
-    const session = await requireSessionOrRespond401(req, res)
-    const role = getSessionRole(session)
-    requireRolesOrRespond403(res, role, ["admin", "staff"])
+  if (req.method !== "GET") {
+    res.setHeader("Allow", ["GET"])
+    return res.status(405).json({ message: "Method Not Allowed" })
+  }
+  const session = await requireRole(req, res, ["admin", "staff"])
+  if (!session) return
 
-    const userId = Number((session.user as any).id)
-    const tokenRows = await prisma.userToken.findMany({
-      where: { userId, platform: { startsWith: "gmail:" } },
+  try {
+    const userId = session.user.id
+    const tokenRows = await prisma.platformToken.findMany({
+      where: { user_id: userId, platform: { startsWith: "gmail:" } },
       select: { platform: true },
-      orderBy: { createdAt: "desc" },
+      orderBy: { created_at: "desc" },
     })
 
     if (!tokenRows.length) {

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { parseContactsCsvWithValidation } from "@/lib/contacts/csv";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
+import { resolveAccountId } from "@/lib/api/emailAccounts";
 
 type ImportedRow = {
   lineNumber: number;
@@ -59,10 +60,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const session = await requireRole(req, res);
   if (!session) return;
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
 
   const csvText = typeof req.body?.csvText === "string" ? req.body.csvText : "";
   const accountEmail = typeof req.body?.accountEmail === "string" ? req.body.accountEmail.trim().toLowerCase() : "";
+  const accountId = await resolveAccountId(userId, accountEmail);
   if (!csvText.trim()) {
     res.status(400).json({ message: "csvText is required." });
     return;
@@ -84,7 +86,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   let imported = 0;
   let skipped = 0;
   const createdTagIds = new Map<string, string>();
-  const normalizedAccountEmail = accountEmail || null;
   const rowErrors: Array<{ lineNumber: number; email: string; reasons: string[] }> = [];
 
   for (const row of rows as ImportedRow[]) {
@@ -124,27 +125,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const updateData = {
-      firstName: row.firstName || null,
-      lastName: row.lastName || null,
+      first_name: row.firstName || null,
+      last_name: row.lastName || null,
       phone: normalizedPhone || null,
       business: row.business || null,
       website: row.website || null,
       address: row.address || null,
     };
     const createData = {
-      userId,
-      accountEmail: normalizedAccountEmail,
-      source: "CSV" as const,
+      user_id: userId,
+      account_id: accountId,
+      source: "csv" as const,
       email,
       ...updateData,
     };
 
-    const contact = normalizedAccountEmail
+    const contact = accountId
       ? await prisma.contact.upsert({
           where: {
-            userId_accountEmail_email: {
-              userId,
-              accountEmail: normalizedAccountEmail,
+            user_id_account_id_email: {
+              user_id: userId,
+              account_id: accountId,
               email,
             },
           },
@@ -154,8 +155,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       : await (async () => {
           const existing = await prisma.contact.findFirst({
             where: {
-              userId,
-              accountEmail: null,
+              user_id: userId,
+              account_id: null,
               email,
             },
             select: { id: true },
@@ -177,27 +178,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (!tagId) {
           const tag = await prisma.contactTag.upsert({
             where: {
-              userId_name: { userId, name: tagName },
+              user_id_name: { user_id: userId, name: tagName },
             },
             update: {},
-            create: { userId, name: tagName },
+            create: { user_id: userId, name: tagName },
           });
           tagId = tag.id;
           createdTagIds.set(tagName, tag.id);
         }
         await prisma.contactTagAssignment.upsert({
           where: {
-            contactId_tagId: { contactId: contact.id, tagId },
+            contact_id_tag_id: { contact_id: contact.id, tag_id: tagId },
           },
           update: {},
-          create: { contactId: contact.id, tagId },
+          create: { contact_id: contact.id, tag_id: tagId },
         });
       }
     }
   }
 
   if (imported > 0) {
-    await syncContactsSpreadsheetForUser({ userId });
+    await syncContactsSpreadsheetForUser({ userId, companyId: session.companyId });
   }
   res.status(200).json({
     imported,

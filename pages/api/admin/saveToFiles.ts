@@ -11,6 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ message: `Method ${req.method} Not Allowed` })
   }
 
+  const { companyId } = session
   const { tokenId, fileName, recipientType, recipientId } = req.body ?? {}
   if (!tokenId || !recipientType || !recipientId) {
     return res.status(400).json({
@@ -27,8 +28,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     if (recipientType === "staff") {
-      const userId = Number(recipientId)
-      if (!Number.isInteger(userId)) {
+      const userId = String(recipientId)
+      if (!userId) {
         return res.status(400).json({ message: "Invalid recipientId for staff." })
       }
       const user = await prisma.user.findUnique({ where: { id: userId } })
@@ -36,7 +37,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(404).json({ message: "Staff member not found." })
       }
       const existing = await prisma.storedFile.findFirst({
-        where: { signingTokenId: tokenId, userId },
+        where: { signing_token_id: tokenId, user_id: userId },
       })
       if (existing) {
         return res.status(200).json({ success: true, alreadySaved: true })
@@ -44,9 +45,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await prisma.storedFile.create({
         data: {
           name,
-          signingTokenId: tokenId,
-          fileType: "pdf",
-          userId,
+          signing_token_id: tokenId,
+          file_type: "pdf",
+          user_id: userId,
+          company_id: companyId,
         },
       })
     } else {
@@ -56,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(404).json({ message: "Client not found." })
       }
       const existing = await prisma.storedFile.findFirst({
-        where: { signingTokenId: tokenId, clientId },
+        where: { signing_token_id: tokenId, client_id: clientId },
       })
       if (existing) {
         return res.status(200).json({ success: true, alreadySaved: true })
@@ -64,9 +66,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       await prisma.storedFile.create({
         data: {
           name,
-          signingTokenId: tokenId,
-          fileType: "pdf",
-          clientId,
+          signing_token_id: tokenId,
+          file_type: "pdf",
+          client_id: clientId,
+          company_id: companyId,
         },
       })
     }

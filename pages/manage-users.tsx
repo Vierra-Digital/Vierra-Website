@@ -5,10 +5,9 @@ import { FiUsers, FiLogOut, FiFileText } from "react-icons/fi"
 import Image from "next/image"
 import Link from "next/link"
 import { Inter } from "next/font/google"
-import { signOut } from "next-auth/react"
+import { signOut } from "@/lib/session-client"
 import type { GetServerSideProps } from "next"
-import { getServerSession } from "next-auth/next"
-import { authOptions } from "@/pages/api/auth/[...nextauth]"
+import { requireSession } from "@/lib/auth"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -18,12 +17,26 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
   type CompletedUser = {
     id: string
     email: string
-    password: string
     client?: { name: string | null }
   }
   const router = useRouter()
   const [users, setUsers] = useState<CompletedUser[]>([])
   const [selected, setSelected] = useState<CompletedUser | null>(null)
+  const [resetStatus, setResetStatus] = useState<"idle" | "sending" | "sent" | "error">("idle")
+
+  const sendResetEmail = async (userId: string) => {
+    setResetStatus("sending")
+    try {
+      const r = await fetch("/api/admin/userPassword", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: userId }),
+      })
+      setResetStatus(r.ok ? "sent" : "error")
+    } catch {
+      setResetStatus("error")
+    }
+  }
 
   useEffect(() => {
     fetch("/api/admin/completed-users")
@@ -95,7 +108,7 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
         {users.map((u) => (
           <div key={u.id} className="mb-2">
             <button
-              onClick={() => setSelected(u)}
+              onClick={() => { setSelected(u); setResetStatus("idle") }}
               className="border border-white/20 px-3 py-1 rounded"
             >
               {u.client?.name || "No Name"}
@@ -106,7 +119,15 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
         {selected && (
           <div className="mt-4 space-y-2">
             <p>Email: {selected.email}</p>
-            <p>Password: {selected.password}</p>
+            <button
+              onClick={() => sendResetEmail(selected.id)}
+              disabled={resetStatus === "sending"}
+              className="border border-white/20 px-3 py-1 rounded text-sm"
+            >
+              {resetStatus === "sending" ? "Sending…" : "Send password reset email"}
+            </button>
+            {resetStatus === "sent" && <p className="text-green-400 text-sm">Reset email sent.</p>}
+            {resetStatus === "error" && <p className="text-red-400 text-sm">Failed to send reset email.</p>}
           </div>
         )}
       </div>
@@ -116,7 +137,7 @@ export default function ManageUsersPage({ dashboardHref }: PageProps) {
 }
 
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
-  const session = await getServerSession(ctx.req, ctx.res, authOptions)
+  const session = await requireSession(ctx.req, ctx.res)
   if (!session) {
     return { redirect: { destination: "/login", permanent: false } }
   }

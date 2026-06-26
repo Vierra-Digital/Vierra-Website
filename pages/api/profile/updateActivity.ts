@@ -21,27 +21,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ message: "Invalid status value" });
     }
 
-    const updateData: any = {
-      lastActiveAt: new Date(),
-    };
-    
+    const user = await prisma.user.findUnique({
+      where: { email: userEmail },
+      select: { id: true, name: true, email: true },
+    });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
     if (status) {
-      updateData.status = status;
+      await prisma.companyMembership.updateMany({
+        where: { user_id: user.id },
+        data: { status },
+      });
     }
 
-    const updated = await prisma.user.update({
-      where: { email: userEmail },
-      data: updateData,
-      select: { 
-        id: true,
-        name: true,
-        email: true,
-        status: true,
-        lastActiveAt: true
-      },
-    });
-
-    return res.status(200).json(updated);
+    return res.status(200).json({ id: user.id, name: user.name, email: user.email, status: status ?? null });
   } catch (e) {
     console.error("profile/updateActivity", e);
     return res.status(500).json({ message: "Internal Server Error" });
