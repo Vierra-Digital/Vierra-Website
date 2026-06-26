@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Head from "next/head";
 import { Inter } from "next/font/google";
+import { motion } from "framer-motion";
 import { Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
 import { useRouter } from "next/router";
 import { useSession } from "@/lib/session-client";
@@ -28,54 +29,34 @@ function resolveCredentialErrorMessage(rawError?: string | null) {
 }
 
 /**
- * Lightweight, GPU-accelerated animated backdrop: a handful of blurred gradient
- * "aurora" orbs that drift on the compositor (transform/opacity only) plus a
- * faint grid. Replaces the old particles.js canvas, which was the source of the
- * lag. Honors prefers-reduced-motion.
+ * Animated backdrop that mirrors the homepage hero: a dark #18042A field with
+ * drifting vertical grid lines, a twinkling starfield, and two slowly floating
+ * blurred purple gradient blobs. Pure transform/opacity on the compositor.
+ * Honors prefers-reduced-motion. Self-contained so it doesn't depend on the
+ * App Router's global stylesheet.
  */
-// Static (deterministic) particle layout — fixed values avoid SSR/client
-// hydration mismatches and keep each dot animating transform/opacity only.
-const PARTICLES = [
-  { left: "8%", size: 3, delay: 0, dur: 17, drift: 18 },
-  { left: "18%", size: 2, delay: 6, dur: 22, drift: -14 },
-  { left: "27%", size: 4, delay: 2, dur: 19, drift: 22 },
-  { left: "38%", size: 2, delay: 9, dur: 24, drift: -10 },
-  { left: "46%", size: 3, delay: 4, dur: 20, drift: 16 },
-  { left: "55%", size: 2, delay: 11, dur: 26, drift: -20 },
-  { left: "63%", size: 4, delay: 1, dur: 18, drift: 12 },
-  { left: "71%", size: 3, delay: 7, dur: 23, drift: -16 },
-  { left: "80%", size: 2, delay: 3, dur: 21, drift: 20 },
-  { left: "88%", size: 3, delay: 10, dur: 25, drift: -12 },
-  { left: "33%", size: 2, delay: 13, dur: 28, drift: 14 },
-  { left: "92%", size: 2, delay: 5, dur: 19, drift: -18 },
-] as const;
+// Evenly spaced vertical grid lines, like the hero.
+const GRID_LINES = Array.from({ length: 7 }, (_, i) => i);
 
 const AnimatedBackground = () => (
   <div className="login-bg" aria-hidden="true">
-    <div className="login-center-glow" />
-    <div className="aurora aurora--1" />
-    <div className="aurora aurora--2" />
-    <div className="aurora aurora--3" />
-    <div className="aurora aurora--4" />
-    <div className="login-grid" />
-    <div className="login-particles">
-      {PARTICLES.map((p, i) => (
-        <span
-          key={i}
-          className="login-particle"
-          style={
-            {
-              left: p.left,
-              width: `${p.size}px`,
-              height: `${p.size}px`,
-              "--delay": `${p.delay}s`,
-              "--dur": `${p.dur}s`,
-              "--drift": `${p.drift}px`,
-            } as React.CSSProperties
-          }
-        />
-      ))}
-    </div>
+    {GRID_LINES.map((i) => (
+      <motion.div
+        key={i}
+        className="login-gridline"
+        style={{ left: `${((i + 1) * 100) / 8}%` }}
+        initial={{ height: 0, opacity: 0 }}
+        animate={{ height: "100%", opacity: 0.07, x: [0, 10, 0] }}
+        transition={{
+          duration: 1.1,
+          delay: i * 0.06,
+          ease: "easeInOut",
+          x: { duration: 4, repeat: Infinity, ease: "easeInOut" },
+        }}
+      />
+    ))}
+    <div className="login-stars" />
+    <div className="login-stars login-stars--2" />
     <div className="login-vignette" />
   </div>
 );
@@ -300,8 +281,7 @@ const StyleBlock = () => (
       min-height: 100vh;
       min-height: 100dvh;
       overflow: hidden;
-      background:
-        radial-gradient(120% 120% at 50% -10%, #2e0a4f 0%, #1b0833 45%, #0d0119 100%);
+      background: #18042a;
     }
 
     .login-bg {
@@ -311,114 +291,42 @@ const StyleBlock = () => (
       overflow: hidden;
     }
 
-    .aurora {
+    /* Vertical grid lines — height / opacity / x drift driven by framer-motion. */
+    .login-gridline {
       position: absolute;
-      border-radius: 9999px;
-      filter: blur(90px);
-      opacity: 0.55;
-      will-change: transform;
-      mix-blend-mode: screen;
-    }
-    .aurora--1 {
-      top: -12%;
-      left: -8%;
-      width: 46vw;
-      height: 46vw;
-      background: radial-gradient(circle at 30% 30%, #8f42ff, transparent 70%);
-      animation: aurora-drift-1 22s ease-in-out infinite;
-    }
-    .aurora--2 {
-      bottom: -18%;
-      right: -10%;
-      width: 50vw;
-      height: 50vw;
-      background: radial-gradient(circle at 60% 40%, #701cc0, transparent 70%);
-      animation: aurora-drift-2 26s ease-in-out infinite;
-    }
-    .aurora--3 {
-      top: 30%;
-      left: 45%;
-      width: 34vw;
-      height: 34vw;
-      background: radial-gradient(circle at 50% 50%, #b06bff, transparent 70%);
-      animation: aurora-drift-3 30s ease-in-out infinite;
-    }
-    .aurora--4 {
-      top: 8%;
-      right: 6%;
-      width: 30vw;
-      height: 30vw;
-      background: radial-gradient(circle at 40% 60%, #5a1bb0, transparent 70%);
-      animation: aurora-drift-4 24s ease-in-out infinite;
+      top: 0;
+      width: 0;
+      border-left: 1px solid #ffffff;
+      will-change: height, transform, opacity;
     }
 
-    /* Drift + a gentle opacity "breathe"; only transform/opacity animate. */
-    @keyframes aurora-drift-1 {
-      0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.5; }
-      50% { transform: translate3d(12vw, 8vh, 0) scale(1.15); opacity: 0.65; }
-    }
-    @keyframes aurora-drift-2 {
-      0%, 100% { transform: translate3d(0, 0, 0) scale(1.05); opacity: 0.6; }
-      50% { transform: translate3d(-10vw, -6vh, 0) scale(0.9); opacity: 0.4; }
-    }
-    @keyframes aurora-drift-3 {
-      0%, 100% { transform: translate3d(-50%, 0, 0) scale(1); opacity: 0.35; }
-      50% { transform: translate3d(-58%, 10vh, 0) scale(1.2); opacity: 0.5; }
-    }
-    @keyframes aurora-drift-4 {
-      0%, 100% { transform: translate3d(0, 0, 0) scale(0.95); opacity: 0.45; }
-      50% { transform: translate3d(-8vw, 7vh, 0) scale(1.1); opacity: 0.6; }
-    }
-
-    /* Soft ambient glow behind the card — gently pulses (scale/opacity), no rotation. */
-    .login-center-glow {
+    /* Twinkling starfield — identical to the homepage hero's .cta-stars: two
+       layers drifting diagonally by animating background-position, fast (5s/9s). */
+    .login-stars {
       position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 70vmax;
-      height: 70vmax;
-      transform: translate3d(-50%, -50%, 0);
-      background: radial-gradient(circle, rgba(143, 66, 255, 0.16) 0%, rgba(112, 28, 192, 0.06) 35%, transparent 65%);
-      will-change: transform, opacity;
-      animation: login-center-pulse 9s ease-in-out infinite;
-    }
-    @keyframes login-center-pulse {
-      0%, 100% { transform: translate3d(-50%, -50%, 0) scale(0.92); opacity: 0.65; }
-      50% { transform: translate3d(-50%, -50%, 0) scale(1.08); opacity: 1; }
-    }
-
-    .login-grid {
-      position: absolute;
-      inset: 0;
+      inset: -10% -10% -10% -10%;
       background-image:
-        linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-      background-size: 54px 54px;
-      mask-image: radial-gradient(120% 80% at 50% 40%, #000 30%, transparent 80%);
-      -webkit-mask-image: radial-gradient(120% 80% at 50% 40%, #000 30%, transparent 80%);
+        radial-gradient(1.5px 1.5px at 25px 35px, rgba(255, 255, 255, 0.9), transparent),
+        radial-gradient(1.5px 1.5px at 120px 80px, rgba(255, 255, 255, 0.7), transparent),
+        radial-gradient(1px 1px at 70px 160px, rgba(255, 255, 255, 0.8), transparent),
+        radial-gradient(1px 1px at 180px 50px, rgba(255, 255, 255, 0.6), transparent),
+        radial-gradient(1.5px 1.5px at 200px 140px, rgba(255, 255, 255, 0.85), transparent),
+        radial-gradient(1px 1px at 40px 110px, rgba(255, 255, 255, 0.5), transparent);
+      background-repeat: repeat;
+      background-size: 220px 220px;
+      opacity: 0.8;
+      animation: login-stars-drift 5s linear infinite;
     }
-
-    .login-particles {
-      position: absolute;
-      inset: 0;
-      overflow: hidden;
+    .login-stars--2 {
+      background-size: 440px 440px;
+      opacity: 0.5;
+      animation: login-stars-drift-2 9s linear infinite;
     }
-    .login-particle {
-      position: absolute;
-      bottom: -8px;
-      border-radius: 9999px;
-      background: rgba(214, 188, 255, 0.7);
-      box-shadow: 0 0 6px rgba(176, 107, 255, 0.7);
-      opacity: 0;
-      will-change: transform, opacity;
-      animation: login-particle-rise var(--dur, 20s) linear infinite;
-      animation-delay: var(--delay, 0s);
+    @keyframes login-stars-drift {
+      to { background-position: 220px 220px; }
     }
-    @keyframes login-particle-rise {
-      0% { transform: translate3d(0, 0, 0); opacity: 0; }
-      10% { opacity: 0.8; }
-      90% { opacity: 0.8; }
-      100% { transform: translate3d(var(--drift, 0px), -100vh, 0); opacity: 0; }
+    @keyframes login-stars-drift-2 {
+      to { background-position: 440px 440px; }
     }
 
     .login-vignette {
@@ -600,15 +508,11 @@ const StyleBlock = () => (
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .aurora,
-      .login-center-glow,
-      .login-particle,
+      .login-stars,
+      .login-stars--2,
       .login-submit::before,
       .login-card-wrap {
         animation: none !important;
-      }
-      .login-particle {
-        opacity: 0;
       }
     }
   `}</style>
