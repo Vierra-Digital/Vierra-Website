@@ -63,7 +63,7 @@ export default function OnboardingStartPage() {
           </h1>
           <h2 className="mt-6 mb-2 text-center text-xl font-semibold text-white">Set up your company</h2>
           <p className="mb-6 text-center text-sm text-white/60">
-            You're not part of a company yet. Create one to get started — you'll be its first admin.
+            You&apos;re not part of a company yet. Create one to get started — you&apos;ll be its first admin.
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
