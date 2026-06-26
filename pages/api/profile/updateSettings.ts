@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ message: "User email not found in session" });
     }
 
-    const { emailNotifications, twoFactorEnabled, theme, language } = req.body;
+    const { emailNotifications, theme, language } = req.body;
     if (theme && !["light", "dark", "auto"].includes(theme)) {
       return res.status(400).json({ message: "Invalid theme value" });
     }
@@ -24,24 +24,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ message: "Invalid language value" });
     }
 
-    const updateData: any = {};
-    if (typeof emailNotifications === "boolean") updateData.emailNotifications = emailNotifications;
-    if (typeof twoFactorEnabled === "boolean") updateData.twoFactorEnabled = twoFactorEnabled;
-    if (theme) updateData.theme = theme;
-    if (language) updateData.language = language;
-
-    const updated = await prisma.user.update({
+    const user = await prisma.user.findUnique({
       where: { email: userEmail },
-      data: updateData,
-      select: { 
-        emailNotifications: true,
-        twoFactorEnabled: true,
-        theme: true,
-        language: true
-      },
+      select: { id: true },
+    });
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const prefData: Record<string, unknown> = {};
+    if (typeof emailNotifications === "boolean") prefData.email_notifications = emailNotifications;
+    if (theme) prefData.theme = theme;
+    if (language) prefData.language = language;
+
+    const updated = await prisma.userPreference.upsert({
+      where: { user_id: user.id },
+      create: { user_id: user.id, ...prefData },
+      update: prefData,
+      select: { email_notifications: true, theme: true, language: true },
     });
 
-    return res.status(200).json(updated);
+    return res.status(200).json({
+      emailNotifications: updated.email_notifications,
+      theme: updated.theme,
+      language: updated.language,
+    });
   } catch (e) {
     console.error("profile/updateSettings", e);
     return res.status(500).json({ message: "Internal Server Error" });

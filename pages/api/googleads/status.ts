@@ -1,6 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 
@@ -32,12 +31,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (sessionId) {
     try {
       const row = await prisma.onboardingPlatformToken.findUnique({
-        where: { sessionId_platform: { sessionId, platform: "googleads" as any } },
-        select: { accessToken: true },
+        where: { session_id_platform: { session_id: sessionId, platform: "googleads" } },
+        select: { access_token: true },
       });
       if (!row) { res.status(200).json({ connected: false }); return; }
 
-      const token = decrypt(row.accessToken);
+      const token = decrypt(row.access_token);
       const connected = await tokenIsValid(token);
       res.status(200).json({ connected });
       return;
@@ -47,18 +46,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return;
     }
   }
-  const session = await getServerSession(req, res, authOptions);
+  const session = await requireSession(req, res);
   if (!session) { res.status(401).json({ connected: false }); return; }
 
-  const userId = Number((session.user as any).id);
+  const userId = (session.user as any).id;
   try {
-    const row = await prisma.userToken.findUnique({
-      where: { userId_platform: { userId, platform: "googleads" as any } },
-      select: { accessToken: true },
+    const row = await prisma.platformToken.findUnique({
+      where: { user_id_platform: { user_id: userId, platform: "googleads" } },
+      select: { access_token: true },
     });
     if (!row) { res.status(200).json({ connected: false }); return; }
 
-    const token = decrypt(row.accessToken);
+    const token = decrypt(row.access_token);
     const connected = await tokenIsValid(token);
     res.status(200).json({ connected });
   } catch (e) {

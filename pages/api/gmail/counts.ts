@@ -118,15 +118,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireRole(req, res);
   if (!session) return;
 
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
   const accountsParam = asStr(req.query.accounts);
   const selectedEmails = (accountsParam || "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
 
-  const rows = await prisma.userToken.findMany({
-    where: { userId, platform: { startsWith: "gmail:" } },
+  const rows = await prisma.platformToken.findMany({
+    where: { user_id: userId, platform: { startsWith: "gmail:" } },
     select: { platform: true },
   });
 
@@ -136,13 +136,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }))
     .filter((row) => (selectedEmails.length ? selectedEmails.includes(row.email) : true));
 
+  let selectedAccountIds: string[] = [];
+  if (selectedEmails.length > 0) {
+    const accounts = await prisma.emailProviderAccount.findMany({
+      where: { user_id: userId, account_email: { in: selectedEmails } },
+      select: { id: true },
+    });
+    selectedAccountIds = accounts.map((a) => a.id);
+  }
+
   const composeDraftWhere = {
-    userId,
+    user_id: userId,
     ...(selectedEmails.length
       ? {
           OR: [
-            { accountEmail: null },
-            { accountEmail: { in: selectedEmails } },
+            { account_id: null },
+            { account_id: { in: selectedAccountIds } },
           ],
         }
       : {}),

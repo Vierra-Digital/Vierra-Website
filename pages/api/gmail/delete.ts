@@ -15,11 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireRole(req, res);
   if (!session) return;
 
-  const userId = Number((session.user as any).id);
-  if (!userId || Number.isNaN(userId)) {
-    res.status(400).json({ message: "Invalid session user." });
-    return;
-  }
+  const userId = session.user.id;
 
   const email = normalizeEmail(req.body?.email);
   if (!email) {
@@ -29,11 +25,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const platform = `gmail:${email}`;
-    const deleted = await prisma.userToken.deleteMany({
-      where: {
-        userId,
-        platform,
-      },
+    const deleted = await prisma.platformToken.deleteMany({
+      where: { user_id: userId, platform },
     });
 
     if (deleted.count === 0) {

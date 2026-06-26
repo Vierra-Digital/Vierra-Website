@@ -1,17 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import crypto from "crypto";
-import { encrypt } from "@/lib/crypto";
+import { createSupabaseAuthUser, getSupabaseAdmin } from "@/lib/supabase/admin";
 import { sendClientOnboardingCompletedEmail } from "@/lib/emailSender";
 import { resolveBaseUrl } from "@/lib/api/url";
-
-function generatePassword(len = 14) {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@$%^*_-";
-  const bytes = crypto.randomBytes(len);
-  let out = "";
-  for (let i = 0; i < len; i++) out += alphabet[bytes[i] % alphabet.length];
-  return out;
-}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
@@ -25,92 +16,103 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    let initialPassword: string | null = null;
     let userEmail: string | null = null;
     let clientName: string | null = null;
     let businessName: string | null = null;
-    let userId: number | null = null;
+    let userId: string | null = null;
+
+    const precheck = await prisma.onboardingSession.findUnique({
+      where: { id: token },
+      include: { clients: true },
+    });
+    if (!precheck) throw new Error("Session not found");
+    if (!precheck.clients) throw new Error("Client missing for session");
+
+    let newSupabaseUserId: string | null = null;
+    if (completed) {
+      const existingUser = await prisma.user.findUnique({
+        where: { email: precheck.clients.email.toLowerCase() },
+      });
+      if (!existingUser) {
+        const authUser = await createSupabaseAuthUser(precheck.clients.email.toLowerCase());
+        newSupabaseUserId = authUser.id;
+      }
+    }
 
     await prisma.$transaction(async (tx) => {
       const sess = await tx.onboardingSession.findUnique({
         where: { id: token },
-        include: { client: true },
+        include: { clients: true },
       });
       if (!sess) throw new Error("Session not found");
-      if (!sess.client) throw new Error("Client missing for session");
-      const updateData: any = {
+      if (!sess.clients) throw new Error("Client missing for session");
+      const updateData: Record<string, unknown> = {
         answers,
-        lastUpdatedAt: new Date(),
+        last_updated_at: new Date(),
       };
       if (sess.status === "pending") updateData.status = "in_progress";
       if (completed) {
-        updateData.submittedAt = new Date();
+        updateData.submitted_at = new Date();
         updateData.status = "completed";
       }
       await tx.onboardingSession.update({ where: { id: token }, data: updateData });
       if (!completed) return;
-      const email = sess.client.email.toLowerCase();
+      const email = sess.clients.email.toLowerCase();
       userEmail = email;
-      clientName = sess.client.name;
-      businessName = sess.client.businessName;
+      clientName = sess.clients.name;
+      businessName = sess.clients.business_name;
 
       let user = await tx.user.findUnique({ where: { email } });
       if (!user) {
-        initialPassword = generatePassword(14);
-        const passwordEnc = encrypt(initialPassword);
         user = await tx.user.create({
-          data: { email, passwordEnc, role: "user", name: sess.client.name },
+          data: { id: newSupabaseUserId!, email, name: sess.clients.name },
         });
-      } else if (!user.name && sess.client.name) {
+      } else if (!user.name && sess.clients.name) {
         user = await tx.user.update({
           where: { id: user.id },
-          data: { name: sess.client.name },
+          data: { name: sess.clients.name },
         });
       }
       userId = user.id;
-      if (!sess.client.userId || sess.client.userId !== user.id) {
-        await tx.client.update({ where: { id: sess.client.id }, data: { userId: user.id } });
+      if (!sess.clients.user_id || sess.clients.user_id !== user.id) {
+        await tx.client.update({ where: { id: sess.clients.id }, data: { user_id: user.id } });
       }
       const tmpTokens = await tx.onboardingPlatformToken.findMany({
-        where: { sessionId: token },
-        select: { platform: true, accessToken: true, refreshToken: true, expiresAt: true },
+        where: { session_id: token },
+        select: { platform: true, access_token: true, refresh_token: true, expires_at: true },
       });
 
       for (const t of tmpTokens) {
-        await tx.userToken.upsert({
-          where: { userId_platform: { userId: user.id, platform: t.platform as any } },
-          update: { accessToken: t.accessToken, refreshToken: t.refreshToken },
+        await tx.platformToken.upsert({
+          where: { user_id_platform: { user_id: user.id, platform: t.platform } },
+          update: { access_token: t.access_token, refresh_token: t.refresh_token },
           create: {
-            userId: user.id,
-            platform: t.platform as any,
-            accessToken: t.accessToken,
-            refreshToken: t.refreshToken,
-  
+            user_id: user.id,
+            platform: t.platform,
+            access_token: t.access_token,
+            refresh_token: t.refresh_token,
           },
         });
       }
       if (tmpTokens.length > 0) {
-        await tx.onboardingPlatformToken.deleteMany({ where: { sessionId: token } });
+        await tx.onboardingPlatformToken.deleteMany({ where: { session_id: token } });
       }
       await tx.onboardingSession.update({
         where: { id: token },
-        data: { consumedAt: new Date() },
+        data: { consumed_at: new Date() },
       });
     });
 
     if (completed && userId && userEmail) {
       try {
-        const resetToken = crypto.randomBytes(32).toString("hex");
-        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-        await prisma.passwordResetToken.create({
-          data: {
-            token: resetToken,
-            userId,
-            expiresAt,
-          },
-        });
         const baseUrl = resolveBaseUrl(req);
-        const setPasswordLink = `${baseUrl}/set-password/${resetToken}`;
+        const supabase = getSupabaseAdmin();
+        const { data: linkData } = await supabase.auth.admin.generateLink({
+          type: "recovery",
+          email: userEmail,
+          options: { redirectTo: `${baseUrl}/set-password` },
+        });
+        const setPasswordLink = (linkData as any)?.properties?.action_link ?? `${baseUrl}/set-password`;
         await sendClientOnboardingCompletedEmail(
           userEmail,
           clientName || "there",
@@ -124,10 +126,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(200).json({
       ok: true,
-      message: initialPassword
+      message: newSupabaseUserId
         ? "User created, linked, and tokens migrated."
         : "User linked and tokens migrated.",
-      credentials: initialPassword ? { email: userEmail, password: initialPassword } : null,
     });
   } catch (err) {
     console.error("Error saving answers / completing:", err);

@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx"
 import { getFileBuffer, STORAGE_BUCKETS } from "@/lib/storage"
+import { getSessionData } from "@/lib/sessionStore"
 import * as XLSX from "xlsx"
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib"
 
@@ -207,8 +208,7 @@ async function convertXlsxToPdfBuffer(xlsxBuffer: Buffer, title: string) {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireSession(req, res)
   if (!session) return res.status(401).json({ message: "Not authenticated" })
-  const role = (session.user as { role?: string })?.role
-  if (role !== "admin" && role !== "staff" && role !== "user")
+  if (session.kind === "unaffiliated")
     return res.status(403).json({ message: "Forbidden" })
 
   if (req.method !== "GET") {
@@ -228,31 +228,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ message: "tokenId is required." })
   }
 
-  const sessionUserId = (session.user as unknown as { id?: number })?.id
-  const uid = sessionUserId != null ? Number(sessionUserId) : null
-  if (uid != null && !Number.isNaN(uid) && tokenId.startsWith(`contacts-xlsx:${uid}`)) {
-    await syncContactsSpreadsheetForUser({ userId: uid })
+  const uid = session.user.id
+  if (session.kind === "member" && tokenId.startsWith(`contacts-xlsx:${uid}`)) {
+    await syncContactsSpreadsheetForUser({ userId: uid, companyId: session.companyId })
   }
 
-  const where: { signingTokenId: string; userId?: number; clientId?: string } = { signingTokenId: tokenId }
+  const where: { signing_token_id: string; company_id: string; user_id?: string; client_id?: string } = {
+    signing_token_id: tokenId,
+    company_id: session.companyId,
+  }
 
-  if (role === "user") {
-    const client = await prisma.client.findUnique({
-      where: { userId: uid != null && !Number.isNaN(uid) ? uid : -1 },
-      select: { id: true },
-    })
-    if (client) {
-      where.clientId = client.id
-    } else {
-      return res.status(404).json({ message: "File not found." })
-    }
-  } else if (uid != null) {
-    where.userId = uid
+  if (session.kind === "client") {
+    where.client_id = session.clientId
+  } else {
+    where.user_id = uid
   }
 
   const stored = await prisma.storedFile.findFirst({
     where,
-    select: { storageKey: true, name: true, fileType: true },
+    select: { storage_key: true, name: true, file_type: true },
   })
 
   const getSafeFilename = (fallback: string, fileType = "pdf") => {
@@ -280,12 +274,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   // Resolve bytes from object storage by key.
   let sourceBuffer: Buffer | null = null
-  if (stored?.storageKey) {
-    sourceBuffer = await getFileBuffer(STORAGE_BUCKETS.docs, stored.storageKey)
+  if (stored?.storage_key) {
+    sourceBuffer = await getFileBuffer(STORAGE_BUCKETS.docs, stored.storage_key)
   }
 
   if (sourceBuffer) {
-    const storedFileType = (stored?.fileType || "pdf").toLowerCase()
+    const storedFileType = (stored?.file_type || "pdf").toLowerCase()
     if (preview && storedFileType === "xlsx") {
       try {
         const pdfBuffer = await convertXlsxToPdfBuffer(sourceBuffer, stored?.name || "Contacts")
@@ -297,16 +291,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         // If conversion fails, fall back to raw file output.
       }
     }
-    const safeFilename = getSafeFilename(stored?.name || "document", stored?.fileType || "pdf")
-    setFileHeaders(safeFilename, sourceBuffer, stored?.fileType || "pdf")
+    const safeFilename = getSafeFilename(stored?.name || "document", stored?.file_type || "pdf")
+    setFileHeaders(safeFilename, sourceBuffer, stored?.file_type || "pdf")
     return res.send(sourceBuffer)
   }
 
   if (stored && !sourceBuffer) {
-    const signingSession = await prisma.signingSession.findUnique({
-      where: { token: tokenId },
-      select: { pdfBase64: true, originalFilename: true },
-    })
+    const signingSession = await getSessionData(tokenId)
     if (signingSession?.pdfBase64) {
       const safeFilename = getSafeFilename(signingSession.originalFilename || stored.name || "document", "pdf")
       const buffer = Buffer.from(signingSession.pdfBase64, "base64")

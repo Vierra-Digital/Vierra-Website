@@ -17,7 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireRole(req, res);
   if (!session) return;
 
-  const userId = Number((session.user as any).id);
+  const userId = (session.user as any).id;
   const id = asStr(req.body?.id);
   if (!id) {
     res.status(400).json({ message: "id is required." });
@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const account = await prisma.emailProviderAccount.findFirst({
-    where: { id, userId },
+    where: { id, user_id: userId },
   });
   if (!account) {
     res.status(404).json({ message: "Provider account not found." });
@@ -33,12 +33,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const transporter = nodemailer.createTransport({
-    host: account.smtpHost,
-    port: account.smtpPort,
-    secure: account.smtpSecure,
+    host: account.smtp_host,
+    port: account.smtp_port,
+    secure: account.smtp_secure,
     auth: {
-      user: account.smtpUsername,
-      pass: decrypt(account.smtpPasswordEnc),
+      user: account.smtp_username,
+      pass: decrypt(account.smtp_password_enc),
     },
   });
 
@@ -52,4 +52,3 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 }
-

@@ -29,8 +29,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       where: { id: token },
       data: {
         status: "pending",
-        expiresAt: newExpiresAt,
-        lastUpdatedAt: now,
+        expires_at: newExpiresAt,
+        last_updated_at: now,
       },
     });
 

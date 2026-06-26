@@ -43,7 +43,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "img-src 'self' data: https: blob:",
               "font-src 'self' https://fonts.gstatic.com data:",
-              "connect-src 'self' https://vierra-server.vercel.app https://api.linkedin.com https://graph.facebook.com https://www.googleapis.com https://www.linkedin.com https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com https://www.google.com https://stats.g.doubleclick.net",
+              "connect-src 'self' https://*.supabase.co https://vierra-server.vercel.app https://api.linkedin.com https://graph.facebook.com https://www.googleapis.com https://www.linkedin.com https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com https://www.google.com https://stats.g.doubleclick.net",
               "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
               "media-src 'self'",
               "object-src 'none'",

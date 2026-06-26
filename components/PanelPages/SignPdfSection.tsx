@@ -21,7 +21,7 @@ import "react-pdf/dist/esm/Page/AnnotationLayer.css"
 import "react-pdf/dist/esm/Page/TextLayer.css"
 import type { PdfField } from "@/lib/sessionStore"
 
-type StaffOption = { id: number; name: string | null; role: string }
+type StaffOption = { id: string; name: string | null; role: string }
 type ClientOption = { id: string; name: string }
 
 if (typeof window !== "undefined") {
@@ -305,7 +305,7 @@ const SignPdfSection: React.FC = () => {
           tokenId: generatedTokenId,
           fileName: generatedFileName,
           recipientType,
-          recipientId: recipientType === "staff" ? Number(selectedId) : selectedId,
+          recipientId: selectedId,
         }),
       })
       const data = await r.json().catch(() => ({}))

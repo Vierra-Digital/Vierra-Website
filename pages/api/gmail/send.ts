@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { requireRole } from "@/lib/auth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
+import { resolveAccountId } from "@/lib/api/emailAccounts";
 
 function asString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -53,7 +54,6 @@ function getPublicBaseUrl(req: NextApiRequest) {
   };
 
   const explicit =
-    process.env.NEXTAUTH_URL ||
     process.env.APP_URL ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
   if (explicit) {
@@ -267,7 +267,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireRole(req, res);
   if (!session) return;
 
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
   const accountEmail = normalizeEmail(asString(req.body?.accountEmail));
   const toRecipients = splitRecipients(asString(req.body?.to));
   const ccRecipients = splitRecipients(asString(req.body?.cc));
@@ -305,10 +305,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const providerAccount = providerAccountId
     ? await prisma.emailProviderAccount.findFirst({
-        where: { id: providerAccountId, userId },
+        where: { id: providerAccountId, user_id: userId },
       })
     : await prisma.emailProviderAccount.findFirst({
-        where: { userId, accountEmail },
+        where: { user_id: userId, account_email: accountEmail },
       });
 
   let tokenResult = await getValidGmailAccessToken(userId, accountEmail);
@@ -318,35 +318,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
+  const accountId = providerAccount?.id ?? (await resolveAccountId(userId, accountEmail));
+
   const [accountSetting, fallbackSetting] = await Promise.all([
-    prisma.emailAccountSetting.findUnique({
-      where: {
-        userId_accountEmail: {
-          userId,
-          accountEmail,
-        },
-      },
-      select: {
-        trackingEnabled: true,
-        openTrackingEnabled: true,
-        clickTrackingEnabled: true,
-      },
-    }),
+    accountId
+      ? prisma.emailAccountSetting.findUnique({
+          where: { account_id: accountId },
+          select: { tracking_enabled: true, open_tracking_enabled: true, click_tracking_enabled: true },
+        })
+      : null,
     prisma.emailAccountSetting.findFirst({
-      where: { userId },
-      orderBy: { updatedAt: "desc" },
-      select: {
-        trackingEnabled: true,
-        openTrackingEnabled: true,
-        clickTrackingEnabled: true,
-      },
+      where: { email_provider_accounts: { user_id: userId } },
+      orderBy: { updated_at: "desc" },
+      select: { tracking_enabled: true, open_tracking_enabled: true, click_tracking_enabled: true },
     }),
   ]);
   const setting = accountSetting || fallbackSetting;
 
-  const trackingEnabled = Boolean(setting?.trackingEnabled);
-  const openTrackingEnabled = trackingEnabled && Boolean(setting?.openTrackingEnabled ?? true);
-  const clickTrackingEnabled = trackingEnabled && Boolean(setting?.clickTrackingEnabled ?? true);
+  const trackingEnabled = Boolean(setting?.tracking_enabled);
+  const openTrackingEnabled = trackingEnabled && Boolean(setting?.open_tracking_enabled ?? true);
+  const clickTrackingEnabled = trackingEnabled && Boolean(setting?.click_tracking_enabled ?? true);
 
   const sanitizedHtmlInput = bodyHtmlInput ? sanitizeEmailHtml(bodyHtmlInput) : "";
   const plainTextBody =
@@ -358,18 +349,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const openToken = openTrackingEnabled ? randomUUID().replace(/-/g, "") : null;
   const outbound = await prisma.emailOutboundMessage.create({
     data: {
-      userId,
-      accountEmail,
+      user_id: userId,
+      account_id: accountId ?? "",
       subject,
-      bodyText: plainTextBody,
-      bodyHtml: sanitizedHtmlInput || linkifyText(plainTextBody),
-      trackingEnabled,
-      openToken,
-      recipients: {
+      body_text: plainTextBody,
+      body_html: sanitizedHtmlInput || linkifyText(plainTextBody),
+      tracking_enabled: trackingEnabled,
+      open_token: openToken,
+      email_outbound_recipients: {
         create: [
-          ...toRecipients.map((email) => ({ email, recipientType: "TO" as const })),
-          ...ccRecipients.map((email) => ({ email, recipientType: "CC" as const })),
-          ...bccRecipients.map((email) => ({ email, recipientType: "BCC" as const })),
+          ...toRecipients.map((email) => ({ email, recipient_type: "TO" })),
+          ...ccRecipients.map((email) => ({ email, recipient_type: "CC" })),
+          ...bccRecipients.map((email) => ({ email, recipient_type: "BCC" })),
         ],
       },
     },
@@ -383,9 +374,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const token = randomUUID().replace(/-/g, "");
       await prisma.emailTrackingLink.create({
         data: {
-          outboundMessageId: outbound.id,
+          outbound_message_id: outbound.id,
           token,
-          originalUrl: url,
+          original_url: url,
         },
       });
       replacements.set(url, `${baseUrl}/api/email/track/click/${token}`);
@@ -430,12 +421,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (providerAccount) {
     provider = "smtp";
     const transporter = nodemailer.createTransport({
-      host: providerAccount.smtpHost,
-      port: providerAccount.smtpPort,
-      secure: providerAccount.smtpSecure,
+      host: providerAccount.smtp_host,
+      port: providerAccount.smtp_port,
+      secure: providerAccount.smtp_secure,
       auth: {
-        user: providerAccount.smtpUsername,
-        pass: decrypt(providerAccount.smtpPasswordEnc),
+        user: providerAccount.smtp_username,
+        pass: decrypt(providerAccount.smtp_password_enc),
       },
     });
     try {
@@ -494,19 +485,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   await prisma.emailOutboundMessage.update({
     where: { id: outbound.id },
     data: {
-      gmailMessageId: sentMessageId,
-      threadId: sentThreadId,
-      bodyText: textBody,
-      bodyHtml: htmlBody,
+      gmail_message_id: sentMessageId,
+      thread_id: sentThreadId,
+      body_text: textBody,
+      body_html: htmlBody,
     },
   });
 
   if (draftKey) {
     await prisma.emailComposeDraft.deleteMany({
-      where: {
-        userId,
-        draftKey,
-      },
+      where: { user_id: userId, draft_key: draftKey },
     });
   }
 

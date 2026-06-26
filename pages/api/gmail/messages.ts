@@ -77,7 +77,6 @@ function buildMailboxQuery(mailbox: Mailbox) {
     return { q: "-in:inbox -in:sent -in:drafts -in:spam -in:trash" };
   }
   if (mailbox === "sent") {
-    // Exclude trashed items so "delete from sent" disappears immediately from Sent view.
     return { q: "in:sent -in:trash" };
   }
   if (mailbox === "drafts") return "DRAFT";
@@ -212,7 +211,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const session = await requireRole(req, res);
   if (!session) return;
 
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
   const mailbox = parseMailbox(asStr(req.query.mailbox));
   const pageRaw = Number(asStr(req.query.page));
   const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
@@ -225,8 +224,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
 
-  const rows = await prisma.userToken.findMany({
-    where: { userId, platform: { startsWith: "gmail:" } },
+  const rows = await prisma.platformToken.findMany({
+    where: { user_id: userId, platform: { startsWith: "gmail:" } },
     select: { platform: true },
   });
 
@@ -316,100 +315,140 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   let mergedMessages = messagesByAccount.flat().sort((a, b) => b.timestamp - a.timestamp);
   if (mailbox === "drafts") {
+    // Resolve account_ids for selected emails when filtering
+    let selectedAccountIds: string[] = [];
+    if (selectedEmails.length > 0) {
+      const acctRecords = await prisma.emailProviderAccount.findMany({
+        where: { user_id: userId, account_email: { in: selectedEmails } },
+        select: { id: true },
+      });
+      selectedAccountIds = acctRecords.map((r) => r.id);
+    }
+
     const composeDraftRows = await prisma.emailComposeDraft.findMany({
       where: {
-        userId,
-        ...(selectedEmails.length
+        user_id: userId,
+        ...(selectedAccountIds.length
           ? {
               OR: [
-                { accountEmail: null },
-                { accountEmail: { in: selectedEmails } },
+                { account_id: null },
+                { account_id: { in: selectedAccountIds } },
               ],
             }
           : {}),
       },
-      orderBy: { updatedAt: "desc" },
+      include: {
+        email_provider_accounts: { select: { account_email: true } },
+      },
+      orderBy: { updated_at: "desc" },
     });
     const mappedDrafts: MessageRow[] = composeDraftRows.map((draft) => {
-      const accountEmail = (draft.accountEmail || selectedEmails[0] || accountRows[0]?.email || "").toLowerCase();
-      const timestamp = draft.updatedAt.getTime();
+      const accountEmail = (
+        draft.email_provider_accounts?.account_email ||
+        selectedEmails[0] ||
+        accountRows[0]?.email ||
+        ""
+      ).toLowerCase();
+      const timestamp = draft.updated_at.getTime();
       const recipientLabel =
-        firstRecipient(draft.toText || "") || firstRecipient(draft.ccText || "") || firstRecipient(draft.bccText || "");
+        firstRecipient(draft.to_text || "") || firstRecipient(draft.cc_text || "") || firstRecipient(draft.bcc_text || "");
       return {
         id: `draftdb:${draft.id}`,
-        threadId: draft.threadId || "",
+        threadId: draft.thread_id || "",
         accountEmail,
         subject: decodeHtmlEntities(draft.subject || "(No Subject)"),
         from: recipientLabel || "(Draft)",
-        to: decodeHtmlEntities(draft.toText || ""),
-        fromRaw: decodeHtmlEntities(draft.toText || ""),
-        toRaw: decodeHtmlEntities(draft.toText || ""),
-        date: draft.updatedAt.toUTCString(),
+        to: decodeHtmlEntities(draft.to_text || ""),
+        fromRaw: decodeHtmlEntities(draft.to_text || ""),
+        toRaw: decodeHtmlEntities(draft.to_text || ""),
+        date: draft.updated_at.toUTCString(),
         timestamp,
-        snippet: decodeHtmlEntities((draft.bodyText || "").slice(0, 220)),
+        snippet: decodeHtmlEntities((draft.body_text || "").slice(0, 220)),
         mailbox: "drafts",
         replyTo: "",
-        messageIdHeader: draft.inReplyTo || "",
+        messageIdHeader: draft.in_reply_to || "",
         references: draft.references || "",
         unread: false,
         tracked: false,
         isComposeDraft: true,
-        draftKey: draft.draftKey,
-        composeCc: draft.ccText || "",
-        composeBcc: draft.bccText || "",
-        composeShowCc: Boolean(draft.showCc),
-        composeShowBcc: Boolean(draft.showBcc),
-        composeBodyText: draft.bodyText || "",
-        composeBodyHtml: draft.bodyHtml || "",
-        composePreviewHtml: draft.previewHtml || "",
+        draftKey: draft.draft_key,
+        composeCc: draft.cc_text || "",
+        composeBcc: draft.bcc_text || "",
+        composeShowCc: Boolean(draft.show_cc),
+        composeShowBcc: Boolean(draft.show_bcc),
+        composeBodyText: draft.body_text || "",
+        composeBodyHtml: draft.body_html || "",
+        composePreviewHtml: draft.preview_html || "",
       };
     });
     mergedMessages = [...mappedDrafts, ...mergedMessages].sort((a, b) => b.timestamp - a.timestamp);
   }
   const offset = (page - 1) * pageSize;
   const pageMessages = mergedMessages.slice(offset, offset + pageSize);
+
+  // Resolve account_id -> account_email mapping for tracked message lookup
+  const accountEmailToId = new Map<string, string>();
+  if (pageMessages.length > 0) {
+    const accountEmailsOnPage = [...new Set(pageMessages.map((m) => m.accountEmail).filter(Boolean))];
+    const providerAccounts = await prisma.emailProviderAccount.findMany({
+      where: { user_id: userId, account_email: { in: accountEmailsOnPage } },
+      select: { id: true, account_email: true },
+    });
+    for (const pa of providerAccounts) {
+      accountEmailToId.set(pa.account_email.toLowerCase(), pa.id);
+    }
+  }
+
   const trackedRows = await prisma.emailOutboundMessage.findMany({
     where: {
-      userId,
-      trackingEnabled: true,
-      gmailMessageId: { in: pageMessages.map((message) => message.id) },
+      user_id: userId,
+      tracking_enabled: true,
+      gmail_message_id: { in: pageMessages.map((message) => message.id) },
     },
     select: {
-      gmailMessageId: true,
-      accountEmail: true,
-      trackingEvents: {
-        where: { eventType: { in: ["OPEN", "CLICK"] } },
+      gmail_message_id: true,
+      account_id: true,
+      email_tracking_events: {
+        where: { event_type: { in: ["OPEN", "CLICK"] } },
         select: {
-          eventType: true,
-          occurredAt: true,
+          event_type: true,
+          occurred_at: true,
         },
-        orderBy: { occurredAt: "asc" },
+        orderBy: { occurred_at: "asc" },
       },
     },
   });
+
+  // Build reverse mapping: account_id -> account_email
+  const accountIdToEmail = new Map<string, string>();
+  for (const [email, id] of accountEmailToId.entries()) {
+    accountIdToEmail.set(id, email);
+  }
+
   const trackedStatsByKey = new Map<
     string,
     { openCount: number; clickCount: number; firstOpenedAt: string | null; lastOpenedAt: string | null; totalOpenWindowMs: number }
   >();
   for (const row of trackedRows) {
-    if (!row.gmailMessageId) continue;
-    const key = `${row.accountEmail.toLowerCase()}::${String(row.gmailMessageId)}`;
+    if (!row.gmail_message_id) continue;
+    const rowAccountEmail = accountIdToEmail.get(row.account_id) ?? "";
+    const key = `${rowAccountEmail.toLowerCase()}::${String(row.gmail_message_id)}`;
     let openCount = 0;
     let clickCount = 0;
     let firstOpenedAt: Date | null = null;
     let lastOpenedAt: Date | null = null;
     const openTimestamps: number[] = [];
-    for (const event of row.trackingEvents) {
-      if (event.eventType === "OPEN") {
+    for (const event of row.email_tracking_events) {
+      if (event.event_type === "OPEN") {
         openCount += 1;
-        openTimestamps.push(event.occurredAt.getTime());
-        if (!firstOpenedAt || event.occurredAt < firstOpenedAt) {
-          firstOpenedAt = event.occurredAt;
+        openTimestamps.push(event.occurred_at.getTime());
+        if (!firstOpenedAt || event.occurred_at < firstOpenedAt) {
+          firstOpenedAt = event.occurred_at;
         }
-        if (!lastOpenedAt || event.occurredAt > lastOpenedAt) {
-          lastOpenedAt = event.occurredAt;
+        if (!lastOpenedAt || event.occurred_at > lastOpenedAt) {
+          lastOpenedAt = event.occurred_at;
         }
-      } else if (event.eventType === "CLICK") {
+      } else if (event.event_type === "CLICK") {
         clickCount += 1;
       }
     }

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { Inter } from "next/font/google";
-import { useSession } from "next-auth/react";
+import { useSession } from "@/lib/session-client";
 import {
   FiPlus,
   FiTrash2,
@@ -23,16 +23,20 @@ import Modal from "@/components/ui/Modal";
 
 const inter = Inter({ subsets: ["latin"] });
 
-type ProjectBoard = "Design" | "Development" | "Outreach" | "Leadership";
-type ProjectTaskStatus = "NotStarted" | "Ongoing" | "UnderReview" | "Completed";
+type ProjectTaskStatus = "not_started" | "ongoing" | "under_review" | "completed";
 
 interface ChecklistItem {
   text: string;
   completed: boolean;
 }
 
+interface BoardInfo {
+  id: string;
+  name: string;
+}
+
 interface BoardMember {
-  id: number;
+  id: string;
   name: string | null;
   email: string | null;
   position: string | null;
@@ -40,52 +44,52 @@ interface BoardMember {
 
 interface ProjectTask {
   id: string;
-  board: ProjectBoard;
+  boardId: string;
   name: string;
   description: string;
   checklist: ChecklistItem[] | null;
   status: ProjectTaskStatus;
-  assignedTo: number[] | null;
+  assignedTo: string[] | null;
   deadline: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 const STATUS_LABELS: Record<ProjectTaskStatus, string> = {
-  NotStarted: "Not Started",
-  Ongoing: "Ongoing",
-  UnderReview: "Under Review",
-  Completed: "Completed",
+  not_started: "Not Started",
+  ongoing: "Ongoing",
+  under_review: "Under Review",
+  completed: "Completed",
 };
 
-const STATUS_COLUMNS: ProjectTaskStatus[] = ["NotStarted", "Ongoing", "UnderReview", "Completed"];
+const STATUS_COLUMNS: ProjectTaskStatus[] = ["not_started", "ongoing", "under_review", "completed"];
 
 const STATUS_STYLES: Record<
   ProjectTaskStatus,
   { bg: string; headerBg: string; text: string; border: string; accent: string }
 > = {
-  NotStarted: {
+  not_started: {
     bg: "bg-gray-50",
     headerBg: "bg-gray-100",
     text: "text-gray-700",
     border: "border-gray-200",
     accent: "bg-gray-500",
   },
-  Ongoing: {
+  ongoing: {
     bg: "bg-amber-50",
     headerBg: "bg-amber-100",
     text: "text-amber-800",
     border: "border-amber-200",
     accent: "bg-amber-500",
   },
-  UnderReview: {
+  under_review: {
     bg: "bg-blue-50",
     headerBg: "bg-blue-100",
     text: "text-blue-800",
     border: "border-blue-200",
     accent: "bg-blue-500",
   },
-  Completed: {
+  completed: {
     bg: "bg-green-50",
     headerBg: "bg-green-100",
     text: "text-green-800",
@@ -94,12 +98,15 @@ const STATUS_STYLES: Record<
   },
 };
 
-const BOARD_ICONS: Record<ProjectBoard, React.ReactNode> = {
-  Design: <FiLayers className="w-4 h-4" />,
-  Development: <FiCode className="w-4 h-4" />,
-  Outreach: <FiSend className="w-4 h-4" />,
-  Leadership: <FiAward className="w-4 h-4" />,
-};
+/** Boards are now company-owned, free-form rows — no fixed enum to key icons off of. */
+function boardIcon(name: string): React.ReactNode {
+  const lower = name.toLowerCase();
+  if (lower.includes("design")) return <FiLayers className="w-4 h-4" />;
+  if (lower.includes("dev")) return <FiCode className="w-4 h-4" />;
+  if (lower.includes("outreach") || lower.includes("sales")) return <FiSend className="w-4 h-4" />;
+  if (lower.includes("lead")) return <FiAward className="w-4 h-4" />;
+  return <FiList className="w-4 h-4" />;
+}
 
 function getChecklistProgress(task: ProjectTask): { done: number; total: number } {
   if (!task.checklist || task.checklist.length === 0)
@@ -110,8 +117,10 @@ function getChecklistProgress(task: ProjectTask): { done: number; total: number 
 
 export default function ProjectManagement() {
   const { data: session } = useSession();
-  const [boards, setBoards] = useState<ProjectBoard[]>([]);
-  const [selectedBoard, setSelectedBoard] = useState<ProjectBoard | null>(null);
+  const [boards, setBoards] = useState<BoardInfo[]>([]);
+  const [selectedBoard, setSelectedBoard] = useState<BoardInfo | null>(null);
+  const [newBoardName, setNewBoardName] = useState("");
+  const [creatingBoard, setCreatingBoard] = useState(false);
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<ProjectTask | null>(null);
@@ -124,7 +133,7 @@ export default function ProjectManagement() {
     name: "",
     description: "",
     checklistText: "",
-    assignedTo: [] as number[],
+    assignedTo: [] as string[],
     deadline: "",
   });
 
@@ -134,11 +143,10 @@ export default function ProjectManagement() {
     try {
       const r = await fetch("/api/project/boards");
       if (r.ok) {
-        const d = await r.json();
-        const boardList = d.boards || [];
+        const boardList: BoardInfo[] = await r.json();
         setBoards(boardList);
         setSelectedBoard((prev) => {
-          if (!prev || !boardList.includes(prev)) return boardList[0] || null;
+          if (!prev || !boardList.some((b) => b.id === prev.id)) return boardList[0] || null;
           return prev;
         });
       }
@@ -147,11 +155,37 @@ export default function ProjectManagement() {
     }
   }, []);
 
+  const handleCreateBoard = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBoardName.trim() || creatingBoard) return;
+    setCreatingBoard(true);
+    try {
+      const r = await fetch("/api/project/boards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newBoardName.trim() }),
+      });
+      if (r.ok) {
+        const board: BoardInfo = await r.json();
+        setBoards((prev) => [...prev, board]);
+        setSelectedBoard(board);
+        setNewBoardName("");
+      } else {
+        const err = await r.json();
+        alert(err.message || "Failed to create board");
+      }
+    } catch {
+      alert("Failed to create board");
+    } finally {
+      setCreatingBoard(false);
+    }
+  };
+
   const fetchTasks = useCallback(async () => {
     if (!selectedBoard) return;
     setLoading(true);
     try {
-      const r = await fetch(`/api/project/tasks?board=${selectedBoard}`);
+      const r = await fetch(`/api/project/tasks?boardId=${selectedBoard.id}`);
       if (r.ok) {
         const data = await r.json();
         setTasks(data);
@@ -174,9 +208,8 @@ export default function ProjectManagement() {
   }, [selectedBoard, fetchTasks]);
 
   const fetchBoardMembers = useCallback(async () => {
-    if (!selectedBoard) return;
     try {
-      const r = await fetch(`/api/project/boardMembers?board=${selectedBoard}`);
+      const r = await fetch("/api/project/boardMembers");
       if (r.ok) {
         const data = await r.json();
         setBoardMembers(data);
@@ -184,11 +217,11 @@ export default function ProjectManagement() {
     } catch {
       setBoardMembers([]);
     }
-  }, [selectedBoard]);
+  }, []);
 
   useEffect(() => {
-    if (selectedBoard) fetchBoardMembers();
-  }, [selectedBoard, fetchBoardMembers]);
+    fetchBoardMembers();
+  }, [fetchBoardMembers]);
 
   const tasksByStatus = STATUS_COLUMNS.reduce(
     (acc, status) => {
@@ -210,15 +243,15 @@ export default function ProjectManagement() {
     const { done, total } = getChecklistProgress(task);
     const checklistComplete = total === 0 || done === total;
 
-    if (newStatus === "UnderReview" || newStatus === "Completed") {
+    if (newStatus === "under_review" || newStatus === "completed") {
       if (!checklistComplete) {
         alert("Complete all checklist items to move the task to under review.");
         return;
       }
     }
 
-    if (newStatus === "Completed") {
-      if (task.status !== "UnderReview") {
+    if (newStatus === "completed") {
+      if (task.status !== "under_review") {
         alert("Task must be Under Review before it can be marked as Completed.");
         return;
       }
@@ -251,7 +284,7 @@ export default function ProjectManagement() {
     const task = tasks.find((t) => t.id === taskId);
     if (!task || !task.checklist) return;
     const item = task.checklist[index];
-    if (task.status === "Completed" && item?.completed) return;
+    if (task.status === "completed" && item?.completed) return;
     const updated = [...task.checklist];
     updated[index] = { ...updated[index], completed: !updated[index].completed };
     try {
@@ -283,7 +316,7 @@ export default function ProjectManagement() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          board: selectedBoard,
+          boardId: selectedBoard.id,
           name: addForm.name.trim(),
           description: addForm.description.trim(),
           checklist: checklist.length ? checklist : null,
@@ -314,15 +347,15 @@ export default function ProjectManagement() {
       const { done, total } = getChecklistProgress({ ...selectedTask, checklist: effectiveChecklist });
       const checklistComplete = total === 0 || done === total;
 
-      if (updates.status === "UnderReview" || updates.status === "Completed") {
+      if (updates.status === "under_review" || updates.status === "completed") {
         if (!checklistComplete) {
           alert("Complete all checklist items to move the task to under review.");
           return;
         }
       }
 
-      if (updates.status === "Completed") {
-        if (selectedTask.status !== "UnderReview") {
+      if (updates.status === "completed") {
+        if (selectedTask.status !== "under_review") {
           alert("Task must be Under Review before it can be marked as Completed.");
           return;
         }
@@ -383,10 +416,32 @@ export default function ProjectManagement() {
             <div className="w-16 h-16 rounded-2xl bg-[#F8F0FF] flex items-center justify-center mx-auto mb-4">
               <FiLayers className="w-8 h-8 text-[#701CC0]" />
             </div>
-            <h3 className="text-lg font-semibold text-[#111827] mb-2">No Boards Assigned</h3>
-            <p className="text-sm text-[#6B7280]">
-              You don&apos;t have access to any project boards. Contact an administrator to assign your position in Staff Orbital.
-            </p>
+            <h3 className="text-lg font-semibold text-[#111827] mb-2">No Boards Yet</h3>
+            {isAdmin ? (
+              <>
+                <p className="text-sm text-[#6B7280] mb-4">Create your first project board to get started.</p>
+                <form onSubmit={handleCreateBoard} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newBoardName}
+                    onChange={(e) => setNewBoardName(e.target.value)}
+                    placeholder="Board name"
+                    className="flex-1 border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={creatingBoard || !newBoardName.trim()}
+                    className="px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm font-medium disabled:opacity-50"
+                  >
+                    Create
+                  </button>
+                </form>
+              </>
+            ) : (
+              <p className="text-sm text-[#6B7280]">
+                Your company doesn&apos;t have any project boards yet. Ask an admin to create one.
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -404,18 +459,41 @@ export default function ProjectManagement() {
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               {boards.map((board) => (
                 <button
-                  key={board}
+                  key={board.id}
                   onClick={() => setSelectedBoard(board)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                    selectedBoard === board
+                    selectedBoard?.id === board.id
                       ? "bg-[#701CC0] text-white shadow-sm"
                       : "bg-white text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0]"
                   }`}
                 >
-                  {BOARD_ICONS[board]}
-                  {board}
+                  {boardIcon(board.name)}
+                  {board.name}
                 </button>
               ))}
+              {isAdmin && (
+                <form
+                  onSubmit={handleCreateBoard}
+                  className="flex items-center gap-1.5"
+                  title="Create a new board"
+                >
+                  <input
+                    type="text"
+                    value={newBoardName}
+                    onChange={(e) => setNewBoardName(e.target.value)}
+                    placeholder="New board"
+                    className="w-28 border border-[#E5E7EB] rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={creatingBoard || !newBoardName.trim()}
+                    aria-label="Create board"
+                    className="p-2 rounded-lg bg-gray-100 text-[#374151] hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    <FiPlus className="w-4 h-4" />
+                  </button>
+                </form>
+              )}
               {isAdmin && (
                 <button
                   onClick={() => setShowAddModal(true)}
@@ -479,7 +557,7 @@ export default function ProjectManagement() {
                           const now = new Date();
                           const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
                           const isPastDeadline =
-                            task.status !== "Completed" &&
+                            task.status !== "completed" &&
                             task.deadline &&
                             task.deadline < todayStr;
                           return (
@@ -516,7 +594,7 @@ export default function ProjectManagement() {
                                 {deadlineStr && (
                                   <div className={`mt-2 flex items-center gap-1.5 text-xs ${isPastDeadline ? "text-red-700" : "text-[#701CC0]"}`}>
                                     <FiCalendar className="w-3.5 h-3.5 flex-shrink-0" />
-                                    <span className={task.status === "Completed" ? "line-through" : ""}>{deadlineStr}</span>
+                                    <span className={task.status === "completed" ? "line-through" : ""}>{deadlineStr}</span>
                                   </div>
                                 )}
                                 {assignees.length > 0 && (
@@ -692,8 +770,8 @@ function AddTaskModal({
   onSubmit,
   onClose,
 }: {
-  form: { name: string; description: string; checklistText: string; assignedTo: number[]; deadline: string };
-  setForm: React.Dispatch<React.SetStateAction<{ name: string; description: string; checklistText: string; assignedTo: number[]; deadline: string }>>;
+  form: { name: string; description: string; checklistText: string; assignedTo: string[]; deadline: string };
+  setForm: React.Dispatch<React.SetStateAction<{ name: string; description: string; checklistText: string; assignedTo: string[]; deadline: string }>>;
   step: number;
   setStep: (n: number) => void;
   boardMembers: BoardMember[];
@@ -923,12 +1001,12 @@ function TaskDetailModal({
   const { done, total } = getChecklistProgress(task);
   const progressPct = total > 0 ? Math.round((done / total) * 100) : 0;
   const checklistComplete = total === 0 || done === total;
-  const canSetCompleted = isAdmin && task.status === "UnderReview" && checklistComplete;
+  const canSetCompleted = isAdmin && task.status === "under_review" && checklistComplete;
   const canSetUnderReview = checklistComplete;
   const now = new Date();
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const isPastDeadline =
-    task.status !== "Completed" && task.deadline && task.deadline < todayStr;
+    task.status !== "completed" && task.deadline && task.deadline < todayStr;
   const assignees = (task.assignedTo || [])
     .map((id) => boardMembers.find((m) => m.id === id))
     .filter(Boolean) as BoardMember[];
@@ -1027,7 +1105,7 @@ function TaskDetailModal({
               </div>
               <div className="space-y-1">
                 {task.checklist.map((item, i) => {
-                  const canUncheck = !(task.status === "Completed" && item.completed);
+                  const canUncheck = !(task.status === "completed" && item.completed);
                   return (
                   <label
                     key={i}
@@ -1075,7 +1153,7 @@ function TaskDetailModal({
           <div>
             <span className="text-xs font-medium text-[#6B7280] block mb-2">Status</span>
             <div className="flex flex-wrap gap-1.5">
-              {(["NotStarted", "Ongoing"] as const).map((s) => (
+              {(["not_started", "ongoing"] as const).map((s) => (
                 <button
                   key={s}
                   onClick={() => onStatusChange(s)}
@@ -1089,10 +1167,10 @@ function TaskDetailModal({
                 </button>
               ))}
               <button
-                onClick={() => canSetUnderReview && onStatusChange("UnderReview")}
+                onClick={() => canSetUnderReview && onStatusChange("under_review")}
                 disabled={!canSetUnderReview}
                 className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-                  task.status === "UnderReview"
+                  task.status === "under_review"
                     ? "bg-[#701CC0] text-white"
                     : canSetUnderReview
                       ? "bg-[#F3F4F6] text-[#6B7280] hover:bg-[#E5E7EB]"
@@ -1100,14 +1178,14 @@ function TaskDetailModal({
                 }`}
                 title={!canSetUnderReview ? "Complete all checklist items first" : undefined}
               >
-                {STATUS_LABELS.UnderReview}
+                {STATUS_LABELS.under_review}
               </button>
               {isAdmin && (
                 <button
-                  onClick={() => canSetCompleted && onStatusChange("Completed")}
+                  onClick={() => canSetCompleted && onStatusChange("completed")}
                   disabled={!canSetCompleted}
                   className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-                    task.status === "Completed"
+                    task.status === "completed"
                       ? "bg-[#701CC0] text-white"
                       : canSetCompleted
                         ? "bg-[#F3F4F6] text-[#6B7280] hover:bg-[#E5E7EB]"
@@ -1115,7 +1193,7 @@ function TaskDetailModal({
                   }`}
                   title={
                     !canSetCompleted
-                      ? task.status !== "UnderReview"
+                      ? task.status !== "under_review"
                         ? "Task must be Under Review first"
                         : !checklistComplete
                           ? "Complete all checklist items first"
@@ -1176,7 +1254,7 @@ function EditTaskModal({
     task.checklist?.map((c) => c.text).join("\n") || ""
   );
   const [status, setStatus] = useState<ProjectTaskStatus>(task.status);
-  const [assignedTo, setAssignedTo] = useState<number[]>(task.assignedTo || []);
+  const [assignedTo, setAssignedTo] = useState<string[]>(task.assignedTo || []);
   const [deadline, setDeadline] = useState(
     task.deadline ? new Date(task.deadline).toISOString().slice(0, 10) : ""
   );
@@ -1335,10 +1413,10 @@ function EditTaskModal({
                     onChange={(e) => setStatus(e.target.value as ProjectTaskStatus)}
                     className="w-full border border-[#E5E7EB] rounded-xl pl-4 pr-12 py-2.5 text-sm focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none bg-white"
                   >
-                    <option value="NotStarted">Not Started</option>
-                    <option value="Ongoing">Ongoing</option>
-                    <option value="UnderReview">Under Review</option>
-                    <option value="Completed">Completed</option>
+                    <option value="not_started">Not Started</option>
+                    <option value="ongoing">Ongoing</option>
+                    <option value="under_review">Under Review</option>
+                    <option value="completed">Completed</option>
                   </select>
                   <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
                     <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">

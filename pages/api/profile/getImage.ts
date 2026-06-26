@@ -20,16 +20,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const user = await prisma.user.findUnique({
       where: { email: userEmail },
-      select: { imageStorageKey: true, imageMimeType: true },
+      select: {
+        user_preferences: { select: { image_storage_key: true, image_mime_type: true } },
+      },
     });
 
     if (!user) {
       return res.status(404).json({ message: "No image found" });
     }
+    const prefs = user.user_preferences;
     const sent = await sendImageAsset(res, {
       bucket: STORAGE_BUCKETS.avatars,
-      storageKey: user.imageStorageKey,
-      mimeType: user.imageMimeType,
+      storageKey: prefs?.image_storage_key ?? null,
+      mimeType: prefs?.image_mime_type ?? null,
       cacheControl: "private, max-age=3600, stale-while-revalidate=86400",
     });
     if (!sent) {

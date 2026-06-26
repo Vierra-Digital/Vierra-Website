@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
 import { toContactsCsv } from "@/lib/contacts/csv";
+import { resolveAccountId } from "@/lib/api/emailAccounts";
 
 function asStr(v: string | string[] | undefined) {
   return Array.isArray(v) ? v[0]?.trim() || "" : v?.trim() || "";
@@ -15,31 +16,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const session = await requireRole(req, res);
   if (!session) return;
-  const userId = Number((session.user as any).id);
+  const userId = session.user.id;
 
   const accountEmail = asStr(req.query.accountEmail).toLowerCase();
   const search = asStr(req.query.search);
-  const source = asStr(req.query.source).toUpperCase();
+  const source = asStr(req.query.source).toLowerCase();
   const tagIds = asStr(req.query.tagIds)
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
 
-  const where: any = { userId };
-  if (accountEmail) where.accountEmail = accountEmail;
-  if (source && ["MANUAL", "GMAIL", "CSV"].includes(source)) where.source = source;
+  const where: any = { user_id: userId };
+  if (accountEmail) {
+    const accountId = await resolveAccountId(userId, accountEmail);
+    where.account_id = accountId ?? "__none__";
+  }
+  if (source && ["manual", "gmail", "csv"].includes(source)) where.source = source;
   if (search) {
     where.OR = [
-      { firstName: { contains: search, mode: "insensitive" } },
-      { lastName: { contains: search, mode: "insensitive" } },
+      { first_name: { contains: search, mode: "insensitive" } },
+      { last_name: { contains: search, mode: "insensitive" } },
       { email: { contains: search, mode: "insensitive" } },
       { business: { contains: search, mode: "insensitive" } },
     ];
   }
   if (tagIds.length > 0) {
-    where.tags = {
+    where.contact_tag_assignments = {
       some: {
-        tagId: { in: tagIds },
+        tag_id: { in: tagIds },
       },
     };
   }
@@ -47,25 +51,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const contacts = await prisma.contact.findMany({
     where,
     include: {
-      tags: {
+      contact_tag_assignments: {
         include: {
-          tag: true,
+          contact_tags: true,
         },
       },
     },
-    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    orderBy: [{ last_name: "asc" }, { first_name: "asc" }],
   });
 
   const csv = toContactsCsv(
     contacts.map((contact) => ({
-      firstName: contact.firstName || "",
-      lastName: contact.lastName || "",
+      firstName: contact.first_name || "",
+      lastName: contact.last_name || "",
       email: contact.email || "",
       phone: contact.phone || "",
       business: contact.business || "",
       website: contact.website || "",
       address: contact.address || "",
-      tags: contact.tags.map((assignment) => assignment.tag.name).join("|"),
+      tags: contact.contact_tag_assignments.map((assignment) => assignment.contact_tags.name).join("|"),
     }))
   );
 

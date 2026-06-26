@@ -13,12 +13,13 @@ const XLSX_CONTENT_TYPE =
 
 /** Remove any object-storage files backing the StoredFile rows matched by `where`. */
 async function cleanupStoredFileObjects(where: Prisma.StoredFileWhereInput) {
-  const rows = await prisma.storedFile.findMany({ where, select: { storageKey: true } });
-  await Promise.all(rows.map((r) => deleteFileAsset(STORAGE_BUCKETS.docs, r.storageKey)));
+  const rows = await prisma.storedFile.findMany({ where, select: { storage_key: true } });
+  await Promise.all(rows.map((r) => deleteFileAsset(STORAGE_BUCKETS.docs, r.storage_key)));
 }
 
 type SyncContactsSpreadsheetInput = {
-  userId: number;
+  userId: string;
+  companyId: string;
 };
 
 type RawContactRow = {
@@ -41,23 +42,23 @@ function asSheetValue(value: string | null | undefined) {
 
 export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsheetInput) {
   const contacts = await prisma.contact.findMany({
-    where: { userId: input.userId },
-    orderBy: [{ lastName: "asc" }, { firstName: "asc" }, { createdAt: "desc" }],
+    where: { user_id: input.userId },
+    orderBy: [{ last_name: "asc" }, { first_name: "asc" }, { created_at: "desc" }],
   });
 
   const signingTokenId = `contacts-xlsx:${input.userId}`;
   const legacyWhere: Prisma.StoredFileWhereInput = {
-    userId: input.userId,
-    fileType: "xlsx",
-    signingTokenId: { startsWith: `contacts-xlsx:${input.userId}:` },
+    user_id: input.userId,
+    file_type: "xlsx",
+    signing_token_id: { startsWith: `contacts-xlsx:${input.userId}:` },
   };
   await cleanupStoredFileObjects(legacyWhere);
   await prisma.storedFile.deleteMany({ where: legacyWhere });
   if (contacts.length === 0) {
     const emptyWhere: Prisma.StoredFileWhereInput = {
-      userId: input.userId,
-      signingTokenId,
-      fileType: "xlsx",
+      user_id: input.userId,
+      signing_token_id: signingTokenId,
+      file_type: "xlsx",
     };
     await cleanupStoredFileObjects(emptyWhere);
     await prisma.storedFile.deleteMany({ where: emptyWhere });
@@ -65,8 +66,8 @@ export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsh
   }
 
   const rawRows = contacts.map((contact) => ({
-    firstName: typeof contact.firstName === "string" ? contact.firstName.trim() : "",
-    lastName: typeof contact.lastName === "string" ? contact.lastName.trim() : "",
+    firstName: typeof contact.first_name === "string" ? contact.first_name.trim() : "",
+    lastName: typeof contact.last_name === "string" ? contact.last_name.trim() : "",
     email: typeof contact.email === "string" ? contact.email.trim() : "",
     phone: typeof contact.phone === "string" ? contact.phone.trim() : "",
     business: typeof contact.business === "string" ? contact.business.trim() : "",
@@ -135,9 +136,9 @@ export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsh
 
   const existing = await prisma.storedFile.findFirst({
     where: {
-      userId: input.userId,
-      signingTokenId,
-      fileType: "xlsx",
+      user_id: input.userId,
+      signing_token_id: signingTokenId,
+      file_type: "xlsx",
     },
     select: { id: true },
   });
@@ -147,23 +148,23 @@ export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsh
       where: { id: existing.id },
       data: {
         name: fileName,
-        storageKey,
-        isDeletionProtected: true,
+        storage_key: storageKey,
+        is_deletion_protected: true,
       },
     });
   } else {
     await prisma.storedFile.create({
       data: {
-        userId: input.userId,
+        company_id: input.companyId,
+        user_id: input.userId,
         name: fileName,
-        signingTokenId,
-        fileType: "xlsx",
-        storageKey,
-        isDeletionProtected: true,
+        signing_token_id: signingTokenId,
+        file_type: "xlsx",
+        storage_key: storageKey,
+        is_deletion_protected: true,
       },
     });
   }
 
   return { saved: true as const, fileName, rows: rawRows.length };
 }
-

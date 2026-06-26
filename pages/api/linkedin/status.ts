@@ -33,14 +33,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (sessionId) {
     try {
       const row = await prisma.onboardingPlatformToken.findUnique({
-        where: { sessionId_platform: { sessionId, platform: "linkedin" } as any },
-        select: { accessToken: true },
+        where: { session_id_platform: { session_id: sessionId, platform: "linkedin" } },
+        select: { access_token: true },
       });
       if (!row) {
         res.status(200).json({ connected: false });
         return;
       }
-      const token = decrypt(row.accessToken);
+      const token = decrypt(row.access_token);
       const connected = await linkedinTokenIsValid(token);
       res.status(200).json({ connected });
       return;
@@ -56,18 +56,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
-  const userId = Number((session.user as any).id);
+  const userId = (session.user as any).id;
   try {
-    const row = await prisma.userToken.findUnique({
-      where: { userId_platform: { userId, platform: "linkedin" } as any },
-      select: { accessToken: true },
+    const row = await prisma.platformToken.findUnique({
+      where: { user_id_platform: { user_id: userId, platform: "linkedin" } },
+      select: { access_token: true },
     });
     if (!row) {
       res.status(200).json({ connected: false });
       return;
     }
 
-    const token = decrypt(row.accessToken);
+    const token = decrypt(row.access_token);
     const connected = await linkedinTokenIsValid(token);
     res.status(200).json({ connected });
   } catch (e) {

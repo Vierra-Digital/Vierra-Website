@@ -4,8 +4,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import type { GetServerSideProps } from "next";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import { requireSession } from "@/lib/auth";
 import { FiSettings } from "react-icons/fi";
 
 const EmailingPlatformSection = dynamic(
@@ -58,7 +57,7 @@ const EmailPanelStandalonePage: React.FC<Props> = ({ initialSelectedAccounts }) 
 };
 
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
-  const session = await getServerSession(ctx.req, ctx.res, authOptions);
+  const session = await requireSession(ctx.req, ctx.res);
   if (!session) {
     return { redirect: { destination: "/login", permanent: false } };
   }

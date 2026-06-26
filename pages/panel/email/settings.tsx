@@ -17,8 +17,7 @@ import {
   FiSlash,
   FiTag,
 } from "react-icons/fi";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import { requireSession } from "@/lib/auth";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -925,7 +924,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 };
 
 export const getServerSideProps: GetServerSideProps<PageProps> = async (ctx) => {
-  const session = await getServerSession(ctx.req, ctx.res, authOptions);
+  const session = await requireSession(ctx.req, ctx.res);
   if (!session) {
     return { redirect: { destination: "/login", permanent: false } };
   }

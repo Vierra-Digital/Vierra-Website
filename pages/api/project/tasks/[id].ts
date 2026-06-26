@@ -1,24 +1,22 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import type { ProjectTaskStatus } from "@prisma/client";
-import { getSessionPosition, requireBoardAccessOrRespond403 } from "@/lib/api/projectAccess";
+import { serializeTask } from "@/lib/api/projectAccess";
+
+const VALID_STATUSES = ["not_started", "ongoing", "under_review", "completed"];
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireRole(req, res, ["admin", "staff"]);
   if (!session) return;
 
-  const role = (session.user as { role?: string })?.role;
-
   const id = req.query.id as string;
   if (!id) return res.status(400).json({ message: "Task id required" });
 
-  const position = await getSessionPosition(session);
-
-  const existing = await prisma.projectTask.findUnique({ where: { id } });
+  const existing = await prisma.projectTask.findFirst({
+    where: { id, company_id: session.companyId },
+    include: { task_assignments: { select: { user_id: true } } },
+  });
   if (!existing) return res.status(404).json({ message: "Task not found" });
-
-  requireBoardAccessOrRespond403(res, position, existing.board, "You do not have access to this task's board");
 
   if (req.method === "PATCH") {
     const { name, description, checklist, status, assignedTo, deadline } = req.body;
@@ -27,16 +25,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (typeof name === "string") updates.name = name.trim();
     if (typeof description === "string") updates.description = description.trim();
     if (Array.isArray(checklist)) {
-      if (existing.status === "Completed") {
+      if (existing.status === "completed") {
         const existingItems = (existing.checklist as { text?: string; completed?: boolean }[] | null) ?? [];
         const newItems = checklist as { text?: string; completed?: boolean }[];
-        const wouldUncheck = existingItems.some(
-          (oldItem) => {
-            if (oldItem?.completed !== true) return false;
-            const match = newItems.find((n) => (n?.text ?? "").trim() === (oldItem?.text ?? "").trim());
-            return match && match.completed === false;
-          }
-        );
+        const wouldUncheck = existingItems.some((oldItem) => {
+          if (oldItem?.completed !== true) return false;
+          const match = newItems.find((n) => (n?.text ?? "").trim() === (oldItem?.text ?? "").trim());
+          return match && match.completed === false;
+        });
         if (wouldUncheck) {
           return res.status(400).json({ message: "Cannot uncheck checklist items on a completed task" });
         }
@@ -44,14 +40,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       updates.checklist = checklist;
     }
 
-    if (role === "admin") {
+    let assignmentIds: string[] | null = null;
+    if (session.user.role === "admin") {
       if (assignedTo !== undefined) {
-        const ids = Array.isArray(assignedTo)
-          ? assignedTo.filter((id: unknown) => typeof id === "number").map(Number)
-          : typeof assignedTo === "number"
+        assignmentIds = Array.isArray(assignedTo)
+          ? assignedTo.filter((aid: unknown) => typeof aid === "string")
+          : typeof assignedTo === "string"
             ? [assignedTo]
             : [];
-        updates.assignedTo = ids.length ? ids : null;
       }
       if (deadline !== undefined) {
         updates.deadline = deadline != null && deadline !== "" ? new Date(deadline) : null;
@@ -59,19 +55,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (status !== undefined) {
-      const valid: ProjectTaskStatus[] = ["NotStarted", "Ongoing", "UnderReview", "Completed"];
-      if (!valid.includes(status)) {
+      if (!VALID_STATUSES.includes(status)) {
         return res.status(400).json({ message: "Invalid status" });
       }
-      if (status === "Completed") {
-        if (role !== "admin") {
-          return res.status(403).json({ message: "Only admins can mark a task as Completed" });
+      if (status === "completed") {
+        if (session.user.role !== "admin") {
+          return res.status(403).json({ message: "Only admins can mark a task as completed" });
         }
-        if (existing.status !== "UnderReview") {
-          return res.status(400).json({ message: "Task must be Under Review before it can be marked as Completed" });
+        if (existing.status !== "under_review") {
+          return res.status(400).json({ message: "Task must be under review before it can be marked as completed" });
         }
       }
-      if (status === "UnderReview" || status === "Completed") {
+      if (status === "under_review" || status === "completed") {
         const items = Array.isArray(checklist) ? checklist : (existing.checklist as unknown[] | null) ?? [];
         if (items.length > 0) {
           const allComplete = items.every((item: { completed?: boolean }) => item?.completed === true);
@@ -84,11 +79,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     try {
+      if (assignmentIds !== null) {
+        const currentIds = existing.task_assignments.map((a) => a.user_id);
+        const toAdd = assignmentIds.filter((aid) => !currentIds.includes(aid));
+        const toRemove = currentIds.filter((aid) => !assignmentIds!.includes(aid));
+        if (toRemove.length) {
+          await prisma.taskAssignment.deleteMany({ where: { task_id: id, user_id: { in: toRemove } } });
+        }
+        if (toAdd.length) {
+          await prisma.taskAssignment.createMany({ data: toAdd.map((userId) => ({ task_id: id, user_id: userId })) });
+        }
+      }
       const task = await prisma.projectTask.update({
         where: { id },
         data: updates,
+        include: { task_assignments: { select: { user_id: true } } },
       });
-      return res.status(200).json(task);
+      return res.status(200).json(serializeTask(task));
     } catch (e) {
       console.error("project/tasks PATCH", e);
       return res.status(500).json({ message: "Internal Server Error" });
@@ -96,7 +103,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === "DELETE") {
-    if (role !== "admin") {
+    if (session.user.role !== "admin") {
       return res.status(403).json({ message: "Only admins can delete tasks" });
     }
     try {

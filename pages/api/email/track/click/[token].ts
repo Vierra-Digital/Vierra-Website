@@ -23,8 +23,6 @@ function getRequestOrigin(req: NextApiRequest) {
   return host ? `${proto}://${host}` : "";
 }
 
-/** True when the click originates from inside our own portal (staff previewing a sent email),
- *  so we don't record it as recipient engagement. Mirrors the open-pixel logic. */
 function isLikelySelfPreview(req: NextApiRequest) {
   const fetchSite = String(req.headers["sec-fetch-site"] || "").toLowerCase();
   if (fetchSite === "same-origin") return true;
@@ -53,32 +51,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     where: { token },
     select: {
       id: true,
-      originalUrl: true,
-      outboundMessage: { select: { id: true, trackingEnabled: true } },
+      original_url: true,
+      email_outbound_messages: { select: { id: true, tracking_enabled: true } },
     },
   });
 
-  if (!link?.outboundMessage?.id) {
+  if (!link?.email_outbound_messages?.id) {
     res.status(404).send("Tracking link not found");
     return;
   }
 
-  if (link.outboundMessage.trackingEnabled && !isLikelySelfPreview(req)) {
+  if (link.email_outbound_messages.tracking_enabled && !isLikelySelfPreview(req)) {
     const ip =
       String(req.headers["x-forwarded-for"] || "")
         .split(",")[0]
         .trim() || req.socket.remoteAddress || "";
     await prisma.emailTrackingEvent.create({
       data: {
-        outboundMessageId: link.outboundMessage.id,
-        trackingLinkId: link.id,
-        eventType: "CLICK",
-        recipientEmail: typeof req.query.email === "string" ? req.query.email : null,
-        ipHash: hashIp(ip),
-        userAgent: String(req.headers["user-agent"] || "").slice(0, 512) || null,
+        outbound_message_id: link.email_outbound_messages.id,
+        tracking_link_id: link.id,
+        event_type: "CLICK",
+        recipient_email: typeof req.query.email === "string" ? req.query.email : null,
+        ip_hash: hashIp(ip),
+        user_agent: String(req.headers["user-agent"] || "").slice(0, 512) || null,
       },
     });
   }
 
-  res.redirect(302, normalizeTarget(link.originalUrl));
+  res.redirect(302, normalizeTarget(link.original_url));
 }

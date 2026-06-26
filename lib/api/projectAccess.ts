@@ -1,47 +1,37 @@
-import type { NextApiResponse } from "next";
-import type { ProjectBoard } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { canAccessBoard } from "@/lib/projectBoards";
 
-const VALID_PROJECT_BOARDS: ProjectBoard[] = ["Design", "Development", "Outreach", "Leadership"];
-
-export function parseProjectBoard(value: string | string[] | undefined): ProjectBoard | null {
-  const board = Array.isArray(value) ? value[0] : value;
-  if (!board) return null;
-  return VALID_PROJECT_BOARDS.includes(board as ProjectBoard) ? (board as ProjectBoard) : null;
+/** Returns the board if it exists and belongs to the given company, else null. */
+export async function findCompanyBoard(companyId: string, boardId: string | string[] | undefined) {
+  const id = Array.isArray(boardId) ? boardId[0] : boardId;
+  if (!id) return null;
+  return prisma.projectBoard.findFirst({ where: { id, company_id: companyId } });
 }
 
-export async function getSessionPosition(session: { user?: { id?: unknown; email?: unknown; role?: string } }) {
-  const role = session.user?.role;
-  if (role === "admin") return "Leadership";
+type SerializableTask = {
+  id: string;
+  board_id: string;
+  name: string;
+  description: string;
+  checklist: unknown;
+  status: string;
+  deadline: Date | null;
+  created_at: Date;
+  updated_at: Date;
+  task_assignments: { user_id: string }[];
+};
 
-  const rawId = session.user?.id;
-  if (rawId != null && rawId !== "") {
-    const user = await prisma.user.findUnique({
-      where: { id: parseInt(String(rawId), 10) },
-      select: { position: true },
-    });
-    return user?.position ?? null;
-  }
-
-  const email = typeof session.user?.email === "string" ? session.user.email : null;
-  if (!email) return null;
-  const user = await prisma.user.findUnique({
-    where: { email },
-    select: { position: true },
-  });
-  return user?.position ?? null;
+/** Shapes a ProjectTask row (snake_case Prisma fields + join-table assignments) for the frontend. */
+export function serializeTask(task: SerializableTask) {
+  return {
+    id: task.id,
+    boardId: task.board_id,
+    name: task.name,
+    description: task.description,
+    checklist: task.checklist,
+    status: task.status,
+    assignedTo: task.task_assignments.map((a) => a.user_id),
+    deadline: task.deadline,
+    createdAt: task.created_at,
+    updatedAt: task.updated_at,
+  };
 }
-
-export function requireBoardAccessOrRespond403(
-  res: NextApiResponse,
-  position: string | null,
-  board: ProjectBoard,
-  message = "You do not have access to this board"
-) {
-  if (!canAccessBoard(position, board)) {
-    res.status(403).json({ message });
-    throw new Error("__handled__");
-  }
-}
-

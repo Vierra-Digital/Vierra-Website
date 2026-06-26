@@ -84,26 +84,26 @@ function isImageFile(name: string, fileType: string) {
 async function resolveClientId(
   req: NextApiRequest,
   role: SessionRole,
-  sessionUserId: number,
+  sessionUserId: string,
   sessionEmail?: string
 ) {
   if (role === "user") {
     const client = await prisma.client.findUnique({
-      where: { userId: sessionUserId },
+      where: { user_id: sessionUserId },
       select: { id: true },
     });
     if (client?.id) return client.id;
 
     if (sessionEmail) {
-      const fallbackClient = await prisma.client.findUnique({
+      const fallbackClient = await prisma.client.findFirst({
         where: { email: sessionEmail.toLowerCase() },
-        select: { id: true, userId: true },
+        select: { id: true, user_id: true },
       });
       if (fallbackClient?.id) {
-        if (!fallbackClient.userId) {
+        if (!fallbackClient.user_id) {
           await prisma.client.update({
             where: { id: fallbackClient.id },
-            data: { userId: sessionUserId },
+            data: { user_id: sessionUserId },
           });
         }
         return fallbackClient.id;
@@ -126,10 +126,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(403).json({ message: "Forbidden" });
   }
 
-  const rawUserId = (session.user as { id?: number | string }).id;
+  const sessionUserId = (session.user as { id?: string }).id;
   const sessionEmail = (session.user as { email?: string | null }).email || undefined;
-  const sessionUserId = rawUserId != null ? Number(rawUserId) : NaN;
-  if (Number.isNaN(sessionUserId)) {
+  if (!sessionUserId) {
     return res.status(400).json({ message: "Invalid session user." });
   }
 
@@ -141,17 +140,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const [client, latestSession, files] = await Promise.all([
         prisma.client.findUnique({
           where: { id: clientId },
-          select: { id: true, name: true, email: true, businessName: true },
+          select: { id: true, name: true, email: true, business_name: true },
         }),
         prisma.onboardingSession.findFirst({
-          where: { clientId },
-          orderBy: { createdAt: "desc" },
+          where: { client_id: clientId },
+          orderBy: { created_at: "desc" },
           select: { id: true, answers: true },
         }),
         prisma.storedFile.findMany({
-          where: { clientId },
-          orderBy: { createdAt: "desc" },
-          select: { id: true, name: true, fileType: true, signingTokenId: true, createdAt: true },
+          where: { client_id: clientId },
+          orderBy: { created_at: "desc" },
+          select: { id: true, name: true, file_type: true, signing_token_id: true, created_at: true },
         }),
       ]);
 
@@ -169,15 +168,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const editableAnswers = normalizeEditableAnswers(answersObject);
 
       const assets = files
-        .filter((f) => isImageFile(f.name, f.fileType))
+        .filter((f) => isImageFile(f.name, f.file_type))
         .map((f) => ({
           id: f.id,
           name: f.name,
-          fileType: f.fileType,
-          signingTokenId: f.signingTokenId,
-          createdAt: f.createdAt,
-          previewUrl: f.signingTokenId
-            ? `/files/preview?tokenId=${encodeURIComponent(f.signingTokenId)}&name=${encodeURIComponent(f.name)}`
+          fileType: f.file_type,
+          signingTokenId: f.signing_token_id,
+          createdAt: f.created_at,
+          previewUrl: f.signing_token_id
+            ? `/files/preview?tokenId=${encodeURIComponent(f.signing_token_id)}&name=${encodeURIComponent(f.name)}`
             : null,
         }));
 
@@ -207,8 +206,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         "additionalBusinessInfo" in body || "postTopic" in body || "keywords" in body || "notes" in body;
 
       const latestSession = await prisma.onboardingSession.findFirst({
-        where: { clientId },
-        orderBy: { createdAt: "desc" },
+        where: { client_id: clientId },
+        orderBy: { created_at: "desc" },
         select: { id: true, answers: true },
       });
 
@@ -252,7 +251,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         where: { id: latestSession.id },
         data: {
           answers: updatedAnswers as Prisma.InputJsonValue,
-          lastUpdatedAt: new Date(),
+          last_updated_at: new Date(),
         },
       });
 
