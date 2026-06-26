@@ -6,7 +6,6 @@ import { Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
 import { useRouter } from "next/router";
 import { useSession } from "@/lib/session-client";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { FcGoogle } from "react-icons/fc";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -134,18 +133,6 @@ const LoginPage = () => {
       setError("Sign-in is temporarily unavailable. Please try again in a moment.");
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    setError("");
-    const supabase = getSupabaseBrowserClient();
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
-    });
-    if (oauthError) {
-      setError("Sign-in is temporarily unavailable. Please try again in a moment.");
     }
   };
 
@@ -296,20 +283,6 @@ const LoginPage = () => {
                 )}
               </button>
             </form>
-
-            <div className="login-divider">
-              <span>or</span>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              disabled={isSubmitting}
-              className={`login-google ${inter.className}`}
-            >
-              <FcGoogle size={18} />
-              Continue with Google
-            </button>
           </div>
         </div>
       </div>
@@ -624,46 +597,6 @@ const StyleBlock = () => (
     }
     .login-submit:disabled::before {
       opacity: 0.4;
-    }
-
-    .login-divider {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin: 1.25rem 0;
-      color: rgba(255, 255, 255, 0.4);
-      font-size: 0.8rem;
-    }
-    .login-divider::before,
-    .login-divider::after {
-      content: "";
-      flex: 1;
-      height: 1px;
-      background: rgba(255, 255, 255, 0.12);
-    }
-
-    .login-google {
-      width: 100%;
-      height: 46px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.6rem;
-      border-radius: 12px;
-      background: rgba(255, 255, 255, 0.95);
-      color: #1f1f1f;
-      font-weight: 600;
-      font-size: 0.92rem;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
-    }
-    .login-google:hover:not(:disabled) {
-      filter: brightness(0.97);
-      transform: translateY(-1px);
-    }
-    .login-google:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
     }
 
     @media (prefers-reduced-motion: reduce) {
