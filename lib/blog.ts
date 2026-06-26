@@ -85,27 +85,47 @@ export type CatalogPost = Pick<
 >;
 
 const EXCERPT_CHARS = 300;
+// How many leading characters of the raw HTML body to pull from the DB. The card
+// only ever keeps a 300-char plain-text excerpt (and client search runs over that
+// same excerpt), so reading the whole post body — tens of KB of HTML each — is
+// pure waste on the cold post-deploy regeneration. A 2000-char HTML prefix always
+// yields >300 chars of plain text after tag-stripping, so the result is identical.
+const CONTENT_PREFIX_CHARS = 2000;
 
 export async function getBlogCatalog(limit = 90): Promise<CatalogPost[]> {
-  const posts = await prisma.blogPost.findMany({
-    orderBy: { published_date: "desc" },
-    take: limit,
-    select: {
-      id: true,
-      title: true,
-      description: true,
-      content: true,
-      slug: true,
-      tag: true,
-      published_date: true,
-      authors: { select: { name: true } },
-    },
-  });
-  return posts.map((p) => ({
+  // Raw query so Postgres truncates `content` server-side (LEFT) and only the
+  // prefix crosses the wire — Prisma's `select` would still transfer the full
+  // column. Params are bound ($1/$2), not interpolated.
+  const rows = await prisma.$queryRaw<
+    Array<{
+      id: string;
+      title: string;
+      description: string | null;
+      content_prefix: string | null;
+      slug: string;
+      tag: string | null;
+      published_date: Date;
+      author_name: string | null;
+    }>
+  >`
+    SELECT b.id,
+           b.title,
+           b.description,
+           LEFT(b.content, ${CONTENT_PREFIX_CHARS}::int) AS content_prefix,
+           b.slug,
+           b.tag,
+           b.published_date,
+           a.name AS author_name
+    FROM blog_posts b
+    LEFT JOIN authors a ON a.id = b.author_id
+    ORDER BY b.published_date DESC
+    LIMIT ${limit}::int
+  `;
+  return rows.map((p) => ({
     id: p.id,
     title: p.title,
     description: p.description ?? null,
-    content: p.content
+    content: (p.content_prefix ?? "")
       .replace(/<[^>]*>/g, " ")
       .replace(/\s+/g, " ")
       .trim()
@@ -113,7 +133,7 @@ export async function getBlogCatalog(limit = 90): Promise<CatalogPost[]> {
     slug: p.slug,
     tag: p.tag ?? null,
     published_date: p.published_date.toISOString(),
-    author: { name: p.authors?.name ?? "Vierra" },
+    author: { name: p.author_name ?? "Vierra" },
   }));
 }
 

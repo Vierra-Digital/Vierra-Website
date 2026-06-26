@@ -15,6 +15,12 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
+# After each production deploy goes live, warm the ISR cache for the blog index
+# and recent posts so the first real visitor doesn't pay the cold regeneration
+# (cold function + cold Supabase connection). Best-effort; never fails the build.
+[[plugins]]
+  package = "/plugins/warm-blog-cache"
+
 [context.production.environment]
   NEXT_PUBLIC_SITE_URL = "https://vierradev.com"
 
