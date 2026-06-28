@@ -2,12 +2,21 @@
 import { useEffect, useState } from "react"
 import { Bricolage_Grotesque, Inter } from "next/font/google"
 import Image from "next/image"
-import { motion } from "framer-motion"
-import { ArrowUpRight } from "lucide-react"
-import dynamic from "next/dynamic"
+import { motion, useScroll, useTransform } from "framer-motion"
+import { ArrowUpRight, Sparkles } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Header } from "@/components/Header"
 import { Modal } from "@/components/Modal"
+import { BusinessSolutions } from "@/components/BusinessSection/BusinessSolutions"
+import Timeline from "@/components/BusinessSection/Timeline"
+import { CaseStudies } from "@/components/WorkSection/CaseStudies"
+import { StatsGrid } from "@/components/BusinessSection/StatsGrid"
+import FeaturesV2 from "@/components/FeaturesSection/FeaturesV2"
+import Tailored from "@/components/ServicesSection/Tailored"
+import Integrations from "@/components/IntegrationsSection/Integrations"
+import Testimonials from "@/components/TestimonialSection/Testimonials"
+import Team from "@/components/TeamSection/Team"
+import { FooterSection } from "@/components/FooterSection/MainComponent"
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
 const inter = Inter({ subsets: ["latin"] })
@@ -20,24 +29,22 @@ const heroVariants = {
   // No opacity fade on the hero text block — it holds the LCP <h1>, so it must
   // paint immediately in SSR HTML rather than waiting on JS. The slide (y) is a
   // GPU transform: it animates without blocking paint or causing layout shift.
-  hidden: { y: 20 },
+  // The container only orchestrates the stagger; each child fades + drops in
+  // from the top one after another, with a clear (but quick) cascade.
+  hidden: {},
   visible: {
-    opacity: 1,
-    y: 0,
-    transition: { staggerChildren: 0.2, ease: "easeOut" as const },
+    transition: { staggerChildren: 0.16, delayChildren: 0.12 },
   },
 }
-const heroTitleTransition = { duration: 0.6, ease: "easeOut" as const }
-const ctaVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0 },
+// Shared child entrance: fade + slide down from the top, smooth ease.
+const heroChild = {
+  hidden: { opacity: 0, y: -34 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] as const } },
 }
-const gradientTextStyle = {
-  backgroundSize: "200% auto",
-  animation: "gradient-horizontal 3s ease infinite",
-  WebkitBackgroundClip: "text",
-  WebkitTextFillColor: "transparent",
-  filter: "brightness(1.2)",
+// "Trusted By Our Partners" entrance — staggers in just after the hero.
+const partnersVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.14, delayChildren: 0.55 } },
 }
 const floatingGradientTransition = {
   duration: 5,
@@ -45,39 +52,16 @@ const floatingGradientTransition = {
   repeatType: "loop" as const,
   ease: "easeInOut" as const,
 }
-const heroImageTransition = {
-  duration: 2,
-  repeat: Infinity,
-  repeatType: "loop" as const,
-  ease: "easeInOut" as const,
-}
-const LazyBusinessSolutions = dynamic(
-  () =>
-    import("@/components/BusinessSection/BusinessSolutions").then(
-      (mod) => mod.BusinessSolutions
-    ),
-  { loading: () => <div className="min-h-[320px] bg-[#F3F3F3]" /> }
-)
-const LazyServices = dynamic(() => import("@/components/ServicesSection/Main"), {
-  loading: () => <div className="min-h-screen bg-[#010205]" />,
-})
-const LazyTestimonials = dynamic(
-  () => import("@/components/TestimonialSection/Testimonials"),
-  { loading: () => <div className="min-h-[480px] bg-[#010205]" /> }
-)
-const LazyTeam = dynamic(() => import("@/components/TeamSection/Team"), {
-  loading: () => <div className="min-h-[480px] bg-[#010205]" />,
-})
-const LazyFooter = dynamic(
-  () =>
-    import("@/components/FooterSection/MainComponent").then(
-      (mod) => mod.FooterSection
-    ),
-  { loading: () => <div className="min-h-[240px] bg-[#7A13D0]" /> }
-)
 
 export default function Page() {
   const [isModalOpen, setIsModalOpen] = useState(false)
+
+  // Scroll-linked parallax for the hero's decorative layers. These are
+  // GPU transforms (translateY) driven by native scroll position, so they add
+  // depth without hijacking the scroll or causing layout shifts.
+  const { scrollY } = useScroll()
+  const blob1Y = useTransform(scrollY, [0, 800], [0, -420])
+  const blob2Y = useTransform(scrollY, [0, 800], [0, 380])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -116,223 +100,222 @@ export default function Page() {
         {gridLines.map((index) => (
           <motion.div
             key={index}
-            className="absolute top-0 h-full border-l border-white opacity-5 -z-10"
+            className="absolute top-0 h-full border-l border-white opacity-[0.07] -z-10"
             style={{ left: `${(index + 1) * (100 / 8)}%` }}
             initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "100%", opacity: 0.05, x: [0, 10, 0] }}
+            animate={{ height: "100%", opacity: 0.07, x: [0, 10, 0] }}
             transition={{
-              duration: 3,
-              delay: index * 0.2,
+              duration: 1.1,
+              delay: index * 0.06,
               ease: "easeInOut" as const,
               x: { duration: 4, repeat: Infinity, ease: "easeInOut" as const },
             }}
           />
         ))}
 
+        {/* Moving space particles behind the hero. */}
+        <div aria-hidden className="absolute inset-0 -z-10 overflow-hidden">
+          <div className="cta-stars" />
+          <div className="cta-stars cta-stars--2" />
+        </div>
+
         <motion.div initial="hidden" animate="visible" variants={headerVariants}>
           <Header />
         </motion.div>
 
-        <main className="relative px-6 max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-10">
-          <motion.div
-            initial={{ x: 0, y: 0 }}
-            animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
-            transition={floatingGradientTransition}
-            className="absolute top-[7%] left-[10%] w-[470px] h-[470px] max-w-[475px] max-h-[475px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A] -z-20"
-          />
-          <motion.div
-            initial={{ x: 0, y: 0 }}
-            animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
-            transition={floatingGradientTransition}
-            className="absolute -bottom-[32%] -right-[3%] w-[545px] h-[545px] max-w-[550px] max-h-[550px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A] -z-20"
-          />
+        <main className="relative px-6 max-w-7xl mx-auto flex flex-col items-center justify-center text-center min-h-[88vh] pb-[4vh] gap-2">
+          <motion.div style={{ y: blob1Y }} className="absolute -top-[6%] -left-[6%] -z-20">
+            <motion.div
+              initial={{ x: 0, y: 0 }}
+              animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
+              transition={floatingGradientTransition}
+              className="w-[470px] h-[470px] max-w-[475px] max-h-[475px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A]"
+            />
+          </motion.div>
+          <motion.div style={{ y: blob2Y }} className="absolute -bottom-[42%] -right-[12%] -z-20">
+            <motion.div
+              initial={{ x: 0, y: 0 }}
+              animate={{ x: [0, 10, 0], y: [0, 10, 0] }}
+              transition={floatingGradientTransition}
+              className="w-[545px] h-[545px] max-w-[550px] max-h-[550px] opacity-80 blur-[20px] rotate-[60deg] rounded-full bg-gradient-to-l from-[#701CC0] to-[#18042A]"
+            />
+          </motion.div>
 
-          <motion.div initial="hidden" animate="visible" variants={heroVariants} className="max-w-2xl">
+          <motion.div initial="hidden" animate="visible" variants={heroVariants} className="flex flex-col items-center">
+            <motion.span
+              variants={heroChild}
+              className={`mb-6 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF] ${inter.className}`}
+            >
+              <Sparkles size={14} className="text-[#C99DFF]" />
+              B2B Lead Generation
+            </motion.span>
             <motion.h1
-              initial={{ y: 20 }}
-              animate={{ y: 0 }}
-              transition={heroTitleTransition}
-              className={`text-5xl md:text-6xl font-bold leading-tight mb-6 text-[#EFF3FF] ${bricolage.className}`}
+              variants={heroChild}
+              style={{ fontSize: "clamp(2.5rem, 7.6vw, 6rem)" }}
+              className={`font-bold leading-[1.05] mb-6 text-[#EFF3FF] max-w-7xl ${bricolage.className}`}
             >
               <span
-                className="inline-block bg-gradient-to-r from-[#8F42FF] via-[#B366FF] via-[#D4A5FF] via-[#B366FF] to-[#8F42FF] bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient"
-                style={gradientTextStyle}
+                className="bg-clip-text text-transparent bg-[length:200%_auto]"
+                style={{
+                  backgroundImage:
+                    "linear-gradient(90deg, #8B5CF6, #D946EF 25%, #F0ABFC 50%, #A855F7 75%, #8B5CF6)",
+                  animation: "vierra-bold-flow 4s linear infinite",
+                }}
               >
                 Risk-Averse
               </span>{" "}
-              Guaranteed Leads For Your Business
+              Lead Engine
+              <br className="hidden md:block" /> For Your Business
             </motion.h1>
 
-            <motion.p variants={ctaVariants} className={`text-[#9BAFC3] text-lg mb-6 ${inter.className}`}>
-              Scale your business effortlessly. Fill in your sales calendar and
-              eliminate risky marketing investments.
+            <motion.p variants={heroChild} className={`text-white text-xl md:text-2xl mb-8 max-w-2xl ${inter.className}`}>
+              Construct your funnel, research leads, capture signals, and schedule
+              meetings autonomously.
             </motion.p>
 
             
             <div className="sr-only">
               <h2>About Vierra</h2>
               <p>
-                Vierra is a digital marketing and lead generation platform that helps businesses 
-                increase ROI, leads, and conversions through guaranteed lead generation services. 
-                Our application provides case-study-proven, results-based marketing solutions to 
-                help businesses scale efficiently, optimize ad spending, and fill their sales 
-                calendars with qualified leads. We work closely with each client to deliver 
-                professional digital marketing services that eliminate risky marketing investments 
-                and maximize return on advertising spend.
+                Vierra is a B2B lead generation platform that helps businesses build a
+                funnel, research leads, capture buying signals, and schedule meetings
+                autonomously. Our case-study-proven, results-based systems help
+                businesses increase ROI and conversions, scale efficiently, and fill
+                their sales calendars with qualified leads.
               </p>
             </div>
 
-            <motion.div variants={ctaVariants} className={`flex flex-col sm:flex-row items-center gap-4 ${inter.className}`}>
+            <motion.div variants={heroChild} className={`flex flex-col sm:flex-row items-center justify-center gap-4 ${inter.className}`}>
               <Button
                 variant="secondary"
-                className="flex items-center gap-2 bg-[#701CC0] hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC0B8] transform transition-transform duration-300 hover:scale-105"
+                className="flex items-center gap-2 bg-[#701CC0] hover:bg-[#8F42FF] text-white rounded-md px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC0B8] transform transition-transform duration-300 hover:scale-105"
                 onClick={() => setIsModalOpen(true)}
               >
-                Free Audit Call
-                <ArrowUpRight className="w-4 h-4" />
+                Let&apos;s Talk
+                <ArrowUpRight className="w-4 h-4 arrow-bob" />
               </Button>
-              <Button
-                variant="link"
-                className="text-white text-[16px] relative group hover:text-[#8F42FF] pl-2"
-                onClick={() => {
-                  document.getElementById("services")?.scrollIntoView({
-                    behavior: "smooth",
-                  })
-                }}
-              >
-                What We Do
-                <span className="absolute left-2 bottom-0 w-0 h-[1px] bg-[#8F42FF] transition-all duration-300 group-hover:w-[calc(100%-20px)]" />
-              </Button>
-            </motion.div>
-          </motion.div>
-
-          <motion.div
-            initial={{ scale: 0.96 }}
-            animate={{ scale: 1 }}
-            transition={{ duration: 0.8, ease: "easeOut" as const }}
-            className="flex-shrink-0"
-          >
-            <motion.div initial={{ y: 0 }} animate={{ y: [0, -10, 0] }} transition={heroImageTransition}>
-              <Image
-                src="/assets/image1.png"
-                alt="Vierra guaranteed lead generation platform for scaling businesses"
-                width={750}
-                height={685}
-                priority
-                quality={80}
-                sizes="(max-width: 768px) 90vw, 750px"
-              />
             </motion.div>
           </motion.div>
         </main>
 
-        <section className="w-full py-16">
-          <div className="max-w-7xl mx-auto px-6">
-            <div className="flex flex-col md:flex-row items-center gap-12">
-              <h2
-                className={`text-white text-xl font-medium whitespace-nowrap ${bricolage.className}`}
+        {/* Partners banner — extends the hero's dark backdrop into a slim
+            trusted-by strip directly beneath the hero content. */}
+        <motion.section
+          initial="hidden"
+          animate="visible"
+          variants={partnersVariants}
+          className="relative z-10 px-6 pt-4 pb-20"
+        >
+          <div className="max-w-6xl mx-auto flex flex-col items-center gap-6">
+            <motion.span
+              variants={heroChild}
+              className={`text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF] ${inter.className}`}
+            >
+              Trusted By Our Partners
+            </motion.span>
+            <motion.div
+              variants={heroChild}
+              className={`flex flex-wrap justify-center items-center gap-x-10 gap-y-6 md:gap-x-14 ${inter.className}`}
+            >
+              <a
+                href="https://www.isenberg.umass.edu/"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="UMass Isenberg School of Management"
+                className="opacity-80 transition-opacity duration-300 hover:opacity-100"
               >
-                Trusted By Our Partners
-              </h2>
-              <div className="flex flex-wrap md:flex-nowrap justify-center items-center gap-12 md:gap-24 w-full">
-                <a
-                  href="https://www.isenberg.umass.edu/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Image
-                    src="/assets/Partners/Isenberg.png"
-                    alt="UMass Isenberg School of Management logo"
-                    width={112}
-                    height={24}
-                  />
-                </a>
-                <a
-                  href="https://ironandwaterco.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <div className="flex items-center gap-2 text-white">
-                    <svg
-                      width="24"
-                      height="24"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                      aria-hidden="true"
-                    >
-                      <path d="M18 20V6.5C18 4.01472 15.9853 2 13.5 2H10.5C8.01472 2 6 4.01472 6 6.5V20" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-                      <path d="M9 9.25C11.7 9.25 13.5 11.05 13.5 13.75C13.5 16.45 11.7 18.25 9 18.25" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-                      <circle cx="14.75" cy="11.25" r="0.95" fill="currentColor"/>
-                    </svg>
-                    <span className="text-[11px] md:text-xs font-semibold tracking-[0.2em] whitespace-nowrap">
-                      IRON &amp; WATER CO.
-                    </span>
-                  </div>
-                </a>
-                <a
-                  href="https://happystack.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <div className="flex items-center gap-2">
-                    <Image
-                      src="/assets/Partners/HappyStack.png"
-                      alt="HappyStack mascot"
-                      width={30}
-                      height={30}
-                      className="w-6 h-6 object-contain"
-                    />
-                    <Image
-                      src="/assets/Partners/HappyStack.svg"
-                      alt="HappyStack"
-                      width={117}
-                      height={19}
-                      className="w-auto h-3.5 md:h-4"
-                    />
-                  </div>
-                </a>
-                <a
-                  href="https://somervilledentalassociates.com/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <div className="flex items-center gap-2 text-white whitespace-nowrap">
-                    <svg
-                      width="20"
-                      height="24"
-                      viewBox="0 0 20 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                      aria-hidden="true"
-                    >
-                      <path
-                        d="M10 22C6.6 22 3.5 19.4 2.9 15.9L1.3 6.2C1.1 4.6 2.3 3.2 3.9 3.2C5 3.2 6 3.8 6.5 4.8L7.3 6.3C8 7.6 9.9 7.6 10.6 6.3L11.4 4.8C11.9 3.8 12.9 3.2 14 3.2C15.6 3.2 16.8 4.6 16.6 6.2L15 15.9C14.4 19.4 13.4 22 10 22Z"
-                        stroke="currentColor"
-                        strokeWidth="1.6"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    <span className="text-[12px] md:text-sm tracking-[0.01em]">
-                      <span className="font-bold">Somerville</span>{" "}
-                      <span className="font-normal text-white/85">Dental</span>
-                    </span>
-                  </div>
-                </a>
-              </div>
-            </div>
+                <Image src="/assets/Partners/Isenberg-w.png" alt="UMass Isenberg School of Management logo" width={580} height={120} className="h-7 w-auto object-contain" />
+              </a>
+              <a
+                href="https://ironandwaterco.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Iron & Water Co."
+                className="opacity-80 transition-opacity duration-300 hover:opacity-100"
+              >
+                <span className="whitespace-nowrap text-[15px] font-semibold uppercase tracking-[0.18em] text-white">
+                  Iron &amp; Water Co.
+                </span>
+              </a>
+              <a
+                href="https://usegl.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Granite Logistics"
+                className="opacity-80 transition-opacity duration-300 hover:opacity-100"
+              >
+                <Image src="/assets/Partners/Granite-w.png" alt="Granite Logistics logo" width={1041} height={240} className="h-8 w-auto object-contain" />
+              </a>
+              <a
+                href="https://thearoundhub.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="The Around Hub"
+                className="opacity-80 transition-opacity duration-300 hover:opacity-100"
+              >
+                <Image src="/assets/Partners/AroundHub-w.png" alt="The Around Hub logo" width={457} height={120} className="h-7 w-auto object-contain" />
+              </a>
+              <a
+                href="https://freeclass.qigonginfusedyoga.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Qigong Infused Yoga"
+                className="opacity-80 transition-opacity duration-300 hover:opacity-100"
+              >
+                <Image src="/assets/Partners/Qigong-w.png" alt="Qigong Infused Yoga logo" width={282} height={120} className="h-9 w-auto object-contain" />
+              </a>
+              <a
+                href="https://somervilledentalassociates.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Somerville Dental"
+                className="opacity-80 transition-opacity duration-300 hover:opacity-100"
+              >
+                <span className="whitespace-nowrap text-[15px] tracking-tight text-white">
+                  <span className="font-bold">Somerville</span>{" "}
+                  <span className="font-normal text-white/80">Dental</span>
+                </span>
+              </a>
+            </motion.div>
           </div>
-        </section>
+        </motion.section>
       </div>
+
       {isModalOpen && (
         <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
       )}
-      <LazyBusinessSolutions />
-      <LazyServices />
-      <LazyTestimonials />
-      <LazyTeam />
-      <LazyFooter />
+
+      {/* 2. Multi-Channel Marketing Campaigns — outlets + database cloud. */}
+      <BusinessSolutions />
+
+      {/* 3. Timeline / how it works. */}
+      <Timeline />
+
+      {/* 4. Why it works / case studies. Gradients into the GTM section below. */}
+      <section className="w-full bg-gradient-to-b from-[#010205] via-[#010205] to-[#18042A] text-white pb-32">
+        <CaseStudies />
+      </section>
+
+      {/* 6. Features v2 — big boxes + pipeline. */}
+      <FeaturesV2 />
+
+      {/* 7. Tailored To You — scroll-locked step cards. */}
+      <Tailored />
+
+      {/* Scale Your Business — stats. */}
+      <section className="w-full bg-[#F3F3F3] py-24 md:py-28">
+        <div className="px-6">
+          <StatsGrid />
+        </div>
+      </section>
+
+      {/* 8. Integrations — booked-meetings animation. */}
+      <Integrations />
+
+      {/* 9-11. Testimonials, leadership, footer. */}
+      <Testimonials />
+      <Team />
+      <FooterSection />
     </>
   )
 }
