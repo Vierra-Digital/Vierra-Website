@@ -1,10 +1,6 @@
 "use client"
-import React, { useState, useEffect, useRef, useMemo } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion } from "framer-motion"
 import { Bricolage_Grotesque, Figtree } from "next/font/google"
-import { Canvas, useFrame } from "@react-three/fiber"
-import { useGLTF } from "@react-three/drei"
-import * as THREE from "three"
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
 const figtree = Figtree({ subsets: ["latin"] })
@@ -20,19 +16,19 @@ const services: Service[] = [
     id: "01",
     name: "Warm Outreach",
     description:
-      "A stagnant business is worse than a dying one. We use warm outreach methods through our connections to drive new leads flowing to your business.",
+      "A stagnant business is worse than a dying one. We use warm outreach through our connections to drive new leads flowing to your business.",
   },
   {
     id: "02",
     name: "Systems",
     description:
-      "You're not getting new clients because you don't have systematic outreach. We build your foundational systems to pinpoint constraints in your growth and maximize organic lead generation.",
+      "You're not getting new clients because you don't have systematic outreach. We build the foundational systems that maximize organic lead generation.",
   },
   {
     id: "03",
     name: "Targeted Ads",
     description:
-      "We use the changing market's trends to push ads that reach an audience that wants your service. Save money by spending on premium ad spend that helps reach your desired audience.",
+      "We use the market's changing trends to push ads that reach an audience that wants your service, spending only on premium placements that convert.",
   },
   {
     id: "04",
@@ -42,441 +38,47 @@ const services: Service[] = [
   },
 ]
 
-const descriptionVariants = {
-  initial: {
-    opacity: 0,
-    height: 0,
-    y: -10,
-  },
-  animate: {
-    opacity: 1,
-    height: "auto",
-    y: 0,
-    transition: {
-      duration: 0.3,
-      ease: "easeOut" as const,
-    },
-  },
-  exit: {
-    opacity: 0,
-    height: 0,
-    y: -10,
-    transition: {
-      duration: 0.2,
-      ease: "easeIn" as const,
-    },
-  },
+const fadeUp = {
+  hidden: { opacity: 0, y: 28 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] as const } },
 }
 
-const Lighting = () => (
-  <>
-    <ambientLight intensity={2.5} />
-    <directionalLight position={[5, 8, 5]} intensity={4} color="#ffffff" />
-    <directionalLight position={[-5, 8, -5]} intensity={3} color="#B0E0E6" />
-    <directionalLight position={[0, -8, 0]} intensity={2} color="#5B9BD5" />
-    <pointLight position={[10, 10, 10]} intensity={2} color="#87CEEB" />
-    <pointLight position={[-10, -10, -10]} intensity={1.5} color="#4169E1" />
-  </>
-)
-
-const getAnimationConfig = (isMobile: boolean) => {
-  return {
-    modelPosition: [0, 0, 0],
-    modelScale: 4,
-    modelScaleAnimating: 4.2,
-    springStrength: isMobile ? 3 : 5,
-    moveSpeed: {
-      animating: isMobile ? 0.2 : 0.15,
-      idle: isMobile ? 0.08 : 0.05,
-    },
-    getPositionForId: (id: string | null, services: Service[]) => {
-      if (!id) return new THREE.Vector3(0, 0, 0)
-
-      const index = services.findIndex((service) => service.id === id)
-      if (index === -1) return new THREE.Vector3(0, 0, 0)
-
-      if (isMobile) {
-        const angle = (index / services.length) * Math.PI * 2
-        const radius = 0.5
-        const x = Math.sin(angle) * radius
-        const z = Math.cos(angle) * radius
-        return new THREE.Vector3(x, 0, z)
-      } else {
-        const yOffset = index === services.length - 1 ? 0.4 : 0
-        return new THREE.Vector3(0, 1.5 - index + yOffset, 0)
-      }
-    },
-  }
-}
-
-const Model = React.memo(function Model({
-  selectedId,
-  isMobile,
-}: {
-  selectedId: string | null
-  isMobile: boolean
-}) {
-  const gltf = useGLTF("/assets/object.glb")
-  const [isAnimating, setIsAnimating] = useState(false)
-  const lastSelectedId = useRef<string | null>(null)
-  const animConfig = useMemo(() => getAnimationConfig(isMobile), [isMobile])
-  const force = useRef(new THREE.Vector3())
-
-  const targetPosition = animConfig.getPositionForId(selectedId, services)
-
-  useEffect(() => {
-    if (selectedId !== lastSelectedId.current) {
-      setIsAnimating(true)
-      lastSelectedId.current = selectedId
-      const timeout = setTimeout(() => setIsAnimating(false), 500)
-      return () => clearTimeout(timeout)
-    }
-  }, [selectedId])
-  useEffect(() => {
-    if (!gltf.scene) return
-    const createGradientTexture = () => {
-      const size = 512
-      const canvas = document.createElement("canvas")
-      canvas.width = size
-      canvas.height = size
-      const context = canvas.getContext("2d")
-      
-      if (!context) return null
-      context.fillStyle = "#701CC0"
-      context.fillRect(0, 0, size, size)
-      
-      const texture = new THREE.CanvasTexture(canvas)
-      texture.wrapS = THREE.RepeatWrapping
-      texture.wrapT = THREE.RepeatWrapping
-      texture.minFilter = THREE.LinearFilter
-      texture.magFilter = THREE.LinearFilter
-      texture.needsUpdate = true
-      return texture
-    }
-    const fixMaterials = () => {
-      const gradientTexture = createGradientTexture()
-      
-      gltf.scene.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          if (child.geometry) {
-            child.geometry.computeVertexNormals()
-            child.geometry.normalizeNormals()
-            if (child.geometry.attributes.normal) {
-              child.geometry.attributes.normal.needsUpdate = true
-            }
-          }
-          
-          if (child.material) {
-            const materials = Array.isArray(child.material)
-              ? child.material
-              : [child.material]
-
-            materials.forEach((material) => {
-              if (material instanceof THREE.MeshStandardMaterial) {
-                let hasValidTexture = false
-                if (material.map) {
-                  try {
-                    const mapImage = material.map.image as HTMLImageElement | undefined
-                    const imageSrc = mapImage?.src || ""
-                    hasValidTexture = Boolean(
-                      imageSrc &&
-                      !imageSrc.startsWith("blob:") &&
-                      mapImage?.complete &&
-                      (mapImage?.naturalWidth ?? 0) > 0
-                    )
-                  } catch {
-                    hasValidTexture = false
-                  }
-                }
-
-                if (!hasValidTexture && gradientTexture) {
-                  if (material.map) {
-                    try {
-                      material.map.dispose()
-                    } catch {
-                    }
-                  }
-                  material.map = gradientTexture
-                  material.color = new THREE.Color(0x701CC0)
-                  material.emissive = new THREE.Color(0x701CC0)
-                  material.emissiveIntensity = 0.05
-                  material.metalness = 0.15
-                  material.roughness = 0.1
-                  material.side = THREE.DoubleSide
-                  material.flatShading = false
-                  material.map.needsUpdate = true
-                } else if (hasValidTexture) {
-                  material.metalness = 0.1
-                  material.roughness = 0.25
-                  material.flatShading = false
-                  material.side = THREE.DoubleSide
-                }
-                material.flatShading = false
-                material.needsUpdate = true
-              }
-            })
-          }
-        }
-      })
-    }
-    fixMaterials()
-    const timeout = setTimeout(fixMaterials, 100)
-    const timeout2 = setTimeout(fixMaterials, 500)
-
-    return () => {
-      clearTimeout(timeout)
-      clearTimeout(timeout2)
-    }
-  }, [gltf.scene])
-
-  useFrame((state, delta) => {
-    if (!gltf.scene) return
-
-    force.current
-      .subVectors(targetPosition, gltf.scene.position)
-      .multiplyScalar(animConfig.springStrength)
-    const moveSpeed = isAnimating
-      ? animConfig.moveSpeed.animating
-      : animConfig.moveSpeed.idle
-    gltf.scene.position.add(force.current.multiplyScalar(moveSpeed * delta))
-
-    const targetScale = isAnimating
-      ? animConfig.modelScaleAnimating
-      : animConfig.modelScale
-    gltf.scene.scale.lerp(
-      new THREE.Vector3(targetScale, targetScale, targetScale),
-      0.1
-    )
-
-    const targetRotationY = selectedId
-      ? (parseInt(selectedId) - 1) * (Math.PI / 2)
-      : gltf.scene.rotation.y
-    gltf.scene.rotation.y += (targetRotationY - gltf.scene.rotation.y) * 0.05
-    gltf.scene.rotation.y += delta / 2
-  })
-
-  return (
-    <primitive
-      object={gltf.scene}
-      scale={animConfig.modelScale}
-      position={animConfig.modelPosition}
-    />
-  )
-})
-
-const ServiceItem = React.memo(function ServiceItem({
-  service,
-  isOpen,
-  toggleService,
-}: {
-  service: Service
-  isOpen: boolean
-  toggleService: (id: string) => void
-}) {
-  return (
-    <div key={service.id}>
-      <motion.div
-        onClick={() => toggleService(service.id)}
-        className={`flex items-center cursor-pointer border-b py-6 md:py-8 group ${
-          isOpen ? "border-[#701CC0]" : "border-[#A4A4A4]/20"
-        }`}
-        animate={{
-          borderColor: isOpen ? "#701CC0" : "rgba(164, 164, 164, 0.2)",
-        }}
-        whileHover={{
-          borderColor: isOpen ? "#701CC0" : "#FFFFFF",
-        }}
-        transition={{ duration: 0.3 }}
-      >
-        <div
-          className={`flex items-center justify-center h-[40px] md:h-[52px] w-[56px] md:w-[70px] rounded-full transition-all duration-300 ${
-            isOpen
-              ? "bg-[#701CC0]"
-              : "bg-transparent border-[1.5px] border-white/40 group-hover:border-white"
-          }`}
-        >
-          <span
-            className={`text-lg md:text-[24px] font-light transition-opacity duration-300 ${
-              isOpen ? "text-white" : "text-white/40 group-hover:text-white"
-            }`}
-          >
-            {service.id}
-          </span>
-        </div>
-        <span
-          className={`ml-4 md:ml-6 max-md:text-xl md:text-[48px] transition-all duration-300 ${
-            isOpen
-              ? "text-white font-normal"
-              : "text-white/40 font-light group-hover:text-white"
-          }`}
-        >
-          {service.name}
-        </span>
-      </motion.div>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            variants={descriptionVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className="text-white/80 text-base md:text-lg overflow-hidden"
-          >
-            <div className={`${figtree.className} mt-4 mb-6 max-w-[580px]`}>
-              {service.description}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-})
-
+// Light, clean numbered steps with a staggered entrance and a growing accent bar.
 export function Services() {
-  const [openServiceId, setOpenServiceId] = useState<string | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const canvasWrapperRef = useRef<HTMLDivElement>(null)
-  const [canvasSize, setCanvasSize] = useState({ width: 480, height: 800 })
-  const [isCanvasActive, setIsCanvasActive] = useState(false)
-
-  useEffect(() => {
-    if (!canvasWrapperRef.current) return
-
-    const updateCanvasSize = () => {
-      const isMobileView = window.innerWidth <= 768
-      const containerWidth = canvasWrapperRef.current
-        ? canvasWrapperRef.current.clientWidth
-        : 0
-      const size = isMobileView
-        ? Math.min(Math.max(containerWidth, 280), 350)
-        : Math.min(containerWidth, 480)
-      setCanvasSize({ width: size, height: isMobileView ? 350 : 800 })
-    }
-
-    const observer = new ResizeObserver(updateCanvasSize)
-    observer.observe(canvasWrapperRef.current)
-
-    updateCanvasSize()
-
-    return () => observer.disconnect()
-  }, [])
-
-  useEffect(() => {
-    if (!canvasWrapperRef.current) return
-    if (typeof IntersectionObserver === "undefined") {
-      setIsCanvasActive(true)
-      return
-    }
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsCanvasActive(true)
-          observer.disconnect()
-        }
-      },
-      { rootMargin: "200px" }
-    )
-    observer.observe(canvasWrapperRef.current)
-    return () => observer.disconnect()
-  }, [])
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setOpenServiceId((prevId) => {
-        const currentIndex = services.findIndex(
-          (service) => service.id === prevId
-        )
-        const nextIndex = (currentIndex + 1) % services.length
-        return services[nextIndex].id
-      })
-    }, 5000)
-
-    return () => clearInterval(timer)
-  }, [])
-
-  const toggleService = (serviceId: string) => {
-    setOpenServiceId(openServiceId === serviceId ? null : serviceId)
-  }
-
   return (
-    <div
-      className="w-full max-w-[1174px] px-4 md:px-6 lg:px-0 my-20"
-      id="services"
-      ref={containerRef}
-    >
-      <div
-        className={`relative w-full min-h-[600px] md:min-h-[773px] bg-[#18042A] rounded-[30px] md:rounded-tr-[60px] md:rounded-br-[60px] md:rounded-tl-[0px] md:rounded-bl-[0px] z-0 ${bricolage.className}`}
+    <div className="mx-auto w-full max-w-7xl px-6" id="services">
+      <motion.div
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.2 }}
+        variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.12 } } }}
+        className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4"
       >
-        <div className="block md:hidden">
-          <div
-            className="py-8 flex justify-center"
-            ref={canvasWrapperRef}
-            style={{ minHeight: "350px" }}
+        {services.map((s) => (
+          <motion.div
+            key={s.id}
+            variants={fadeUp}
+            className="group relative flex flex-col rounded-3xl border border-[#ECE6F5] bg-white p-7 shadow-[0_18px_44px_-30px_rgba(112,28,192,0.5)] transition-transform duration-300 hover:-translate-y-1"
           >
-            {isCanvasActive ? (
-              <Canvas
-                style={{
-                  width: canvasSize.width,
-                  height: canvasSize.height,
-                  minHeight: "350px",
-                }}
-                gl={{ antialias: true, alpha: true }}
-                camera={{ position: [0, 0, 5], fov: 75 }}
-              >
-                <Lighting />
-                <Model selectedId={openServiceId} isMobile={true} />
-              </Canvas>
-            ) : (
-              <div className="w-full h-[350px]" />
-            )}
-          </div>
-          <div className="px-4 py-4">
-            {services.map((service) => (
-              <ServiceItem
-                key={service.id}
-                service={service}
-                isOpen={openServiceId === service.id}
-                toggleService={toggleService}
-              />
-            ))}
-          </div>
-        </div>
-        <div className="hidden md:block">
-          <div
-            className="z-10 absolute right-[12%] top-1/3 -translate-y-[40%] translate-x-1/2"
-            ref={canvasWrapperRef}
-          >
-            {isCanvasActive ? (
-              <Canvas
-                style={{
-                  width: canvasSize.width,
-                  height: canvasSize.height,
-                }}
-                gl={{ antialias: true }}
-                onPointerOver={() => (document.body.style.cursor = "grab")}
-                onPointerOut={() => (document.body.style.cursor = "default")}
-              >
-                <Lighting />
-                <Model selectedId={openServiceId} isMobile={false} />
-              </Canvas>
-            ) : (
-              <div
-                style={{ width: canvasSize.width, height: canvasSize.height }}
-              />
-            )}
-          </div>
-          <div className="px-4 md:ml-40 md:mr-20 py-8 md:py-20">
-            {services.map((service) => (
-              <ServiceItem
-                key={service.id}
-                service={service}
-                isOpen={openServiceId === service.id}
-                toggleService={toggleService}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
+            <span
+              className={`grid h-12 w-12 place-items-center rounded-2xl bg-[#701CC0] text-lg font-semibold text-white ${bricolage.className}`}
+            >
+              {s.id}
+            </span>
+            <h3 className={`mt-5 text-xl font-semibold text-[#18042A] ${bricolage.className}`}>{s.name}</h3>
+            <p className={`mt-2 flex-1 text-[15px] leading-relaxed text-[#5C5470] ${figtree.className}`}>
+              {s.description}
+            </p>
+            <motion.div
+              className="mt-5 h-[3px] rounded-full bg-[#701CC0]"
+              initial={{ width: 0 }}
+              whileInView={{ width: 40 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            />
+          </motion.div>
+        ))}
+      </motion.div>
     </div>
   )
 }

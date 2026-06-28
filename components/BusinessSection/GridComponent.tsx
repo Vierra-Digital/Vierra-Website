@@ -132,11 +132,11 @@ function GridComponent() {
         setActiveNodes([currentSet.source, ...currentSet.targets])
           currentSet.targets.forEach(assignIconToKey)
         setAnimationPhase("showing")
-      }, 500)
+      }, 450)
 
       eraseTimer = setTimeout(() => {
         setAnimationPhase("erasing")
-      }, 4000)
+      }, 2400)
 
       resetTimer = setTimeout(() => {
         setIsAnimating(false)
@@ -151,12 +151,12 @@ function GridComponent() {
           }
           return next
         })
-      }, 5000)
+      }, 3000)
     }
 
     const startAnimationLoop = () => {
       runAnimation()
-      intervalTimer = setInterval(runAnimation, 5500)
+      intervalTimer = setInterval(runAnimation, 3300)
     }
 
     const stopAnimationLoop = () => {

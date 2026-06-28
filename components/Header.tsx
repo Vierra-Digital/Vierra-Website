@@ -44,27 +44,11 @@ export function Header() {
           </Link>
           <nav className={`hidden md:flex items-center gap-8 text-[16px] ${bricolage.className}`}>
             <Link
-              href="/#about"
-              className="relative group transition-colors duration-300 hover:text-white"
-              onClick={(event) => handleSectionClick(event, "about")}
-            >
-              About us
-              <span className="absolute -bottom-1 left-1/2 h-[2px] w-0 -translate-x-1/2 rounded-full bg-gradient-to-r from-[#8F42FF] to-[#D4A5FF] shadow-[0_0_10px_#8F42FF99] transition-all duration-300 ease-out group-hover:w-full" />
-            </Link>
-            <Link
               href="/#services"
               className="relative group transition-colors duration-300 hover:text-white"
               onClick={(event) => handleSectionClick(event, "services")}
             >
-              Services
-              <span className="absolute -bottom-1 left-1/2 h-[2px] w-0 -translate-x-1/2 rounded-full bg-gradient-to-r from-[#8F42FF] to-[#D4A5FF] shadow-[0_0_10px_#8F42FF99] transition-all duration-300 ease-out group-hover:w-full" />
-            </Link>
-            <Link
-              href="/#cases"
-              className="relative group transition-colors duration-300 hover:text-white"
-              onClick={(event) => handleSectionClick(event, "cases")}
-            >
-              Case Studies
+              GTM Engine
               <span className="absolute -bottom-1 left-1/2 h-[2px] w-0 -translate-x-1/2 rounded-full bg-gradient-to-r from-[#8F42FF] to-[#D4A5FF] shadow-[0_0_10px_#8F42FF99] transition-all duration-300 ease-out group-hover:w-full" />
             </Link>
             <Link href="/blog" className="relative group transition-colors duration-300 hover:text-white">
@@ -75,10 +59,10 @@ export function Header() {
         </div>
         <Button
           variant="secondary"
-          className={`audit-glow hidden md:flex items-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-transparent text-white rounded-lg px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] transition-all duration-300 hover:border-[#8F42FF] ${inter.className}`}
+          className={`audit-glow hidden md:flex items-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-transparent text-white rounded-md px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] transition-all duration-300 hover:border-[#8F42FF] ${inter.className}`}
           onClick={() => setIsModalOpen(true)}
         >
-          Free Audit Call <ArrowUpRight className="w-4 h-4" />
+          Let&apos;s Talk <ArrowUpRight className="w-4 h-4 arrow-bob" />
         </Button>
         <div className="md:hidden">
           <button 
@@ -104,38 +88,24 @@ export function Header() {
                 </div>
                 <nav className={`flex flex-col p-4 ${bricolage.className}`}>
                   <Link
-                    href="/#about"
-                    className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors"
-                    onClick={(event) => handleSectionClick(event, "about", true)}
-                  >
-                    About us
-                  </Link>
-                  <Link
                     href="/#services"
                     className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors"
                     onClick={(event) => handleSectionClick(event, "services", true)}
                   >
-                    Services
-                  </Link>
-                  <Link
-                    href="/#cases"
-                    className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors"
-                    onClick={(event) => handleSectionClick(event, "cases", true)}
-                  >
-                    Cases
+                    GTM Engine
                   </Link>
                   <Link href="/blog" className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors" onClick={() => setIsMobileMenuOpen(false)}>Blog</Link>
                 </nav>
                 <div className="mt-auto p-4 border-t border-white/10">
                   <Button
                     variant="secondary"
-                    className={`w-full flex items-center justify-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-[#8F42FF] text-white rounded-lg px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] ${inter.className}`}
+                    className={`w-full flex items-center justify-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-[#8F42FF] text-white rounded-md px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] ${inter.className}`}
                     onClick={() => {
                       setIsMobileMenuOpen(false);
                       setIsModalOpen(true);
                     }}
                   >
-                    Free Audit Call <ArrowUpRight className="w-4 h-4" />
+                    Let&apos;s Talk <ArrowUpRight className="w-4 h-4 arrow-bob" />
                   </Button>
                 </div>
               </div>
