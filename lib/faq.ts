@@ -23,7 +23,7 @@ export const FAQ_ITEMS: FaqItem[] = [
       'We combine warm outreach through our network, results-based targeted ad campaigns, and automated client-acquisition systems, then use analytics to continuously improve conversions. The result is a predictable pipeline of qualified leads rather than one-off campaigns that stop working the moment you stop paying.',
   },
   {
-    question: 'What makes Vierra "risk-averse" and "guaranteed"?',
+    question: 'What makes Vierra "risk-averse"?',
     answer:
       'Our model is built around case studies and measurable ROI. We focus your budget only on the activities proven to generate leads that pay back the investment, so you eliminate wasted, speculative marketing spend and maximize return on ad spend. You only pay for the leads who convert to high-paying clients.',
   },

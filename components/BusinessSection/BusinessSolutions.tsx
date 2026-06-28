@@ -1,185 +1,148 @@
-import { useEffect, useState } from "react"
-import { Bricolage_Grotesque, Inter, Figtree } from "next/font/google"
-import { StatsGrid } from "./StatsGrid"
-import { motion, AnimatePresence } from "framer-motion"
-import Timeline from "./Timeline"
+import { useRef, useState } from "react"
+import { Bricolage_Grotesque, Figtree } from "next/font/google"
+import { motion, useScroll, useMotionValueEvent } from "framer-motion"
+import type { IconType } from "react-icons"
+import { FaLinkedin, FaComment } from "react-icons/fa6"
+import { SiGmail, SiMeta, SiGoogle } from "react-icons/si"
 import GridComponent from "./GridComponent"
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const inter = Inter({ subsets: ["latin"] })
 const figtree = Figtree({ subsets: ["latin"] })
 
 interface TabItem {
   id: string
   title: string
   content: string
+  Icon: IconType
+  color: string
 }
 
 const tabs: TabItem[] = [
   {
-    id: "onboarding",
-    title: "Seamless Onboarding",
+    id: "email",
+    title: "Email Cartography & Campaigns",
     content:
-      "We start immediately. Our onboarding process is fast and simple, working towards starting your lead generation swiftly.",
+      "We mine and map high-intent inboxes, then run targeted campaigns that land your offer in front of the right buyers.",
+    Icon: SiGmail,
+    color: "#EA4335",
   },
   {
-    id: "time",
-    title: "Increase Your Time",
+    id: "linkedin",
+    title: "LinkedIn Sales Navigator & InMails",
     content:
-      "We take responsibility for your online presence so you can spend more time doing the work you enjoy.",
+      "Precision prospecting on LinkedIn — we surface decision-makers and open real conversations with personalized InMails.",
+    Icon: FaLinkedin,
+    color: "#0A66C2",
   },
   {
-    id: "costs",
-    title: "Reduce Spending",
+    id: "meta",
+    title: "Meta: Instagram And Facebook",
     content:
-      "Spend only the resources required to generate leads that pay back your investments and increase your capital.",
+      "Paid and organic plays across Instagram and Facebook put your offer in front of the audiences most likely to convert.",
+    Icon: SiMeta,
+    color: "#0467DF",
   },
   {
-    id: "streamline",
-    title: "Streamline Systems",
+    id: "sms",
+    title: "SMS Warm Outreach",
     content:
-      "Automate client and partner acquisition with our case study-driven systems. Leads discover your business through organic outreach.",
+      "Timely, personal text follow-ups that re-engage warm leads and keep deals moving forward.",
+    Icon: FaComment,
+    color: "#16A34A",
+  },
+  {
+    id: "organic",
+    title: "Organic Leads",
+    content:
+      "Content and SEO funnels pull in inbound leads who are already searching for exactly what you do.",
+    Icon: SiGoogle,
+    color: "#4285F4",
   },
 ]
 
 export function BusinessSolutions() {
-  const [activeTab, setActiveTab] = useState(tabs[0].id)
+  const ref = useRef<HTMLElement>(null)
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] })
+  const [active, setActive] = useState(0)
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveTab((prevTab) => {
-        const currentIndex = tabs.findIndex((tab) => tab.id === prevTab)
-        const nextIndex = (currentIndex + 1) % tabs.length
-        return tabs[nextIndex].id
-      })
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [activeTab])
+  // Page-scroll drives which outreach method is shown (no hover-trap, no
+  // site-wide snap) — the section pins and steps through the channels.
+  useMotionValueEvent(scrollYProgress, "change", (v) => {
+    setActive(Math.min(tabs.length - 1, Math.max(0, Math.floor(v * tabs.length))))
+  })
+  const goTo = (i: number) => {
+    const el = ref.current
+    if (!el) return
+    const scrollable = el.offsetHeight - window.innerHeight
+    window.scrollTo({ top: el.offsetTop + ((i + 0.5) / tabs.length) * scrollable, behavior: "smooth" })
+  }
+
+  const tab = tabs[active]
+  const Icon = tab.Icon
 
   return (
-    <section className="w-full py-20 px-6 bg-[#F3F3F3]" id="solutions">
-      <div className="max-w-7xl mx-auto px-6 max-md:px-2">
-        <div className="grid md:grid-cols-2 gap-12 mb-16">
-          <h2
-            className={`text-3xl font-semibold text-[#18042A] mb-4 ${bricolage.className}`}
-          >
-            We Are Not Your Average
-            <br />
-            “Consultants”
-          </h2>
-          <p className={`text-[#8A9197] text-lg ${inter.className}`}>
-            We reduce complexity by eliminating corporate formalities. We
-            implement a clear-cut and simple approach to increasing the return
-            on ad spending. Our team hand-picks leads so we can offer more
-            clients and increase your time.
-          </p>
-        </div>
-        <div className="grid md:grid-cols-2 gap-12 mb-20 place-items-center">
-          <div className="space-y-6 relative max-md:min-h-[480px]">
-            {tabs.map((tab) => (
-              <motion.div
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`block text-left w-full cursor-pointer ${bricolage.className}`}
-                initial={false}
-              >
-                <motion.h3
-                  className={`text-2xl sm:text-4xl md:text-5xl md:mb-6 relative inline-block ${
-                    activeTab === tab.id && "mb-6"
-                  } `}
-                  animate={{
-                    color: activeTab === tab.id ? "#701CC0" : "#929C9A",
-                  }}
-                  transition={{
-                    duration: 0.5,
-                    ease: [0.32, 0.72, 0, 1],
-                  }}
+    <section ref={ref} id="solutions" className="relative bg-[#F3F3F3]" style={{ height: `${tabs.length * 55}vh` }}>
+      <div className="sticky top-0 flex h-screen items-center overflow-hidden px-6">
+        <div className="mx-auto w-full max-w-7xl max-md:px-2">
+          {/* Centered header */}
+          <div className="mb-12 text-center md:mb-14">
+            <span className={`${figtree.className} text-[11px] font-semibold uppercase tracking-[0.35em] text-[#701CC0]`}>
+              Campaign Outlets
+            </span>
+            <h2 className={`${bricolage.className} mt-4 text-4xl font-bold leading-[1.05] text-[#18042A] md:text-6xl`}>
+              Multi-Channel Marketing
+            </h2>
+            <p className={`${figtree.className} mx-auto mt-5 max-w-2xl text-lg leading-7 text-[#5C5470]`}>
+              Reach your entire market across every channel that converts, powered by one
+              of the largest verified brand universe databases of buyers in the world.
+            </p>
+          </div>
+
+          {/* Outlet showcase (left, scroll-driven) + Stripe animation (right) */}
+          <div className="grid items-center gap-12 md:grid-cols-2">
+            <div>
+              <div className="relative flex min-h-[240px] w-full items-center">
+                <motion.div
+                  key={active}
+                  initial={{ opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  className="flex flex-col items-start text-left"
                 >
-                  {tab.title}
-                  {activeTab === tab.id && (
-                    <>
-                      <motion.div
-                        className="absolute -inset-x-4 inset-y-0 bg-[#701CC0]/5 rounded-lg -z-10"
-                        layoutId="background"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1] }}
-                      />
-                      <motion.div
-                        className="absolute bottom-[-12px] left-0 w-full h-[2px] bg-[#D9DEDD] overflow-hidden"
-                        layoutId="underline"
-                        transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1] }}
-                      >
-                        <motion.div
-                          className="h-full bg-[#701CC0]"
-                          initial={{ width: "0%" }}
-                          animate={{ width: "100%" }}
-                          transition={{ duration: 5, ease: "linear" }}
-                          key={activeTab}
-                        />
-                      </motion.div>
-                    </>
-                  )}
-                </motion.h3>
-                <AnimatePresence mode="wait">
-                  {activeTab === tab.id && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{
-                        opacity: 1,
-                        height: "auto",
-                        transition: {
-                          height: {
-                            duration: 0.4,
-                            ease: [0.32, 0.72, 0, 1],
-                          },
-                          opacity: {
-                            duration: 0.25,
-                            delay: 0.15,
-                          },
-                        },
-                      }}
-                      exit={{
-                        opacity: 0,
-                        height: 0,
-                        transition: {
-                          height: {
-                            duration: 0.4,
-                            ease: [0.32, 0.72, 0, 1],
-                          },
-                          opacity: {
-                            duration: 0.25,
-                          },
-                        },
-                      }}
-                    >
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.4, delay: 0.15 }}
-                        className={`${figtree.className}`}
-                      >
-                        <p className="text-[#646A69] text-[18px] mb-6">
-                          {tab.content}
-                        </p>
-                      </motion.div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            ))}
-          </div>
-          <div className="relative mx-auto">
-            <GridComponent />
+                  <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white shadow-[0_12px_30px_-16px_rgba(112,28,192,0.5)]">
+                    <Icon className="h-8 w-8" style={{ color: tab.color }} aria-hidden />
+                  </span>
+                  <h3 className={`${bricolage.className} mt-6 text-4xl font-bold leading-[1.08] text-[#18042A] md:text-5xl`}>
+                    {tab.title}
+                  </h3>
+                  <p className={`${figtree.className} mt-4 max-w-md text-xl leading-8 text-[#646A69]`}>
+                    {tab.content}
+                  </p>
+                </motion.div>
+              </div>
+
+              {/* progress dots — reflect scroll position; click to jump */}
+              <div className="mt-8 flex items-center gap-2.5">
+                {tabs.map((t, i) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => goTo(i)}
+                    aria-label={t.title}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${
+                      i === active ? "w-10 bg-[#701CC0]" : "w-1.5 bg-[#701CC0]/25 hover:bg-[#701CC0]/50"
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Stripe-style traveling grid */}
+            <div className="relative mx-auto">
+              <GridComponent />
+            </div>
           </div>
         </div>
-      </div>
-      <div className="mt-24">
-        <Timeline />
-      </div>
-      <div className="mt-24">
-        <StatsGrid />
       </div>
     </section>
   )

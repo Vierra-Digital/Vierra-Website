@@ -47,12 +47,15 @@ const Footer = ({ bare = false }: { bare?: boolean }) => {
             <h3 className={`text-lg font-medium mb-4 md:mb-6 ${figtree.className}`}>Company</h3>
             <ul className={`space-y-3 md:space-y-4 text-white/80 ${inter.className}`}>
               <li>
-                <Link href="/#about" className="hover:text-white transition-colors">About</Link>
+                <Link href="/#services" className="hover:text-white transition-colors">GTM Engine</Link>
               </li>
               <li>
                 <Link href="/careers" className="inline-flex items-center justify-center md:justify-start gap-2 text-white/80 transition-colors hover:text-white">
                   Careers <span className="bg-[#701CC0]/60 text-xs px-2 py-0.5 rounded-[12px] text-white/80">HIRING</span>
                 </Link>
+              </li>
+              <li>
+                <Link href="/blog" className="hover:text-white transition-colors">Blog</Link>
               </li>
               <li>
                 <Link href="/faq" className="hover:text-white transition-colors">FAQ</Link>
