@@ -14,7 +14,7 @@ const inter = Inter({ subsets: ['latin'] });
 const CANONICAL = 'https://vierradev.com/faq';
 const META_TITLE = 'Vierra | Frequently Asked Questions';
 const META_DESCRIPTION =
-  'Answers to common questions about Vierra Digital — what we do, how our risk-averse, guaranteed lead generation works, who we work with, pricing, and how to get started.';
+  'Answers to common questions about Vierra Digital — what we do, how our risk-averse lead generation works, who we work with, pricing, and how to get started.';
 
 const FaqPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -42,7 +42,7 @@ const FaqPage: React.FC = () => {
         <meta name="description" content={META_DESCRIPTION} />
         <meta
           name="keywords"
-          content="Vierra FAQ, lead generation questions, digital marketing agency FAQ, guaranteed leads, how Vierra works, Vierra Digital"
+          content="Vierra FAQ, lead generation questions, digital marketing agency FAQ, how Vierra works, Vierra Digital"
         />
         <meta name="robots" content="index, follow" />
         <link rel="canonical" href={CANONICAL} />
@@ -148,7 +148,7 @@ const FaqPage: React.FC = () => {
                 onClick={() => setIsModalOpen(true)}
                 className="audit-glow mt-7 inline-flex items-center gap-2 rounded-lg border-2 border-[#701CC0] bg-transparent px-8 py-4 font-medium text-white transition-all duration-300 hover:border-[#8F42FF]"
               >
-                Claim Your Free Audit Call
+                Let's Talk
               </button>
             </section>
           </div>

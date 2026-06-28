@@ -19,8 +19,6 @@
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "@radix-ui/react-slot": "^1.1.1",
-    "@react-three/drei": "^10.0.4",
-    "@react-three/fiber": "^9.1.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.2",
     "@tiptap/extension-color": "^3.22.3",
@@ -46,7 +44,7 @@
     "googleapis": "^172.0.0",
     "lucide-react": "^0.474.0",
     "next": "^15.5.18",
-    "nodemailer": "^8.0.4",
+    "nodemailer": "^9.0.1",
     "pdf-lib": "^1.17.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -60,7 +58,6 @@
     "stripe": "^20.3.1",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
-    "three": "^0.174.0",
     "turndown": "^7.2.4",
     "uuid": "^11.1.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"

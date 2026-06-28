@@ -234,7 +234,7 @@ export function getFaqMarkdown(): string {
     header({
       title: "Frequently Asked Questions — Vierra",
       description:
-        "Answers about Vierra Digital: what we do, how risk-averse guaranteed lead generation works, who we serve, location, and how to get started.",
+        "Answers about Vierra Digital: what we do, how risk-averse lead generation works, who we serve, location, and how to get started.",
       canonical: `${SITE_URL}/faq`,
     }),
     qa,
@@ -274,13 +274,13 @@ export async function getLlmsTxt(): Promise<string> {
   const lines: string[] = [
     "# Vierra",
     "",
-    "> Vierra is a digital marketing and lead generation platform that helps businesses increase ROI, leads, and conversions through guaranteed, case-study-proven lead generation services.",
+    "> Vierra is a digital marketing and lead generation platform that helps businesses increase ROI, leads, and conversions through case-study-proven lead generation services.",
     "",
     "Append `.md` to any page URL to fetch a clean Markdown version of that page. The links below point directly to those Markdown mirrors.",
     "",
     "## Main",
     "",
-    `- [Vierra — Home](${SITE_URL}/index.md): Guaranteed, risk-averse lead generation for your business.`,
+    `- [Vierra — Home](${SITE_URL}/index.md): Risk-averse lead engine for your business.`,
     `- [Brand Kit](${SITE_URL}/branding.md): Logo, colors, gradients, and typography guidelines.`,
     "",
     "## Legal",
@@ -291,7 +291,7 @@ export async function getLlmsTxt(): Promise<string> {
     "",
     "## Support",
     "",
-    `- [Frequently Asked Questions](${SITE_URL}/faq.md): What Vierra does, how guaranteed lead generation works, who we serve, and how to start.`,
+    `- [Frequently Asked Questions](${SITE_URL}/faq.md): What Vierra does, how lead generation works, who we serve, and how to start.`,
     "",
     "## Careers",
     "",

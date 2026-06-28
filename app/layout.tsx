@@ -17,11 +17,11 @@ const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID
 export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Vierra | Risk-Averse Guaranteed Leads For Your Business",
+    default: "Vierra | Risk-Averse Lead Engine For Your Business",
     template: "Vierra | %s",
   },
   description:
-    "Scale your business effortlessly with guaranteed leads. Fill in your sales calendar and eliminate risky marketing investments. Professional digital marketing and lead generation services.",
+    "Build your funnel, research leads, capture buying signals, and schedule meetings autonomously. Risk-averse, results-based B2B lead generation for scaling businesses.",
   keywords: [
     "marketing",
     "lead generation",
@@ -29,7 +29,7 @@ export const metadata = {
     "digital optimization",
     "business scaling",
     "risk-averse marketing",
-    "guaranteed leads",
+    "GTM engine",
     "digital marketing agency",
     "B2B lead generation",
     "sales pipeline",
@@ -53,9 +53,9 @@ export const metadata = {
   openGraph: {
     type: "website",
     url: SITE_URL,
-    title: "Vierra | Risk-Averse Guaranteed Leads For Your Business",
+    title: "Vierra | Risk-Averse Lead Engine For Your Business",
     description:
-      "Scale your business effortlessly with guaranteed leads. Fill in your sales calendar and eliminate risky marketing investments.",
+      "Build your funnel, research leads, capture buying signals, and schedule meetings autonomously. Risk-averse, results-based lead generation for scaling businesses.",
     siteName: "Vierra",
     locale: "en_US",
     images: [
@@ -63,7 +63,7 @@ export const metadata = {
         url: META_IMAGE_URL,
         width: 1200,
         height: 630,
-        alt: "Vierra - Risk-Averse Guaranteed Leads For Your Business",
+        alt: "Vierra - Risk-Averse Lead Engine For Your Business",
         type: "image/png",
       },
     ],
@@ -72,15 +72,15 @@ export const metadata = {
     card: "summary_large_image",
     creator: "@vierradev",
     site: "@vierradev",
-    title: "Vierra | Risk-Averse Guaranteed Leads For Your Business",
+    title: "Vierra | Risk-Averse Lead Engine For Your Business",
     description:
-      "Scale your business effortlessly with guaranteed leads. Fill in your sales calendar and eliminate risky marketing investments.",
+      "Build your funnel, research leads, capture buying signals, and schedule meetings autonomously. Risk-averse, results-based lead generation for scaling businesses.",
     images: [
       {
         url: META_IMAGE_URL,
         width: 1200,
         height: 630,
-        alt: "Vierra - Risk-Averse Guaranteed Leads For Your Business",
+        alt: "Vierra - Risk-Averse Lead Engine For Your Business",
       },
     ],
   },
@@ -165,7 +165,7 @@ export default function RootLayout({
                 width: 464,
                 height: 188,
               },
-              description: "Scale your business effortlessly with guaranteed leads. Fill in your sales calendar and eliminate risky marketing investments.",
+              description: "Build your funnel, research leads, capture buying signals, and schedule meetings autonomously. Risk-averse, results-based lead generation for scaling businesses.",
               address: {
                 "@type": "PostalAddress",
                 addressLocality: "Cambridge",
@@ -206,7 +206,7 @@ export default function RootLayout({
               "@id": `${SITE_URL}/#website`,
               name: "Vierra",
               url: SITE_URL,
-              description: "Risk-Averse Guaranteed Leads For Your Business",
+              description: "Risk-Averse Lead Engine For Your Business",
               publisher: { "@id": `${SITE_URL}/#organization` },
               potentialAction: {
                 "@type": "SearchAction",
@@ -238,7 +238,7 @@ export default function RootLayout({
               },
               image: META_IMAGE_URL,
               description:
-                "B2B digital marketing and lead generation agency in Cambridge, MA. Risk-averse, guaranteed leads for scaling businesses.",
+                "B2B digital marketing and lead generation agency in Cambridge, MA. Risk-averse lead engine for scaling businesses.",
               address: {
                 "@type": "PostalAddress",
                 addressLocality: "Cambridge",
