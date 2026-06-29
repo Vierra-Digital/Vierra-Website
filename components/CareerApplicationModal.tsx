@@ -64,6 +64,8 @@ export function CareerApplicationModal({
   const [resume, setResume] = useState<File | null>(null);
   const [coverLetter, setCoverLetter] = useState<File | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useLockBodyScroll(isOpen);
 
@@ -75,6 +77,8 @@ export function CareerApplicationModal({
       setResume(null);
       setCoverLetter(null);
       setSubmitted(false);
+      setSubmitting(false);
+      setSubmitError(null);
     }
   }, [isOpen, roleSlug]);
 
@@ -106,11 +110,39 @@ export function CareerApplicationModal({
   const nextStep = () => setStep((s) => Math.min(TOTAL_STEPS, s + 1));
   const prevStep = () => setStep((s) => Math.max(1, s - 1));
 
-  const handleSubmit = () => {
-    if (alreadyApplied || submitted || !basicInfoValid || !attachmentsValid) return;
-    // The application is intentionally not sent anywhere for now.
-    setSubmitted(true);
-    onSubmitted();
+  const handleSubmit = async () => {
+    if (alreadyApplied || submitted || submitting || !basicInfoValid || !attachmentsValid) return;
+    if (!resume || !coverLetter) return;
+
+    setSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const body = new FormData();
+      body.append("roleSlug", roleSlug);
+      body.append("fullName", formData.fullName.trim());
+      body.append("email", formData.email.trim());
+      body.append("phoneNumber", formData.phoneNumber.trim());
+      body.append("currentLocation", formData.currentLocation.trim());
+      body.append("needRelocate", formData.needRelocate);
+      body.append("usCitizen", formData.usCitizen);
+      body.append("additionalNotes", formData.additionalNotes.trim());
+      body.append("resume", resume);
+      body.append("coverLetter", coverLetter);
+
+      const res = await fetch("/api/careers/apply", { method: "POST", body });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.message || "Something went wrong. Please try again.");
+      }
+
+      setSubmitted(true);
+      onSubmitted();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -271,6 +303,15 @@ export function CareerApplicationModal({
             </AnimatePresence>
           </div>
 
+          {/* Submit error */}
+          {submitError && (
+            <div className="px-6 pt-3 sm:px-8">
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+                {submitError}
+              </p>
+            </div>
+          )}
+
           {/* Footer */}
           <div className="mt-2 flex items-center justify-between gap-3 border-t border-gray-100 px-6 py-4 sm:px-8">
             {step > 1 ? (
@@ -298,8 +339,8 @@ export function CareerApplicationModal({
                 </motion.span>
               </PrimaryButton>
             ) : (
-              <PrimaryButton onClick={handleSubmit} disabled={!basicInfoValid || !attachmentsValid}>
-                Submit Application
+              <PrimaryButton onClick={handleSubmit} disabled={!basicInfoValid || !attachmentsValid || submitting}>
+                {submitting ? "Submitting…" : "Submit Application"}
               </PrimaryButton>
             )}
           </div>
