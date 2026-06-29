@@ -46,7 +46,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           <tr>
             <td style="padding:50px 40px;text-align:center;vertical-align:top;">
               <div style="margin-bottom:30px;">
-                <img src="https://vierradev.com/assets/Onboarding/Dove.png" alt="Dove" style="width:85px;height:85px;border-radius:50%;border:4px solid #0E0A2D;background:#6D5DD3;padding:20px;">
+                <img src="https://vierradev.com/assets/Onboarding/dove.png" alt="Dove" style="width:85px;height:85px;border-radius:50%;border:4px solid #0E0A2D;background:#6D5DD3;padding:20px;">
               </div>
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">
                 Welcome To Vierra ${clientName || "there"}!
