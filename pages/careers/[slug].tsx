@@ -121,14 +121,14 @@ const RolePage: React.FC<{ role: JobRole; datePosted: string; validThrough: stri
       sameAs: 'https://vierradev.com',
       logo: 'https://vierradev.com/assets/vierra-logo.png',
     },
-    jobLocation: {
-      '@type': 'Place',
-      address: {
-        '@type': 'PostalAddress',
-        addressLocality: 'New York',
-        addressRegion: 'NY',
-        addressCountry: 'US',
-      },
+    // Roles are remote/hybrid, so we declare TELECOMMUTE + applicant location
+    // requirements instead of a physical jobLocation. This is Google's correct
+    // shape for non-office-bound jobs and avoids emitting an incomplete address
+    // (which triggered "missing streetAddress / postalCode" warnings in GSC).
+    jobLocationType: 'TELECOMMUTE',
+    applicantLocationRequirements: {
+      '@type': 'Country',
+      name: 'USA',
     },
     directApply: true,
     url: canonical,
