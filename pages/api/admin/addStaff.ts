@@ -1,20 +1,13 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { createSupabaseAuthUser, getSupabaseAdmin } from "@/lib/supabase/admin";
 import { sendStaffSetPasswordEmail } from "@/lib/emailSender";
 import { resolveBaseUrl } from "@/lib/api/url";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res);
-  if (!session) return;
-  const { companyId } = session;
+export default withAuth(
+  async (req, res, session) => {
+    const { companyId } = session;
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ message: "Method Not Allowed" });
-  }
-
-  try {
     const { name, email, position, time_zone } = req.body;
 
     if (!name || !email) {
@@ -78,8 +71,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       message: "Staff member created successfully",
       user: { ...newUser, role: "staff" },
     });
-  } catch (e) {
-    console.error("admin/addStaff", e);
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-}
+  },
+  { methods: ["POST"] }
+);

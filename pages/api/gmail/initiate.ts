@@ -1,8 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { requireRole } from "@/lib/auth";
-import { asStr, issueOauthStateCookie } from "@/lib/api/oauth";
+import { asStr, issueOauthStateCookie, resolveGoogleWebClientCredentials } from "@/lib/api/oauth";
 import { serialize as serializeCookie } from "cookie";
-import { resolveGoogleWebClientCredentials } from "@/lib/googleOAuthClient";
 
 const SCOPES = [
   "openid",

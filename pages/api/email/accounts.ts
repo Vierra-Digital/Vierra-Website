@@ -1,27 +1,14 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { decrypt, encrypt } from "@/lib/crypto";
-
-function asStr(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function asPort(value: unknown, fallback: number) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
-  return Math.floor(numeric);
-}
+import { asStr, asPort } from "@/lib/api/parsing";
 
 function serializeAccount<T extends { smtp_password_enc: string }>(row: T) {
   const { smtp_password_enc, ...rest } = row;
   return { ...rest, hasPassword: Boolean(smtp_password_enc) };
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res);
-  if (!session) return;
-
+export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
   if (req.method === "GET") {
     const rows = await prisma.emailProviderAccount.findMany({
@@ -136,6 +123,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(200).json({ ok: true });
     return;
   }
-
-  res.status(405).json({ message: "Method Not Allowed" });
-}
+}, { methods: ["GET", "POST", "PUT", "DELETE"] });

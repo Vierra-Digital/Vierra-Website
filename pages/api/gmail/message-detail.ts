@@ -1,5 +1,4 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 
 function asStr(v: string | string[] | undefined) {
@@ -91,15 +90,7 @@ async function fetchWithAuthRetry(
   return response;
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "GET") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-
-  const session = await requireRole(req, res);
-  if (!session) return;
-
+export default withAuth(async (req, res, session) => {
   const userId = (session.user as any).id;
   const accountEmail = (asStr(req.query.accountEmail) || "").trim().toLowerCase();
   const messageId = (asStr(req.query.messageId) || "").trim();
@@ -213,4 +204,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     senderPhotoUrl,
     threadMessages,
   });
-}
+}, { methods: ["GET"] });

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { decrypt, encrypt } from "@/lib/crypto";
-import { resolveGoogleWebClientCredentials } from "@/lib/googleOAuthClient";
+import { resolveGoogleWebClientCredentials } from "@/lib/api/oauth";
 
 export type GmailTokenResult =
   | {

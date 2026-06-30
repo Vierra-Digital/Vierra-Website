@@ -1,14 +1,8 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
+import { asStr } from "@/lib/api/parsing";
 
-function asStr(v: unknown) {
-  return typeof v === "string" ? v.trim() : "";
-}
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res);
-  if (!session) return;
+export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
 
   if (req.method === "GET") {
@@ -69,6 +63,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(200).json({ ok: true });
     return;
   }
-
-  res.status(405).json({ message: "Method Not Allowed" });
-}
+}, { methods: ["GET", "POST", "PUT", "DELETE"] });

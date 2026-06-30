@@ -1,9 +1,11 @@
-import React, { useState, useMemo, useEffect } from "react"
+import React, { useState, useMemo, useEffect, useRef } from "react"
 import { Inter } from "next/font/google"
 import { FiFolder, FiTrash2, FiDownload, FiLock } from "react-icons/fi"
 import PanelSearchInput from "@/components/ui/PanelSearchInput"
+import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import PanelSectionHeader from "@/components/ui/PanelSectionHeader"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
+import { useFetch } from "@/hooks/useFetch"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -32,27 +34,36 @@ const FilesSection: React.FC<{
   showOwnerInReadOnly = false,
 }) => {
   const [search, setSearch] = useState("")
-  const [files, setFiles] = useState<FileItem[]>([])
-  const [loading, setLoading] = useState(true)
   const [fileToDelete, setFileToDelete] = useState<FileItem | null>(null)
-
-  useEffect(() => {
-    const fetchFiles = async () => {
-      try {
-        const url = fileFilter ? `/api/admin/files?filter=${encodeURIComponent(fileFilter)}` : "/api/admin/files"
-        const r = await fetch(url)
-        if (r.ok) {
-          const data = await r.json()
-          setFiles(data || [])
-        }
-      } catch {
-        setFiles([])
-      } finally {
-        setLoading(false)
+  const {
+    data: filesData,
+    setData: setFiles,
+    loading,
+    run: fetchFiles,
+  } = useFetch<FileItem[]>(async () => {
+    try {
+      const url = fileFilter ? `/api/admin/files?filter=${encodeURIComponent(fileFilter)}` : "/api/admin/files"
+      const r = await fetch(url)
+      if (r.ok) {
+        const data = await r.json()
+        return (data || []) as FileItem[]
       }
+      return []
+    } catch {
+      return []
+    }
+  }, { immediate: true })
+
+  const didMountRef = useRef(false)
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true
+      return
     }
     fetchFiles()
-  }, [fileFilter])
+  }, [fileFilter, fetchFiles])
+
+  const files = useMemo(() => filesData ?? [], [filesData])
 
   const filteredFiles = useMemo(() => {
     if (!search.trim()) return files
@@ -67,7 +78,7 @@ const FilesSection: React.FC<{
         method: "DELETE",
       })
       if (r.ok) {
-        setFiles((prev) => prev.filter((f) => f.id !== fileToDelete.id))
+        setFiles((prev) => (prev ?? []).filter((f) => f.id !== fileToDelete.id))
       }
     } catch {
       console.error("Failed to delete")
@@ -107,10 +118,7 @@ const FilesSection: React.FC<{
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto"></div>
-                <p className="mt-2 text-sm text-[#6B7280]">Loading File Data...</p>
-              </div>
+              <LoadingSpinner label="Loading File Data..." />
             </div>
           ) : filteredFiles.length === 0 ? (
             <div className="bg-white rounded-xl shadow-sm border border-[#E5E7EB] p-10">
