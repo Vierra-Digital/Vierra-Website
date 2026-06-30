@@ -1,16 +1,11 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { requireSession } from "@/lib/auth";
+import { withSession } from "@/lib/api/withSession";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 function slugify(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "company";
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
-
-  const session = await requireSession(req, res);
-  if (!session) return res.status(401).json({ message: "Not authenticated" });
+export default withSession(async (req, res, session) => {
   if (session.kind !== "unaffiliated") {
     return res.status(403).json({ message: "You already belong to a company." });
   }
@@ -50,4 +45,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   return res.status(500).json({ message: "Failed to create company (slug collision)" });
-}
+}, { methods: ["POST"] });
