@@ -1,5 +1,4 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { requireSession } from "@/lib/auth";
+import { withSession } from "@/lib/api/withSession";
 import { resolveLinkedInTokenForContext, resolvePersonalTarget, linkedInRequest } from "@/lib/linkedin";
 
 type SessionRole = "admin" | "staff" | "user";
@@ -13,15 +12,7 @@ type PublishBody = {
   visibility?: "PUBLIC" | "CONNECTIONS";
 };
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", ["POST"]);
-    return res.status(405).json({ message: "Method Not Allowed" });
-  }
-
-  const session = await requireSession(req, res);
-  if (!session) return res.status(401).json({ message: "Not authenticated" });
-
+export default withSession(async (req, res, session) => {
   const role = ((session.user as { role?: SessionRole }).role || "user") as SessionRole;
   if (!["admin", "staff", "user"].includes(role)) return res.status(403).json({ message: "Forbidden" });
 
@@ -32,8 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const postText = (body.postText || "").trim();
   if (!postText) return res.status(400).json({ message: "postText is required." });
 
-  try {
-    const token = await resolveLinkedInTokenForContext({
+  const token = await resolveLinkedInTokenForContext({
       sessionUserId: userId,
       role,
       clientId: typeof body.clientId === "string" ? body.clientId : null,
@@ -74,9 +64,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       postId: publishResponse.id || null,
       author: authorUrn,
     });
-  } catch (error) {
-    console.error("linkedin/publish", error);
-    return res.status(500).json({ message: "Failed to publish to LinkedIn." });
-  }
-}
+}, { methods: ["POST"] });
 

@@ -1,18 +1,10 @@
-import type { NextApiRequest, NextApiResponse } from "next"
+import { withSession } from "@/lib/api/withSession"
 import { prisma } from "@/lib/prisma"
-import { requireSession } from "@/lib/auth"
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireSession(req, res)
-  if (!session) return res.status(401).json({ message: "Not authenticated" })
+export default withSession(async (req, res, session) => {
   const role = (session.user as { role?: string })?.role
   if (role !== "admin" && role !== "staff" && role !== "user")
     return res.status(403).json({ message: "Forbidden" })
-
-  if (req.method !== "GET") {
-    res.setHeader("Allow", ["GET"])
-    return res.status(405).json({ message: `Method ${req.method} Not Allowed` })
-  }
 
   const { filter } = req.query
   const companyId = (session as any).companyId as string | undefined
@@ -77,4 +69,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error("admin/files GET", e)
     return res.status(500).json({ message: "Failed to load files." })
   }
-}
+}, { methods: ["GET"] })
