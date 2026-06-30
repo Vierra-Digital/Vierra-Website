@@ -1,27 +1,16 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { toContactsCsv } from "@/lib/contacts/csv";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
+import { asQueryStr } from "@/lib/api/parsing";
 
-function asStr(v: string | string[] | undefined) {
-  return Array.isArray(v) ? v[0]?.trim() || "" : v?.trim() || "";
-}
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "GET") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-
-  const session = await requireRole(req, res);
-  if (!session) return;
+export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
 
-  const accountEmail = asStr(req.query.accountEmail).toLowerCase();
-  const search = asStr(req.query.search);
-  const source = asStr(req.query.source).toLowerCase();
-  const tagIds = asStr(req.query.tagIds)
+  const accountEmail = asQueryStr(req.query.accountEmail).toLowerCase();
+  const search = asQueryStr(req.query.search);
+  const source = asQueryStr(req.query.source).toLowerCase();
+  const tagIds = asQueryStr(req.query.tagIds)
     .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
@@ -77,4 +66,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   res.status(200).send(csv);
-}
+}, { methods: ["GET"] });

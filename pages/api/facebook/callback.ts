@@ -1,8 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { encrypt } from "@/lib/crypto";
 import { requireSession } from "@/lib/auth";
 import { asStr, clearOauthStateCookie, readCookies } from "@/lib/api/oauth";
+import { persistPlatformToken, persistOnboardingPlatformToken } from "@/lib/api/oauthTokens";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") return res.status(405).end();
@@ -35,7 +35,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
   if (!access_token) return res.status(400).send("No access_token in response");
 
-  const enc = encrypt(access_token);
   const expiresAt = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
 
   if (hasStateCookie) {
@@ -43,21 +42,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!session) return res.redirect("/login");
     const userId = (session.user as any).id;
 
-    await prisma.platformToken.upsert({
-      where: { user_id_platform: { user_id: userId, platform: "facebook" } },
-      update: { access_token: enc, ...(expiresAt && { expires_at: expiresAt }) },
-      create: { user_id: userId, platform: "facebook", access_token: enc, ...(expiresAt && { expires_at: expiresAt }) },
-    });
+    await persistPlatformToken(userId, { platform: "facebook", accessToken: access_token, expiresAt });
 
     return res.redirect("/connect?connected=facebook");
   } else {
     const sessionId = state;
 
-    await prisma.onboardingPlatformToken.upsert({
-      where: { session_id_platform: { session_id: sessionId, platform: "facebook" } },
-      update: { access_token: enc, ...(expiresAt && { expires_at: expiresAt }) },
-      create: { session_id: sessionId, platform: "facebook", access_token: enc, ...(expiresAt && { expires_at: expiresAt }) },
-    });
+    await persistOnboardingPlatformToken(sessionId, { platform: "facebook", accessToken: access_token, expiresAt });
 
     return res.redirect(`/onboarding/${sessionId}?linked=facebook`);
   }

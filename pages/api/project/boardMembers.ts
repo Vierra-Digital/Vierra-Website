@@ -1,15 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res, ["admin", "staff"]);
-  if (!session) return;
-
-  if (req.method !== "GET") {
-    return res.status(405).json({ message: "Method Not Allowed" });
-  }
-
+export default withAuth(async (req, res, session) => {
   try {
     const memberships = await prisma.companyMembership.findMany({
       where: { company_id: session.companyId },
@@ -35,4 +27,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error("project/boardMembers GET", e);
     return res.status(500).json({ message: "Internal Server Error" });
   }
-}
+}, { methods: ["GET"], roles: ["admin", "staff"] });

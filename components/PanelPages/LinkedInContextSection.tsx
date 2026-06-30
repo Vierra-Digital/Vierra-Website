@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Inter } from "next/font/google";
 import PanelSectionHeader from "@/components/ui/PanelSectionHeader";
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
 const inter = Inter({ subsets: ["latin"] });
 const NON_RESIZABLE_TEXT_KEYS = new Set(["website", "brandTone"]);
@@ -137,10 +138,7 @@ const LinkedInContextSection: React.FC<Props> = ({
           <div className="w-full max-w-6xl flex flex-col h-full">
             {!embedded && <PanelSectionHeader title={title} />}
             <div className="py-12 flex items-center justify-center">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto" />
-                <p className="mt-2 text-sm text-[#6B7280]">Loading Context Data...</p>
-              </div>
+              <LoadingSpinner label="Loading Context Data..." />
             </div>
           </div>
         </div>

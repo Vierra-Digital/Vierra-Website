@@ -37,17 +37,3 @@ export async function requireRole(req: any, res: any, roles?: SessionRole[]) {
   }
   return session;
 }
-
-/** Authenticate a client-portal-only API request (kind === "client"). */
-export async function requireClientSession(req: any, res: any) {
-  const session = await requireSession(req, res);
-  if (!session) {
-    res.status(401).json({ message: "Not authenticated" });
-    return null;
-  }
-  if (session.kind !== "client") {
-    res.status(403).json({ message: "Forbidden" });
-    return null;
-  }
-  return session;
-}

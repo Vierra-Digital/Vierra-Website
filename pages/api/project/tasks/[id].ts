@@ -1,14 +1,10 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { serializeTask } from "@/lib/api/projectAccess";
 
 const VALID_STATUSES = ["not_started", "ongoing", "under_review", "completed"];
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res, ["admin", "staff"]);
-  if (!session) return;
-
+export default withAuth(async (req, res, session) => {
   const id = req.query.id as string;
   if (!id) return res.status(400).json({ message: "Task id required" });
 
@@ -115,5 +111,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
+  res.setHeader("Allow", ["PATCH", "DELETE"]);
   return res.status(405).json({ message: "Method Not Allowed" });
-}
+}, { methods: ["PATCH", "DELETE"], roles: ["admin", "staff"] });

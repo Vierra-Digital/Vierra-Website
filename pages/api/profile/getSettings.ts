@@ -1,16 +1,8 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res);
-  if (!session) return;
-
-  if (req.method !== "GET") {
-    return res.status(405).json({ message: "Method Not Allowed" });
-  }
-
-  try {
+export default withAuth(
+  async (req, res, session) => {
     const userEmail = (session.user as any)?.email;
     if (!userEmail) {
       return res.status(400).json({ message: "User email not found in session" });
@@ -33,8 +25,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       theme: prefs?.theme ?? "auto",
       language: prefs?.language ?? "en",
     });
-  } catch (e) {
-    console.error("profile/getSettings", e);
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-}
+  },
+  { methods: ["GET"] }
+);

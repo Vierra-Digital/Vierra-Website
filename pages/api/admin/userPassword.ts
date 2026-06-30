@@ -1,21 +1,15 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { sendPasswordResetEmail } from "@/lib/emailSender";
 import { resolveBaseUrl } from "@/lib/api/url";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
+export default withAuth(
+  async (req, res) => {
+    const id = req.query.id || (req.body && req.body.id);
+    const userId = Array.isArray(id) ? id[0] : id;
+    if (!userId) return res.status(400).json({ message: "id is required" });
 
-  const session = await requireRole(req, res, ["admin"]);
-  if (!session) return;
-
-  const id = req.query.id || (req.body && req.body.id);
-  const userId = Array.isArray(id) ? id[0] : id;
-  if (!userId) return res.status(400).json({ message: "id is required" });
-
-  try {
     const user = await prisma.user.findUnique({
       where: { id: String(userId) },
       select: { id: true, email: true, name: true },
@@ -34,8 +28,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await sendPasswordResetEmail(user.email, user.name || "", resetLink);
 
     return res.status(200).json({ message: "Password reset email sent." });
-  } catch (e) {
-    console.error("admin/userPassword", e);
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-}
+  },
+  { methods: ["POST"], roles: ["admin"] }
+);

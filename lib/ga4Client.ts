@@ -1,5 +1,5 @@
 import { google } from "googleapis"
-import { resolveGoogleWebClientCredentials } from "@/lib/googleOAuthClient"
+import { resolveGoogleWebClientCredentials } from "@/lib/api/oauth"
 
 export type WebsiteVisitsPoint = {
   week: string

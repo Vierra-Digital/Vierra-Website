@@ -1,6 +1,5 @@
-import type { NextApiRequest, NextApiResponse } from "next"
 import { prisma } from "@/lib/prisma"
-import { requireRole } from "@/lib/auth"
+import { withAuth } from "@/lib/api/withAuth"
 import { handleApiError } from "@/lib/api/guards"
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens"
 import {
@@ -97,14 +96,7 @@ function resolveMeetingLink(event: GoogleCalendarEvent) {
   return null
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "GET") {
-    res.setHeader("Allow", ["GET"])
-    return res.status(405).json({ message: "Method Not Allowed" })
-  }
-  const session = await requireRole(req, res, ["admin", "staff"])
-  if (!session) return
-
+export default withAuth(async (req, res, session) => {
   try {
     const userId = session.user.id
     const tokenRows = await prisma.platformToken.findMany({
@@ -276,4 +268,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (error) {
     handleApiError(res, "/api/dashboard/upcoming-meetings error", error, "Failed to load upcoming meetings")
   }
-}
+}, { methods: ["GET"], roles: ["admin", "staff"] })

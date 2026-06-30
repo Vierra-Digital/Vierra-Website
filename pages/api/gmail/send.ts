@@ -1,16 +1,13 @@
 import { randomUUID } from "crypto";
-import type { NextApiRequest, NextApiResponse } from "next";
+import type { NextApiRequest } from "next";
 import nodemailer from "nodemailer";
 import sanitizeHtml from "sanitize-html";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
-
-function asString(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
+import { asStr } from "@/lib/api/parsing";
 
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
@@ -182,9 +179,9 @@ function parseAttachments(raw: unknown): { ok: true; parts: Array<{ filename: st
   for (const item of raw) {
     if (!item || typeof item !== "object") continue;
     const row = item as Record<string, unknown>;
-    const filename = asString(row.filename) || "attachment";
-    const contentType = asString(row.contentType) || "application/octet-stream";
-    const contentBase64 = asString(row.contentBase64);
+    const filename = asStr(row.filename) || "attachment";
+    const contentType = asStr(row.contentType) || "application/octet-stream";
+    const contentBase64 = asStr(row.contentBase64);
     if (!contentBase64) continue;
     const buf = Buffer.from(contentBase64, "base64");
     if (!buf.length) continue;
@@ -258,28 +255,20 @@ function buildRawMime(opts: {
   return `${headers.join(nl)}${nl}${nl}${firstPart}${rest}--${mixedBoundary}--`;
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-
-  const session = await requireRole(req, res);
-  if (!session) return;
-
+export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
-  const accountEmail = normalizeEmail(asString(req.body?.accountEmail));
-  const toRecipients = splitRecipients(asString(req.body?.to));
-  const ccRecipients = splitRecipients(asString(req.body?.cc));
-  const bccRecipients = splitRecipients(asString(req.body?.bcc));
-  const subjectRaw = asString(req.body?.subject);
-  const body = asString(req.body?.body);
-  const bodyHtmlInput = asString(req.body?.bodyHtml);
-  const threadId = asString(req.body?.threadId);
-  const inReplyTo = asString(req.body?.inReplyTo);
-  const references = asString(req.body?.references);
-  const draftKey = asString(req.body?.draftKey);
-  const providerAccountId = asString(req.body?.providerAccountId);
+  const accountEmail = normalizeEmail(asStr(req.body?.accountEmail));
+  const toRecipients = splitRecipients(asStr(req.body?.to));
+  const ccRecipients = splitRecipients(asStr(req.body?.cc));
+  const bccRecipients = splitRecipients(asStr(req.body?.bcc));
+  const subjectRaw = asStr(req.body?.subject);
+  const body = asStr(req.body?.body);
+  const bodyHtmlInput = asStr(req.body?.bodyHtml);
+  const threadId = asStr(req.body?.threadId);
+  const inReplyTo = asStr(req.body?.inReplyTo);
+  const references = asStr(req.body?.references);
+  const draftKey = asStr(req.body?.draftKey);
+  const providerAccountId = asStr(req.body?.providerAccountId);
   const isReply = Boolean(threadId || inReplyTo || references);
   const subject = isReply ? ensureReplyPrefix(subjectRaw) : subjectRaw || "(No Subject)";
 
@@ -504,4 +493,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     tracked: trackingEnabled,
     provider,
   });
-}
+}, { methods: ["POST"] });

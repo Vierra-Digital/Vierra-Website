@@ -4,6 +4,8 @@ import { FiPlus, FiFileText, FiFilter, FiSearch, FiEdit2, FiTrash2 } from "react
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import RichTextEditor from "@/components/ui/RichTextEditor"
+import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import { useFetch } from "@/hooks/useFetch"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -19,9 +21,25 @@ type Post = {
 }
 
 export default function BlogEditorSection() {
-  const [posts, setPosts] = useState<Post[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const {
+    data: posts,
+    setData: setPosts,
+    loading,
+    error,
+    setError,
+  } = useFetch<Post[]>(
+    async () => {
+      const r = await fetch(`/api/blog/posts?page=1&limit=50`)
+      const data = await r.json()
+      const mapped: Post[] = data.posts
+        .map((p: any) => ({
+          ...p,
+          published_date: new Date(p.published_date).toISOString(),
+        }))
+      return mapped
+    },
+    { immediate: true, errorMessage: "Failed to load posts" }
+  )
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [postToDelete, setPostToDelete] = useState<{ id: string; title: string } | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
@@ -43,27 +61,7 @@ export default function BlogEditorSection() {
   const [mode, setMode] = useState<"list" | "edit">("list")
   const [search, setSearch] = useState("")
   const isEditing = useMemo(() => form.id !== "", [form.id])
-
-  useEffect(() => {
-    ;(async () => {
-      try {
-        setLoading(true)
-        const r = await fetch(`/api/blog/posts?page=1&limit=50`)
-        const data = await r.json()
-        const mapped: Post[] = data.posts
-          .map((p: any) => ({
-            ...p,
-            published_date: new Date(p.published_date).toISOString(),
-          }))
-        setPosts(mapped)
-      } catch (e: any) {
-        setError(e?.message ?? "Failed to load posts")
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [])
-
+  const postList = useMemo(() => posts ?? [], [posts])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -102,7 +100,7 @@ export default function BlogEditorSection() {
     try {
       const r = await fetch(`/api/blog/admin/post?id=${id}`, { method: "DELETE" })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      setPosts((prev) => prev.filter((p) => p.id !== id))
+      setPosts((prev) => (prev ?? []).filter((p) => p.id !== id))
       setDeleteModalOpen(false)
       setPostToDelete(null)
     } catch (e: any) {
@@ -206,7 +204,7 @@ export default function BlogEditorSection() {
                                                 className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
                                             >
                                                 <option value="all">All Tags</option>
-                                                {Array.from(new Set(posts.flatMap(p => p.tag ? p.tag.split(',').map(t => t.trim()) : []).filter(Boolean))).map(tag => (
+                                                {Array.from(new Set(postList.flatMap(p => p.tag ? p.tag.split(',').map(t => t.trim()) : []).filter(Boolean))).map(tag => (
                                                     <option key={tag} value={tag}>{tag}</option>
                                                 ))}
                                             </select>
@@ -231,7 +229,7 @@ export default function BlogEditorSection() {
                                                 className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
                                             >
                                                 <option value="all">All Authors</option>
-                                                {Array.from(new Set(posts.map(p => p.author?.name).filter(Boolean))).map(author => (
+                                                {Array.from(new Set(postList.map(p => p.author?.name).filter(Boolean))).map(author => (
                                                     <option key={author} value={author}>{author}</option>
                                                 ))}
                                             </select>
@@ -286,7 +284,7 @@ export default function BlogEditorSection() {
   )
 
   const filteredPosts = useMemo(() => {
-    let filtered = posts
+    let filtered = postList
     const q = search.trim().toLowerCase()
     if (q) {
       filtered = filtered.filter((p) =>
@@ -308,7 +306,7 @@ export default function BlogEditorSection() {
     }
 
     return filtered
-  }, [posts, search, dateSort, tagFilter, authorFilter])
+  }, [postList, search, dateSort, tagFilter, authorFilter])
 
   const totalPages = Math.ceil(filteredPosts.length / pageSize) || 1
   const paginatedPosts = filteredPosts.slice((currentPage - 1) * pageSize, currentPage * pageSize)
@@ -330,10 +328,7 @@ export default function BlogEditorSection() {
       {mode === "list" && (
         loading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto"></div>
-              <p className="mt-2 text-sm text-[#6B7280]">Loading Blog Data...</p>
-            </div>
+            <LoadingSpinner label="Loading Blog Data..." />
           </div>
         ) : paginatedPosts.length === 0 ? (
           <div className="bg-white rounded-2xl border border-[#E5E7EB] shadow-sm p-10">

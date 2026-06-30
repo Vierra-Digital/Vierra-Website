@@ -1,22 +1,10 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { decrypt } from "@/lib/crypto";
+import { asStr } from "@/lib/api/parsing";
 
-function asStr(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-
-  const session = await requireRole(req, res);
-  if (!session) return;
-
+export default withAuth(async (req, res, session) => {
   const userId = (session.user as any).id;
   const id = asStr(req.body?.id);
   if (!id) {
@@ -51,4 +39,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       message: error instanceof Error ? error.message : "SMTP test failed.",
     });
   }
-}
+}, { methods: ["POST"] });

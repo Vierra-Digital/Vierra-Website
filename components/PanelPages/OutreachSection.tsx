@@ -3,6 +3,7 @@ import Image from "next/image"
 import { useSession } from "@/lib/session-client"
 import { FiChevronLeft, FiChevronRight, FiCalendar, FiTrendingUp, FiDollarSign, FiUsers, FiTarget } from "react-icons/fi"
 import { motion } from "framer-motion"
+import LoadingSpinner from "@/components/ui/LoadingSpinner"
 
 const statFields = [
     { key: "attempts", label: "Attempts", icon: FiTarget },
@@ -481,10 +482,7 @@ const OutreachSection = () => {
 
                     {isLoading ? (
                         <div className="flex items-center justify-center py-12">
-                            <div className="text-center">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto"></div>
-                                <p className="mt-2 text-sm text-[#6B7280]">Loading Marketing Data...</p>
-                            </div>
+                            <LoadingSpinner label="Loading Marketing Data..." />
                         </div>
                     ) : viewMode === "yearly" ? (
                         <div className="pb-32">

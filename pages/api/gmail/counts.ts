@@ -1,6 +1,5 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 
 type GmailLabel = {
@@ -105,18 +104,10 @@ function isAuthError(error: unknown) {
   return error instanceof Error && /gmail (unread estimate|label DRAFT) failed 401/i.test(error.message);
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default withAuth(async (req, res, session) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
-
-  if (req.method !== "GET") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-
-  const session = await requireRole(req, res);
-  if (!session) return;
 
   const userId = session.user.id;
   const accountsParam = asStr(req.query.accounts);
@@ -209,4 +200,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     counts: aggregated,
     accountErrors,
   });
-}
+}, { methods: ["GET"] });

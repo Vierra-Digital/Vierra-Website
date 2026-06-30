@@ -49,3 +49,15 @@ export function setOnboardingSessionCookie(res: NextApiResponse, sessionId: stri
   );
 }
 
+/**
+ * Single Google OAuth Web client credentials (NextAuth, Gmail connect, token
+ * refresh). Reads GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET.
+ */
+export function resolveGoogleWebClientCredentials() {
+  const trim = (v: string | undefined) => (typeof v === "string" ? v.trim() : "");
+  return {
+    clientId: trim(process.env.GOOGLE_CLIENT_ID),
+    clientSecret: trim(process.env.GOOGLE_CLIENT_SECRET),
+  };
+}
+

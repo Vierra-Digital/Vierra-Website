@@ -1,6 +1,5 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 
 type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive";
@@ -198,18 +197,10 @@ async function fetchWithRetry(url: string, init: RequestInit, attempts = 3): Pro
   return lastResponse as Response;
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default withAuth(async (req, res, session) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
-
-  if (req.method !== "GET") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-
-  const session = await requireRole(req, res);
-  if (!session) return;
 
   const userId = session.user.id;
   const mailbox = parseMailbox(asStr(req.query.mailbox));
@@ -492,4 +483,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     totalLoaded: mergedMessages.length,
     hasNextPage,
   });
-}
+}, { methods: ["GET"] });

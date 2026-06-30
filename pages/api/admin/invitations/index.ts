@@ -1,28 +1,24 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import crypto from "crypto";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { resolveBaseUrl } from "@/lib/api/url";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Inviting teammates is admin-only, not staff.
-  const session = await requireRole(req, res, ["admin"]);
-  if (!session) return;
+// Inviting teammates is admin-only, not staff.
+export default withAuth(
+  async (req, res, session) => {
+    const admin = getSupabaseAdmin();
 
-  const admin = getSupabaseAdmin();
+    if (req.method === "GET") {
+      const { data, error } = await admin
+        .from("invitations")
+        .select("id, email, role, expires_at, accepted_at, created_at")
+        .eq("company_id", session.companyId)
+        .is("accepted_at", null)
+        .order("created_at", { ascending: false });
+      if (error) return res.status(500).json({ message: "Failed to load invitations" });
+      return res.status(200).json(data);
+    }
 
-  if (req.method === "GET") {
-    const { data, error } = await admin
-      .from("invitations")
-      .select("id, email, role, expires_at, accepted_at, created_at")
-      .eq("company_id", session.companyId)
-      .is("accepted_at", null)
-      .order("created_at", { ascending: false });
-    if (error) return res.status(500).json({ message: "Failed to load invitations" });
-    return res.status(200).json(data);
-  }
-
-  if (req.method === "POST") {
     const { email, role } = req.body ?? {};
     if (!email || typeof email !== "string") {
       return res.status(400).json({ message: "email is required" });
@@ -56,7 +52,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (error) return res.status(500).json({ message: "Failed to record invitation" });
 
     return res.status(201).json(data);
-  }
-
-  return res.status(405).json({ message: "Method Not Allowed" });
-}
+  },
+  { methods: ["GET", "POST"], roles: ["admin"] }
+);

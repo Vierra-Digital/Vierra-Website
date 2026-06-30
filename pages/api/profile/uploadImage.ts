@@ -1,6 +1,5 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { putImageAsset } from "@/lib/api/image";
 import { STORAGE_BUCKETS } from "@/lib/storage";
 
@@ -12,15 +11,8 @@ export const config = {
   },
 };
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res);
-  if (!session) return;
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ message: "Method Not Allowed" });
-  }
-
-  try {
+export default withAuth(
+  async (req, res, session) => {
     const userEmail = (session.user as any)?.email;
     if (!userEmail) {
       return res.status(400).json({ message: "User email not found in session" });
@@ -60,8 +52,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     return res.status(200).json({ id: existingUser.id, name: existingUser.name, email: existingUser.email });
-  } catch (e) {
-    console.error("profile/uploadImage", e);
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-}
+  },
+  { methods: ["POST"] }
+);
