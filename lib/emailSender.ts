@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { isBrevoConfigured, sendBrevoEmail } from "@/lib/email/brevo";
 
 interface EmailData {
   fullName: string;
@@ -24,9 +25,35 @@ const transporter = nodemailer.createTransport({
 } as nodemailer.TransportOptions);
 
 const recipients = ["alex@vierradev.com"];
-const fromEmail = process.env.FROM_EMAIL || "business@alexshick.com";
+const fromEmail = process.env.FROM_EMAIL || "alex@vierradev.com";
 const fromName = process.env.FROM_NAME || "Vierra";
 const fromAddress = `"${fromName}" <${fromEmail}>`;
+
+interface DeliverOptions {
+  to: string;
+  subject: string;
+  html: string;
+  attachments?: { filename: string; content: Buffer; contentType?: string; cid?: string }[];
+}
+
+/**
+ * Send through Brevo (authenticated for vierradev.com) when configured;
+ * otherwise fall back to Gmail SMTP. Gmail-sent mail as an @vierradev.com
+ * From address fails the domain's DMARC (p=reject) and lands in spam, so
+ * Brevo is the correct path whenever BREVO_API_KEY is set.
+ */
+async function deliver(options: DeliverOptions): Promise<void> {
+  if (isBrevoConfigured()) {
+    await sendBrevoEmail({
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+      attachments: options.attachments?.map((a) => ({ filename: a.filename, content: a.content })),
+    });
+    return;
+  }
+  await transporter.sendMail({ from: fromAddress, ...options });
+}
 
 export async function sendEmail(data: EmailData): Promise<void> {
   const formattedPhoneNumber = data.phoneNumber.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
@@ -61,8 +88,8 @@ export async function sendEmail(data: EmailData): Promise<void> {
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log("Email sent successfully:", info.response);
+    await deliver(mailOptions);
+    console.log("Email sent successfully");
   } catch (error) {
     console.error("Error sending email:", error);
     throw error;
@@ -138,8 +165,8 @@ export async function sendSignedDocumentEmail(documentName: string, attachment: 
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log("Signed document email sent successfully:", info.response);
+    await deliver(mailOptions);
+    console.log("Signed document email sent successfully");
   } catch (error) {
     console.error("Error sending signed document email:", error);
   }
@@ -188,8 +215,8 @@ export async function sendSignerCopyEmail(email: string, documentName: string, a
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Signed document copy sent to signer at ${email}:`, info.response);
+    await deliver(mailOptions);
+    console.log(`Signed document copy sent to signer at ${email}`);
   } catch (error) {
     console.error(`Error sending signed document copy to signer at ${email}:`, error);
     throw error;
@@ -230,8 +257,8 @@ export async function sendStaffSetPasswordEmail(staffEmail: string, staffName: s
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Set password email sent to ${staffEmail}:`, info.response);
+    await deliver(mailOptions);
+    console.log(`Set password email sent to ${staffEmail}`);
   } catch (error) {
     console.error(`Error sending set password email to ${staffEmail}:`, error);
     throw error;
@@ -272,8 +299,8 @@ export async function sendPasswordResetEmail(email: string, name: string, resetL
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Password reset email sent to ${email}:`, info.response);
+    await deliver(mailOptions);
+    console.log(`Password reset email sent to ${email}`);
   } catch (error) {
     console.error(`Error sending password reset email to ${email}:`, error);
     throw error;
@@ -324,8 +351,8 @@ export async function sendClientOnboardingCompletedEmail(
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Onboarding completion email sent to ${clientEmail}:`, info.response);
+    await deliver(mailOptions);
+    console.log(`Onboarding completion email sent to ${clientEmail}`);
   } catch (error) {
     console.error(`Error sending onboarding completion email to ${clientEmail}:`, error);
     throw error;
