@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import nodemailer from "nodemailer";
 import { resolveBaseUrl } from "@/lib/api/url";
+import { isBrevoConfigured, sendBrevoEmail } from "@/lib/email/brevo";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
@@ -27,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return link;
     }
   })();
-  const fromEmail = process.env.FROM_EMAIL || "business@alexshick.com";
+  const fromEmail = process.env.FROM_EMAIL || "alex@vierradev.com";
   const fromName = process.env.FROM_NAME || "Vierra";
   const fromAddress = `"${fromName}" <${fromEmail}>`;
 
@@ -82,7 +83,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    if (isBrevoConfigured()) {
+      await sendBrevoEmail({ to: mailOptions.to, subject: mailOptions.subject, html: mailOptions.html });
+    } else {
+      await transporter.sendMail(mailOptions);
+    }
     return res.status(200).json({ message: "Email sent" });
   } catch (err: any) {
     console.error("Failed to send session link email:", err);
