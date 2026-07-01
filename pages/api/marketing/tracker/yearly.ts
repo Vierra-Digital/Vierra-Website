@@ -1,16 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { getMarketingYearlySummary } from "@/lib/marketingYearlySummary";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "GET") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-
-  const session = await requireRole(req, res);
-  if (!session) return;
-
+export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
   const year = req.query.year ? Number(req.query.year) : undefined;
 
@@ -21,4 +12,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error("Error fetching marketing yearly summary:", e);
     res.status(500).json({ message: "Internal Server Error" });
   }
-}
+}, { methods: ["GET"] });

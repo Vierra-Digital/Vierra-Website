@@ -1,7 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { prisma } from "@/lib/prisma";
+import { asStr } from "@/lib/api/parsing";
 
 type ActionType =
   | "trash"
@@ -21,16 +21,12 @@ type ActionItem = {
   messageId: string;
 };
 
-function asString(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
 function normalizeItems(input: unknown): ActionItem[] {
   if (!Array.isArray(input)) return [];
   return input
     .map((item) => ({
-      accountEmail: asString((item as any)?.accountEmail).toLowerCase(),
-      messageId: asString((item as any)?.messageId),
+      accountEmail: asStr((item as any)?.accountEmail).toLowerCase(),
+      messageId: asStr((item as any)?.messageId),
     }))
     .filter((item) => item.accountEmail && item.messageId);
 }
@@ -90,16 +86,8 @@ async function callGmailAction(accessToken: string, action: ActionType, messageI
   });
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-
-  const session = await requireRole(req, res);
-  if (!session) return;
-
-  const action = asString(req.body?.action) as ActionType;
+export default withAuth(async (req, res, session) => {
+  const action = asStr(req.body?.action) as ActionType;
   const items = normalizeItems(req.body?.items);
   const validActions: ActionType[] = [
     "trash",
@@ -203,4 +191,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   res.status(200).json({ ok: true, results });
-}
+}, { methods: ["POST"] });

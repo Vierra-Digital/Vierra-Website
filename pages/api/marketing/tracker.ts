@@ -1,14 +1,11 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { prisma } from "@/lib/prisma";
 
 function pct(numerator: number, denominator: number): number {
   return denominator > 0 ? Math.round((numerator / denominator) * 100 * 100) / 100 : 0;
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res);
-  if (!session) return;
+export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
 
   if (req.method === "GET") {
@@ -96,4 +93,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error("Error updating marketing tracker:", e);
     res.status(500).json({ message: "Internal Server Error" });
   }
-}
+}, { methods: ["GET", "POST"] });

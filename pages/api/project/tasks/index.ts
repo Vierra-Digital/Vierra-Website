@@ -1,12 +1,8 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { findCompanyBoard, serializeTask } from "@/lib/api/projectAccess";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res, ["admin", "staff"]);
-  if (!session) return;
-
+export default withAuth(async (req, res, session) => {
   if (req.method === "GET") {
     const board = await findCompanyBoard(session.companyId, req.query.boardId as string | undefined);
     if (!board) {
@@ -72,5 +68,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
+  res.setHeader("Allow", ["GET", "POST"]);
   return res.status(405).json({ message: "Method Not Allowed" });
-}
+}, { methods: ["GET", "POST"], roles: ["admin", "staff"] });

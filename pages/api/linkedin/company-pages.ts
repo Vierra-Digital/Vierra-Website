@@ -1,18 +1,9 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { requireSession } from "@/lib/auth";
+import { withSession } from "@/lib/api/withSession";
 import { resolveCompanyTargets, resolveLinkedInTokenForContext } from "@/lib/linkedin";
 
 type SessionRole = "admin" | "staff" | "user";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "GET") {
-    res.setHeader("Allow", ["GET"]);
-    return res.status(405).json({ message: "Method Not Allowed" });
-  }
-
-  const session = await requireSession(req, res);
-  if (!session) return res.status(401).json({ message: "Not authenticated" });
-
+export default withSession(async (req, res, session) => {
   const role = ((session.user as { role?: SessionRole }).role || "user") as SessionRole;
   if (!["admin", "staff", "user"].includes(role)) return res.status(403).json({ message: "Forbidden" });
 
@@ -41,5 +32,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         : "Unable to load LinkedIn company pages.";
     return res.status(200).json({ connected: false, pages: [], message });
   }
-}
+}, { methods: ["GET"] });
 

@@ -1,7 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from "next";
+import type { NextApiRequest } from "next";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireSession } from "@/lib/auth";
+import { withSession } from "@/lib/api/withSession";
 import { CONTEXT_CATEGORY_LABELS, CONTEXT_FIELDS, CONTEXT_FIELD_KEYS, type ContextCategoryId } from "@/lib/contextFields";
 
 type SessionRole = "admin" | "staff" | "user";
@@ -117,10 +117,7 @@ async function resolveClientId(
   return rawClientId;
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireSession(req, res);
-  if (!session) return res.status(401).json({ message: "Not authenticated" });
-
+export default withSession(async (req, res, session) => {
   const role = ((session.user as { role?: SessionRole }).role || "user") as SessionRole;
   if (!["admin", "staff", "user"].includes(role)) {
     return res.status(403).json({ message: "Forbidden" });
@@ -262,7 +259,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
-  res.setHeader("Allow", ["GET", "PUT"]);
-  return res.status(405).json({ message: "Method Not Allowed" });
-}
+}, { methods: ["GET", "PUT"] });
 
