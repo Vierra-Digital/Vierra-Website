@@ -28,6 +28,19 @@ const StaffActionsMenu: React.FC<{
     )
 }
 
+const InviteActionsMenu: React.FC<{
+    inviteEmail: string
+    onRescind: () => void
+}> = ({ inviteEmail, onRescind }) => {
+    return (
+        <RowActionMenu label={`Manage invite for ${inviteEmail}`}>
+            <RowActionMenuItem onClick={onRescind} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
+                Rescind Invite
+            </RowActionMenuItem>
+        </RowActionMenu>
+    )
+}
+
 interface TeamRow {
     id: string
     name: string
@@ -95,6 +108,8 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const [selectedStaff, setSelectedStaff] = useState<TeamRow | null>(null)
     const [showDeleteModal, setShowDeleteModal] = useState(false)
     const [staffToDelete, setStaffToDelete] = useState<{ id: string; name: string } | null>(null)
+    const [showRescindModal, setShowRescindModal] = useState(false)
+    const [inviteToRescind, setInviteToRescind] = useState<{ id: string; email: string } | null>(null)
     const [searchTerm, setSearchTerm] = useState("")
     const [sortBy, setSortBy] = useState<"position" | "country" | "strikes" | "status">("position")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
@@ -145,6 +160,31 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         } catch (error) {
             console.error("Error deleting staff:", error)
             alert("Failed to delete staff member. Please try again.")
+        }
+    }
+
+    const handleRescindInvite = (inviteId: string, inviteEmail: string) => {
+        setInviteToRescind({ id: inviteId, email: inviteEmail })
+        setShowRescindModal(true)
+    }
+
+    const confirmRescindInvite = async () => {
+        if (!inviteToRescind) return
+
+        try {
+            const response = await fetch(`/api/admin/invitations/${inviteToRescind.id}`, {
+                method: "DELETE",
+            })
+
+            if (!response.ok) {
+                throw new Error("Failed to rescind invite")
+            }
+            setRows(prev => prev.filter(r => r.id !== inviteToRescind.id))
+            setShowRescindModal(false)
+            setInviteToRescind(null)
+        } catch (error) {
+            console.error("Error rescinding invite:", error)
+            alert("Failed to rescind invite. Please try again.")
         }
     }
 
@@ -564,7 +604,10 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                                 {userRole === "admin" && (
                                                     <td className="px-4 py-4 text-sm text-[#6B7280] relative">
                                                         {r.isPending ? (
-                                                            <span className="text-xs italic text-[#9CA3AF]">Awaiting response</span>
+                                                            <InviteActionsMenu
+                                                                inviteEmail={r.email}
+                                                                onRescind={() => handleRescindInvite(r.id, r.email)}
+                                                            />
                                                         ) : (
                                                             <StaffActionsMenu
                                                                 staffId={r.id}
@@ -651,6 +694,26 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                         setStaffToDelete(null)
                     }}
                     onConfirm={confirmDeleteStaff}
+                />
+            )}
+
+            {userRole === "admin" && (
+                <ConfirmActionModal
+                    isOpen={showRescindModal}
+                    title="Rescind Invite"
+                    message={
+                        <>
+                            Are you sure you want to rescind the invite for{" "}
+                            <span className="font-semibold text-[#111827]">{inviteToRescind?.email || ""}</span>? They
+                            will no longer be able to use this invite to join the team.
+                        </>
+                    }
+                    confirmLabel="Rescind Invite"
+                    onCancel={() => {
+                        setShowRescindModal(false)
+                        setInviteToRescind(null)
+                    }}
+                    onConfirm={confirmRescindInvite}
                 />
             )}
         </div>
