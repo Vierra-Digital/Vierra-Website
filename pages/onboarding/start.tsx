@@ -1,17 +1,18 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Head from "next/head";
 import Image from "next/image";
 import { Inter } from "next/font/google";
-import { Loader2, Camera } from "lucide-react";
+import { Loader2, Camera, Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/router";
 import type { GetServerSideProps } from "next";
 import { requireSession } from "@/lib/auth";
 import { signOut } from "@/lib/session-client";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import ImageCropModal from "@/components/ImageCropModal";
 
 const inter = Inter({ subsets: ["latin"] });
 
-type Step = "company" | "name" | "photo";
-const STEPS: Step[] = ["company", "name", "photo"];
+type Step = "password" | "company" | "name" | "photo";
 
 function ErrorAlert({ children }: { children: React.ReactNode }) {
   return (
@@ -21,22 +22,97 @@ function ErrorAlert({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function OnboardingStartPage() {
+export default function OnboardingStartPage({ initialStep }: { initialStep: Step }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("company");
+  const [bootstrapState, setBootstrapState] = useState<"loading" | "ready" | "unauthenticated">(
+    initialStep === "password" ? "loading" : "ready"
+  );
+  const STEPS: Step[] =
+    initialStep === "password" ? ["password", "name", "photo"]
+    : initialStep === "company" ? ["company", "name", "photo"]
+    : ["name", "photo"];
+  const [step, setStep] = useState<Step>(initialStep);
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [companyName, setCompanyName] = useState("");
   const [fullName, setFullName] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageData, setImageData] = useState<{ base64: string; mimeType: string } | null>(null);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const stepIndex = STEPS.indexOf(step);
 
+  // Invite links deliver Supabase tokens in the URL hash (implicit flow), which
+  // never reaches getServerSideProps. Exchange them client-side before the
+  // rest of the wizard can rely on an authenticated session.
+  useEffect(() => {
+    if (initialStep !== "password") return;
+    const supabase = getSupabaseBrowserClient();
+
+    async function bootstrap() {
+      const hash = window.location.hash.slice(1);
+      const params = new URLSearchParams(hash);
+      const accessToken = params.get("access_token");
+      const refreshToken = params.get("refresh_token");
+
+      if (accessToken && refreshToken) {
+        const { data, error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (data.session && !error) {
+          window.history.replaceState(null, "", window.location.pathname);
+          setBootstrapState("ready");
+        } else {
+          setBootstrapState("unauthenticated");
+        }
+        return;
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      setBootstrapState(session ? "ready" : "unauthenticated");
+    }
+
+    bootstrap();
+  }, [initialStep]);
+
+  useEffect(() => {
+    if (bootstrapState === "unauthenticated") router.replace("/login");
+  }, [bootstrapState, router]);
+
   const goTo = (s: Step) => {
     setError("");
     setStep(s);
+  };
+
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+    if (password !== confirm) {
+      setError("Passwords don't match.");
+      return;
+    }
+    setIsSubmitting(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/setPassword", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Failed to set password.");
+      goTo("name");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to set password.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleCompanySubmit = async (e: React.FormEvent) => {
@@ -86,13 +162,22 @@ export default function OnboardingStartPage() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const result = ev.target?.result as string;
-      const [header, base64] = result.split(",");
-      const mimeType = header.split(":")[1].split(";")[0];
-      setImagePreview(result);
-      setImageData({ base64, mimeType });
+      setCropImageSrc(ev.target?.result as string);
     };
     reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handleCropComplete = (blob: Blob) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      const base64 = result.split(",")[1];
+      setImagePreview(result);
+      setImageData({ base64, mimeType: blob.type || "image/jpeg" });
+      setCropImageSrc(null);
+    };
+    reader.readAsDataURL(blob);
   };
 
   const handlePhotoFinish = async (skip = false) => {
@@ -118,6 +203,17 @@ export default function OnboardingStartPage() {
       setIsSubmitting(false);
     }
   };
+
+  if (bootstrapState === "loading") {
+    return (
+      <div
+        className={`min-h-screen flex items-center justify-center ${inter.className}`}
+        style={{ background: "radial-gradient(120% 120% at 50% -10%, #2e0a4f 0%, #1b0833 45%, #0d0119 100%)" }}
+      >
+        <Loader2 size={32} className="animate-spin text-white/50" />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -157,7 +253,83 @@ export default function OnboardingStartPage() {
               />
             </div>
 
-            {/* ── Step 1: Company ── */}
+            {/* ── Step: Set password (invite links only) ── */}
+            {step === "password" && (
+              <>
+                <h2 className="mt-6 mb-2 text-center text-xl font-semibold text-white">You&apos;ve been invited</h2>
+                <p className="mb-6 text-center text-sm text-white/60">
+                  Set a password to finish creating your account.
+                </p>
+                <form onSubmit={handlePasswordSubmit} className="space-y-4">
+                  <div>
+                    <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-white/80">
+                      Password
+                    </label>
+                    <div className="relative flex items-center">
+                      <input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => { setPassword(e.target.value); if (error) setError(""); }}
+                        placeholder="Choose a password"
+                        required
+                        minLength={6}
+                        disabled={isSubmitting}
+                        className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 pr-11 text-white outline-none focus:border-[#8f42ff]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((v) => !v)}
+                        className="absolute right-3 text-white/40 hover:text-white/70"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        tabIndex={-1}
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="confirm" className="mb-1.5 block text-sm font-medium text-white/80">
+                      Confirm password
+                    </label>
+                    <div className="relative flex items-center">
+                      <input
+                        id="confirm"
+                        type={showConfirm ? "text" : "password"}
+                        value={confirm}
+                        onChange={(e) => { setConfirm(e.target.value); if (error) setError(""); }}
+                        placeholder="Repeat your password"
+                        required
+                        disabled={isSubmitting}
+                        className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 pr-11 text-white outline-none focus:border-[#8f42ff]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirm((v) => !v)}
+                        className="absolute right-3 text-white/40 hover:text-white/70"
+                        aria-label={showConfirm ? "Hide password" : "Show password"}
+                        tabIndex={-1}
+                      >
+                        {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {error && <ErrorAlert>{error}</ErrorAlert>}
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !password || !confirm}
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-[#701cc0] to-[#8f42ff] py-3 font-semibold text-white disabled:opacity-60 transition-opacity"
+                  >
+                    {isSubmitting ? <><Loader2 size={18} className="animate-spin" /> Setting up account…</> : "Get started"}
+                  </button>
+                </form>
+              </>
+            )}
+
+            {/* ── Step: Company ── */}
             {step === "company" && (
               <>
                 <h2 className="mt-6 mb-2 text-center text-xl font-semibold text-white">Set up your company</h2>
@@ -192,7 +364,7 @@ export default function OnboardingStartPage() {
               </>
             )}
 
-            {/* ── Step 2: Full Name ── */}
+            {/* ── Step: Full Name ── */}
             {step === "name" && (
               <>
                 <h2 className="mt-6 mb-2 text-center text-xl font-semibold text-white">What&apos;s your name?</h2>
@@ -228,7 +400,7 @@ export default function OnboardingStartPage() {
               </>
             )}
 
-            {/* ── Step 3: Profile Photo ── */}
+            {/* ── Step: Profile Photo ── */}
             {step === "photo" && (
               <>
                 <h2 className="mt-6 mb-2 text-center text-xl font-semibold text-white">Add a profile photo</h2>
@@ -297,6 +469,14 @@ export default function OnboardingStartPage() {
           </button>
         </div>
       </div>
+
+      {cropImageSrc && (
+        <ImageCropModal
+          imageSrc={cropImageSrc}
+          onComplete={handleCropComplete}
+          onCancel={() => setCropImageSrc(null)}
+        />
+      )}
     </>
   );
 }
@@ -304,13 +484,22 @@ export default function OnboardingStartPage() {
 export const getServerSideProps: GetServerSideProps = async (ctx) => {
   const session = await requireSession(ctx.req, ctx.res);
   if (!session) {
-    return { redirect: { destination: "/login", permanent: false } };
+    // No cookie session yet — this is likely a fresh invite link whose
+    // Supabase tokens live in the URL hash, which never reaches the server.
+    // Let the client exchange them and continue the wizard from "password".
+    return { props: { initialStep: "password" } };
   }
   if (session.kind === "member") {
-    return { redirect: { destination: "/panel", permanent: false } };
+    // Already finished onboarding (has a name) — nothing left to do here.
+    if (session.user.name) {
+      return { redirect: { destination: "/panel", permanent: false } };
+    }
+    // Already belongs to a company (self-service signup or invite already
+    // accepted) — skip straight to name + photo.
+    return { props: { initialStep: "name" } };
   }
   if (session.kind === "client") {
     return { redirect: { destination: "/client", permanent: false } };
   }
-  return { props: {} };
+  return { props: { initialStep: "company" } };
 };

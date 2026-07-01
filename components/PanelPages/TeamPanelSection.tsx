@@ -41,12 +41,21 @@ interface TeamRow {
     strikes: string
     status: string
     lastActiveAt: string | null
+    isPending?: boolean
 }
 
-const StatusBadge: React.FC<{ lastActiveAt: string | null }> = ({ lastActiveAt }) => {
+const StatusBadge: React.FC<{ lastActiveAt: string | null; isPending?: boolean }> = ({ lastActiveAt, isPending }) => {
+    if (isPending) {
+        return (
+            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                Pending
+            </span>
+        )
+    }
+
     const getActualStatus = () => {
         if (!lastActiveAt) return "offline"
-        
+
         const lastActive = new Date(lastActiveAt)
         const now = new Date()
         const diffMinutes = (now.getTime() - lastActive.getTime()) / (1000 * 60)
@@ -89,7 +98,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const [searchTerm, setSearchTerm] = useState("")
     const [sortBy, setSortBy] = useState<"position" | "country" | "strikes" | "status">("position")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
-    const [statusFilter, setStatusFilter] = useState<"all" | "online" | "away" | "offline">("all")
+    const [statusFilter, setStatusFilter] = useState<"all" | "online" | "away" | "offline" | "pending">("all")
     const [isFilterOpen, setIsFilterOpen] = useState(false)
     const filterRef = useRef<HTMLDivElement>(null)
     const pageSize = 10
@@ -179,7 +188,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             if (!res.ok) throw new Error("Failed to fetch team data")
             const data = await res.json()
             const teamOnly = (data as any[]).filter((u: any) => u.role === "admin" || u.role === "staff")
-            const shaped = teamOnly.map((u: any) => ({
+            const shaped: TeamRow[] = teamOnly.map((u: any) => ({
                 id: u.id,
                 name: u.name,
                 email: u.email,
@@ -191,9 +200,38 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 strikes: u.strikes,
                 time_zone: u.time_zone,
                 status: u.status,
-                lastActiveAt: u.lastActiveAt
+                lastActiveAt: u.lastActiveAt,
+                isPending: false,
             }))
-            setRows(shaped)
+
+            let pendingRows: TeamRow[] = []
+            if (userRole === "admin") {
+                try {
+                    const invRes = await fetch("/api/admin/invitations")
+                    if (invRes.ok) {
+                        const invitations = await invRes.json()
+                        pendingRows = (invitations as any[]).map((inv: any) => ({
+                            id: inv.id,
+                            name: inv.email,
+                            email: inv.email,
+                            image: null,
+                            position: "Invited",
+                            country: "—",
+                            company_email: null,
+                            mentor: null,
+                            time_zone: "—",
+                            strikes: "—",
+                            status: "pending",
+                            lastActiveAt: null,
+                            isPending: true,
+                        }))
+                    }
+                } catch (e) {
+                    console.warn("Failed to load pending invitations:", e)
+                }
+            }
+
+            setRows([...pendingRows, ...shaped])
         } catch (error) {
             console.error("Error loading team data:", error)
         } finally {
@@ -210,10 +248,11 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 row.country?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 row.company_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 row.mentor?.toLowerCase().includes(searchTerm.toLowerCase())
-            const matchesStatus = statusFilter === "all" || 
+            const matchesStatus = statusFilter === "all" ||
                 (statusFilter === "online" && row.status === "online") ||
                 (statusFilter === "away" && row.status === "away") ||
-                (statusFilter === "offline" && row.status === "offline")
+                (statusFilter === "offline" && row.status === "offline") ||
+                (statusFilter === "pending" && row.status === "pending")
 
             return matchesSearch && matchesStatus
         })
@@ -243,7 +282,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                     bValue = parseInt(b.strikes?.split("/")[0] || "0")
                     break
                 case "status":
-                    const statusOrder = { "online": 1, "away": 2, "offline": 3 }
+                    const statusOrder = { "pending": 0, "online": 1, "away": 2, "offline": 3 }
                     aValue = statusOrder[a.status as keyof typeof statusOrder] || 999
                     bValue = statusOrder[b.status as keyof typeof statusOrder] || 999
                     break
@@ -405,13 +444,14 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                                 <div className="relative">
                                                     <select
                                                         value={statusFilter}
-                                                        onChange={(e) => setStatusFilter(e.target.value as "all" | "online" | "away" | "offline")}
+                                                        onChange={(e) => setStatusFilter(e.target.value as "all" | "online" | "away" | "offline" | "pending")}
                                                         className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
                                                     >
                                                         <option value="all">All Status</option>
                                                         <option value="online">Online</option>
                                                         <option value="away">Away</option>
                                                         <option value="offline">Offline</option>
+                                                        <option value="pending">Pending</option>
                                                     </select>
                                                     <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                                                         <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -519,16 +559,20 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                                 <td className="px-4 py-4 text-sm text-[#111827]">{r.mentor || "—"}</td>
                                                 <td className="px-4 py-4 text-sm">{r.strikes || "0/3"}</td>
                                                 <td className="px-4 py-4 text-sm">
-                                                    <StatusBadge lastActiveAt={r.lastActiveAt} />
+                                                    <StatusBadge lastActiveAt={r.lastActiveAt} isPending={r.isPending} />
                                     </td>
                                                 {userRole === "admin" && (
                                                     <td className="px-4 py-4 text-sm text-[#6B7280] relative">
-                                                        <StaffActionsMenu
-                                                            staffId={r.id}
-                                                            staffName={r.name}
-                                                            onEdit={() => handleManageStaff(r)}
-                                                            onDelete={() => handleDeleteStaff(r.id, r.name)}
-                                                        />
+                                                        {r.isPending ? (
+                                                            <span className="text-xs italic text-[#9CA3AF]">Awaiting response</span>
+                                                        ) : (
+                                                            <StaffActionsMenu
+                                                                staffId={r.id}
+                                                                staffName={r.name}
+                                                                onEdit={() => handleManageStaff(r)}
+                                                                onDelete={() => handleDeleteStaff(r.id, r.name)}
+                                                            />
+                                                        )}
                                     </td>
                                                 )}
                                 </tr>
