@@ -1,48 +1,44 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") return res.status(405).json({ message: "Method not allowed" });
+export default withAuth(
+  async (req, res) => {
+    const { token } = req.body;
 
-  const session = await requireRole(req, res, ["admin", "staff"]);
-  if (!session) return;
-
-  const { token } = req.body;
-  
-  if (!token || typeof token !== "string") {
-    return res.status(400).json({ message: "Session token is required" });
-  }
-
-  try {
-    const onboardingSession = await prisma.onboardingSession.findUnique({
-      where: { id: token },
-    });
-
-    if (!onboardingSession) {
-      return res.status(404).json({ message: "Session not found" });
+    if (!token || typeof token !== "string") {
+      return res.status(400).json({ message: "Session token is required" });
     }
-    const now = new Date();
-    const newExpiresAt = new Date(now.getTime() + 60 * 60 * 1000);
 
-    const updated = await prisma.onboardingSession.update({
-      where: { id: token },
-      data: {
-        status: "pending",
-        expires_at: newExpiresAt,
-        last_updated_at: now,
-      },
-    });
+    try {
+      const onboardingSession = await prisma.onboardingSession.findUnique({
+        where: { id: token },
+      });
 
-    res.status(200).json({
-      message: "Session renewed successfully",
-      token: updated.id,
-      status: updated.status,
-      link: `/onboarding/${updated.id}`,
-    });
-  } catch (err) {
-    console.error("/api/admin/renewSession error", err);
-    res.status(500).json({ message: "Failed to renew session" });
-  }
-}
+      if (!onboardingSession) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+      const now = new Date();
+      const newExpiresAt = new Date(now.getTime() + 60 * 60 * 1000);
 
+      const updated = await prisma.onboardingSession.update({
+        where: { id: token },
+        data: {
+          status: "pending",
+          expires_at: newExpiresAt,
+          last_updated_at: now,
+        },
+      });
+
+      res.status(200).json({
+        message: "Session renewed successfully",
+        token: updated.id,
+        status: updated.status,
+        link: `/onboarding/${updated.id}`,
+      });
+    } catch (err) {
+      console.error("/api/admin/renewSession error", err);
+      res.status(500).json({ message: "Failed to renew session" });
+    }
+  },
+  { methods: ["POST"], roles: ["admin", "staff"] }
+);

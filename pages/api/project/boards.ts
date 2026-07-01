@@ -1,11 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res, ["admin", "staff"]);
-  if (!session) return;
-
+export default withAuth(async (req, res, session) => {
   if (req.method === "GET") {
     try {
       const boards = await prisma.projectBoard.findMany({
@@ -40,5 +36,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
+  res.setHeader("Allow", ["GET", "POST"]);
   return res.status(405).json({ message: "Method Not Allowed" });
-}
+}, { methods: ["GET", "POST"], roles: ["admin", "staff"] });

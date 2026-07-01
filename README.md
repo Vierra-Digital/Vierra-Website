@@ -67,7 +67,7 @@ Vierra-Website/
 | `lib/gmail/tokens.ts` | Gmail OAuth token storage & refresh |
 | `lib/googleCalendar/visibility.ts` | Per-calendar show/hide for dashboard meetings |
 | `lib/ga4Client.ts` | GA4 Data API auth (OAuth refresh token) |
-| `lib/googleOAuthClient.ts` | Shared Google OAuth2 client |
+| `lib/api/oauth.ts` | OAuth state-cookie helpers & shared Google client credentials |
 | `lib/stripe.ts` | Stripe SDK instance |
 | `lib/emailSender.ts` | SMTP sending for transactional mail |
 | `lib/manus.ts` | Manus AI API (LinkedIn/outreach content) |
