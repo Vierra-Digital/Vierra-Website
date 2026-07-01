@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import nodemailer from "nodemailer";
 import { resolveBaseUrl } from "@/lib/api/url";
+import { isBrevoConfigured, sendBrevoEmail } from "@/lib/email/brevo";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
@@ -27,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return link;
     }
   })();
-  const fromEmail = process.env.FROM_EMAIL || "business@alexshick.com";
+  const fromEmail = process.env.FROM_EMAIL || "alex@vierradev.com";
   const fromName = process.env.FROM_NAME || "Vierra";
   const fromAddress = `"${fromName}" <${fromEmail}>`;
 
@@ -40,7 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
           <tr>
             <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
+              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
             </td>
           </tr>
           <tr>
@@ -82,7 +83,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
 
   try {
-    await transporter.sendMail(mailOptions);
+    if (isBrevoConfigured()) {
+      await sendBrevoEmail({ to: mailOptions.to, subject: mailOptions.subject, html: mailOptions.html });
+    } else {
+      await transporter.sendMail(mailOptions);
+    }
     return res.status(200).json({ message: "Email sent" });
   } catch (err: any) {
     console.error("Failed to send session link email:", err);
