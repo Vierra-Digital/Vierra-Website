@@ -39,17 +39,10 @@ export const metadata = {
   authors: [{ name: "Alex Shick", url: "https://vierradev.com" }],
   creator: "Vierra Digital",
   publisher: "Vierra Digital",
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-    },
-  },
+  // NOTE: `robots` is intentionally NOT set here. It lives on app/page.tsx so it
+  // applies to the homepage without cascading onto the not-found boundary (which
+  // Next.js auto-marks `noindex`). A layout-level `index, follow` conflicted with
+  // that framework `noindex` on the 404 page.
   openGraph: {
     type: "website",
     url: SITE_URL,
@@ -144,9 +137,9 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://www.youtube.com" />
         <link rel="dns-prefetch" href="https://www.youtube-nocookie.com" />
 
-        <meta name="geo.region" content="US-MA" />
-        <meta name="geo.placename" content="Cambridge, Massachusetts" />
-        <meta name="ICBM" content="42.3736, -71.1097" />
+        <meta name="geo.region" content="US-NY" />
+        <meta name="geo.placename" content="New York, New York" />
+        <meta name="ICBM" content="40.7128, -74.0060" />
 
         <script
           id="schema-org-organization"
@@ -168,9 +161,9 @@ export default function RootLayout({
               description: "Scale your business effortlessly with guaranteed leads. Fill in your sales calendar and eliminate risky marketing investments.",
               address: {
                 "@type": "PostalAddress",
-                addressLocality: "Cambridge",
-                addressRegion: "MA",
-                postalCode: "02138",
+                addressLocality: "New York",
+                addressRegion: "NY",
+                postalCode: "10001",
                 addressCountry: "US",
               },
               contactPoint: {
@@ -238,18 +231,18 @@ export default function RootLayout({
               },
               image: META_IMAGE_URL,
               description:
-                "B2B digital marketing and lead generation agency in Cambridge, MA. Risk-averse, guaranteed leads for scaling businesses.",
+                "B2B digital marketing and lead generation agency in New York, NY. Risk-averse, guaranteed leads for scaling businesses.",
               address: {
                 "@type": "PostalAddress",
-                addressLocality: "Cambridge",
-                addressRegion: "MA",
-                postalCode: "02138",
+                addressLocality: "New York",
+                addressRegion: "NY",
+                postalCode: "10001",
                 addressCountry: "US",
               },
               geo: {
                 "@type": "GeoCoordinates",
-                latitude: 42.3736,
-                longitude: -71.1097,
+                latitude: 40.7128,
+                longitude: -74.0060,
               },
               telephone: "+1-339-333-0929",
               email: "alex@vierradev.com",
@@ -260,8 +253,7 @@ export default function RootLayout({
               },
               foundingDate: "2019",
               areaServed: [
-                { "@type": "City", name: "Cambridge" },
-                { "@type": "City", name: "Medford" },
+                { "@type": "City", name: "New York" },
                 { "@type": "Country", name: "United States" },
               ],
               openingHoursSpecification: {

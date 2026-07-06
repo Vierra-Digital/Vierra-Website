@@ -35,6 +35,17 @@ const FaqPage: React.FC = () => {
     })),
   };
 
+  // BreadcrumbList — mirrors the blog/author pages so every non-home page exposes
+  // its position in the site hierarchy to crawlers and AI answer engines.
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://vierradev.com' },
+      { '@type': 'ListItem', position: 2, name: 'FAQ', item: CANONICAL },
+    ],
+  };
+
   return (
     <>
       <Head>
@@ -60,6 +71,11 @@ const FaqPage: React.FC = () => {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }}
+      />
+      <script
+        id="schema-org-breadcrumbs-faq"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
       />
 
       <div className={`relative min-h-screen bg-[#F3F3F3] text-[#2A2140] ${inter.className}`}>
