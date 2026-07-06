@@ -179,8 +179,8 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
         <meta name="robots" content="noindex,nofollow" />
       </Head>
       <div id="main-panel" className="fixed inset-0 w-full h-full bg-white flex flex-row overflow-hidden">
-        <div id="left-side" className={`relative flex flex-col  h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
-          <div id="vierra-nameplate-body" className="w-full h-20 flex items-center justify-center mb-4">
+        <div id="left-side" className={`relative flex flex-col h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
+          <div id="vierra-nameplate-body" className="w-full h-20 shrink-0 flex items-center justify-center">
             <Link href="/">
               <Image
                 src="/assets/vierra-logo-panel.png"
@@ -191,7 +191,7 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
               />
             </Link>
           </div>
-          <div id="panel-nav" className="w-full h-full flex flex-col gap-y-[5px] items-center text-[#EDF1F5]">
+          <div id="panel-nav" className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-y-[5px] items-center text-[#EDF1F5] pb-2">
             {isClientViewMode ? (
               <>
                 <div id="panel-nav-item" onClick={() => { setViewModeSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${viewModeSection === 0 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
@@ -320,7 +320,11 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
             )}
           </div>
 
-          <div className="w-full flex justify-center absolute bottom-6 left-0">
+          {/* One nav-item-height gap above the bottom action. The nav list above is
+              flex-1 + scrollable, so it absorbs extra height and this gap only
+              compresses on screens too short to fit everything — never overlaps. */}
+          <div className="w-full shrink-0" style={{ height: 52 }} aria-hidden="true" />
+          <div className="w-full flex justify-center shrink-0 pb-6">
             {isClientViewMode ? (
               <button
                 onClick={exitClientViewMode}
@@ -329,7 +333,7 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
                 <FiArrowLeft className="w-5 h-5 text-white group-hover:text-black transition-colors" />
                 <span className={`text-xs ${inter.className} ml-2`}>Back</span>
               </button>
-            ) : isAdmin ? null : (
+            ) : (
               <button
                 onClick={() => signOut({ callbackUrl: "/login" })}
                 className="group w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 justify-start rounded-xl text-white bg-transparent hover:bg-white hover:text-black transition"
