@@ -82,9 +82,14 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
     // making every post invisible to non-JS / first-pass crawlers.
     const [filteredLatestPosts, setFilteredLatestPosts] = useState<BlogPostType[]>(latestPosts)
     const [loading, setLoading] = useState(false);
-    const [visibleCount, setVisibleCount] = useState(9);
+    // Start with every post rendered so all posts appear in the SSR HTML
+    // (crawlable internal links — previously only the first 9 were, orphaning
+    // older posts from the index). Infinite scroll still paginates on
+    // filter/search. getBlogCatalog caps the catalog at 90, so this is bounded.
+    const [visibleCount, setVisibleCount] = useState(latestPosts.length || 9);
     const batchSize = 9;
     const sentinelRef = useRef<HTMLDivElement | null>(null);
+    const filterInitialized = useRef(false);
 
     const filterPostsByTag = (tagName: string, posts: BlogPostType[]) => {
         if (tagName === "All Blog Posts") {
@@ -130,7 +135,10 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
         const byTag = filterPostsByTag(tagSelectedName, latestPosts);
         const bySearch = filterPostsByQuery(searchQuery, byTag);
         setFilteredLatestPosts(bySearch);
-        setVisibleCount(batchSize);
+        // Keep the initial full render intact (all posts stay in the SSR HTML for
+        // crawlers); only restart pagination when the user changes tag/search.
+        if (filterInitialized.current) setVisibleCount(batchSize);
+        else filterInitialized.current = true;
     }, [latestPosts, tagSelectedName, searchQuery]);
 
     const visiblePosts = filteredLatestPosts.slice(0, visibleCount);
