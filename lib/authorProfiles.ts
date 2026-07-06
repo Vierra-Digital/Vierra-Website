@@ -41,7 +41,7 @@ const AUTHOR_PROFILES: Record<string, AuthorProfile> = {
     company: "NewDay USA",
     image: "/assets/Team/Paul.png",
     // Draft based on role — edit to add real specifics (background, focus, wins).
-    bio: "Paul Wahba is an Account Executive at NewDay USA, where he works directly with veterans and military families to guide them through VA home loan financing. He focuses on building trusted client relationships, understanding each family's goals, and helping them navigate the mortgage process with clarity.",
+    bio: "Paul Wahba is an Account Executive at NewDay USA, where he works directly with veterans and military families to guide them through VA home loan financing. He focuses on building trusted client relationships, understanding each family's goals, and helping them navigate the mortgage process with clarity. Paul is a guest contributor to the Vierra blog, sharing a frontline sales and client-relationship perspective.",
   },
   "Kylie Lappin": {
     sameAs: ["https://www.linkedin.com/in/kylie-lappin-b3677b32a/"],
@@ -49,7 +49,7 @@ const AUTHOR_PROFILES: Record<string, AuthorProfile> = {
     company: "Pathos Communications",
     image: "/assets/Team/Kylie.png",
     // Draft based on role — edit to add real specifics (background, focus, wins).
-    bio: "Kylie Lappin is a Writer and Publisher at Pathos Communications, where she develops brand storytelling, editorial content, and messaging for clients. She writes about marketing, communications, and how brands connect with the audiences they want to reach.",
+    bio: "Kylie Lappin is a Writer and Publisher at Pathos Communications, where she develops brand storytelling, editorial content, and messaging for clients. She writes about marketing, communications, and how brands connect with the audiences they want to reach. Kylie is a guest contributor to the Vierra blog.",
   },
 }
 
