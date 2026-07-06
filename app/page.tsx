@@ -288,6 +288,9 @@ export default function Page() {
       {/* 2. Multi-Channel Marketing Campaigns — outlets + database cloud. */}
       <BusinessSolutions />
 
+      {/* Breathing room between the pinned Multi-Channel section and How It Works. */}
+      <div aria-hidden className="h-16 md:h-28 bg-[#F3F3F3]" />
+
       {/* 3. Timeline / how it works. */}
       <Timeline />
 
