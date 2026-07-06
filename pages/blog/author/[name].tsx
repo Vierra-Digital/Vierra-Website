@@ -5,9 +5,10 @@ import { Bricolage_Grotesque, Inter } from "next/font/google"
 import { getPostsByAuthor, getAllAuthorNames } from "@/lib/blog"
 import { Header } from "@/components/Header"
 import Footer from "@/components/FooterSection/Footer"
-import { authorSameAs } from "@/lib/authorProfiles"
+import { authorSameAs, getAuthorProfile } from "@/lib/authorProfiles"
 import { motion } from "framer-motion"
 import { ChevronRight } from "lucide-react"
+import Image from "next/image"
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
 const inter = Inter({ subsets: ["latin"] })
@@ -32,6 +33,9 @@ const formatDate = (dateString: string): string => {
 export default function AuthorPage({ authorName, posts }: AuthorPageProps) {
   const baseUrl = "https://vierradev.com"
   const pageUrl = `${baseUrl}/blog/author/${encodeURIComponent(authorName)}`
+  const profile = getAuthorProfile(authorName)
+  const authorImageUrl = profile.image ? `${baseUrl}${profile.image}` : undefined
+  const linkedIn = profile.sameAs?.find((u) => u.includes("linkedin.com"))
   return (
     <>
       <Head>
@@ -80,8 +84,13 @@ export default function AuthorPage({ authorName, posts }: AuthorPageProps) {
               "@type": "Person",
               name: authorName,
               url: pageUrl,
+              jobTitle: profile.jobTitle,
+              description: profile.bio,
+              image: authorImageUrl,
               sameAs: authorSameAs(authorName),
-              worksFor: { "@id": "https://vierradev.com/#organization" },
+              worksFor: profile.company
+                ? { "@type": "Organization", name: profile.company }
+                : { "@id": "https://vierradev.com/#organization" },
             },
             publisher: {
               "@type": "Organization",
@@ -147,10 +156,55 @@ export default function AuthorPage({ authorName, posts }: AuthorPageProps) {
             </h1>
             <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs text-white/70 backdrop-blur-md">
               <span className="h-1.5 w-1.5 rounded-full bg-[#8F42FF]" />
-              {posts.length} post{posts.length === 1 ? "" : "s"} by {authorName}
+              {posts.length} Post{posts.length === 1 ? "" : "s"} By {authorName}
             </div>
           </header>
         </div>
+
+        {/* Author bio — below the header, on the light band above the posts grid */}
+        {profile.bio && (
+          <div className="bg-[#F3F3F3]">
+            <div className="mx-auto max-w-4xl px-6 pt-14">
+              <div className="flex flex-col items-center gap-5 rounded-2xl border border-[#ECE6F5] bg-white p-6 text-center shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:flex-row sm:items-center sm:text-left md:p-8">
+                {profile.image ? (
+                  <Image
+                    src={profile.image}
+                    alt={`${authorName}, ${profile.jobTitle ?? "author"} at Vierra Digital`}
+                    width={80}
+                    height={80}
+                    draggable={false}
+                    className="h-20 w-20 flex-shrink-0 select-none rounded-full object-cover ring-2 ring-[#8F42FF]/40 ring-offset-2 ring-offset-white [-webkit-user-drag:none]"
+                  />
+                ) : (
+                  <div className="flex h-20 w-20 flex-shrink-0 items-center justify-center rounded-full bg-[#701CC0] text-2xl font-bold text-white ring-2 ring-[#8F42FF]/40 ring-offset-2 ring-offset-white">
+                    {authorName.charAt(0)}
+                  </div>
+                )}
+                <div className={inter.className}>
+                  {profile.jobTitle && (
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-[#701CC0]">
+                      {profile.jobTitle}, {profile.company ?? "Vierra Digital"}
+                    </p>
+                  )}
+                  <p className="mt-2 text-[15px] leading-relaxed text-[#4B4460]">{profile.bio}</p>
+                  {linkedIn && (
+                    <a
+                      href={linkedIn}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-[#701CC0] transition-colors hover:text-[#8F42FF]"
+                    >
+                      Connect On LinkedIn
+                      <span aria-hidden className="animate-arrow-nudge">
+                        →
+                      </span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Posts */}
         <div className="bg-[#F3F3F3]">

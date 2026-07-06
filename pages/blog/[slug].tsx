@@ -5,7 +5,8 @@ import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
 import Footer from "@/components/FooterSection/Footer";
 import SocialShareBar from "@/components/Blog/SocialShareBar";
-import { authorSameAs } from "@/lib/authorProfiles";
+import AuthorBio from "@/components/Blog/AuthorBio";
+import { authorSameAs, getAuthorProfile } from "@/lib/authorProfiles";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getPostBySlug, getRelatedPosts, getAllSlugs } from '@/lib/blog';
@@ -49,6 +50,8 @@ const BlogViewPage = ({
     const authorPageUrl = `https://vierradev.com/blog/author/${encodeURIComponent(author.name)}`;
     const publishedDateISO = new Date(publishedDate).toISOString();
     const modifiedDateISO = new Date(updatedDate ?? publishedDate).toISOString();
+    const authorProfile = getAuthorProfile(author.name);
+    const authorImageUrl = authorProfile.image ? `https://vierradev.com${authorProfile.image}` : undefined;
 
     const [progress, setProgress] = useState(0);
 
@@ -154,8 +157,13 @@ const BlogViewPage = ({
                             "@type": "Person",
                             name: author.name,
                             url: authorPageUrl,
+                            jobTitle: authorProfile.jobTitle,
+                            description: authorProfile.bio,
+                            image: authorImageUrl,
                             sameAs: authorSameAs(author.name),
-                            worksFor: { "@id": "https://vierradev.com/#organization" },
+                            worksFor: authorProfile.company
+                                ? { "@type": "Organization", name: authorProfile.company }
+                                : { "@id": "https://vierradev.com/#organization" },
                         },
                         publisher: {
                             "@type": "Organization",
@@ -353,6 +361,12 @@ const BlogViewPage = ({
                                 `}</style>
                                 <div dangerouslySetInnerHTML={{ __html: content }} />
                             </div>
+                        </div>
+                        {/* Author bio: sibling of #blog-text-content — same centered
+                            column and padded container, so it's free of the prose
+                            styles yet flows right under the article with no gap. */}
+                        <div className="w-full max-w-3xl">
+                            <AuthorBio name={author.name} />
                         </div>
                     </div>
                 </div>

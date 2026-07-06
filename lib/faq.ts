@@ -45,7 +45,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'Where is Vierra located?',
     answer:
-      'Vierra Digital is a lead generation agency based in Cambridge, Massachusetts with a NYC office. We serve clients across the United States, working remotely with businesses wherever they operate.',
+      'Vierra Digital is a lead generation agency based in New York, NY. We serve clients across the United States, working remotely with businesses wherever they operate.',
   },
   {
     question: 'How do I get a free audit or quote?',

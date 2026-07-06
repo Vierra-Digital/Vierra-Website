@@ -12,8 +12,8 @@ Region: US
 Organization: Vierra Digital LLC
 Legal-Name: Vierra Digital LLC
 Business-Type: Digital Marketing Agency, Lead Generation Service
-Location: Cambridge, MA 02138, United States
-Founded: 2024
+Location: New York, NY 10001, United States
+Founded: 2019
 
 # Contact Information
 Contact-Email: alex@vierradev.com
