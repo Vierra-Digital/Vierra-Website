@@ -203,13 +203,13 @@ function GridComponent() {
                     className={`absolute inset-0 rounded-xl border transition-all duration-300 ease-out group-hover:scale-[1.12] group-hover:border-[#701CC0]/40 group-hover:shadow-[0_6px_18px_-8px_rgba(112,28,192,0.35)] ${
                       showIcon
                         ? "border-transparent bg-white shadow-[0_8px_22px_-10px_rgba(17,24,39,0.35)]"
-                        : "border-[#E3E3EC] bg-transparent"
+                        : "border-[#C4C2D6] bg-transparent"
                     }`}
                   >
-                    {/* Empty-state marker — faintly visible, fades out when a logo shows. */}
+                    {/* Empty-state marker — inner circle, fades out when a logo shows. */}
                     <span
-                      className={`absolute left-1/2 top-1/2 h-1/3 w-1/3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#D2D2DE] transition-opacity duration-300 ${
-                        showIcon ? "opacity-0" : "opacity-70"
+                      className={`absolute left-1/2 top-1/2 h-1/3 w-1/3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#AEACC4] transition-opacity duration-300 ${
+                        showIcon ? "opacity-0" : "opacity-100"
                       }`}
                     />
                   </div>
