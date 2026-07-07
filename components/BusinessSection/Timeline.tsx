@@ -49,6 +49,8 @@ const Timeline = () => {
         className="hidden lg:block relative h-[200vh] mx-[-1.5rem]"
       >
         <div className="bg-gradient-to-r from-[#010205] via-[#0c0415] to-[#19082d] text-white py-16 px-20 sticky top-0 h-[100vh] flex flex-col justify-center w-full overflow-hidden">
+          {/* Fade the panel's base to solid black so it blends into the case-studies section below. */}
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-40 bg-gradient-to-b from-transparent to-[#010205]" />
           <h2
             className={`${bricolage.className} text-5xl font-normal text-start mb-16`}
           >
@@ -114,7 +116,9 @@ const Timeline = () => {
         </div>
       </div>
       <div className="lg:hidden bg-gradient-to-b from-[#010205] via-[#0c0415] to-[#19082d] text-white py-16 w-screen -mx-[1.5rem] relative overflow-hidden">
-        <div className="px-4">
+        {/* Fade the panel's base to solid black so it blends into the case-studies section below. */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-32 bg-gradient-to-b from-transparent to-[#010205]" />
+        <div className="relative z-10 px-4">
           <h2
             className={`${bricolage.className} text-4xl font-normal text-start mb-16`}
           >
