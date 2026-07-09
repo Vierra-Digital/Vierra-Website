@@ -286,7 +286,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <RootLayoutClient
           geistSansVariable={geistSans.variable}
           geistMonoVariable={geistMono.variable}

@@ -3,127 +3,131 @@
 import { motion } from "framer-motion"
 import { Inter } from "next/font/google"
 import type { IconType } from "react-icons"
-import { FaLinkedin } from "react-icons/fa6"
-import { SiGmail, SiGoogle, SiHubspot, SiGooglecalendar, SiSlack } from "react-icons/si"
+import { FaLinkedin, FaInstagram, FaFacebook, FaWhatsapp, FaCalendarCheck, FaUsers, FaBullseye, FaPlug } from "react-icons/fa6"
+import { SiGmail, SiGoogle, SiHubspot, SiSalesforce, SiZoho, SiClickup, SiSlack } from "react-icons/si"
 
 const inter = Inter({ subsets: ["latin"] })
 
-// Diagram coordinate space (matches the container's aspect ratio).
-const VW = 1000
-const VH = 460
-const ENGINE = { x: 500, y: 230 }
+// Everything lives in one SVG coordinate space (boxes via foreignObject), so
+// connectors always meet box centres. `tier` drives the staggered funnel reveal.
+type Kind = "default" | "engine" | "primary" | "small"
+type Node = { id: string; label: string; x: number; y: number; tier: number; Icon?: IconType; color?: string; kind?: Kind }
 
-type Node = { id: string; label: string; x: number; y: number; Icon?: IconType; color?: string }
-
-// How the pipeline works: outbound channels feed raw prospects into the Vierra
-// engine (research → enrich → sequence → qualify), which pushes booked meetings
-// and synced data out to the team's stack.
-const sources: Node[] = [
-  { id: "mining", label: "Email Mining", x: 150, y: 70, Icon: SiGmail, color: "#EA4335" },
-  { id: "campaigns", label: "Email Campaigns", x: 150, y: 177, Icon: SiGmail, color: "#EA4335" },
-  { id: "linkedin", label: "LinkedIn Outreach", x: 150, y: 284, Icon: FaLinkedin, color: "#0A66C2" },
-  { id: "cold", label: "Cold Email + SEO", x: 150, y: 391, Icon: SiGoogle, color: "#4285F4" },
+const nodes: Node[] = [
+  { id: "icp", label: "ICP", x: 270, y: 250, tier: 0, Icon: FaBullseye, color: "#C99DFF" },
+  { id: "intent", label: "Deep Intent Research", x: 270, y: 345, tier: 1 },
+  { id: "instagram", label: "Instagram", x: 480, y: 150, tier: 2, Icon: FaInstagram, color: "#E4405F" },
+  { id: "facebook", label: "Facebook", x: 480, y: 225, tier: 2, Icon: FaFacebook, color: "#1877F2" },
+  { id: "li-campaigns", label: "LinkedIn Campaigns", x: 480, y: 300, tier: 2, Icon: FaLinkedin, color: "#0A66C2" },
+  { id: "li-nav", label: "LinkedIn Sales Navigator", x: 480, y: 375, tier: 2, Icon: FaLinkedin, color: "#0A66C2" },
+  { id: "email", label: "Email Cartography", x: 480, y: 450, tier: 2, Icon: SiGmail, color: "#EA4335" },
+  { id: "sms", label: "SMS & WhatsApp", x: 480, y: 525, tier: 2, Icon: FaWhatsapp, color: "#25D366" },
+  { id: "campaigns", label: "Campaigns", x: 700, y: 345, tier: 3 },
+  { id: "positive", label: "Positive Intents", x: 920, y: 345, tier: 4 },
+  { id: "vierra", label: "Vierra", x: 1140, y: 345, tier: 5, kind: "engine" },
+  { id: "seo", label: "SEO · AEO · GEO", x: 1140, y: 110, tier: 6, Icon: SiGoogle, color: "#4285F4" },
+  { id: "crm", label: "CRM Sync", x: 1140, y: 560, tier: 6, Icon: SiHubspot, color: "#FF7A59" },
+  { id: "slack", label: "Slack Alerts", x: 1360, y: 250, tier: 6, Icon: SiSlack, color: "#9b6dff" },
+  { id: "ae", label: "AE Research Report", x: 1360, y: 440, tier: 6, Icon: FaUsers, color: "#9b6dff" },
+  { id: "meetings", label: "Meetings Booked", x: 1580, y: 345, tier: 7, Icon: FaCalendarCheck, kind: "primary" },
+  { id: "salesforce", label: "Salesforce", x: 430, y: 650, tier: 8, Icon: SiSalesforce, color: "#00A1E0", kind: "small" },
+  { id: "hubspot", label: "HubSpot", x: 650, y: 650, tier: 8, Icon: SiHubspot, color: "#FF7A59", kind: "small" },
+  { id: "zoho", label: "Zoho", x: 870, y: 650, tier: 8, Icon: SiZoho, color: "#E42527", kind: "small" },
+  { id: "monday", label: "Monday", x: 1090, y: 650, tier: 8, kind: "small" },
+  { id: "clickup", label: "ClickUp", x: 1310, y: 650, tier: 8, Icon: SiClickup, color: "#7B68EE", kind: "small" },
+  { id: "custom", label: "Custom Integrations", x: 1530, y: 650, tier: 8, Icon: FaPlug, color: "#C99DFF", kind: "small" },
 ]
-const dests: Node[] = [
-  { id: "crm", label: "CRM Sync", x: 850, y: 70, Icon: SiHubspot, color: "#FF7A59" },
-  { id: "cal", label: "Calendar", x: 850, y: 177, Icon: SiGooglecalendar, color: "#4285F4" },
-  { id: "slack", label: "Slack Alerts", x: 850, y: 284, Icon: SiSlack, color: "#9b6dff" },
-  { id: "meet", label: "Meetings Booked", x: 850, y: 391 },
-]
 
-function pct(v: number, max: number) {
-  return `${(v / max) * 100}%`
+const byId = Object.fromEntries(nodes.map((n) => [n.id, n])) as Record<string, Node>
+
+function elbow(a: Node, b: Node) {
+  const midX = (a.x + b.x) / 2
+  return `M${a.x},${a.y} H${midX} V${b.y} H${b.x}`
 }
 
-function NodePill({ n }: { n: Node }) {
+const STEP = 0.14
+
+const edges: [string, string][] = [
+  ["icp", "intent"],
+  ["intent", "instagram"], ["intent", "facebook"], ["intent", "li-campaigns"], ["intent", "li-nav"], ["intent", "email"], ["intent", "sms"],
+  ["instagram", "campaigns"], ["facebook", "campaigns"], ["li-campaigns", "campaigns"], ["li-nav", "campaigns"], ["email", "campaigns"], ["sms", "campaigns"],
+  ["campaigns", "positive"],
+  ["positive", "vierra"],
+  ["vierra", "seo"], ["vierra", "crm"], ["vierra", "slack"], ["vierra", "ae"],
+  ["slack", "meetings"], ["ae", "meetings"],
+]
+
+// CRM Sync fans down into the CRM stack along a shared bus (tier 8).
+const crmBus = ["M1140,560 V610", "M430,610 H1530", "M430,610 V650", "M650,610 V650", "M870,610 V650", "M1090,610 V650", "M1310,610 V650", "M1530,610 V650"]
+
+const linePaths = [
+  ...edges.map(([a, b]) => ({ d: elbow(byId[a], byId[b]), delay: byId[b].tier * STEP })),
+  ...crmBus.map((d) => ({ d, delay: 8 * STEP })),
+]
+
+const dims = (k?: Kind) =>
+  k === "engine" ? { w: 150, h: 66 } : k === "small" ? { w: 134, h: 38 } : { w: 158, h: 44 }
+
+function NodeBox({ n }: { n: Node }) {
+  const { w, h } = dims(n.kind)
   const Icon = n.Icon
   return (
-    <div
-      className="absolute -translate-x-1/2 -translate-y-1/2"
-      style={{ left: pct(n.x, VW), top: pct(n.y, VH) }}
+    <motion.g
+      initial={{ opacity: 0, y: 14 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.2 }}
+      transition={{ duration: 0.45, delay: n.tier * STEP, ease: [0.22, 1, 0.36, 1] }}
     >
-      <div className={`inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-white/10 bg-[#2A1148] px-3 py-2 text-[13px] font-medium text-white shadow-[0_10px_30px_-18px_rgba(112,28,192,0.9)] ${inter.className}`}>
-        {Icon ? <Icon className="h-4 w-4" style={{ color: n.color }} aria-hidden /> : null}
-        {n.label}
-      </div>
-    </div>
+      <foreignObject x={n.x - w / 2} y={n.y - h / 2} width={w} height={h} style={{ overflow: "visible" }}>
+        {n.kind === "engine" ? (
+          <div className="flex h-full w-full items-center justify-center rounded-2xl bg-gradient-to-br from-[#8F42FF] to-[#701CC0] shadow-[0_18px_50px_-18px_rgba(112,28,192,1)]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/assets/vierra-logo-panel.png" alt="Vierra" style={{ height: 26, width: "auto" }} />
+          </div>
+        ) : (
+          <div
+            className={`flex h-full w-full items-center justify-center gap-2 rounded-lg px-2.5 text-center font-medium leading-tight ${n.kind === "small" ? "text-[10px]" : "text-[11px]"} ${
+              n.kind === "primary"
+                ? "bg-gradient-to-br from-[#8F42FF] to-[#701CC0] text-white shadow-[0_14px_34px_-16px_rgba(112,28,192,1)]"
+                : "border border-white/10 bg-[#2A1148] text-white"
+            } ${inter.className}`}
+          >
+            {Icon ? <Icon style={{ color: n.color, width: 13, height: 13, flexShrink: 0 }} aria-hidden /> : null}
+            <span>{n.label}</span>
+          </div>
+        )}
+      </foreignObject>
+    </motion.g>
   )
 }
 
 export default function PipelineGrid() {
-  const lines = [
-    ...sources.map((s) => ({ x1: s.x, y1: s.y, x2: ENGINE.x, y2: ENGINE.y })),
-    ...dests.map((d) => ({ x1: ENGINE.x, y1: ENGINE.y, x2: d.x, y2: d.y })),
-  ]
   return (
-    <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[#1F0A38]/70 p-6 md:p-10">
-      {/* dotted grid backdrop */}
+    <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#1F0A38]/70 p-4 md:p-6">
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 [background-image:radial-gradient(circle,_rgba(255,255,255,0.07)_1px,_transparent_1px)] [background-size:24px_24px]"
+        className="pointer-events-none absolute inset-0 [background-image:radial-gradient(circle,_rgba(255,255,255,0.06)_1px,_transparent_1px)] [background-size:22px_22px]"
       />
-
-      {/* --- desktop diagram --- */}
-      <div className="relative mx-auto hidden w-full md:block" style={{ aspectRatio: `${VW} / ${VH}` }}>
-        <svg viewBox={`0 0 ${VW} ${VH}`} className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid meet">
-          {lines.map((l, i) => (
-            <line
-              key={i}
-              x1={l.x1}
-              y1={l.y1}
-              x2={l.x2}
-              y2={l.y2}
-              className="pipe-line"
-              stroke="#8F42FF"
-              strokeOpacity="0.7"
-              strokeWidth="2"
-            />
-          ))}
-        </svg>
-
-        {sources.map((n) => (
-          <NodePill key={n.id} n={n} />
+      <svg viewBox="150 56 1550 646" className="relative mx-auto w-full" preserveAspectRatio="xMidYMid meet">
+        {linePaths.map((p, i) => (
+          <motion.path
+            key={i}
+            d={p.d}
+            fill="none"
+            stroke="#8F42FF"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            initial={{ pathLength: 0, opacity: 0 }}
+            whileInView={{ pathLength: 1, opacity: 0.7 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.55, delay: p.delay, ease: "easeInOut" }}
+          />
         ))}
-        {dests.map((n) => (
-          <NodePill key={n.id} n={n} />
+        {nodes.map((n) => (
+          <NodeBox key={n.id} n={n} />
         ))}
-
-        {/* central engine */}
-        <motion.div
-          className="absolute -translate-x-1/2 -translate-y-1/2"
-          style={{ left: pct(ENGINE.x, VW), top: pct(ENGINE.y, VH) }}
-          animate={{ boxShadow: ["0 0 0 0 rgba(143,66,255,0.0)", "0 0 0 14px rgba(143,66,255,0.06)", "0 0 0 0 rgba(143,66,255,0.0)"] }}
-          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-        >
-          <div className="flex flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-[#8F42FF] to-[#701CC0] px-7 py-5 text-center shadow-[0_24px_60px_-18px_rgba(112,28,192,1)]">
-            <span className={`text-lg font-bold text-white ${inter.className}`}>Vierra</span>
-            <span className={`text-[11px] uppercase tracking-[0.25em] text-white/70 ${inter.className}`}>Engine</span>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* --- mobile fallback: stacked flow --- */}
-      <div className={`relative space-y-3 md:hidden ${inter.className}`}>
-        <div className="grid grid-cols-2 gap-2">
-          {sources.map((n) => (
-            <span key={n.id} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#2A1148] px-3 py-2 text-xs text-white">
-              {n.Icon ? <n.Icon className="h-3.5 w-3.5" style={{ color: n.color }} aria-hidden /> : null}
-              {n.label}
-            </span>
-          ))}
-        </div>
-        <div className="flex justify-center">
-          <span className="rounded-xl bg-gradient-to-br from-[#8F42FF] to-[#701CC0] px-5 py-2.5 text-sm font-bold text-white">Vierra Engine</span>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {dests.map((n) => (
-            <span key={n.id} className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-[#2A1148] px-3 py-2 text-xs text-white">
-              {n.Icon ? <n.Icon className="h-3.5 w-3.5" style={{ color: n.color }} aria-hidden /> : null}
-              {n.label}
-            </span>
-          ))}
-        </div>
-      </div>
+      </svg>
     </div>
   )
 }
