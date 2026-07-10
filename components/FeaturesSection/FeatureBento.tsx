@@ -10,6 +10,16 @@ import BrandSphere from "./BrandSphere"
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
 const inter = Inter({ subsets: ["latin"] })
 
+// Shared reveal-on-scroll motion + card chrome, kept DRY across the bento.
+const reveal = {
+  initial: { opacity: 0, y: 24 },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { once: true, amount: 0.3 },
+  transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] as const },
+}
+const CARD_SHELL = "overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-[#240A45] to-[#1A0735]"
+const MEDIA_SHELL = "rounded-2xl border border-white/5 bg-[#160530]"
+
 /* ------------------------------------------------------------------ */
 /* Per-box animations (compact, self-contained)                        */
 /* ------------------------------------------------------------------ */
@@ -136,12 +146,20 @@ function DeliveryAnim() {
         </div>
         <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-white/10">
           <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-[#8FF0B0] to-[#22C55E]"
+            className="relative h-full overflow-hidden rounded-full bg-gradient-to-r from-[#8FF0B0] to-[#22C55E]"
             initial={{ width: 0 }}
             whileInView={{ width: "100%" }}
             viewport={{ once: true }}
             transition={{ duration: 1.2, ease: [0.22, 1, 0.36, 1] }}
-          />
+          >
+            {/* Moving glow that sweeps along the filled line. */}
+            <motion.span
+              aria-hidden
+              className="absolute inset-y-0 w-1/4 bg-gradient-to-r from-transparent via-white/80 to-transparent blur-[1px]"
+              animate={{ x: ["-120%", "520%"] }}
+              transition={{ duration: 1.9, repeat: Infinity, ease: "easeInOut" }}
+            />
+          </motion.div>
         </div>
       </div>
 
@@ -261,7 +279,7 @@ function SalesIntelAnim() {
 // Personalized Outreach — a live SMS thread. Each message is preceded by a
 // typing indicator, shows the sender's profile picture + a timestamp, and the
 // back-and-forth plays out (then loops).
-const OUTREACH_CYCLE = 13
+const OUTREACH_CYCLE = 10
 const OUTREACH_MSGS = [
   { from: "you", time: "2:14 PM", text: "Hi Shelby! Loved seeing She Sells Academy open a new cohort. We keep sales calendars full of qualified calls, no extra hires needed. Open to a quick look?" },
   { from: "them", time: "2:15 PM", text: "Honestly, this is perfect timing. Send me a couple times and I'm in" },
@@ -288,8 +306,8 @@ function OutreachAvatar({ you }: { you: boolean }) {
 function OutreachMsg({ i }: { i: number }) {
   const m = OUTREACH_MSGS[i]
   const you = m.from === "you"
-  const at = 0.06 + i * 0.145 // when the text lands
-  const typeAt = Math.max(0.01, at - 0.06) // when the typing bubble appears
+  const at = 0.05 + i * 0.13 // when the text lands — even cadence for every message
+  const typeAt = Math.max(0.01, at - 0.05) // when the typing bubble appears
   const bubble = `rounded-2xl px-3 py-2 text-[12px] leading-snug ${you ? "rounded-br-md bg-[#701CC0]/45 text-white" : "rounded-bl-md bg-white/10 text-white/90"}`
   return (
     <motion.div
@@ -380,10 +398,18 @@ function SeoAnim() {
         </motion.span>
         <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/15">
           <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-[#8FF0B0] to-[#22C55E]"
+            className="relative h-full overflow-hidden rounded-full bg-gradient-to-r from-[#8FF0B0] to-[#22C55E]"
             animate={{ width: ["0%", "100%", "100%"] }}
             transition={{ duration: 3, times: [0, 0.55, 1], repeat: Infinity, ease: "easeInOut" }}
-          />
+          >
+            {/* Moving glow that sweeps along the filled line. */}
+            <motion.span
+              aria-hidden
+              className="absolute inset-y-0 w-1/4 bg-gradient-to-r from-transparent via-white/80 to-transparent blur-[1px]"
+              animate={{ x: ["-120%", "520%"] }}
+              transition={{ duration: 1.9, repeat: Infinity, ease: "easeInOut" }}
+            />
+          </motion.div>
         </div>
       </div>
       {/* Cited across answer engines. */}
@@ -420,24 +446,30 @@ function AnalyticsAnim() {
     <div className={`flex h-full flex-col items-center justify-center gap-1.5 p-4 ${inter.className}`}>
       {stages.map((s, i) => {
         // Appear (extend) top→bottom, then disappear (retract) bottom→top.
-        // No opacity fade — width only.
+        // No opacity fade on the bar itself — width only. The side labels
+        // (drop-% + Optimize) fade in/out on the same clock so the whole row
+        // collapses together instead of leaving floating text behind.
         const N = stages.length
         const gStart = 0.05 + i * 0.08 // top rows grow first
         const sStart = 0.62 + (N - 1 - i) * 0.07 // bottom rows shrink first
+        const times = [0, gStart, gStart + 0.12, sStart, sStart + 0.14, 1]
+        const present = [0, 0, 1, 1, 0, 0] // matches the bar's grow → hold → retract
+        const sideTx = { duration: CYCLE, times, repeat: Infinity }
         return (
         <div key={s.label} className="flex w-full items-center justify-center gap-2">
-          <span className="w-6 shrink-0 text-right text-[8px] text-[#8FF0B0]">{s.drop}</span>
+          <motion.span
+            className="w-14 shrink-0 text-right text-[8px] text-[#8FF0B0]"
+            animate={{ opacity: present }}
+            transition={sideTx}
+          >
+            {s.drop}
+          </motion.span>
           <motion.div
             className={`relative flex h-6 items-center justify-center overflow-hidden rounded-md ${
               s.opt ? "bg-gradient-to-r from-[#F0ABFC] to-[#B366FF]" : "bg-gradient-to-r from-[#701CC0] to-[#B366FF]"
             }`}
-            animate={{ width: ["10%", "10%", `${s.w}%`, `${s.w}%`, "10%", "10%"] }}
-            transition={{
-              duration: CYCLE,
-              times: [0, gStart, gStart + 0.12, sStart, sStart + 0.14, 1],
-              repeat: Infinity,
-              ease: [0.16, 1, 0.3, 1],
-            }}
+            animate={{ width: ["0%", "0%", `${s.w}%`, `${s.w}%`, "0%", "0%"] }}
+            transition={{ duration: CYCLE, times, repeat: Infinity, ease: [0.16, 1, 0.3, 1] }}
           >
             <span className="truncate px-2 text-[10px] font-semibold text-white">
               {s.label} · {s.v}
@@ -445,21 +477,25 @@ function AnalyticsAnim() {
           </motion.div>
           {s.opt ? (
             <motion.span
-              className="w-[52px] shrink-0 whitespace-nowrap rounded-full bg-[#F0ABFC]/20 px-1.5 py-0.5 text-center text-[8px] font-semibold text-[#F0ABFC]"
-              animate={{ opacity: [0.5, 1, 0.5] }}
-              transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+              className="w-14 shrink-0 whitespace-nowrap rounded-full bg-[#F0ABFC]/20 px-1.5 py-0.5 text-center text-[8px] font-semibold text-[#F0ABFC]"
+              animate={{ opacity: present }}
+              transition={sideTx}
             >
               ↑ Optimize
             </motion.span>
           ) : (
-            <span className="w-[52px] shrink-0" aria-hidden />
+            <span className="w-14 shrink-0" aria-hidden />
           )}
         </div>
         )
       })}
-      <div className="mt-1 flex items-center gap-1.5 text-[9px] font-medium text-[#8FF0B0]">
+      <motion.div
+        className="mt-1 flex items-center gap-1.5 text-[9px] font-medium text-[#8FF0B0]"
+        animate={{ opacity: [0, 0, 1, 1, 0, 0] }}
+        transition={{ duration: CYCLE, times: [0, 0.42, 0.52, 0.62, 0.78, 1], repeat: Infinity }}
+      >
         <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#8FF0B0]" /> 312 Meetings Booked · +142% MoM
-      </div>
+      </motion.div>
     </div>
   )
 }
@@ -520,13 +556,10 @@ const boxes: Box[] = [
 function FeatureCard({ b, fill, className = "" }: { b: Box; fill?: boolean; className?: string }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.3 }}
-      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      className={`flex break-inside-avoid flex-col overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-[#240A45] to-[#1A0735] p-5 transition-transform duration-300 hover:-translate-y-1 ${className}`}
+      {...reveal}
+      className={`flex break-inside-avoid flex-col ${CARD_SHELL} p-5 transition-transform duration-300 hover:-translate-y-1 ${className}`}
     >
-      <div className={`relative mb-5 overflow-hidden rounded-2xl border border-white/5 bg-[#160530] ${fill ? "min-h-[12rem] flex-1" : b.h}`}>
+      <div className={`relative mb-5 overflow-hidden ${MEDIA_SHELL} ${fill ? "min-h-[12rem] flex-1" : b.h}`}>
         {b.anim}
       </div>
       <h3 className={`text-lg font-semibold text-white ${bricolage.className}`}>{b.title}</h3>
@@ -548,11 +581,8 @@ export default function FeatureBento() {
       {/* Top row: Brand Universe (2/3) + Lead Research (1/3) */}
       <div className="mb-4 grid gap-4 lg:grid-cols-3">
         <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.3 }}
-          transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-          className="grid items-center gap-6 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-[#240A45] to-[#1A0735] p-6 md:p-8 sm:grid-cols-2 lg:col-span-2"
+          {...reveal}
+          className={`grid items-center gap-6 ${CARD_SHELL} p-6 md:p-8 sm:grid-cols-2 lg:col-span-2`}
         >
           <div className="relative h-64 w-full sm:h-80 lg:h-[22rem]">
             <BrandSphere />
@@ -577,14 +607,8 @@ export default function FeatureBento() {
           Infrastructure (2/3 right, wrench left of the copy). */}
       <div className="mb-4 grid items-stretch gap-4 lg:grid-cols-3">
         {outreach && (
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.3 }}
-            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-            className="flex flex-col overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-[#240A45] to-[#1A0735] p-5 lg:col-span-1"
-          >
-            <div className="relative mb-4 min-h-[24rem] flex-1 overflow-hidden rounded-2xl border border-white/5 bg-[#160530]">
+          <motion.div {...reveal} className={`flex flex-col ${CARD_SHELL} p-5 lg:col-span-1`}>
+            <div className={`relative mb-4 min-h-[24rem] flex-1 overflow-hidden ${MEDIA_SHELL}`}>
               {outreach.anim}
             </div>
             <h3 className={`text-lg font-semibold text-white ${bricolage.className}`}>{outreach.title}</h3>
@@ -596,14 +620,8 @@ export default function FeatureBento() {
             Intelligence filling the gap beneath it (beside the tall Outreach). */}
         <div className="flex flex-col gap-4 lg:col-span-2">
           {delivery && (
-            <motion.div
-              initial={{ opacity: 0, y: 24 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.3 }}
-              transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              className="grid items-center gap-6 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-b from-[#240A45] to-[#1A0735] p-6 md:p-8 sm:grid-cols-2"
-            >
-              <div className="relative h-52 w-full rounded-2xl border border-white/5 bg-[#160530] sm:h-60">
+            <motion.div {...reveal} className={`grid items-center gap-6 ${CARD_SHELL} p-6 md:p-8 sm:grid-cols-2`}>
+              <div className={`relative h-52 w-full ${MEDIA_SHELL} sm:h-60`}>
                 {delivery.anim}
               </div>
               <div>
