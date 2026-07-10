@@ -23,7 +23,7 @@ export function CaseStudies() {
           Flood Your Sales Calendar
         </h2>
         <p className={`${inter.className} mx-auto mt-5 max-w-2xl text-base font-light text-white/80`}>
-          The only platform needed to automatically find, reach &amp; close your
+          The only platform needed to automatically find, reach, and close your
           entire market.
         </p>
       </div>

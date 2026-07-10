@@ -3,7 +3,6 @@
 import { motion } from "framer-motion"
 import { Bricolage_Grotesque, Inter } from "next/font/google"
 import PipelineGrid from "./PipelineGrid"
-import AutopilotPlane from "./AutopilotPlane"
 import FeatureBento from "./FeatureBento"
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
@@ -29,31 +28,27 @@ export default function FeaturesV2() {
         variants={stagger}
         className="mx-auto max-w-7xl"
       >
-        <div className="grid items-center gap-10 lg:grid-cols-2">
-          <div className="max-w-3xl">
-            <motion.span
-              variants={fadeUp}
-              className={`text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF] ${inter.className}`}
-            >
-              The Vierra Engine
-            </motion.span>
-            <motion.h2
-              variants={fadeUp}
-              className={`mt-4 text-4xl md:text-6xl font-bold leading-[1.05] text-[#EFF3FF] ${bricolage.className}`}
-            >
-              Your Entire GTM On Autopilot
-            </motion.h2>
-            <motion.p
-              variants={fadeUp}
-              className={`mt-5 text-lg text-[#B9A9D6] ${inter.className}`}
-            >
-              One centralized pipeline to take cold marketing into booked meetings.
-              It sources, researches, and engages while you stay focused on closing.
-            </motion.p>
-          </div>
-          <motion.div variants={fadeUp} className="w-full">
-            <AutopilotPlane />
-          </motion.div>
+        <div className="mx-auto max-w-3xl text-center">
+          <motion.span
+            variants={fadeUp}
+            className={`text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF] ${inter.className}`}
+          >
+            The Vierra Engine
+          </motion.span>
+          <motion.h2
+            variants={fadeUp}
+            style={{ fontSize: "clamp(1.5rem, 6.2vw, 3.75rem)" }}
+            className={`mt-4 whitespace-nowrap font-bold leading-[1.05] text-[#EFF3FF] ${bricolage.className}`}
+          >
+            Your Entire GTM On Autopilot
+          </motion.h2>
+          <motion.p
+            variants={fadeUp}
+            className={`mt-5 text-lg text-[#B9A9D6] ${inter.className}`}
+          >
+            One centralized pipeline to take cold marketing into booked meetings.
+            It sources, researches, and engages while you stay focused on closing.
+          </motion.p>
         </div>
 
         {/* Pipeline grid — outbound channels feed the engine, which pushes booked
