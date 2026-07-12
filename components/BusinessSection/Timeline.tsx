@@ -1,189 +1,192 @@
 "use client"
 
 import { Bricolage_Grotesque, Figtree } from "next/font/google"
-import { useEffect, useRef, useState } from "react"
-import { motion, useScroll, useTransform, useMotionValueEvent } from "framer-motion"
-import dynamic from "next/dynamic"
+import { useRef, useState } from "react"
+import { motion, AnimatePresence, useScroll, useTransform, useMotionValueEvent } from "framer-motion"
+import { OnboardingStepAnim, TamMiningAnim } from "./OnboardingSteps"
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
 const figtree = Figtree({ subsets: ["latin"] })
 
-// WebGL models — client-only so three.js stays out of the SSR path.
-const OnboardingModels3D = dynamic(() => import("./OnboardingModels3D"), {
-  ssr: false,
-  loading: () => <div aria-hidden className="absolute inset-0" />,
-})
-
-// Step-by-step of how onboarding a new client works. Each step's 3D model lives
-// in OnboardingModels3D, indexed to match this order.
+// The onboarding journey, start to signed client. Each step's animation lives in
+// OnboardingSteps (index-matched); step 3 (TAM) uses the WebGL Brand sphere.
 const steps = [
   {
     n: 1,
-    title: "Discovery Call",
-    text: "We map your ICP, goals, and current funnel on a quick kickoff call — and confirm we're a fit to work together.",
+    title: "Initial Meeting & Evaluation",
+    text: "We meet, map your goals, and evaluate fit — we only move forward if we can genuinely fill your pipeline.",
   },
   {
     n: 2,
-    title: "Setup & Integrations",
-    text: "We connect your inboxes, CRM, and tools, then warm your sending infrastructure so your outbound actually lands.",
+    title: "Onboard Into Vierra",
+    text: "You onboard through our custom module — connect inboxes, CRM, and tools in minutes, guided end to end.",
   },
   {
     n: 3,
-    title: "Campaign Build",
-    text: "Our team writes painpoint-driven messaging and builds multi-channel sequences tailored to your market.",
+    title: "Full Market & ICP Research",
+    text: "We research your entire market and lock in your exact ICP, profiling every account before any outreach.",
   },
   {
     n: 4,
-    title: "Launch & Scale",
-    text: "Campaigns go live. We watch buying signals, book meetings, and optimize every week to grow your pipeline.",
+    title: "TAM Sort & Mining",
+    text: "We mine your total addressable market and sort it by ICP fit, surfacing only the accounts worth pursuing.",
+  },
+  {
+    n: 5,
+    title: "Campaign Launching",
+    text: "Multi-channel campaigns go live across email, LinkedIn, and SMS — coordinated and launched in sync.",
+  },
+  {
+    n: 6,
+    title: "Clients Signed Successfully",
+    text: "Qualified meetings convert into booked calls and signed clients — then we optimize every week to scale.",
   },
 ]
 
 // Intro title stays centered & locked until HOLD_END, then docks to the top by
-// DOCK_END; the onboarding steps play out across the rest of the scroll.
-const HOLD_END = 0.2
-const DOCK_END = 0.3
+// DOCK_END; the steps play out across the rest of the scroll.
+const HOLD_END = 0.16
+const DOCK_END = 0.26
 
 const Timeline = () => {
   const sectionRef = useRef<HTMLDivElement>(null)
   const [active, setActive] = useState(0)
   const [showIntro, setShowIntro] = useState(true)
-  const [inView, setInView] = useState(false)
-  const [reduced, setReduced] = useState(false)
+  const [dir, setDir] = useState(1) // scroll direction: 1 = forward, -1 = back
+  const activeRef = useRef(0)
 
-  // Continuous scroll progress across the locked section (0 at the top, 1 at
-  // the bottom) — drives the header dock + the crossfading step content/model.
+  // Only the header's POSITION is scroll-linked (the smooth dock). Every opacity
+  // is state-driven via AnimatePresence below, so nothing can get stuck at a
+  // partial opacity when you stop mid-scroll (the old "opacity broken" bug).
   const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start start", "end end"] })
-  const headerTop = useTransform(scrollYProgress, [HOLD_END, DOCK_END], ["50%", "15%"])
-  const headerScale = useTransform(scrollYProgress, [HOLD_END, DOCK_END], [1, 0.82])
-  // Intro fades out fully before the step copy fades in (no overlapping text).
-  const introOpacity = useTransform(scrollYProgress, [0, HOLD_END, DOCK_END - 0.04], [1, 1, 0])
-  const stepOpacity = useTransform(scrollYProgress, [DOCK_END - 0.03, DOCK_END + 0.04], [0, 1])
-  const modelOpacity = useTransform(scrollYProgress, [DOCK_END, DOCK_END + 0.1], [0, 1])
+  // Intro: centered (top 50% + translateY -50%). Docked: top-anchored near the
+  // top (top 11% + translateY 0) so the title sits cleanly above the animation
+  // with consistent spacing (no weird mid-screen gap).
+  const headerTop = useTransform(scrollYProgress, [HOLD_END, DOCK_END], ["50%", "11%"])
+  const headerTY = useTransform(scrollYProgress, [HOLD_END, DOCK_END], ["-50%", "0%"])
+  const headerScale = useTransform(scrollYProgress, [HOLD_END, DOCK_END], [1, 0.84])
 
-  // Discrete step index for the model + step copy (steps live after the intro).
-  // `showIntro` hard-swaps the two header layers (not just opacity) so the intro
-  // title can never ghost behind the step titles once it has docked.
   useMotionValueEvent(scrollYProgress, "change", (p) => {
     setShowIntro(p < DOCK_END - 0.02)
     const t = (p - DOCK_END) / (1 - DOCK_END)
-    setActive(Math.max(0, Math.min(steps.length - 1, Math.floor(t * steps.length))))
-  })
-
-  // Only spin the WebGL loop while the section is on screen; honor reduced motion.
-  useEffect(() => {
-    const el = sectionRef.current
-    if (!el) return
-    const io = new IntersectionObserver(([e]) => setInView(e.isIntersecting), { threshold: 0.02 })
-    io.observe(el)
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)")
-    setReduced(mq.matches)
-    const onMq = (e: MediaQueryListEvent) => setReduced(e.matches)
-    mq.addEventListener("change", onMq)
-    return () => {
-      io.disconnect()
-      mq.removeEventListener("change", onMq)
+    const idx = Math.max(0, Math.min(steps.length - 1, Math.floor(t * steps.length)))
+    if (idx !== activeRef.current) {
+      setDir(idx > activeRef.current ? 1 : -1)
+      activeRef.current = idx
+      setActive(idx)
     }
-  }, [])
+  })
 
   const step = steps[active]
 
   return (
     <>
       {/* Desktop — scroll-locked stage. An intro header sits centered on screen,
-          then docks to the top as one continuous move while its text morphs into
-          the active onboarding step; the 3D model spins continuously in the
-          middle and crossfades per step as you scroll. */}
-      <div id="timeline-section" ref={sectionRef} className="relative mx-[-1.5rem] hidden h-[360vh] lg:block">
-        <div className="sticky top-0 h-screen w-full overflow-hidden bg-gradient-to-b from-[#010205] via-[#0c0415] to-[#19082d] text-white">
-          <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-40 bg-gradient-to-b from-transparent to-[#010205]" />
+          then docks to the top while its text morphs into the active step; the
+          step's animation plays in the band beneath it. */}
+      <div id="timeline-section" ref={sectionRef} className="relative mx-[-1.5rem] hidden h-[560vh] lg:block">
+        <div className="sticky top-0 h-screen w-full overflow-hidden bg-[#0A0414] text-white">
+          {/* Soft purple glow behind the stage — one clean highlight, not a busy gradient. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 top-1/2 h-[70vmax] w-[70vmax] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-70 blur-[130px]"
+            style={{ background: "radial-gradient(circle, rgba(122,19,208,0.28), rgba(122,19,208,0) 70%)" }}
+          />
+          {/* Fade top + bottom edges so the section blends into its neighbors. */}
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 z-0 h-32 bg-gradient-to-b from-[#010205] to-transparent" />
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-32 bg-gradient-to-t from-[#010205] to-transparent" />
 
-          {/* 3D model — continuous, centered, crossfades to the active step. */}
-          <motion.div style={{ opacity: modelOpacity }} className="absolute inset-0 z-10 flex items-center justify-center">
-            <div className="h-[46vh] w-full max-w-3xl">
-              <OnboardingModels3D step={active} paused={reduced} active={inView} />
-            </div>
-          </motion.div>
-
-          {/* Header — moves center → top; content crossfades intro → step. Title
-              scale matches the site's section headings (see FeaturesV2). */}
-          <motion.div
-            style={{ top: headerTop, y: "-50%", scale: headerScale }}
-            className="absolute inset-x-0 z-20 flex h-52 items-center justify-center px-8"
-          >
-            <div className="relative w-full max-w-3xl text-center">
-              {showIntro ? (
-                <motion.div style={{ opacity: introOpacity }} className="absolute inset-x-0 top-0">
-                  <span className={`${figtree.className} text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]`}>
-                    Getting Started
-                  </span>
-                  <h2
-                    style={{ fontSize: "clamp(1.5rem, 6.2vw, 3.75rem)" }}
-                    className={`${bricolage.className} mt-4 font-bold leading-[1.05] text-[#EFF3FF]`}
-                  >
-                    How Onboarding Works
-                  </h2>
-                  <p className={`${figtree.className} mx-auto mt-5 max-w-xl text-lg text-[#B9A9D6]`}>
-                    From the first call to a calendar full of qualified meetings — here&apos;s exactly how we get you live.
-                  </p>
-                </motion.div>
-              ) : (
-                <motion.div style={{ opacity: stepOpacity }} className="absolute inset-x-0 top-0">
-                  <span className={`${figtree.className} text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]`}>
-                    Step {step.n} of {steps.length}
-                  </span>
-                  <h2
-                    style={{ fontSize: "clamp(1.5rem, 6.2vw, 3.75rem)" }}
-                    className={`${bricolage.className} mt-4 font-bold leading-[1.05] text-[#EFF3FF]`}
-                  >
-                    {step.title}
-                  </h2>
-                  <p className={`${figtree.className} mx-auto mt-5 max-w-xl text-lg text-[#B9A9D6]`}>{step.text}</p>
+          {/* Animation stage — the active step's animation, centered in the band
+              below the docked title. TAM uses the WebGL sphere; it only mounts
+              when active so its canvas isn't rendered behind the other steps. */}
+          <div className="absolute inset-x-0 top-[31%] bottom-[9%] z-10">
+            <AnimatePresence mode="wait">
+              {!showIntro && (
+                <motion.div
+                  key={active === 3 ? "tam" : `anim-${active}`}
+                  className="absolute inset-0"
+                  initial={{ opacity: 0, scale: 0.94, y: dir > 0 ? 70 : -70 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.94, y: dir > 0 ? -70 : 70 }}
+                  transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  {active === 3 ? <TamMiningAnim /> : <OnboardingStepAnim step={active} />}
                 </motion.div>
               )}
+            </AnimatePresence>
+          </div>
+
+          {/* Header — moves center → top; content crossfades intro → step. */}
+          <motion.div style={{ top: headerTop, y: headerTY, scale: headerScale }} className="absolute inset-x-0 z-20 px-8">
+            <div className="mx-auto max-w-3xl text-center">
+              <AnimatePresence mode="wait">
+                {showIntro ? (
+                  <motion.div key="intro" initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -22 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
+                    <span className={`${figtree.className} text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]`}>
+                      Getting Started
+                    </span>
+                    <h2
+                      style={{ fontSize: "clamp(1.5rem, 6.2vw, 3.75rem)" }}
+                      className={`${bricolage.className} mt-4 whitespace-nowrap font-bold leading-[1.05] text-[#EFF3FF]`}
+                    >
+                      How Onboarding Works
+                    </h2>
+                    <p className={`${figtree.className} mx-auto mt-5 max-w-xl text-lg text-[#B9A9D6]`}>
+                      From the first call to a calendar full of qualified meetings — here&apos;s exactly how we get you live.
+                    </p>
+                  </motion.div>
+                ) : (
+                  <motion.div key={`step-${active}`} initial={{ opacity: 0, y: dir > 0 ? 22 : -22 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: dir > 0 ? -22 : 22 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
+                    <span className={`${figtree.className} text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]`}>
+                      Step {step.n} of {steps.length}
+                    </span>
+                    <h2
+                      style={{ fontSize: "clamp(1.5rem, 6.2vw, 3.75rem)" }}
+                      className={`${bricolage.className} mt-4 whitespace-nowrap font-bold leading-[1.05] text-[#EFF3FF]`}
+                    >
+                      {step.title}
+                    </h2>
+                    <p className={`${figtree.className} mx-auto mt-5 max-w-xl text-lg text-[#B9A9D6]`}>{step.text}</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
 
           {/* Progress rail — appears once the steps begin. */}
-          <motion.div style={{ opacity: stepOpacity }} className="absolute inset-x-0 bottom-16 z-20 flex justify-center gap-2">
-            {steps.map((s, i) => (
-              <span
-                key={s.n}
-                className={`h-1.5 rounded-full transition-all duration-300 ${active === i ? "w-10 bg-[#C99DFF]" : "w-5 bg-white/15"}`}
-              />
-            ))}
-          </motion.div>
+          <AnimatePresence>
+            {!showIntro && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4 }}
+                className="absolute inset-x-0 bottom-16 z-20 flex justify-center gap-2"
+              >
+                {steps.map((s, i) => (
+                  <span
+                    key={s.n}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${active === i ? "w-10 bg-[#C99DFF]" : "w-5 bg-white/15"}`}
+                  />
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
-      {/* Mobile — one sticky model that follows whichever step scrolls into view,
-          with the step copy stacked below. */}
-      <MobileTimeline reduced={reduced} />
+      {/* Mobile — stacked cards, each with its own step animation. */}
+      <MobileTimeline />
     </>
   )
 }
 
-function MobileTimeline({ reduced }: { reduced: boolean }) {
-  const [active, setActive] = useState(0)
-  const [inView, setInView] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const io = new IntersectionObserver(([e]) => setInView(e.isIntersecting), { threshold: 0.02 })
-    io.observe(el)
-    return () => io.disconnect()
-  }, [])
-
+function MobileTimeline() {
   return (
-    <div
-      ref={ref}
-      className="relative -mx-[1.5rem] w-screen overflow-hidden bg-gradient-to-b from-[#010205] via-[#0c0415] to-[#19082d] py-16 text-white lg:hidden"
-    >
+    <div className="relative -mx-[1.5rem] w-screen overflow-hidden bg-gradient-to-b from-[#010205] via-[#0c0415] to-[#19082d] py-16 text-white lg:hidden">
       <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-32 bg-gradient-to-b from-transparent to-[#010205]" />
       <div className="relative z-10 px-6">
-        <div className="mb-6 text-center">
+        <div className="mb-8 text-center">
           <span className={`${figtree.className} text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]`}>Getting Started</span>
           <h2
             style={{ fontSize: "clamp(1.75rem, 9vw, 3rem)" }}
@@ -193,11 +196,7 @@ function MobileTimeline({ reduced }: { reduced: boolean }) {
           </h2>
         </div>
 
-        <div className="sticky top-16 z-10 mx-auto h-60 w-full max-w-sm">
-          <OnboardingModels3D step={active} paused={reduced} active={inView} />
-        </div>
-
-        <div className="mt-4 flex flex-col gap-6">
+        <div className="flex flex-col gap-6">
           {steps.map((s, i) => (
             <motion.div
               key={s.n}
@@ -205,12 +204,14 @@ function MobileTimeline({ reduced }: { reduced: boolean }) {
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
-              viewport={{ once: false, amount: 0.6 }}
-              onViewportEnter={() => setActive(i)}
+              viewport={{ once: true, amount: 0.4 }}
             >
-              <div className="mb-2 flex items-center gap-3">
+              <div className="mb-3 flex items-center gap-3">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#7A13D0] text-sm font-bold text-white">{s.n}</span>
                 <h3 className={`${bricolage.className} text-xl font-semibold`}>{s.title}</h3>
+              </div>
+              <div className="relative mb-3 h-60 overflow-hidden rounded-xl border border-white/5 bg-[#0c0415]">
+                {i === 3 ? <TamMiningAnim /> : <OnboardingStepAnim step={i} />}
               </div>
               <p className={`text-[15px] leading-relaxed text-[#B9A9D6] ${figtree.className}`}>{s.text}</p>
             </motion.div>
