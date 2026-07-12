@@ -1,0 +1,172 @@
+{
+  "summary": {
+    "health_score": 80,
+    "business_type": "B2B Digital Marketing / Lead Generation Agency (professional service)",
+    "domain": "vierradev.com",
+    "audit_date": "2026-07-10",
+    "scope": "Site-wide SEO + redesigned homepage on branch homepage-redesign (not yet deployed)",
+    "top_findings": [
+      "Broken import in the redesign: Timeline.tsx imports the deleted OnboardingModels3D; new OnboardingSteps.tsx unwired (build throws Module not found)",
+      "NAP location conflict: Cambridge, MA schema vs New York, NY JobPosting/careers copy",
+      "<main> landmark wraps only the hero; all other homepage sections are siblings outside it",
+      "Split-brand: llms.txt/manifest/markdown-mirror still say 'Guaranteed Leads' vs site 'Risk-Averse Lead Engine'",
+      "Founding-year contradiction: schema 2019 vs llms.txt 2024"
+    ],
+    "quick_wins": [
+      "Fix Timeline.tsx dynamic import",
+      "Rename duplicate id='cases' (Testimonials -> id='testimonials')",
+      "Reconcile founding year and HQ location across llms.txt, manifest, schema",
+      "Promote 'Scale Your Business' and footer CTA from span/div to <h2>",
+      "Lengthen short titles on /blog, /careers, /branding"
+    ],
+    "not_covered": "Field CWV (CrUX), GSC indexation, GA4 organic traffic, backlink profile, live SERP positions — no API credentials configured"
+  },
+  "categories": [
+    {
+      "name": "Technical SEO",
+      "score": 88,
+      "weight": 22,
+      "what_works": [
+        "HTTPS enforced with HSTS; CSP, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy present",
+        "www->non-www and http->https 301 redirects verified live",
+        "robots.txt disallows app/auth paths, allows blog+RSS, explicitly allows AI crawlers (GPTBot, ClaudeBot, PerplexityBot, OAI-SearchBot, Google-Extended)",
+        "Dynamic sitemap with ISR (revalidate 3600), test-slug filtering, correct noindex-tag exclusion; 30 URLs live",
+        "AVIF/WebP image pipeline; poweredByHeader disabled; Cloudflare CDN"
+      ],
+      "findings": [
+        {"title": "Broken dynamic import in redesign", "severity": "High", "description": "Timeline.tsx:12,108,198 import deleted ./OnboardingModels3D; replacement OnboardingSteps.tsx unwired. SSR survives (ssr:false + loading fallback) but client visual broken and dev build errors.", "recommendation": "Rewire Timeline to the new step component before merge"},
+        {"title": "SearchAction endpoint non-functional", "severity": "Medium", "description": "app/layout.tsx:215 targets /blog?search= but pages/blog.tsx never reads the query param.", "recommendation": "Hydrate blog search from URL, or remove the SearchAction"},
+        {"title": "X-Frame-Options header absent", "severity": "Low", "description": "Only CSP frame-ancestors 'self' guards clickjacking.", "recommendation": "Add X-Frame-Options: SAMEORIGIN for defense-in-depth"}
+      ]
+    },
+    {
+      "name": "Content Quality",
+      "score": 80,
+      "weight": 23,
+      "what_works": [
+        "Deep legal/policy pages (18-24 sections each) with clean H1/H2 hierarchy",
+        "Blog posts carry real E-E-A-T: author byline+link, published/modified dates, sameAs profiles",
+        "Careers content deep (10 roles with full detail)",
+        "Homepage 1,287 crawlable words + sr-only 'About Vierra' summary"
+      ],
+      "findings": [
+        {"title": "Split-brand: Guaranteed Leads vs Risk-Averse Lead Engine", "severity": "High", "description": "llms.txt, manifest.json, content/md/index.md still say 'Guaranteed Leads'; site says 'Risk-Averse Lead Engine'. Legally loaded claim; AI engines cite the stale files.", "recommendation": "Migrate AI/PWA files to current positioning; drop 'guaranteed'"},
+        {"title": "Blog author pages indexable but thin", "severity": "Medium", "description": "pages/blog/author/[name].tsx: card grid only, ~44-char templated description, no bio/photo/credentials.", "recommendation": "Add author bio/avatar/role or noindex"},
+        {"title": "Homepage 'Coming Soon' case-studies placeholder", "severity": "Medium", "description": "components/WorkSection/CaseStudies.tsx:20-64 is a thin placeholder under a keyword-named heading.", "recommendation": "Add real case-study results text"},
+        {"title": "Client-rotated sections expose one variant in SSR", "severity": "Medium", "description": "BusinessSolutions shows only active tab; testimonials/stats rotate via setInterval.", "recommendation": "Render all variants in DOM, toggle via CSS"},
+        {"title": "FAQ only 9 items", "severity": "Low", "description": "lib/faq.ts", "recommendation": "Expand to 12-15 Q&A"}
+      ]
+    },
+    {
+      "name": "On-Page SEO",
+      "score": 79,
+      "weight": 20,
+      "what_works": [
+        "Homepage: 50-char title, unique description, canonical, robots, OG, Twitter, exactly one H1",
+        "Unique dynamic titles/descriptions/canonicals across templates",
+        "Blog post OG uses og:type=article with published/modified/author/tags"
+      ],
+      "findings": [
+        {"title": "<main> wraps only the hero", "severity": "High", "description": "app/page.tsx:126-199 vs sections at :289-321 outside <main>.", "recommendation": "Wrap all primary content in one <main>"},
+        {"title": "Duplicate id='cases'", "severity": "Medium", "description": "CaseStudies.tsx:12 and Testimonials.tsx:144 — invalid HTML, breaks anchor scroll.", "recommendation": "Rename Testimonials to id='testimonials'"},
+        {"title": "Prominent visual headings not marked up", "severity": "Medium", "description": "StatsGrid.tsx:150 'Scale Your Business' is a span; MainComponent.tsx:88 footer CTA is a div.", "recommendation": "Promote both to <h2>"},
+        {"title": "Short/generic titles", "severity": "Medium", "description": "/blog 13 chars, /careers 16, /branding 18.", "recommendation": "Expand to keyword-rich 30-60 chars"},
+        {"title": "Missing OG/Twitter images on legal + branding pages", "severity": "Medium", "description": "privacy-policy, terms-of-service, work-policy, branding have no image tags.", "recommendation": "Add shared meta-banner.png; upgrade branding to summary_large_image"},
+        {"title": "Heading skip H1->H3 on author/tag pages", "severity": "Low", "description": "author/[name].tsx:145,177; tag/[tag].tsx:141,173.", "recommendation": "Add an H2 section label"},
+        {"title": "Homepage meta description ~164 chars + variant mismatch", "severity": "Low", "description": "app/layout.tsx:23-24 vs OG/Twitter :58,77.", "recommendation": "Trim to <=160 and align"}
+      ]
+    },
+    {
+      "name": "Schema / Structured Data",
+      "score": 82,
+      "weight": 10,
+      "what_works": [
+        "Site-wide Organization, WebSite (+SearchAction), ProfessionalService/LocalBusiness",
+        "BlogPosting + BreadcrumbList, Blog listing, CollectionPage (author/tag), FAQPage, careers ItemList + Breadcrumb",
+        "Best-in-class JobPosting: validThrough, employmentType enum, baseSalary MonetaryAmount, directApply"
+      ],
+      "findings": [
+        {"title": "NAP conflict: MA entity vs NYC JobPosting", "severity": "High", "description": "app/layout.tsx:169-175 (Cambridge MA) vs pages/careers/[slug].tsx:124-132 (New York NY).", "recommendation": "Reconcile HQ; add NYC as distinct location or fix job location"},
+        {"title": "foundingDate 2019 vs 2024", "severity": "Medium", "description": "app/layout.tsx:190,261 vs llms.txt:16.", "recommendation": "Align to correct year"},
+        {"title": "Blog-listing publisher.logo uses social banner", "severity": "Medium", "description": "pages/blog.tsx:238-241 uses meta-banner.png (1200x630) with no dimensions.", "recommendation": "Use vierra-logo.png (464x188)"},
+        {"title": "Homepage has no page-level schema", "severity": "Medium", "description": "app/page.tsx inherits site-wide only.", "recommendation": "Add Service/OfferCatalog enumerating services"},
+        {"title": "Author pages use CollectionPage not ProfilePage", "severity": "Medium", "description": "pages/blog/author/[name].tsx:70-119.", "recommendation": "Wrap author in ProfilePage -> Person"},
+        {"title": "LocalBusiness type risks local-pack mismatch", "severity": "Low", "description": "National B2B agency modeled as LocalBusiness with storefront signals.", "recommendation": "Consider Organization + ProfessionalService only"}
+      ]
+    },
+    {
+      "name": "Performance (CWV)",
+      "score": 70,
+      "weight": 10,
+      "what_works": [
+        "WebGL code-split via dynamic ssr:false; three.js out of initial bundle",
+        "Reduced-motion respected across animated components",
+        "Onboarding refactor replaces WebGL step-models with lighter DOM/SVG animations",
+        "AVIF/WebP; preconnect/dns-prefetch hints; hero H1 paints without opacity fade to protect LCP"
+      ],
+      "findings": [
+        {"title": "Entire homepage is 'use client'", "severity": "Medium", "description": "app/page.tsx:1 — whole tree hydrates, inflating JS/INP around LCP.", "recommendation": "Keep page a Server Component; push 'use client' to interactive leaves"},
+        {"title": "Pervasive opacity:0-until-animated pattern", "severity": "Medium", "description": "whileInView/initial=hidden across sections; hydration failure or no-JS yields blank page.", "recommendation": "Default-visible for reduced-motion/no-JS; add resilience"},
+        {"title": "No measured LCP/INP/CLS", "severity": "Medium", "description": "No field or lab data captured.", "recommendation": "Run Lighthouse + pull CrUX after deploy; validate mobile INP"},
+        {"title": "Broken Timeline import may throw client-side", "severity": "High", "description": "Until fixed, can degrade UX/CWV.", "recommendation": "Fix import before merge"}
+      ]
+    },
+    {
+      "name": "AI Search Readiness (GEO)",
+      "score": 73,
+      "weight": 10,
+      "what_works": [
+        "llms.txt present with org/services/contact/sitemap/crawl guidance",
+        "AI crawlers explicitly allowed in robots.txt",
+        "FAQPage schema + <details> keep answers in DOM (highly citable)",
+        "Markdown mirror (content/md via /api/md) gives clean LLM text",
+        "sr-only 'About Vierra' summary is a quotable definition"
+      ],
+      "findings": [
+        {"title": "llms.txt stale and off-message", "severity": "High", "description": "public/llms.txt:6,16,29 — 'Guaranteed Leads', 'Founded: 2024'. This is the file AI engines cite.", "recommendation": "Update to match site positioning and correct facts"},
+        {"title": "Client-rotated homepage content not fully in DOM", "severity": "Medium", "description": "Channel tabs, testimonials, stats rotate via JS.", "recommendation": "Render all variants for full AI snapshot"},
+        {"title": "Thin case-studies block reduces citable proof", "severity": "Medium", "description": "CaseStudies.tsx:20-64 'Coming Soon'.", "recommendation": "Publish real quotable results"}
+      ]
+    },
+    {
+      "name": "Images",
+      "score": 88,
+      "weight": 5,
+      "what_works": [
+        "All 30 homepage images carry alt (0 missing); decorative correctly alt='' aria-hidden",
+        "WebGL BrandSphere given role='img' aria-label text alternative",
+        "AVIF/WebP via Next Image; qualities:[80] declared"
+      ],
+      "findings": [
+        {"title": "Per-post/page OG images all generic banner", "severity": "Low", "description": "pages/blog/[slug].tsx:150.", "recommendation": "Generate per-post OG images"}
+      ]
+    }
+  ],
+  "action_plan": {
+    "phases": [
+      {"name": "Phase 1: Critical Fixes (before merging redesign)", "timeframe": "Week 1", "items": ["Fix broken Timeline.tsx dynamic import", "Rename duplicate id='cases'", "Wrap all primary content in <main>", "Reconcile founding year 2019 vs 2024"]},
+      {"name": "Phase 2: High-Impact Improvements", "timeframe": "Weeks 2-3", "items": ["Resolve NAP location conflict (MA vs NYC)", "Fix split-brand across llms.txt/manifest/markdown", "Render all client-rotated variants in DOM", "Promote visual headings to <h2>", "Replace 'Coming Soon' case-studies with real results", "Lengthen short titles", "Add OG/Twitter images to legal+branding", "Run Lighthouse + pull CrUX"]},
+      {"name": "Phase 3: Content & Authority", "timeframe": "Month 2", "items": ["Enrich author pages + ProfilePage schema", "Add Service/OfferCatalog homepage schema", "Fix blog-listing publisher logo", "Wire /blog search or remove SearchAction", "Expand FAQ to 12-15", "Consider dropping bare LocalBusiness type", "Per-post OG images", "Refactor homepage to Server Component + client leaves"]},
+      {"name": "Phase 4: Monitoring & Iteration", "timeframe": "Ongoing", "items": ["Configure Google APIs (GSC/CrUX/GA4) + DataForSEO", "Add noscript/hydration-failure fallback", "Re-baseline audit after redesign ships", "Add X-Frame-Options header"]}
+    ]
+  },
+  "artifacts": {
+    "findings_dir": "findings/",
+    "screenshots_dir": "screenshots/",
+    "full_report": "FULL-AUDIT-REPORT.md",
+    "action_plan": "ACTION-PLAN.md",
+    "specialist_reports": {
+      "geo_aeo": "findings/geo-aeo.md",
+      "local": "findings/local.md",
+      "sxo": "findings/sxo.md",
+      "backlinks": "findings/backlinks.md",
+      "content_clusters": "findings/content-clusters.md",
+      "copy_feedback": "findings/copy-feedback.md"
+    },
+    "specialist_scores": {
+      "citability_geo_aeo": 58,
+      "sxo_gap": 46,
+      "persona_skeptical_cfo": 36
+    }
+  }
+}
