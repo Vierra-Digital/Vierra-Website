@@ -160,7 +160,7 @@ export default function HomeClient() {
               >
                 Risk-Averse
               </span>{" "}
-              Guaranteed Leads For Your Business
+              Lead Engine For Your Business
             </motion.h1>
 
             <motion.p variants={ctaVariants} className={`text-[#9BAFC3] text-lg mb-6 ${inter.className}`}>
@@ -173,7 +173,7 @@ export default function HomeClient() {
               <h2>About Vierra</h2>
               <p>
                 Vierra is a digital marketing and lead generation platform that helps businesses 
-                increase ROI, leads, and conversions through guaranteed lead generation services. 
+                increase ROI, leads, and conversions through risk-averse, results-based lead generation services. 
                 Our application provides case-study-proven, results-based marketing solutions to 
                 help businesses scale efficiently, optimize ad spending, and fill their sales 
                 calendars with qualified leads. We work closely with each client to deliver 
@@ -215,7 +215,7 @@ export default function HomeClient() {
             <motion.div initial={{ y: 0 }} animate={{ y: [0, -10, 0] }} transition={heroImageTransition}>
               <Image
                 src="/assets/image1.png"
-                alt="Vierra guaranteed lead generation platform for scaling businesses"
+                alt="Vierra risk-averse lead generation platform for scaling businesses"
                 width={750}
                 height={685}
                 priority

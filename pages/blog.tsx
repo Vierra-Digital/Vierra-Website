@@ -87,6 +87,12 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
     // older posts from the index). Infinite scroll still paginates on
     // filter/search. getBlogCatalog caps the catalog at 90, so this is bounded.
     const [visibleCount, setVisibleCount] = useState(latestPosts.length || 9);
+    // Hydrate the search box from the URL (?search=) so the WebSite SearchAction
+    // structured-data target (/blog?search={term}) actually applies the query.
+    useEffect(() => {
+        const q = new URLSearchParams(window.location.search).get("search");
+        if (q) setSearchQuery(q);
+    }, []);
     const batchSize = 9;
     const sentinelRef = useRef<HTMLDivElement | null>(null);
     const filterInitialized = useRef(false);
@@ -245,7 +251,9 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                                 name: "Vierra Digital",
                                 logo: {
                                     "@type": "ImageObject",
-                                    url: "https://vierradev.com/assets/meta-banner.png",
+                                    url: "https://vierradev.com/assets/vierra-logo.png",
+                                    width: 464,
+                                    height: 188,
                                 },
                             },
                         })),

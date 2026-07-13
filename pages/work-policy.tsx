@@ -103,7 +103,10 @@ const WorkPolicyPage: React.FC = () => {
         <meta property="og:description" content="Vierra Digital Work Policy. Learn about our work standards and processes." />
         <meta property="og:url" content="https://vierradev.com/work-policy" />
         <meta property="og:type" content="website" />
-        <meta name="twitter:card" content="summary" />
+        <meta property="og:site_name" content="Vierra Digital" />
+        <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="https://vierradev.com/assets/meta-banner.png" />
         <meta name="twitter:title" content="Vierra | Work Policy" />
         <meta name="twitter:description" content="Vierra Digital Work Policy. Learn about our work standards and processes." />
       </Head>

@@ -141,7 +141,10 @@ const BrandingPage: React.FC = () => {
         <meta property="og:description" content="Logo styles, colors, gradients, and typography that make up the Vierra visual identity." />
         <meta property="og:url" content="https://vierradev.com/branding" />
         <meta property="og:type" content="website" />
-        <meta name="twitter:card" content="summary" />
+        <meta property="og:site_name" content="Vierra Digital" />
+        <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="https://vierradev.com/assets/meta-banner.png" />
         <meta name="twitter:title" content="Vierra | Brand Kit" />
         <meta name="twitter:description" content="Logo styles, colors, gradients, and typography that make up the Vierra visual identity." />
       </Head>

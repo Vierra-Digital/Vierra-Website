@@ -103,7 +103,10 @@ const PrivacyPolicyPage: React.FC = () => {
         <meta property="og:description" content="Vierra Digital Privacy Policy. Learn how we collect, use, and protect your personal information." />
         <meta property="og:url" content="https://vierradev.com/privacy-policy" />
         <meta property="og:type" content="website" />
-        <meta name="twitter:card" content="summary" />
+        <meta property="og:site_name" content="Vierra Digital" />
+        <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="https://vierradev.com/assets/meta-banner.png" />
         <meta name="twitter:title" content="Vierra | Privacy Policy" />
         <meta name="twitter:description" content="Vierra Digital Privacy Policy. Learn how we collect, use, and protect your personal information." />
       </Head>

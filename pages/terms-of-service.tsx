@@ -111,7 +111,10 @@ const TermsOfServicePage: React.FC = () => {
         <meta property="og:description" content="Vierra Digital Terms of Service. Read our terms and conditions for using our services." />
         <meta property="og:url" content="https://vierradev.com/terms-of-service" />
         <meta property="og:type" content="website" />
-        <meta name="twitter:card" content="summary" />
+        <meta property="og:site_name" content="Vierra Digital" />
+        <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="https://vierradev.com/assets/meta-banner.png" />
         <meta name="twitter:title" content="Vierra | Terms of Service" />
         <meta name="twitter:description" content="Vierra Digital Terms of Service. Read our terms and conditions for using our services." />
       </Head>

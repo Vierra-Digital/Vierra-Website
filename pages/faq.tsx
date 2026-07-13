@@ -14,7 +14,7 @@ const inter = Inter({ subsets: ['latin'] });
 const CANONICAL = 'https://vierradev.com/faq';
 const META_TITLE = 'Vierra | Frequently Asked Questions';
 const META_DESCRIPTION =
-  'Answers to common questions about Vierra Digital — what we do, how our risk-averse, guaranteed lead generation works, who we work with, pricing, and how to get started.';
+  'Answers to common questions about Vierra Digital — what we do, how our risk-averse, results-based lead generation works, who we work with, pricing, and how to get started.';
 
 const FaqPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -53,7 +53,7 @@ const FaqPage: React.FC = () => {
         <meta name="description" content={META_DESCRIPTION} />
         <meta
           name="keywords"
-          content="Vierra FAQ, lead generation questions, digital marketing agency FAQ, guaranteed leads, how Vierra works, Vierra Digital"
+          content="Vierra FAQ, lead generation questions, digital marketing agency FAQ, risk-averse lead generation, how Vierra works, Vierra Digital"
         />
         <meta name="robots" content="index, follow" />
         <link rel="canonical" href={CANONICAL} />

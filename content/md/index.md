@@ -1,22 +1,24 @@
 ---
-title: "Vierra — Risk-Averse, Guaranteed Leads For Your Business"
-description: "Vierra is a digital marketing and lead generation platform that helps businesses increase ROI, leads, and conversions through guaranteed, case-study-proven lead generation services."
+title: "Vierra: Risk-Averse Lead Engine For Your Business"
+description: "Vierra is a B2B lead generation platform that helps businesses increase ROI, leads, and conversions through risk-averse, case-study-proven lead generation services."
 source: https://vierradev.com
 ---
 
-# Risk-Averse, Guaranteed Leads For Your Business
+# Risk-Averse Lead Engine For Your Business
 
-Scale your business effortlessly. Fill in your sales calendar and eliminate risky marketing investments.
+Scale your business effortlessly. Fill your sales calendar with qualified leads and eliminate risky marketing investments.
 
 ## About Vierra
 
-Vierra is a digital marketing and lead generation platform that helps businesses increase ROI, leads, and conversions through guaranteed lead generation services. Our application provides case-study-proven, results-based marketing solutions to help businesses scale efficiently, optimize ad spending, and fill their sales calendars with qualified leads. We work closely with each client to deliver professional digital marketing services that eliminate risky marketing investments and maximize return on advertising spend.
+Vierra is a B2B lead generation platform that helps businesses increase ROI, leads, and conversions through risk-averse, results-based lead generation. Our case-study-proven systems help businesses scale efficiently, optimize ad spending, and fill their sales calendars with qualified leads. Headquartered in Cambridge, MA with an office in New York, NY, and founded in 2019, we work closely with each client to maximize return on advertising spend.
 
 ## Trusted By Our Partners
 
 - Isenberg School of Management (UMass)
 - Iron & Water Co.
-- HappyStack
+- Granite Logistics
+- The Around Hub
+- Qigong Infused Yoga
 - Somerville Dental Associates
 
 ## Business Solutions
@@ -37,7 +39,7 @@ Automate client and partner acquisition with our case study-driven systems. Lead
 
 ## Testimonials
 
-Trusted by clients including Salon Renee, Somerville Dental Associates, and more — with results shared by Deanna Mazzeo, Hannah Lowney, and Nowfal Ebrahim.
+Trusted by clients including Somerville Dental Associates, Salon Renee, Air-Gen, and ezML, with results shared by Deanna Mazzeo, Hannah Lowney, and Alexander Lombardi.
 
 ## Team
 
