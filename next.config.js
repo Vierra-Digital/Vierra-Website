@@ -2,6 +2,12 @@ const nextConfig = {
   reactStrictMode: true,
   compress: true,
   poweredByHeader: false,
+  // Tree-shake heavy barrel-import libraries so importing one symbol doesn't pull
+  // the whole package into the client bundle. react-icons (30 files) and recharts
+  // aren't in Next's default optimize list, so this is a real bundle/LCP/INP win.
+  experimental: {
+    optimizePackageImports: ['react-icons', 'framer-motion', '@react-three/drei', 'recharts'],
+  },
   async redirects() {
     return [
       {
@@ -23,6 +29,8 @@ const nextConfig = {
     formats: ['image/avif', 'image/webp'],
     // Quality levels used via <Image quality={...} /> must be declared (required in Next 16).
     qualities: [80],
+    // Cache optimized image variants for 30 days to cut repeat re-optimization work.
+    minimumCacheTTL: 2592000,
     remotePatterns: [
       {
         protocol: 'https',
