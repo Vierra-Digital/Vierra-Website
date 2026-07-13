@@ -77,10 +77,10 @@ export default function AuthorPage({ authorName, posts }: AuthorPageProps) {
         dangerouslySetInnerHTML={{
           __html: JSON.stringify({
             "@context": "https://schema.org",
-            "@type": "CollectionPage",
+            "@type": "ProfilePage",
             name: `Author: ${authorName}`,
             url: pageUrl,
-            author: {
+            mainEntity: {
               "@type": "Person",
               name: authorName,
               url: pageUrl,
