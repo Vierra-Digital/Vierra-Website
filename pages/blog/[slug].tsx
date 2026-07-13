@@ -439,6 +439,21 @@ export const getStaticPaths: GetStaticPaths = async () => {
     }
 };
 
+// Add native lazy-loading + async decoding to images inside CMS post bodies.
+// The first image is left eager (it may be the post's LCP element); every later
+// image defers until near the viewport, cutting bandwidth and CLS on long posts.
+// Images that already declare `loading` are left untouched.
+function addLazyImages(html: string): string {
+    if (!html) return html;
+    let seen = 0;
+    return html.replace(/<img\b[^>]*>/gi, (tag) => {
+        seen += 1;
+        if (seen === 1) return tag;
+        if (/\bloading\s*=/i.test(tag)) return tag;
+        return tag.replace(/<img\b/i, '<img loading="lazy" decoding="async"');
+    });
+}
+
 export const getStaticProps: GetStaticProps = async ({ params }) => {
     const slug = params?.slug as string;
 
@@ -462,7 +477,7 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
         props: {
             title: post.title,
             description: post.description,
-            content: post.content,
+            content: addLazyImages(post.content),
             author: { name: post.author.name },
             publishedDate: post.published_date,
             updatedDate: post.updated_date,
