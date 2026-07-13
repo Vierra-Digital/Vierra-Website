@@ -122,7 +122,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.5,
     }));
   } catch (error) {
-    console.warn('Database unavailable during sitemap generation, skipping blog posts:', error);
+    // A DB failure here silently shrinks the sitemap (all blog + author URLs are
+    // dropped), which can read as mass deindexing to search engines. Log at error
+    // level so it surfaces in monitoring instead of passing unnoticed; the static
+    // pages below are still emitted so the sitemap never comes back empty.
+    console.error('Sitemap generation: DB unavailable — blog/author URLs omitted from this build:', error);
   }
 
   // Individual career role pages — static, generated from the careers data.
