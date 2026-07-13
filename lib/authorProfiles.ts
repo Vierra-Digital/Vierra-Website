@@ -33,7 +33,7 @@ const AUTHOR_PROFILES: Record<string, AuthorProfile> = {
     jobTitle: "Founder",
     image: "/assets/Team/Alex.png",
     // Draft — edit to taste. Kept factual (founder, 2019) so nothing is invented.
-    bio: "Alex Shick is the founder of Vierra Digital, which he launched in 2019 to help businesses scale with risk-averse, guaranteed lead generation. He writes about marketing systems, sales psychology, and what actually moves pipeline for growing companies.",
+    bio: "Alex Shick is the founder of Vierra Digital, which he launched in 2019 to help businesses scale with risk-averse, results-based lead generation. He writes about marketing systems, sales psychology, and what actually moves pipeline for growing companies.",
   },
   "Paul Wahba": {
     sameAs: ["https://www.linkedin.com/in/paul-wahba-2306b2279/"],

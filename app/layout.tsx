@@ -17,11 +17,11 @@ const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID
 export const metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Vierra | Risk-Averse Guaranteed Leads For Your Business",
+    default: "Vierra | Risk-Averse Lead Engine For Your Business",
     template: "Vierra | %s",
   },
   description:
-    "Scale your business effortlessly with guaranteed leads. Fill in your sales calendar and eliminate risky marketing investments. Professional digital marketing and lead generation services.",
+    "Risk-averse, results-based B2B lead generation. Fill your sales calendar with qualified leads and eliminate risky marketing investments.",
   keywords: [
     "marketing",
     "lead generation",
@@ -29,7 +29,7 @@ export const metadata = {
     "digital optimization",
     "business scaling",
     "risk-averse marketing",
-    "guaranteed leads",
+    "risk-averse lead generation",
     "digital marketing agency",
     "B2B lead generation",
     "sales pipeline",
@@ -46,9 +46,9 @@ export const metadata = {
   openGraph: {
     type: "website",
     url: SITE_URL,
-    title: "Vierra | Risk-Averse Guaranteed Leads For Your Business",
+    title: "Vierra | Risk-Averse Lead Engine For Your Business",
     description:
-      "Scale your business effortlessly with guaranteed leads. Fill in your sales calendar and eliminate risky marketing investments.",
+      "Risk-averse, results-based B2B lead generation. Fill your sales calendar and eliminate risky marketing investments.",
     siteName: "Vierra",
     locale: "en_US",
     images: [
@@ -56,7 +56,7 @@ export const metadata = {
         url: META_IMAGE_URL,
         width: 1200,
         height: 630,
-        alt: "Vierra - Risk-Averse Guaranteed Leads For Your Business",
+        alt: "Vierra - Risk-Averse Lead Engine For Your Business",
         type: "image/png",
       },
     ],
@@ -65,15 +65,15 @@ export const metadata = {
     card: "summary_large_image",
     creator: "@vierradev",
     site: "@vierradev",
-    title: "Vierra | Risk-Averse Guaranteed Leads For Your Business",
+    title: "Vierra | Risk-Averse Lead Engine For Your Business",
     description:
-      "Scale your business effortlessly with guaranteed leads. Fill in your sales calendar and eliminate risky marketing investments.",
+      "Risk-averse, results-based B2B lead generation. Fill your sales calendar and eliminate risky marketing investments.",
     images: [
       {
         url: META_IMAGE_URL,
         width: 1200,
         height: 630,
-        alt: "Vierra - Risk-Averse Guaranteed Leads For Your Business",
+        alt: "Vierra - Risk-Averse Lead Engine For Your Business",
       },
     ],
   },
@@ -137,9 +137,9 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://www.youtube.com" />
         <link rel="dns-prefetch" href="https://www.youtube-nocookie.com" />
 
-        <meta name="geo.region" content="US-NY" />
-        <meta name="geo.placename" content="New York, New York" />
-        <meta name="ICBM" content="40.7128, -74.0060" />
+        <meta name="geo.region" content="US-MA" />
+        <meta name="geo.placename" content="Cambridge, Massachusetts" />
+        <meta name="ICBM" content="42.3736, -71.1097" />
 
         <script
           id="schema-org-organization"
@@ -158,12 +158,12 @@ export default function RootLayout({
                 width: 464,
                 height: 188,
               },
-              description: "Scale your business effortlessly with guaranteed leads. Fill in your sales calendar and eliminate risky marketing investments.",
+              description: "Risk-averse, results-based B2B lead generation that fills your sales calendar with qualified leads and eliminates risky marketing investments.",
               address: {
                 "@type": "PostalAddress",
-                addressLocality: "New York",
-                addressRegion: "NY",
-                postalCode: "10001",
+                addressLocality: "Cambridge",
+                addressRegion: "MA",
+                postalCode: "02138",
                 addressCountry: "US",
               },
               contactPoint: {
@@ -186,6 +186,46 @@ export default function RootLayout({
                 minValue: 5,
                 maxValue: 10,
               },
+              location: [
+                {
+                  "@type": "Place",
+                  name: "Vierra Digital (Cambridge HQ)",
+                  address: {
+                    "@type": "PostalAddress",
+                    addressLocality: "Cambridge",
+                    addressRegion: "MA",
+                    postalCode: "02138",
+                    addressCountry: "US",
+                  },
+                  geo: {
+                    "@type": "GeoCoordinates",
+                    latitude: 42.3736,
+                    longitude: -71.1097,
+                  },
+                },
+                {
+                  "@type": "Place",
+                  name: "Vierra Digital (New York)",
+                  address: {
+                    "@type": "PostalAddress",
+                    addressLocality: "New York",
+                    addressRegion: "NY",
+                    addressCountry: "US",
+                  },
+                },
+              ],
+              hasOfferCatalog: {
+                "@type": "OfferCatalog",
+                name: "Vierra Services",
+                itemListElement: [
+                  { "@type": "Offer", itemOffered: { "@type": "Service", name: "B2B Lead Generation" } },
+                  { "@type": "Offer", itemOffered: { "@type": "Service", name: "Risk-Averse, Results-Based Lead Generation" } },
+                  { "@type": "Offer", itemOffered: { "@type": "Service", name: "Marketing Automation" } },
+                  { "@type": "Offer", itemOffered: { "@type": "Service", name: "Sales Pipeline Optimization" } },
+                  { "@type": "Offer", itemOffered: { "@type": "Service", name: "Ad Campaign Optimization" } },
+                  { "@type": "Offer", itemOffered: { "@type": "Service", name: "Appointment Setting" } },
+                ],
+              },
             }),
           }}
         />
@@ -199,7 +239,7 @@ export default function RootLayout({
               "@id": `${SITE_URL}/#website`,
               name: "Vierra",
               url: SITE_URL,
-              description: "Risk-Averse Guaranteed Leads For Your Business",
+              description: "Risk-Averse Lead Engine For Your Business",
               publisher: { "@id": `${SITE_URL}/#organization` },
               potentialAction: {
                 "@type": "SearchAction",
@@ -231,18 +271,18 @@ export default function RootLayout({
               },
               image: META_IMAGE_URL,
               description:
-                "B2B digital marketing and lead generation agency in New York, NY. Risk-averse, guaranteed leads for scaling businesses.",
+                "B2B digital marketing and lead generation agency headquartered in Cambridge, MA with an office in New York, NY. Risk-averse, results-based lead generation for scaling businesses.",
               address: {
                 "@type": "PostalAddress",
-                addressLocality: "New York",
-                addressRegion: "NY",
-                postalCode: "10001",
+                addressLocality: "Cambridge",
+                addressRegion: "MA",
+                postalCode: "02138",
                 addressCountry: "US",
               },
               geo: {
                 "@type": "GeoCoordinates",
-                latitude: 40.7128,
-                longitude: -74.0060,
+                latitude: 42.3736,
+                longitude: -71.1097,
               },
               telephone: "+1-339-333-0929",
               email: "alex@vierradev.com",
@@ -253,6 +293,7 @@ export default function RootLayout({
               },
               foundingDate: "2019",
               areaServed: [
+                { "@type": "City", name: "Cambridge" },
                 { "@type": "City", name: "New York" },
                 { "@type": "Country", name: "United States" },
               ],
