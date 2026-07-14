@@ -79,36 +79,19 @@ export default function TagPage({ tag, posts }: TagPageProps) {
             "@type": "CollectionPage",
             name: `Tag: ${tag}`,
             url: pageUrl,
-            publisher: {
-              "@type": "Organization",
-              name: "Vierra Digital",
-              logo: {
-                "@type": "ImageObject",
-                url: "https://vierradev.com/assets/vierra-logo.png",
-                width: 464,
-                height: 188,
-              },
-            },
+            publisher: { "@id": "https://vierradev.com/#organization" },
             hasPart: posts.map((p) => ({
               "@type": "BlogPosting",
               headline: p.title,
               url: `${baseUrl}/blog/${p.slug}`,
               datePublished: p.publishedDate,
+              dateModified: p.publishedDate,
               author: {
                 "@type": "Person",
                 name: p.author.name,
                 url: `${baseUrl}/blog/author/${encodeURIComponent(p.author.name)}`,
               },
-              publisher: {
-                "@type": "Organization",
-                name: "Vierra Digital",
-                logo: {
-                  "@type": "ImageObject",
-                  url: "https://vierradev.com/assets/vierra-logo.png",
-                  width: 464,
-                  height: 188,
-                },
-              },
+              publisher: { "@id": "https://vierradev.com/#organization" },
             })),
           }),
         }}

@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { track } from "@/lib/track";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiX, FiArrowLeft, FiArrowRight } from "react-icons/fi";
@@ -75,6 +76,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
       setFormData(EMPTY_FORM);
       setSubmitted(false);
       setSubmitting(false);
+      track("lead_form_open");
     }
   }, [isOpen]);
 
@@ -105,7 +107,12 @@ export function Modal({ isOpen, onClose }: ModalProps) {
     !!formData.desiredRevenue.trim() &&
     desiredValid;
 
-  const nextStep = () => setStep((s) => Math.min(TOTAL_STEPS, s + 1));
+  const nextStep = () =>
+    setStep((s) => {
+      const next = Math.min(TOTAL_STEPS, s + 1);
+      if (next !== s) track("lead_form_step", { step: next });
+      return next;
+    });
   const prevStep = () => setStep((s) => Math.max(1, s - 1));
 
   const handleSubmit = async () => {
@@ -122,6 +129,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
         return;
       }
       setSubmitted(true);
+      track("lead_form_submit");
     } catch (error) {
       console.error("Error submitting form:", error);
       alert("An error occurred. Please try again.");

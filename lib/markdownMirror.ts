@@ -282,7 +282,7 @@ export async function getLlmsTxt(): Promise<string> {
     "",
     "- Organization: Vierra Digital LLC",
     "- Type: B2B digital marketing and lead generation agency",
-    "- Headquarters: Cambridge, MA 02138, United States",
+    "- Headquarters: 3 Ashland Street, Medford, MA 02155, United States",
     "- Office: New York, NY, United States",
     "- Founded: 2019",
     "- Contact: alex@vierradev.com | +1-339-333-0929",
