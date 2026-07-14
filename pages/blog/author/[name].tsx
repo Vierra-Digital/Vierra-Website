@@ -142,6 +142,7 @@ export default function AuthorPage({ authorName, posts }: AuthorPageProps) {
           </header>
         </div>
 
+        <main>
         {/* Author bio — below the header, on the light band above the posts grid */}
         {profile.bio && (
           <div className="bg-[#F3F3F3]">
@@ -229,6 +230,7 @@ export default function AuthorPage({ authorName, posts }: AuthorPageProps) {
             )}
           </div>
         </div>
+        </main>
         <Footer />
       </div>
     </>
@@ -270,7 +272,7 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
           tag: p.tag ?? null,
         })),
       },
-      revalidate: 60,
+      revalidate: 600,
     }
   } catch (error) {
     // Transient DB failure — rethrow (non-cached 500 + retry) instead of caching a 404.

@@ -5,7 +5,7 @@
 // reliably and never "fade" — except TAM Sort & Mining, which reuses the real
 // WebGL Brand Universe sphere. Each animation is designed to fill its parent.
 import { useEffect, useRef, useState } from "react"
-import { motion, AnimatePresence, useSpring } from "framer-motion"
+import { motion, AnimatePresence, useSpring, useInView } from "framer-motion"
 import dynamic from "next/dynamic"
 import { inter } from "@/lib/fonts";
 import { SiGmail } from "react-icons/si"
@@ -415,9 +415,17 @@ function IcpResearchAnim() {
 /* 3 — TAM Sorting & Mining: dense logo cloud, nudged down so it sits centered
    in the stage below the docked title. */
 function TamMiningAnim() {
+  // Gate the WebGL sphere two ways (mirrors BrandSphere):
+  //  - `active` (live in-view) → frameloop only runs on screen, not continuously.
+  //  - `shouldMount` (latched, ~800px early) → the three.js Canvas initializes
+  //    just before it scrolls into view, keeping its heavy boot off the initial
+  //    load path with no visible pop-in.
+  const ref = useRef<HTMLDivElement>(null)
+  const inView = useInView(ref, { amount: 0.15 })
+  const shouldMount = useInView(ref, { once: true, margin: "800px" })
   return (
-    <div className="absolute inset-x-0 bottom-0 top-[9%]">
-      <TamSphere3D />
+    <div ref={ref} className="absolute inset-x-0 bottom-0 top-[9%]">
+      {shouldMount && <TamSphere3D active={inView} />}
     </div>
   )
 }

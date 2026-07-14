@@ -31,8 +31,16 @@ html::-webkit-scrollbar {
   to { opacity: 1; transform: translateY(0); }
 }
 .hero-reveal {
-  animation: hero-reveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.28s both;
+  animation: hero-reveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+/* Stagger delays matching the old framer heroChild cascade (delayChildren 0.12 +
+   0.16 per child) so eyebrow → h1 → subtitle → CTA reveal in sequence. Every
+   above-fold hero element is CSS-driven (not framer-gated) so whichever one
+   Chrome picks as the LCP element paints from SSR HTML, not after hydration. */
+.hero-reveal-d1 { animation-delay: 0.12s; }
+.hero-reveal-d2 { animation-delay: 0.28s; }
+.hero-reveal-d3 { animation-delay: 0.44s; }
+.hero-reveal-d4 { animation-delay: 0.60s; }
 @media (prefers-reduced-motion: reduce) {
   .hero-reveal { animation: none; }
 }

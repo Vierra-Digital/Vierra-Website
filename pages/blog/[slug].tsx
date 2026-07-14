@@ -249,6 +249,7 @@ const BlogViewPage = ({
                     </div>
                 </header>
                 </div>
+                <main>
                 <div id="view-section" className="bg-white px-6 md:px-8 lg:px-20">
                     <div id="blog-text" className="flex flex-col pb-16 md:pb-20 items-center pt-12 md:pt-16 lg:pt-20">
                         <div id="blog-text-content" className="w-full max-w-3xl">
@@ -413,6 +414,7 @@ const BlogViewPage = ({
                         </div>
                     </div>
                 )}
+            </main>
             </div>
             <Footer />
         </>
@@ -421,11 +423,15 @@ const BlogViewPage = ({
 
 export const getStaticPaths: GetStaticPaths = async () => {
     try {
-    // Prerender only the most recent posts at build time; older and newly-added
-    // posts are generated on-demand via fallback: 'blocking'. This keeps Netlify
-    // build time bounded as the post count grows (each prerender is a remote
-    // Supabase round-trip, serialized by connection_limit=1).
-    const slugs = await getAllSlugs(25);
+    // Prerender EVERY post at build time so each blog URL is static HTML served
+    // straight from the CDN — no on-demand DB round-trip on first hit. This is the
+    // fix for slow/unreliable indexing (Google was crawling posts that weren't
+    // pre-generated, hitting a cold Supabase round-trip serialized by
+    // connection_limit=1 → slow TTFB / 500s during crawl bursts) and for slow
+    // first loads. fallback:'blocking' stays only as a safety net for a post added
+    // between deploys (generated once, then ISR-cached); on-demand revalidation
+    // still fires on publish/edit.
+    const slugs = await getAllSlugs();
     const paths = slugs.map((slug) => ({ params: { slug } }));
 
     return { paths, fallback: 'blocking' };
@@ -488,8 +494,10 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
                 description: p.description,
             }))
         },
-        // 5-minute ISR window (on-demand revalidation still fires on publish/edit).
-        revalidate: 300,
+        // 1-hour ISR window. Posts are prerendered and on-demand revalidation
+        // fires on publish/edit, so a longer window is safe and sharply cuts
+        // background regeneration DB load during crawl bursts.
+        revalidate: 3600,
     };
     } catch (error) {
         // Transient DB failure (e.g. Supabase pooler saturation during a GSC crawl

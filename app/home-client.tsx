@@ -17,8 +17,8 @@ import { BusinessSolutions } from "@/components/BusinessSection/BusinessSolution
 // ssr:true) for SEO; the purely-decorative Integrations animation is client-only
 // and mounted on-scroll via <LazyMount>, so its timers never run off-screen.
 const Timeline = dynamic(() => import("@/components/BusinessSection/Timeline"))
-const CaseStudies = dynamic(() =>
-  import("@/components/WorkSection/CaseStudies").then((m) => m.CaseStudies)
+const ProductDemo = dynamic(() =>
+  import("@/components/WorkSection/ProductDemo").then((m) => m.ProductDemo)
 )
 const StatsGrid = dynamic(() =>
   import("@/components/BusinessSection/StatsGrid").then((m) => m.StatsGrid)
@@ -174,16 +174,15 @@ export default function HomeClient() {
           </motion.div>
 
           <motion.div initial="hidden" animate="visible" variants={heroVariants} className="flex flex-col items-center">
-            <motion.span
-              variants={heroChild}
-              className={`mb-6 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF] ${inter.className}`}
+            <span
+              className={`hero-reveal hero-reveal-d1 mb-6 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF] ${inter.className}`}
             >
               <Sparkles size={14} className="text-[#C99DFF]" />
               B2B Lead Generation
-            </motion.span>
+            </span>
             <h1
               style={{ fontSize: "clamp(2.5rem, 7.6vw, 6rem)" }}
-              className={`hero-reveal font-bold leading-[1.05] mb-6 text-[#EFF3FF] max-w-7xl ${bricolage.className}`}
+              className={`hero-reveal hero-reveal-d2 font-bold leading-[1.05] mb-6 text-[#EFF3FF] max-w-7xl ${bricolage.className}`}
             >
               <span
                 className="bg-clip-text text-transparent bg-[length:200%_auto]"
@@ -199,10 +198,10 @@ export default function HomeClient() {
               <br className="hidden md:block" /> For Your Business
             </h1>
 
-            <motion.p variants={heroChild} className={`text-white text-xl md:text-2xl mb-8 max-w-2xl ${inter.className}`}>
+            <p className={`hero-reveal hero-reveal-d3 text-white text-xl md:text-2xl mb-8 max-w-2xl ${inter.className}`}>
               Construct your funnel, research leads, capture signals, and schedule
               meetings autonomously.
-            </motion.p>
+            </p>
 
             
             <div className="sr-only">
@@ -222,6 +221,7 @@ export default function HomeClient() {
                     "@type": "WebPage",
                     "@id": "https://vierradev.com/#webpage",
                     url: "https://vierradev.com",
+                    isPartOf: { "@id": "https://vierradev.com/#website" },
                     speakable: {
                       "@type": "SpeakableSpecification",
                       cssSelector: ["h1", ".sr-only h2", ".sr-only p"],
@@ -231,7 +231,7 @@ export default function HomeClient() {
               />
             </div>
 
-            <motion.div variants={heroChild} className={`flex flex-col sm:flex-row items-center justify-center gap-4 ${inter.className}`}>
+            <div className={`hero-reveal hero-reveal-d4 flex flex-col sm:flex-row items-center justify-center gap-4 ${inter.className}`}>
               <Button
                 variant="secondary"
                 className="flex items-center gap-2 bg-[#701CC0] hover:bg-[#8F42FF] text-white rounded-md px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC0B8] transform transition-transform duration-300 hover:scale-105"
@@ -240,7 +240,7 @@ export default function HomeClient() {
                 Let&apos;s Talk
                 <ArrowUpRight className="w-4 h-4 arrow-bob" />
               </Button>
-            </motion.div>
+            </div>
           </motion.div>
         </section>
 
@@ -340,9 +340,9 @@ export default function HomeClient() {
       {/* 3. Timeline / how it works. */}
       <Timeline />
 
-      {/* 4. Why it works / case studies. Gradients into the GTM section below. */}
+      {/* 4. See It In Action — product demo. Gradients into the GTM section below. */}
       <section className="w-full bg-gradient-to-b from-[#010205] via-[#010205] to-[#18042A] text-white pb-32">
-        <CaseStudies />
+        <ProductDemo />
       </section>
 
       {/* 6. Features v2 — big boxes + pipeline. */}

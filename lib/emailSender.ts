@@ -6,13 +6,8 @@ interface EmailData {
   email: string;
   phoneNumber: string;
   website: string;
-  socialMedia: string;
   monthlyRevenue: string;
   desiredRevenue: string;
-  startTimeline: string;
-  agencyExperience: string;
-  uniqueTraits: string;
-  businessIssues: string;
 }
 
 const transporter = nodemailer.createTransport({
@@ -72,13 +67,8 @@ export async function sendEmail(data: EmailData): Promise<void> {
         <p><strong>Email:</strong> <a href="mailto:${data.email}" style="color: #8F42FF; text-decoration: none;">${data.email}</a></p>
         <p><strong>Phone Number:</strong> <a href="tel:${formattedPhoneNumber}" style="color: #8F42FF; text-decoration: none;">${formattedPhoneNumber}</a></p>
         <p><strong>Website:</strong> <a href="${data.website}" target="_blank" style="color: #8F42FF; text-decoration: none;">${data.website}</a></p>
-        <p><strong>Social Media:</strong> ${data.socialMedia}</p>
         <p><strong>Monthly Revenue:</strong> ${data.monthlyRevenue}</p>
         <p><strong>Desired Revenue:</strong> ${data.desiredRevenue}</p>
-        <p><strong>Start Timeline:</strong> ${data.startTimeline}</p>
-        <p><strong>Agency Experience:</strong> ${data.agencyExperience}</p>
-        <p><strong>Unique Traits:</strong> ${data.uniqueTraits}</p>
-        <p><strong>Business Issues:</strong> ${data.businessIssues}</p>
         <footer style="margin-top: 30px; text-align: center; border-top: 1px solid #701CC0; padding-top: 20px; color: #9BAFC3;">
           <p style="margin: 0;">© 2025 Vierra Digital Inc. All rights reserved.</p>
           <p style="margin: 0;">Visit us at <a href="https://vierradev.com" style="color: #8F42FF; text-decoration: none;">vierradev.com</a></p>

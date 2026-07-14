@@ -26,7 +26,10 @@ function CountUp({ value, duration = 1.6 }: { value: string; duration?: number }
   const suffix = parsed ? parsed[3] : ""
   const target = parsed ? parseFloat(numStr) : 0
   const decimals = numStr.includes(".") ? numStr.split(".")[1].length : 0
-  const [display, setDisplay] = useState(parsed ? `${prefix}${(0).toFixed(decimals)}${suffix}` : value)
+  // Initialize to the real value so the actual stat is in the SSR HTML — non-JS
+  // fetchers (AI answer engines, scrapers) previously saw "0%"/"$0M+". The
+  // count-up from 0 is a client-only enhancement the effect below (re)starts on view.
+  const [display, setDisplay] = useState(value)
   useEffect(() => {
     if (!parsed) {
       setDisplay(value)

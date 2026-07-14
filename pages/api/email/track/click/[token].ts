@@ -1,43 +1,11 @@
-import { createHash } from "crypto";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-
-function asToken(v: string | string[] | undefined) {
-  return Array.isArray(v) ? v[0] : v || "";
-}
-
-function hashIp(ip: string) {
-  if (!ip) return null;
-  return createHash("sha256").update(ip).digest("hex");
-}
+import { asToken, hashIp, isLikelySelfPreview, trackingClientIp } from "@/lib/api/emailTracking";
 
 function normalizeTarget(url: string) {
   if (!url) return "";
   if (/^https?:\/\//i.test(url)) return url;
   return `https://${url}`;
-}
-
-function getRequestOrigin(req: NextApiRequest) {
-  const proto = String(req.headers["x-forwarded-proto"] || "http");
-  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "");
-  return host ? `${proto}://${host}` : "";
-}
-
-function isLikelySelfPreview(req: NextApiRequest) {
-  const fetchSite = String(req.headers["sec-fetch-site"] || "").toLowerCase();
-  if (fetchSite === "same-origin") return true;
-
-  const referer = String(req.headers.referer || "");
-  if (!referer) return false;
-  const requestOrigin = getRequestOrigin(req);
-  if (!requestOrigin) return false;
-
-  try {
-    const refererUrl = new URL(referer);
-    return refererUrl.origin === requestOrigin && refererUrl.pathname.startsWith("/panel");
-  } catch {
-    return false;
-  }
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -62,17 +30,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (link.email_outbound_messages.tracking_enabled && !isLikelySelfPreview(req)) {
-    const ip =
-      String(req.headers["x-forwarded-for"] || "")
-        .split(",")[0]
-        .trim() || req.socket.remoteAddress || "";
     await prisma.emailTrackingEvent.create({
       data: {
         outbound_message_id: link.email_outbound_messages.id,
         tracking_link_id: link.id,
         event_type: "CLICK",
         recipient_email: typeof req.query.email === "string" ? req.query.email : null,
-        ip_hash: hashIp(ip),
+        ip_hash: hashIp(trackingClientIp(req)),
         user_agent: String(req.headers["user-agent"] || "").slice(0, 512) || null,
       },
     });

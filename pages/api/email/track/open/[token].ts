@@ -1,45 +1,13 @@
-import { createHash } from "crypto";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-
-function asToken(v: string | string[] | undefined) {
-  return Array.isArray(v) ? v[0] : v || "";
-}
+import { asToken, hashIp, isLikelySelfPreview, trackingClientIp } from "@/lib/api/emailTracking";
 
 function normalizeOpenToken(value: string) {
   return value.trim().replace(/\.gif$/i, "");
 }
 
-function hashIp(ip: string) {
-  if (!ip) return null;
-  return createHash("sha256").update(ip).digest("hex");
-}
-
 const ONE_PIXEL_GIF = Buffer.from("R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==", "base64");
 const DUPLICATE_OPEN_WINDOW_MS = 2_000;
-
-function getRequestOrigin(req: NextApiRequest) {
-  const proto = String(req.headers["x-forwarded-proto"] || "http");
-  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "");
-  return host ? `${proto}://${host}` : "";
-}
-
-function isLikelySelfPreview(req: NextApiRequest) {
-  const fetchSite = String(req.headers["sec-fetch-site"] || "").toLowerCase();
-  if (fetchSite === "same-origin") return true;
-
-  const referer = String(req.headers.referer || "");
-  if (!referer) return false;
-  const requestOrigin = getRequestOrigin(req);
-  if (!requestOrigin) return false;
-
-  try {
-    const refererUrl = new URL(referer);
-    return refererUrl.origin === requestOrigin && refererUrl.pathname.startsWith("/panel");
-  } catch {
-    return false;
-  }
-}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const token = normalizeOpenToken(asToken(req.query.token));
@@ -58,11 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return;
       }
 
-      const ip =
-        String(req.headers["x-forwarded-for"] || "")
-          .split(",")[0]
-          .trim() || req.socket.remoteAddress || "";
-      const ipHash = hashIp(ip);
+      const ipHash = hashIp(trackingClientIp(req));
       const recentDuplicate = await prisma.emailTrackingEvent.findFirst({
         where: {
           outbound_message_id: outbound.id,

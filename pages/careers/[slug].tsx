@@ -40,6 +40,10 @@ const DetailBlock: React.FC<{ title: string; items: string[] }> = ({ title, item
   </section>
 );
 
+// Stable fallback for JobPosting.datePosted — a fixed date, NOT new Date(), so
+// each deploy doesn't reset the posting date (which Google Jobs reads as a re-post).
+const DEFAULT_DATE_POSTED = '2026-06-01T00:00:00.000Z';
+
 // Map our employment labels to schema.org JobPosting employmentType values.
 const SCHEMA_EMPLOYMENT_TYPE: Record<JobRole['employmentType'], string> = {
   'Full-Time': 'FULL_TIME',
@@ -115,8 +119,9 @@ const RolePage: React.FC<{ role: JobRole; datePosted: string; validThrough: stri
     employmentType: SCHEMA_EMPLOYMENT_TYPE[role.employmentType],
     hiringOrganization: {
       '@type': 'Organization',
+      '@id': 'https://vierradev.com/#organization',
       name: 'Vierra Digital',
-      sameAs: 'https://vierradev.com',
+      url: 'https://vierradev.com',
       logo: 'https://vierradev.com/assets/vierra-logo.png',
     },
     // Roles are remote/hybrid, so we declare TELECOMMUTE + applicant location
@@ -232,7 +237,7 @@ const RolePage: React.FC<{ role: JobRole; datePosted: string; validThrough: stri
         </div>
 
         {/* Content */}
-        <div className="relative z-10 mx-auto max-w-5xl px-5 pb-24 pt-14 md:px-8">
+        <main className="relative z-10 mx-auto max-w-5xl px-5 pb-24 pt-14 md:px-8">
           <div className="space-y-6">
             <section className="rounded-[26px] border border-[#701CC0]/10 bg-white/90 p-6 shadow-[0_10px_40px_-18px_rgba(112,28,192,0.25)] ring-1 ring-black/[0.02] backdrop-blur-sm md:p-9">
               <h2 className={`text-xl md:text-2xl font-semibold tracking-tight text-[#1A1033] ${bricolage.className}`}>
@@ -279,7 +284,7 @@ const RolePage: React.FC<{ role: JobRole; datePosted: string; validThrough: stri
               </motion.button>
             </section>
           </div>
-        </div>
+        </main>
 
         <Footer />
       </div>
@@ -316,7 +321,7 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
   return {
     props: {
       role,
-      datePosted: now.toISOString(),
+      datePosted: role.datePosted ?? DEFAULT_DATE_POSTED,
       validThrough: validThrough.toISOString(),
     },
   };
