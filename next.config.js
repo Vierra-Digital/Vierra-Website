@@ -1,3 +1,9 @@
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  // Opt-in: only wraps the build when ANALYZE=true, so normal builds are unaffected.
+  enabled: process.env.ANALYZE === 'true',
+  openAnalyzer: false,
+});
+
 const nextConfig = {
   reactStrictMode: true,
   compress: true,
@@ -87,4 +93,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+module.exports = withBundleAnalyzer(nextConfig);

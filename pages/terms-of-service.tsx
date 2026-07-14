@@ -493,7 +493,8 @@ const TermsOfServicePage: React.FC = () => {
                     <div className="mt-2 rounded-2xl border border-[#701CC0]/15 bg-gradient-to-br from-[#701CC0]/[0.06] to-transparent p-6">
                       <p className="not-prose text-[#3A3352]">
                         <strong className="text-[#1A1033]">Vierra Digital LLC</strong><br />
-                        Cambridge, MA 02138<br />
+                        3 Ashland Street<br />
+                        Medford, MA 02155<br />
                         United States<br />
                         Phone: (+1) 339-333-0929<br />
                         <a href="mailto:business@vierradev.com">business@vierradev.com</a>

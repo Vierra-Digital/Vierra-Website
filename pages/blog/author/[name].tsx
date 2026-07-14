@@ -92,36 +92,19 @@ export default function AuthorPage({ authorName, posts }: AuthorPageProps) {
                 ? { "@type": "Organization", name: profile.company }
                 : { "@id": "https://vierradev.com/#organization" },
             },
-            publisher: {
-              "@type": "Organization",
-              name: "Vierra Digital",
-              logo: {
-                "@type": "ImageObject",
-                url: "https://vierradev.com/assets/vierra-logo.png",
-                width: 464,
-                height: 188,
-              },
-            },
+            publisher: { "@id": "https://vierradev.com/#organization" },
             hasPart: posts.map((p) => ({
               "@type": "BlogPosting",
               headline: p.title,
               url: `${baseUrl}/blog/${p.slug}`,
               datePublished: p.publishedDate,
+              dateModified: p.publishedDate,
               author: {
                 "@type": "Person",
                 name: authorName,
                 url: pageUrl,
               },
-              publisher: {
-                "@type": "Organization",
-                name: "Vierra Digital",
-                logo: {
-                  "@type": "ImageObject",
-                  url: "https://vierradev.com/assets/vierra-logo.png",
-                  width: 464,
-                  height: 188,
-                },
-              },
+              publisher: { "@id": "https://vierradev.com/#organization" },
             })),
           }),
         }}

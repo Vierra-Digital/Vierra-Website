@@ -6,7 +6,7 @@ import { HelpCircle, ChevronDown } from 'lucide-react';
 import { Header } from '@/components/Header';
 import Footer from '@/components/FooterSection/Footer';
 import { Modal } from '@/components/Modal';
-import { FAQ_ITEMS } from '@/lib/faq';
+import { FAQ_ITEMS, FAQ_LAST_UPDATED } from '@/lib/faq';
 
 const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
 const inter = Inter({ subsets: ['latin'] });
@@ -25,6 +25,7 @@ const FaqPage: React.FC = () => {
     '@type': 'FAQPage',
     '@id': `${CANONICAL}#faqpage`,
     url: CANONICAL,
+    dateModified: FAQ_LAST_UPDATED,
     mainEntity: FAQ_ITEMS.map((item) => ({
       '@type': 'Question',
       name: item.question,
@@ -76,6 +77,22 @@ const FaqPage: React.FC = () => {
         id="schema-org-breadcrumbs-faq"
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+      />
+      <script
+        id="schema-org-speakable-faq"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'WebPage',
+            '@id': 'https://vierradev.com/faq#webpage',
+            url: 'https://vierradev.com/faq',
+            speakable: {
+              '@type': 'SpeakableSpecification',
+              cssSelector: ['.faq-item summary', '.faq-answer'],
+            },
+          }),
+        }}
       />
 
       <div className={`relative min-h-screen bg-[#F3F3F3] text-[#2A2140] ${inter.className}`}>

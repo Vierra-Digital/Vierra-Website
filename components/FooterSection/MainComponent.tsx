@@ -4,6 +4,7 @@ import { ArrowUpRight } from "lucide-react";
 import CheckItem from "./CheckItem";
 import Footer from "./Footer";
 import { Modal } from "@/components/Modal";
+import { track } from "@/lib/track";
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
 const inter = Inter({ subsets: ["latin"] });
@@ -40,7 +41,7 @@ export function FooterSection() {
               <div className={`flex gap-5 mt-28 max-md:mt-10 max-sm:flex-col max-sm:mx-auto ${inter.className}`}>
                 <button
                   className="flex items-center justify-center gap-2 px-8 py-4 text-sm font-bold tracking-wide text-[#7A13D0] bg-white border-2 border-white rounded-[70px] transform transition-transform duration-300 hover:scale-105 max-sm:w-full"
-                  onClick={() => setIsModalOpen(true)}
+                  onClick={() => { track("cta_click", { location: "footer" }); setIsModalOpen(true); }}
                 >
                   Free Audit Call <ArrowUpRight className="w-5 h-5" />
                 </button>

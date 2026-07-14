@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react"
 import { Bricolage_Grotesque, Inter } from "next/font/google"
 import Image from "next/image"
+import Link from "next/link"
+import { track } from "@/lib/track"
 import { motion } from "framer-motion"
 import { ArrowUpRight } from "lucide-react"
 import dynamic from "next/dynamic"
@@ -172,21 +174,42 @@ export default function HomeClient() {
             <div className="sr-only">
               <h2>About Vierra</h2>
               <p>
-                Vierra is a digital marketing and lead generation platform that helps businesses 
-                increase ROI, leads, and conversions through risk-averse, results-based lead generation services. 
-                Our application provides case-study-proven, results-based marketing solutions to 
-                help businesses scale efficiently, optimize ad spending, and fill their sales 
-                calendars with qualified leads. We work closely with each client to deliver 
-                professional digital marketing services that eliminate risky marketing investments 
-                and maximize return on advertising spend.
+                Vierra is a B2B lead generation agency that runs on a risk-averse,
+                pay-after-results model instead of a fixed retainer. Founded in 2019 and
+                headquartered in Medford, MA with an office in New York, NY, Vierra ties
+                its fees to booked meetings and qualified pipeline rather than upfront ad
+                spend, so clients are not paying for activity that never turns into revenue.
+                Vierra builds the outreach systems, ad campaigns, and analytics that fill a
+                sales calendar with qualified leads, then optimizes toward what actually converts.
               </p>
+              <p>
+                Read the full breakdown:{" "}
+                <Link href="/blog/what-is-risk-averse-lead-generation-and-why-it-beats-paying-upfront">
+                  What Is Risk-Averse Lead Generation?
+                </Link>
+              </p>
+              <script
+                type="application/ld+json"
+                dangerouslySetInnerHTML={{
+                  __html: JSON.stringify({
+                    "@context": "https://schema.org",
+                    "@type": "WebPage",
+                    "@id": "https://vierradev.com/#webpage",
+                    url: "https://vierradev.com",
+                    speakable: {
+                      "@type": "SpeakableSpecification",
+                      cssSelector: ["h1", ".sr-only h2", ".sr-only p"],
+                    },
+                  }),
+                }}
+              />
             </div>
 
             <motion.div variants={ctaVariants} className={`flex flex-col sm:flex-row items-center gap-4 ${inter.className}`}>
               <Button
                 variant="secondary"
                 className="flex items-center gap-2 bg-[#701CC0] hover:bg-[#8F42FF] text-white rounded-full px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC0B8] transform transition-transform duration-300 hover:scale-105"
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => { track("cta_click", { location: "hero" }); setIsModalOpen(true); }}
               >
                 Free Audit Call
                 <ArrowUpRight className="w-4 h-4" />
