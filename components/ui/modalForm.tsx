@@ -209,7 +209,7 @@ export const ThemedSelect: React.FC<{
                 exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.14, ease: "easeOut" }}
                 style={{ position: "fixed", left: coords.left, top: coords.top, width: coords.width, zIndex: 300 }}
-                className="max-h-60 overflow-auto rounded-xl border border-gray-100 bg-white p-1.5 shadow-[0_16px_40px_-12px_rgba(26,16,51,0.3)]"
+                className="modal-scroll-area max-h-80 overflow-auto rounded-2xl border border-gray-200 bg-white p-1.5 shadow-[0_20px_50px_-16px_rgba(26,16,51,0.4)]"
               >
                 {options.map((o) => {
                   const active = o.value === value;
@@ -222,7 +222,7 @@ export const ThemedSelect: React.FC<{
                           setOpen(false);
                         }}
                         className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[15px] transition-colors ${
-                          active ? "bg-[#701CC0]/10 font-medium text-[#701CC0]" : "text-[#3A3352] hover:bg-gray-50"
+                          active ? "bg-[#701CC0]/10 font-medium text-[#701CC0]" : "text-[#3A3352] hover:bg-[#701CC0]/5 hover:text-[#701CC0]"
                         }`}
                       >
                         <span className="truncate">{o.label}</span>

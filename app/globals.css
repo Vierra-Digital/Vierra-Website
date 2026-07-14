@@ -33,6 +33,18 @@ html::-webkit-scrollbar {
 .hero-reveal {
   animation: hero-reveal 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+/* LCP-element variant (hero <h1>): slides in with a partial fade that starts at
+   0.35 opacity (NOT 0). Because the text is already painted/visible from the
+   first frame, Chrome credits LCP immediately and there's no NO_LCP trace error,
+   while still giving a visible fade + slide entrance. (Fading from 0 is what
+   delayed LCP and caused the intermittent NO_LCP errors.) */
+@keyframes hero-reveal-slide {
+  from { opacity: 0.35; transform: translateY(-34px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.hero-reveal-solid {
+  animation: hero-reveal-slide 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
 /* Stagger delays matching the old framer heroChild cascade (delayChildren 0.12 +
    0.16 per child) so eyebrow → h1 → subtitle → CTA reveal in sequence. Every
    above-fold hero element is CSS-driven (not framer-gated) so whichever one
@@ -42,7 +54,7 @@ html::-webkit-scrollbar {
 .hero-reveal-d3 { animation-delay: 0.44s; }
 .hero-reveal-d4 { animation-delay: 0.60s; }
 @media (prefers-reduced-motion: reduce) {
-  .hero-reveal { animation: none; }
+  .hero-reveal, .hero-reveal-solid { animation: none; }
 }
 
 /* Continuously nudging arrow (used on the footer "Free Audit Call" button). */
@@ -242,6 +254,18 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #8F42FF;
+}
+
+/* Modal body scroll area — hide the scrollbar entirely (overrides the global
+   custom scrollbar above). Scroll still works on short viewports. */
+.modal-scroll-area {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.modal-scroll-area::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 @layer base {
