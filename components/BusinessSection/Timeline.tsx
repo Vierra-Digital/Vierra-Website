@@ -1,155 +1,235 @@
+"use client"
+
 import { Bricolage_Grotesque, Figtree } from "next/font/google"
-import React, { useState, useEffect } from "react"
-import { motion } from "framer-motion"
+import { useRef, useState } from "react"
+import { motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion"
+import { OnboardingStepAnim, TamMiningAnim } from "./OnboardingSteps"
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
 const figtree = Figtree({ subsets: ["latin"] })
 
+// The onboarding journey, start to signed client. Each step's animation lives in
+// OnboardingSteps (index-matched); step 3 (TAM) uses the WebGL Brand sphere.
 const steps = [
   {
-    number: 1,
-    text: "Free evaluation call. We'll provide feedback on what to improve and see if you're a good fit to work with us.",
+    n: 1,
+    title: "Initial Meeting & Evaluation",
+    text: "We meet, map your goals, and see if we are compatible to work with each other. We only move forward if we're confident in filling your pipeline.",
   },
   {
-    number: 2,
-    text: "We'll onboard you. A full-scale breakdown of improvements, campaigns, and plans will be brought to your attention.",
+    n: 2,
+    title: "Onboard Onto Our Platform",
+    text: "Go through our onboarding module in under an hour. Connect inboxes, tools, and tell us more about your ICPs.",
   },
   {
-    number: 3,
-    text: "Leads will be generated. Campaigns will run, and you'll see an influx of leads signing up for sales calls.",
+    n: 3,
+    title: "Full Market & ICP Research",
+    text: "We research your entire market and lock in your exact ICP, profiling every account before any outreach.",
   },
   {
-    number: 4,
-    text: "Rinse and repeat. Our team will improve organic outreach and raise revenue, doubling your MRR.",
+    n: 4,
+    title: "TAM Sorting & Mining",
+    text: "We mine your total addressable market and sort it by ICP fit, surfacing only the accounts worth pursuing.",
+  },
+  {
+    n: 5,
+    title: "Campaign Launching",
+    text: "Multi-channel campaigns go live across email, LinkedIn, and SMS — coordinated and launched in sync.",
+  },
+  {
+    n: 6,
+    title: "Clients Signed Successfully",
+    text: "Qualified meetings convert into booked calls and signed clients — then we optimize every week to scale.",
   },
 ]
 
-const Timeline = () => {
-  const [activeStep, setActiveStep] = useState(-1)
+// The intro title holds until DOCK_END, then simply crossfades into the steps
+// (no upward slide) while the steps play out across the rest of the scroll.
+const DOCK_END = 0.18
 
-  useEffect(() => {
-    if (window.innerWidth < 1024) return
-    const handleScroll = () => {
-      const timelineSection = document.getElementById("timeline-section")
-      if (!timelineSection) return
-      const { offsetTop, offsetHeight } = timelineSection
-      const progress =
-        (window.scrollY - offsetTop) / (offsetHeight - window.innerHeight)
-      setActiveStep(Math.max(-1, Math.min(3, Math.floor(progress * 5) - 1)))
+const Timeline = () => {
+  const sectionRef = useRef<HTMLDivElement>(null)
+  const [active, setActive] = useState(0)
+  const [showIntro, setShowIntro] = useState(true)
+  const [dir, setDir] = useState(1) // scroll direction: 1 = forward, -1 = back
+  const activeRef = useRef(0)
+
+  // Scroll drives which step is shown; all opacity is state-driven via
+  // AnimatePresence so nothing sticks at a partial opacity mid-scroll.
+  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start start", "end end"] })
+
+  useMotionValueEvent(scrollYProgress, "change", (p) => {
+    setShowIntro(p < DOCK_END - 0.01)
+    const t = (p - DOCK_END) / (1 - DOCK_END)
+    const idx = Math.max(0, Math.min(steps.length - 1, Math.floor(t * steps.length)))
+    if (idx !== activeRef.current) {
+      setDir(idx > activeRef.current ? 1 : -1)
+      activeRef.current = idx
+      setActive(idx)
     }
-    window.addEventListener("scroll", handleScroll)
-    handleScroll()
-    return () => window.removeEventListener("scroll", handleScroll)
-  }, [])
+  })
+
+  const step = steps[active]
 
   return (
     <>
-      <div
-        id="timeline-section"
-        className="hidden lg:block relative h-[200vh] mx-[-1.5rem]"
-      >
-        <div className="bg-gradient-to-r from-[#010205] via-[#0c0415] to-[#19082d] text-white py-16 px-20 sticky top-0 h-[100vh] flex flex-col justify-center w-full overflow-hidden">
-          <h2
-            className={`${bricolage.className} text-5xl font-normal text-start mb-16`}
-          >
-            How Does It Work?
-          </h2>
-          <div className="h-[50vh] flex relative w-full justify-between items-center">
-            <div className="absolute top-1/2 left-0 right-0 h-4 bg-[#3E1F58] z-0" />
-            {steps.map((step, index) => (
-              <div key={index} className="relative w-1/4 text-center">
-                <div
-                  className={`absolute min-w-[25vw] w-full ${
-                    index % 2 === 0 ? "-top-36" : "top-24"
-                  } flex flex-row items-center gap-4 px-2 ${figtree.className}`}
-                >
-                  <motion.span
-                    className="text-6xl font-bold text-white"
-                    initial={{ opacity: 0, scale: 0.5 }}
-                    animate={{
-                      opacity: activeStep >= index ? 1 : 0,
-                      scale: activeStep >= index ? 1 : 0.5,
-                    }}
-                    transition={{
-                      duration: 0.8,
-                      type: "spring",
-                      stiffness: 100,
-                    }}
-                  >
-                    {step.number}
-                  </motion.span>
-                  <motion.p
-                    className="text-gray-200 text-lg max-w-[280px] leading-tight"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: activeStep >= index ? 1 : 0 }}
-                    transition={{ duration: 0.5, delay: 0.2 }}
-                  >
-                    {step.text}
-                  </motion.p>
-                </div>
+      {/* Desktop — scroll-locked stage. An intro header sits centered on screen,
+          then docks to the top while its text morphs into the active step; the
+          step's animation plays in the band beneath it. */}
+      <div id="timeline-section" ref={sectionRef} className="relative mx-[-1.5rem] hidden h-[560vh] lg:block">
+        <div className="sticky top-0 h-screen w-full overflow-hidden bg-[#0A0414] text-white">
+          {/* Soft purple glow behind the stage — one clean highlight, not a busy gradient. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 top-1/2 h-[70vmax] w-[70vmax] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-70 blur-[130px]"
+            style={{ background: "radial-gradient(circle, rgba(122,19,208,0.28), rgba(122,19,208,0) 70%)" }}
+          />
+          {/* Fade top + bottom edges so the section blends into its neighbors. */}
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 z-0 h-32 bg-gradient-to-b from-[#010205] to-transparent" />
+          <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-32 bg-gradient-to-t from-[#010205] to-transparent" />
+
+          {/* Animation stage — the active step's animation, centered in the band
+              below the docked title. TAM uses the WebGL sphere; it only mounts
+              when active so its canvas isn't rendered behind the other steps. */}
+          <div className="absolute inset-x-0 top-[27%] bottom-[14%] z-10 flex items-center justify-center">
+            <AnimatePresence mode="wait">
+              {!showIntro && (
                 <motion.div
-                  className="relative z-10 w-12 h-12 bg-[#7A13D0] left-[9.7rem] rounded-full flex items-center justify-center"
-                  initial={{ opacity: 0, scale: 0 }}
-                  animate={{
-                    opacity: activeStep >= index ? 1 : 0,
-                    scale: activeStep >= index ? 1 : 0,
-                  }}
-                  transition={{ duration: 0.5 }}
+                  key={active === 3 ? "tam" : `anim-${active}`}
+                  className="absolute inset-0"
+                  initial={{ opacity: 0, scale: 0.97, y: dir > 0 ? 40 : -40 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.97, y: dir > 0 ? -40 : 40 }}
+                  transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
                 >
-                  <div className="w-8 h-8 bg-[#010205] rounded-full flex items-center justify-center">
-                    <div className="w-4 h-4 bg-[#FFFFFF] rounded-full" />
-                  </div>
+                  {active === 3 ? <TamMiningAnim /> : <OnboardingStepAnim step={active} />}
                 </motion.div>
-                <motion.div
-                  className={`absolute ${
-                    index % 2 === 1 ? "top-[2.8rem]" : "bottom-[2.8rem]"
-                  } left-[11rem] -translate-x-1/4 w-2 bg-[#7A13D0]`}
-                  initial={{ height: 0 }}
-                  animate={{ height: activeStep >= index ? "2.5rem" : 0 }}
-                  transition={{ duration: 0.5 }}
-                />
-              </div>
-            ))}
+              )}
+            </AnimatePresence>
           </div>
-        </div>
-      </div>
-      <div className="lg:hidden bg-gradient-to-b from-[#010205] via-[#0c0415] to-[#19082d] text-white py-16 w-screen -mx-[1.5rem] relative overflow-hidden">
-        <div className="px-4">
-          <h2
-            className={`${bricolage.className} text-4xl font-normal text-start mb-16`}
-          >
-            How Does It Work?
-          </h2>
-          <div className="flex flex-col items-center relative w-full">
-            <div className="absolute left-1/2 -translate-x-1/2 w-2 h-full bg-[#3E1F58] z-0" />
-            {steps.map((step, index) => (
+
+          {/* Intro — centered hero; simply fades out into the steps (no slide). */}
+          <AnimatePresence>
+            {showIntro && (
               <motion.div
-                key={index}
-                className="relative flex flex-col items-center w-full mb-12 last:mb-0"
-                initial={{ opacity: 0, y: 50 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                viewport={{ once: true, amount: 0.5 }}
+                key="intro"
+                className="absolute inset-x-0 top-1/2 z-20 -translate-y-1/2 px-8"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
               >
-                <div className="relative z-10 w-12 h-12 bg-[#7A13D0] rounded-full flex items-center justify-center">
-                  <div className="w-8 h-8 bg-[#010205] rounded-full flex items-center justify-center">
-                    <div className="w-4 h-4 bg-[#FFFFFF] rounded-full" />
-                  </div>
-                </div>
-                <div className="text-center mt-6 px-6 relative z-10">
-                  <span className="text-5xl font-bold text-white">
-                    {step.number}
+                <div className="mx-auto max-w-4xl text-center">
+                  <span className={`${figtree.className} text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]`}>
+                    Getting Started
                   </span>
-                  <p className="text-gray-200 text-base leading-tight mt-2 p-4 rounded-lg">
-                    {step.text}
+                  <h2
+                    style={{ fontSize: "clamp(1.75rem, 6vw, 3.75rem)" }}
+                    className={`${bricolage.className} mt-4 whitespace-nowrap font-bold leading-[1.05] text-[#EFF3FF]`}
+                  >
+                    Triple Your MRR In Under 6 Steps
+                  </h2>
+                  <p className={`${figtree.className} mx-auto mt-5 max-w-xl text-lg text-[#B9A9D6]`}>
+                    From the first call to a calendar exploding with qualified leads. Here&apos;s exactly what you need to do.
                   </p>
                 </div>
               </motion.div>
-            ))}
+            )}
+          </AnimatePresence>
+
+          {/* Step header — docked near the top; crossfades between steps. */}
+          <div className="absolute inset-x-0 top-[10%] z-20 px-8">
+            <AnimatePresence mode="wait">
+              {!showIntro && (
+                <motion.div
+                  key={`step-${active}`}
+                  className="mx-auto max-w-3xl text-center"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <span className={`${figtree.className} text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]`}>
+                    Step {step.n} of {steps.length}
+                  </span>
+                  <h2
+                    style={{ fontSize: "clamp(1.5rem, 5vw, 3rem)" }}
+                    className={`${bricolage.className} mt-4 whitespace-nowrap font-bold leading-[1.05] text-[#EFF3FF]`}
+                  >
+                    {step.title}
+                  </h2>
+                  <p className={`${figtree.className} mx-auto mt-4 max-w-xl text-base text-[#B9A9D6]`}>{step.text}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
+
+          {/* Progress rail — appears once the steps begin. */}
+          <AnimatePresence>
+            {!showIntro && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.4 }}
+                className="absolute inset-x-0 bottom-16 z-20 flex justify-center gap-2"
+              >
+                {steps.map((s, i) => (
+                  <span
+                    key={s.n}
+                    className={`h-1.5 rounded-full transition-all duration-300 ${active === i ? "w-10 bg-[#C99DFF]" : "w-5 bg-white/15"}`}
+                  />
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
+
+      {/* Mobile — stacked cards, each with its own step animation. */}
+      <MobileTimeline />
     </>
+  )
+}
+
+function MobileTimeline() {
+  return (
+    <div className="relative -mx-[1.5rem] w-screen overflow-hidden bg-gradient-to-b from-[#010205] via-[#0c0415] to-[#19082d] py-16 text-white lg:hidden">
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-32 bg-gradient-to-b from-transparent to-[#010205]" />
+      <div className="relative z-10 px-6">
+        <div className="mb-8 text-center">
+          <span className={`${figtree.className} text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]`}>Getting Started</span>
+          <h2
+            style={{ fontSize: "clamp(1.9rem, 9vw, 3rem)" }}
+            className={`${bricolage.className} mt-3 font-bold leading-[1.05] text-[#EFF3FF]`}
+          >
+            Triple Your MRR In Under 6 Steps
+          </h2>
+        </div>
+
+        <div className="flex flex-col gap-6">
+          {steps.map((s, i) => (
+            <motion.div
+              key={s.n}
+              className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              viewport={{ once: true, amount: 0.4 }}
+            >
+              <div className="mb-3 flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#7A13D0] text-sm font-bold text-white">{s.n}</span>
+                <h3 className={`${bricolage.className} text-xl font-semibold`}>{s.title}</h3>
+              </div>
+              <div className="relative mb-3 h-60 overflow-hidden rounded-xl border border-white/5 bg-[#0c0415]">
+                {i === 3 ? <TamMiningAnim /> : <OnboardingStepAnim step={i} />}
+              </div>
+              <p className={`text-[15px] leading-relaxed text-[#B9A9D6] ${figtree.className}`}>{s.text}</p>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }
 
