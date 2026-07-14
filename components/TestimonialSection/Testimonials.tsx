@@ -1,11 +1,9 @@
 "use client"
 import Image from "next/image"
 import { useState, useEffect } from "react"
-import { Bricolage_Grotesque, Inter } from "next/font/google"
+import { bricolage, inter } from "@/lib/fonts";
 import { motion, AnimatePresence } from "framer-motion"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const inter = Inter({ subsets: ["latin"] })
 
 type Testimonial = {
   name: string
@@ -141,7 +139,7 @@ export default function TestimonialsSection() {
 
   return (
     <section
-      id="cases"
+      id="testimonials"
       className="relative w-full overflow-hidden bg-[#010205] text-white px-4 md:px-8 pt-20 md:pt-28 pb-16 md:pb-28 scroll-mt-24"
     >
       {/* Purple glow, top-right — gives the glass tiles depth to refract without

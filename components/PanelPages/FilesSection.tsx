@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react"
-import { Inter } from "next/font/google"
+import { inter } from "@/lib/fonts";
 import { FiFolder, FiTrash2, FiDownload, FiLock } from "react-icons/fi"
 import PanelSearchInput from "@/components/ui/PanelSearchInput"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
@@ -7,7 +7,6 @@ import PanelSectionHeader from "@/components/ui/PanelSectionHeader"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import { useFetch } from "@/hooks/useFetch"
 
-const inter = Inter({ subsets: ["latin"] })
 
 const getNameWithoutExtension = (name: string) =>
   name.replace(/\.[^/.]+$/, "") || name

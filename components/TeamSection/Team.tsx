@@ -1,8 +1,6 @@
 import Image from "next/image"
-import { Bricolage_Grotesque, Inter } from "next/font/google"
+import { bricolage, inter } from "@/lib/fonts";
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const inter = Inter({ subsets: ["latin"] })
 
 export default function TeamSection() {
   const team = [
@@ -48,6 +46,7 @@ export default function TeamSection() {
                   src={image}
                   alt={name}
                   fill
+                  sizes="(max-width: 640px) 140px, (max-width: 768px) 150px, 170px"
                   quality={80}
                   draggable={false}
                   onDragStart={(e) => e.preventDefault()}

@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { Inter as InterFont } from "next/font/google";
+import { inter } from "@/lib/fonts";
 import { FiUser, FiCheck } from 'react-icons/fi'
 import type { SessionItem } from "@/types/session";
 import Modal from "@/components/ui/Modal";
 
-const inter = InterFont({ subsets: ["latin"] });
 
 interface AddClientModalProps {
   isOpen: boolean;

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bricolage_Grotesque, Inter } from 'next/font/google';
+import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import type { GetStaticPaths, GetStaticProps } from 'next';
@@ -10,8 +10,6 @@ import Footer from '@/components/FooterSection/Footer';
 import { CareerApplicationModal } from '@/components/CareerApplicationModal';
 import { JOB_ROLES, getJobRole, type JobRole } from '@/lib/careers';
 
-const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
-const inter = Inter({ subsets: ['latin'] });
 
 const APPLIED_STORAGE_KEY = 'vierra-applied-roles';
 

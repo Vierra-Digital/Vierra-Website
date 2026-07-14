@@ -3,11 +3,10 @@
 import React, { useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Image from "next/image";
-import { Inter } from "next/font/google";
+import { inter } from "@/lib/fonts";
 import { Eye, EyeOff } from "lucide-react";
 import { FiCheck } from "react-icons/fi";
 
-const inter = Inter({ subsets: ["latin"] });
 
 export default function SetPasswordPage() {
     const router = useRouter();

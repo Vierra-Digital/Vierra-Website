@@ -1,12 +1,10 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Bricolage_Grotesque, Inter } from "next/font/google"
+import { bricolage, inter } from "@/lib/fonts";
 import PipelineGrid from "./PipelineGrid"
 import FeatureBento from "./FeatureBento"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const inter = Inter({ subsets: ["latin"] })
 
 const fadeUp = {
   hidden: { opacity: 0, y: 28 },

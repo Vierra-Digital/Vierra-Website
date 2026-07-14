@@ -1,6 +1,6 @@
 import React, { useState, useRef, MouseEvent, useEffect } from "react"
 import PdfUploader from "@/components/ui/PdfUploader"
-import { Inter } from "next/font/google"
+import { inter } from "@/lib/fonts";
 import { Document, Page, pdfjs } from "react-pdf"
 import {
   FiPenTool,
@@ -28,7 +28,6 @@ if (typeof window !== "undefined") {
   pdfjs.GlobalWorkerOptions.workerSrc = `${window.location.origin}/pdf.worker.min.mjs`
 }
 
-const inter = Inter({ subsets: ["latin"] })
 
 type ToolType = "signature" | "date" | "text" | null
 

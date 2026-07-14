@@ -1,7 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { Inter } from 'next/font/google';
+import { inter } from "@/lib/fonts";
 
-const inter = Inter({ subsets: ["latin"] });
 
 interface PdfUploaderProps {
   onFileSelect: (file: File) => void;

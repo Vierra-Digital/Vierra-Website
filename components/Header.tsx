@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { bricolage, inter } from "@/lib/fonts";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowUpRight, Menu, X } from "lucide-react";
@@ -8,8 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/Modal";
 import { track } from "@/lib/track";
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
-const inter = Inter({ subsets: ["latin"] });
 
 export function Header() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);

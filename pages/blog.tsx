@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import { getBlogCatalog } from "@/lib/blog"
 import { Header } from "@/components/Header";
@@ -66,8 +66,6 @@ const getExcerpt = (content?: string | null, limit: number = 260): string => {
     return text.slice(0, limit).trimEnd() + '...';
 };
 
-const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
-const inter = Inter({ subsets: ["latin"] });
 const tags: string[] = ["All Blog Posts", "Case Studies", "Technology", "AI & Automation", "Finance", "Marketing", "Sales", "Management", "Leadership"]
 
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react"
 import Head from "next/head"
-import { Inter } from "next/font/google"
+import { inter } from "@/lib/fonts";
 import Image from "next/image"
 import ProfileImage from "@/components/ProfileImage"
 import { profileImageSrc } from "@/lib/profileImage"
@@ -27,7 +27,6 @@ const LinkedInContextSection = dynamic(
   { ssr: false }
 )
 
-const inter = Inter({ subsets: ["latin"] })
 
 const ClientPage = () => {
   const router = useRouter()

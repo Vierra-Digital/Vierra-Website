@@ -1,26 +1,40 @@
 "use client"
-import { useEffect, useState } from "react"
-import { Bricolage_Grotesque, Inter } from "next/font/google"
+import { useEffect, useState, type ReactNode } from "react"
+import { bricolage, inter } from "@/lib/fonts";
 import Image from "next/image"
+import dynamic from "next/dynamic"
 import { motion, useScroll, useTransform } from "framer-motion"
 import { ArrowUpRight, Sparkles } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Header } from "@/components/Header"
 import { Modal } from "@/components/Modal"
 import { track } from "@/lib/track"
+import LazyMount from "@/components/LazyMount"
 import { BusinessSolutions } from "@/components/BusinessSection/BusinessSolutions"
-import Timeline from "@/components/BusinessSection/Timeline"
-import { CaseStudies } from "@/components/WorkSection/CaseStudies"
-import { StatsGrid } from "@/components/BusinessSection/StatsGrid"
-import FeaturesV2 from "@/components/FeaturesSection/FeaturesV2"
-import Tailored from "@/components/ServicesSection/Tailored"
-import Integrations from "@/components/IntegrationsSection/Integrations"
-import Testimonials from "@/components/TestimonialSection/Testimonials"
-import Team from "@/components/TeamSection/Team"
-import { FooterSection } from "@/components/FooterSection/MainComponent"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const inter = Inter({ subsets: ["latin"] })
+// Below-the-fold sections are code-split so they stay out of the homepage's
+// initial JS chunk. Text-bearing sections keep SSR (next/dynamic defaults to
+// ssr:true) for SEO; the purely-decorative Integrations animation is client-only
+// and mounted on-scroll via <LazyMount>, so its timers never run off-screen.
+const Timeline = dynamic(() => import("@/components/BusinessSection/Timeline"))
+const CaseStudies = dynamic(() =>
+  import("@/components/WorkSection/CaseStudies").then((m) => m.CaseStudies)
+)
+const StatsGrid = dynamic(() =>
+  import("@/components/BusinessSection/StatsGrid").then((m) => m.StatsGrid)
+)
+const FeaturesV2 = dynamic(() => import("@/components/FeaturesSection/FeaturesV2"))
+const Tailored = dynamic(() => import("@/components/ServicesSection/Tailored"))
+const Integrations = dynamic(
+  () => import("@/components/IntegrationsSection/Integrations"),
+  { ssr: false }
+)
+const Testimonials = dynamic(() => import("@/components/TestimonialSection/Testimonials"))
+const Team = dynamic(() => import("@/components/TeamSection/Team"))
+const FooterSection = dynamic(() =>
+  import("@/components/FooterSection/MainComponent").then((m) => m.FooterSection)
+)
+
 const gridLines = Array.from({ length: 7 }, (_, index) => index)
 const headerVariants = {
   hidden: { opacity: 0, y: -20 },
@@ -52,6 +66,22 @@ const floatingGradientTransition = {
   repeat: Infinity,
   repeatType: "loop" as const,
   ease: "easeInOut" as const,
+}
+
+// Fade-up-on-scroll wrapper for below-the-fold content sections. The content is
+// in the SSR HTML (just opacity:0) so crawlers still see it; it reveals on scroll.
+// Only use on non-sticky sections — a transformed ancestor breaks position:sticky.
+function Reveal({ children }: { children: ReactNode }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 28 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+    >
+      {children}
+    </motion.div>
+  )
 }
 
 export default function HomeClient() {
@@ -97,6 +127,7 @@ export default function HomeClient() {
 
   return (
     <>
+      <main>
       <div className="min-h-screen bg-[#18042A] text-white relative overflow-hidden z-0">
         {gridLines.map((index) => (
           <motion.div
@@ -124,7 +155,7 @@ export default function HomeClient() {
           <Header />
         </motion.div>
 
-        <main className="relative px-6 max-w-7xl mx-auto flex flex-col items-center justify-center text-center min-h-[88vh] pb-[4vh] gap-2">
+        <section aria-label="Hero" className="relative px-6 max-w-7xl mx-auto flex flex-col items-center justify-center text-center min-h-[88vh] pb-[4vh] gap-2">
           <motion.div style={{ y: blob1Y }} className="absolute -top-[6%] -left-[6%] -z-20">
             <motion.div
               initial={{ x: 0, y: 0 }}
@@ -150,10 +181,9 @@ export default function HomeClient() {
               <Sparkles size={14} className="text-[#C99DFF]" />
               B2B Lead Generation
             </motion.span>
-            <motion.h1
-              variants={heroChild}
+            <h1
               style={{ fontSize: "clamp(2.5rem, 7.6vw, 6rem)" }}
-              className={`font-bold leading-[1.05] mb-6 text-[#EFF3FF] max-w-7xl ${bricolage.className}`}
+              className={`hero-reveal font-bold leading-[1.05] mb-6 text-[#EFF3FF] max-w-7xl ${bricolage.className}`}
             >
               <span
                 className="bg-clip-text text-transparent bg-[length:200%_auto]"
@@ -167,7 +197,7 @@ export default function HomeClient() {
               </span>{" "}
               Lead Engine
               <br className="hidden md:block" /> For Your Business
-            </motion.h1>
+            </h1>
 
             <motion.p variants={heroChild} className={`text-white text-xl md:text-2xl mb-8 max-w-2xl ${inter.className}`}>
               Construct your funnel, research leads, capture signals, and schedule
@@ -212,7 +242,7 @@ export default function HomeClient() {
               </Button>
             </motion.div>
           </motion.div>
-        </main>
+        </section>
 
         {/* Partners banner — extends the hero's dark backdrop into a slim
             trusted-by strip directly beneath the hero content. */}
@@ -328,12 +358,20 @@ export default function HomeClient() {
         </div>
       </section>
 
-      {/* 8. Integrations — booked-meetings animation. */}
-      <Integrations />
+      {/* 8. Integrations — booked-meetings animation (decorative, client-only,
+          mounted on-scroll so its timers don't run off-screen). */}
+      <LazyMount minHeight={640}>
+        <Integrations />
+      </LazyMount>
 
       {/* 9-11. Testimonials, leadership, footer. */}
-      <Testimonials />
-      <Team />
+      <Reveal>
+        <Testimonials />
+      </Reveal>
+      <Reveal>
+        <Team />
+      </Reveal>
+      </main>
       <FooterSection />
     </>
   )

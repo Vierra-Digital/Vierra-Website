@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
+import { asQueryStr } from "@/lib/api/parsing";
 
 type GmailLabel = {
   id?: string;
@@ -16,9 +17,6 @@ type GmailListEstimateResponse = {
   resultSizeEstimate?: number;
 };
 
-function asStr(v: string | string[] | undefined) {
-  return Array.isArray(v) ? v[0] : v;
-}
 
 function readLabelUnreadCount(labels: GmailLabel[], id: string) {
   const label = labels.find((entry) => (entry.id || "").toUpperCase() === id.toUpperCase());
@@ -110,7 +108,7 @@ export default withAuth(async (req, res, session) => {
   res.setHeader("Expires", "0");
 
   const userId = session.user.id;
-  const accountsParam = asStr(req.query.accounts);
+  const accountsParam = asQueryStr(req.query.accounts);
   const selectedEmails = (accountsParam || "")
     .split(",")
     .map((s) => s.trim().toLowerCase())

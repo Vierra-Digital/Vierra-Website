@@ -1,12 +1,11 @@
 "use client"
 
 import { motion, useReducedMotion } from "framer-motion"
-import { Inter } from "next/font/google"
+import { inter } from "@/lib/fonts";
 import type { IconType } from "react-icons"
 import { FaLinkedin, FaInstagram, FaFacebook, FaWhatsapp, FaCalendarCheck, FaUsers, FaBullseye, FaPlug } from "react-icons/fa6"
 import { SiGmail, SiGoogle, SiHubspot, SiSalesforce, SiZoho, SiClickup, SiSlack } from "react-icons/si"
 
-const inter = Inter({ subsets: ["latin"] })
 
 // Everything lives in one SVG coordinate space (boxes via foreignObject), so
 // connectors always meet box centres. `tier` drives the staggered funnel reveal.

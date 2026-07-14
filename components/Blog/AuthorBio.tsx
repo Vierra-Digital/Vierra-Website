@@ -1,10 +1,8 @@
 import Image from "next/image"
 import Link from "next/link"
-import { Bricolage_Grotesque, Inter } from "next/font/google"
+import { bricolage, inter } from "@/lib/fonts";
 import { getAuthorProfile } from "@/lib/authorProfiles"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const inter = Inter({ subsets: ["latin"] })
 
 /**
  * "About the author" card — a visible E-E-A-T signal that pairs with the Person

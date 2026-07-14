@@ -1,9 +1,7 @@
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 
-function asStr(v: string | string[] | undefined) {
-  return Array.isArray(v) ? v[0] : v;
-}
+import { asQueryStr } from "@/lib/api/parsing";
 
 function decodeBase64Url(data: string) {
   const padded = data.replace(/-/g, "+").replace(/_/g, "/");
@@ -92,8 +90,8 @@ async function fetchWithAuthRetry(
 
 export default withAuth(async (req, res, session) => {
   const userId = (session.user as any).id;
-  const accountEmail = (asStr(req.query.accountEmail) || "").trim().toLowerCase();
-  const messageId = (asStr(req.query.messageId) || "").trim();
+  const accountEmail = (asQueryStr(req.query.accountEmail) || "").trim().toLowerCase();
+  const messageId = (asQueryStr(req.query.messageId) || "").trim();
   if (!accountEmail || !messageId) {
     res.status(400).json({ message: "accountEmail and messageId are required." });
     return;

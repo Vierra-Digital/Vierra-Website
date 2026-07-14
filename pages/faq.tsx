@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bricolage_Grotesque, Inter } from 'next/font/google';
+import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import { HelpCircle, ChevronDown } from 'lucide-react';
 import { Header } from '@/components/Header';
@@ -8,8 +8,6 @@ import Footer from '@/components/FooterSection/Footer';
 import { Modal } from '@/components/Modal';
 import { FAQ_ITEMS, FAQ_LAST_UPDATED } from '@/lib/faq';
 
-const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
-const inter = Inter({ subsets: ['latin'] });
 
 const CANONICAL = 'https://vierradev.com/faq';
 const META_TITLE = 'Vierra | Frequently Asked Questions';

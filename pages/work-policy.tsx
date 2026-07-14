@@ -1,12 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bricolage_Grotesque, Inter } from 'next/font/google';
+import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import { Header } from '@/components/Header';
 import Footer from '@/components/FooterSection/Footer';
 
-const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
-const inter = Inter({ subsets: ['latin'] });
 
 type SectionMeta = { id: string; title: string };
 

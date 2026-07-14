@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Inter } from "next/font/google";
+import { inter } from "@/lib/fonts";
 import Image from "next/image";
 import { FaGoogle } from "react-icons/fa";
 import {
@@ -40,7 +40,6 @@ import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import ComposeRichEditor, { printComposeContent, type ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
 
-const inter = Inter({ subsets: ["latin"] });
 const PAGE_SIZE = 50;
 const CONTACTS_PAGE_SIZE = 50;
 

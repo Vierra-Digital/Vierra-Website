@@ -1,6 +1,6 @@
 "use client"
 import React from "react"
-import { Bricolage_Grotesque, Inter } from "next/font/google"
+import { bricolage, inter } from "@/lib/fonts";
 import { motion } from "framer-motion"
 import Link from "next/link"
 import { Home } from "lucide-react"
@@ -8,8 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Header } from "@/components/Header"
 import { FooterSection } from "@/components/FooterSection/MainComponent"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const inter = Inter({ subsets: ["latin"] })
 
 export default function NotFound() {
   return (

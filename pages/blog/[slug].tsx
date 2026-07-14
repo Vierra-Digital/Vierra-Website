@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
@@ -24,8 +24,6 @@ type BlogPostProps = {
     relatedPosts: { title: string; slug: string; publishedDate: string; author: { name: string }; tag?: string | null; description?: string | null }[];
 };
 
-const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
-const inter = Inter({ subsets: ["latin"] });
 
 const formatDate = (dateString: string): string => {
     const dateStr = dateString.split('T')[0];

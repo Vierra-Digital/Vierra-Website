@@ -3,7 +3,7 @@ import Head from "next/head";
 import Link from "next/link";
 import Image from "next/image";
 import type { GetServerSideProps } from "next";
-import { Inter } from "next/font/google";
+import { inter } from "@/lib/fonts";
 import type { IconType } from "react-icons";
 import {
   FiActivity,
@@ -19,7 +19,6 @@ import {
 } from "react-icons/fi";
 import { requireSession } from "@/lib/auth";
 
-const inter = Inter({ subsets: ["latin"] });
 
 function Toggle({
   checked,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Bricolage_Grotesque, Figtree } from "next/font/google"
+import { bricolage, figtree } from "@/lib/fonts";
 import { motion } from "framer-motion"
 import type { IconType } from "react-icons"
 import { FaLinkedin, FaComment, FaInstagram, FaFacebook, FaWhatsapp } from "react-icons/fa6"
@@ -7,8 +7,6 @@ import { SiGmail } from "react-icons/si"
 import { FcGoogle } from "react-icons/fc"
 import GridComponent from "./GridComponent"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const figtree = Figtree({ subsets: ["latin"] })
 
 interface TabItem {
   id: string
