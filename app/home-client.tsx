@@ -182,7 +182,7 @@ export default function HomeClient() {
             </span>
             <h1
               style={{ fontSize: "clamp(2.5rem, 7.6vw, 6rem)" }}
-              className={`hero-reveal hero-reveal-d2 font-bold leading-[1.05] mb-6 text-[#EFF3FF] max-w-7xl ${bricolage.className}`}
+              className={`hero-reveal-solid hero-reveal-d2 font-bold leading-[1.05] mb-6 text-[#EFF3FF] max-w-7xl ${bricolage.className}`}
             >
               <span
                 className="bg-clip-text text-transparent bg-[length:200%_auto]"

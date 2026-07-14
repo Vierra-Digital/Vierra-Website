@@ -90,9 +90,9 @@ export function Modal({ isOpen, onClose }: ModalProps) {
   const step2Valid =
     !!formData.website.trim() &&
     websiteValid &&
-    // Revenue fields are optional (lower form friction) — only validate the
-    // desired-revenue format if the user actually entered something.
-    (!formData.desiredRevenue.trim() || desiredValid);
+    !!formData.monthlyRevenue &&
+    !!formData.desiredRevenue.trim() &&
+    desiredValid;
 
   const nextStep = () =>
     setStep((s) => {
@@ -134,7 +134,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
       onClose={onClose}
       zIndexClass="z-[200]"
       backdropClassName="bg-[#0F0F14]/70 backdrop-blur-md"
-      cardClassName={`relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white/90 shadow-[0_30px_80px_-28px_rgba(26,16,51,0.55)] ${inter.className}`}
+      cardClassName={`relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-[0_30px_80px_-28px_rgba(26,16,51,0.55)] ${inter.className}`}
       closeOnBackdrop={true}
       label="Book your free audit"
     >
@@ -174,8 +174,9 @@ export function Modal({ isOpen, onClose }: ModalProps) {
             </button>
           </div>
 
-          {/* Scrollable body */}
-          <div className="flex-1 overflow-y-auto px-7 pb-2 pt-1 sm:px-10">
+          {/* Scrollable body — scrollbar hidden (rarely needed; only on short
+              viewports), matching the rest of the site's chrome-free scroll. */}
+          <div className="modal-scroll-area flex-1 overflow-y-auto px-7 pb-2 pt-1 sm:px-10">
             <AnimatePresence mode="wait">
               <motion.div
                 key={step}
@@ -248,7 +249,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                       />
                     </Field>
                     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                      <Field label="Current Monthly Revenue" htmlFor="monthlyRevenue" optional>
+                      <Field label="Current Monthly Revenue" htmlFor="monthlyRevenue">
                         <ThemedSelect
                           id="monthlyRevenue"
                           value={formData.monthlyRevenue}
@@ -260,7 +261,6 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                       <Field
                         label="Desired Revenue (12 months)"
                         htmlFor="desiredRevenue"
-                        optional
                         error={formData.desiredRevenue && !desiredValid ? "Enter a valid amount." : undefined}
                       >
                         <input
@@ -308,6 +308,14 @@ export function Modal({ isOpen, onClose }: ModalProps) {
             ) : (
               <PrimaryButton onClick={handleSubmit} disabled={submitting || !step1Valid || !step2Valid}>
                 {submitting ? "Submitting..." : "Submit"}
+                {!submitting && (
+                  <motion.span
+                    animate={{ x: [0, 4, 0] }}
+                    transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+                  >
+                    <FiArrowRight className="h-4 w-4" />
+                  </motion.span>
+                )}
               </PrimaryButton>
             )}
           </div>

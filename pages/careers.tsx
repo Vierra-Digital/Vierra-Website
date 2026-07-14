@@ -104,7 +104,7 @@ const CareersPage: React.FC = () => {
         </div>
 
         {/* Content — margins match the blog page system */}
-        <div className="px-6 sm:px-8 lg:px-20">
+        <main className="px-6 sm:px-8 lg:px-20">
           <div className="mx-auto max-w-7xl py-14 sm:py-20">
             {/* Intro / culture paragraph — left aligned */}
             <div className="space-y-4 text-[15px] leading-7 text-[#4B4460]">
@@ -173,7 +173,7 @@ const CareersPage: React.FC = () => {
               ))}
             </div>
           </div>
-        </div>
+        </main>
 
         <Footer />
       </div>
