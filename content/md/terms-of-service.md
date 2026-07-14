@@ -222,7 +222,8 @@ These Legal Terms and any policies or operating rules posted by us on the Servic
 To resolve a complaint regarding the Services or to receive further information regarding the use of the Services, please contact us at:
 
 **Vierra Digital LLC**  
-Cambridge, MA 02138  
+3 Ashland Street  
+Medford, MA 02155  
 United States  
 Phone: (+1) 339-333-0929  
 [business@vierradev.com](mailto:business@vierradev.com)

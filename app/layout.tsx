@@ -1,13 +1,6 @@
-import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import RootLayoutClient from "./layout.client"
 import Script from "next/script"
-
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] })
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-})
 
 const SITE_URL = "https://vierradev.com"
 const META_IMAGE_URL = `${SITE_URL}/assets/meta-banner.png`
@@ -138,8 +131,8 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://www.youtube-nocookie.com" />
 
         <meta name="geo.region" content="US-MA" />
-        <meta name="geo.placename" content="Cambridge, Massachusetts" />
-        <meta name="ICBM" content="42.3736, -71.1097" />
+        <meta name="geo.placename" content="Medford, Massachusetts" />
+        <meta name="ICBM" content="42.4184, -71.1062" />
 
         <script
           id="schema-org-organization"
@@ -161,9 +154,10 @@ export default function RootLayout({
               description: "Risk-averse, results-based B2B lead generation that fills your sales calendar with qualified leads and eliminates risky marketing investments.",
               address: {
                 "@type": "PostalAddress",
-                addressLocality: "Cambridge",
+                streetAddress: "3 Ashland Street",
+                addressLocality: "Medford",
                 addressRegion: "MA",
-                postalCode: "02138",
+                postalCode: "02155",
                 addressCountry: "US",
               },
               contactPoint: {
@@ -189,18 +183,18 @@ export default function RootLayout({
               location: [
                 {
                   "@type": "Place",
-                  name: "Vierra Digital (Cambridge HQ)",
+                  name: "Vierra Digital (Medford HQ)",
                   address: {
                     "@type": "PostalAddress",
-                    addressLocality: "Cambridge",
+                    addressLocality: "Medford",
                     addressRegion: "MA",
-                    postalCode: "02138",
+                    postalCode: "02155",
                     addressCountry: "US",
                   },
                   geo: {
                     "@type": "GeoCoordinates",
-                    latitude: 42.3736,
-                    longitude: -71.1097,
+                    latitude: 42.4184,
+                    longitude: -71.1062,
                   },
                 },
                 {
@@ -226,6 +220,7 @@ export default function RootLayout({
                   { "@type": "Offer", itemOffered: { "@type": "Service", name: "Appointment Setting" } },
                 ],
               },
+              subOrganization: { "@id": `${SITE_URL}/#localbusiness` },
             }),
           }}
         />
@@ -260,6 +255,7 @@ export default function RootLayout({
               "@context": "https://schema.org",
               "@type": ["ProfessionalService", "LocalBusiness"],
               "@id": `${SITE_URL}/#localbusiness`,
+              parentOrganization: { "@id": `${SITE_URL}/#organization` },
               name: "Vierra Digital",
               legalName: "Vierra Digital LLC",
               url: SITE_URL,
@@ -271,18 +267,19 @@ export default function RootLayout({
               },
               image: META_IMAGE_URL,
               description:
-                "B2B digital marketing and lead generation agency headquartered in Cambridge, MA with an office in New York, NY. Risk-averse, results-based lead generation for scaling businesses.",
+                "B2B digital marketing and lead generation agency headquartered in Medford, MA with an office in New York, NY. Risk-averse, results-based lead generation for scaling businesses.",
               address: {
                 "@type": "PostalAddress",
-                addressLocality: "Cambridge",
+                streetAddress: "3 Ashland Street",
+                addressLocality: "Medford",
                 addressRegion: "MA",
-                postalCode: "02138",
+                postalCode: "02155",
                 addressCountry: "US",
               },
               geo: {
                 "@type": "GeoCoordinates",
-                latitude: 42.3736,
-                longitude: -71.1097,
+                latitude: 42.4184,
+                longitude: -71.1062,
               },
               telephone: "+1-339-333-0929",
               email: "alex@vierradev.com",
@@ -293,7 +290,7 @@ export default function RootLayout({
               },
               foundingDate: "2019",
               areaServed: [
-                { "@type": "City", name: "Cambridge" },
+                { "@type": "City", name: "Medford" },
                 { "@type": "City", name: "New York" },
                 { "@type": "Country", name: "United States" },
               ],
@@ -320,10 +317,7 @@ export default function RootLayout({
         />
       </head>
       <body>
-        <RootLayoutClient
-          geistSansVariable={geistSans.variable}
-          geistMonoVariable={geistMono.variable}
-        >
+        <RootLayoutClient>
           {children}
         </RootLayoutClient>
       </body>

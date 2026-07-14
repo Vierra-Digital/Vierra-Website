@@ -10,7 +10,7 @@ Scale your business effortlessly. Fill your sales calendar with qualified leads 
 
 ## About Vierra
 
-Vierra is a B2B lead generation platform that helps businesses increase ROI, leads, and conversions through risk-averse, results-based lead generation. Our case-study-proven systems help businesses scale efficiently, optimize ad spending, and fill their sales calendars with qualified leads. Headquartered in Cambridge, MA with an office in New York, NY, and founded in 2019, we work closely with each client to maximize return on advertising spend.
+Vierra is a B2B lead generation platform that helps businesses increase ROI, leads, and conversions through risk-averse, results-based lead generation. Our case-study-proven systems help businesses scale efficiently, optimize ad spending, and fill their sales calendars with qualified leads. Headquartered in Medford, MA with an office in New York, NY, and founded in 2019, we work closely with each client to maximize return on advertising spend.
 
 ## Trusted By Our Partners
 
