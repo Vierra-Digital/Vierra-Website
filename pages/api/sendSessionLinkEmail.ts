@@ -67,7 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 <a href="https://www.instagram.com/vierra.dev" style="margin:0 12px;display:inline-block;transition:transform 0.3s ease;">
                   <img src="https://vierradev.com/assets/Socials/Instagram.png" alt="Instagram" style="width:32px;height:32px;">
                 </a>
-                <a href="https://www.facebook.com/share/1GXE6s4NSX/?mibextid=wwXIfr" style="margin:0 12px;display:inline-block;transition:transform 0.3s ease;">
+                <a href="https://www.facebook.com/vierradigital?mibextid=wwXIfr" style="margin:0 12px;display:inline-block;transition:transform 0.3s ease;">
                   <img src="https://vierradev.com/assets/Socials/Facebook.png" alt="Facebook" style="width:32px;height:32px;">
                 </a>
               </div>
