@@ -64,7 +64,7 @@ export function BusinessSolutions() {
 
   // Headers cycle automatically; a manual click resets the timer (no scroll lock).
   useEffect(() => {
-    const id = setTimeout(() => setActive((a) => (a + 1) % tabs.length), 4500)
+    const id = setTimeout(() => setActive((a) => (a + 1) % tabs.length), 2800)
     return () => clearTimeout(id)
   }, [active])
 

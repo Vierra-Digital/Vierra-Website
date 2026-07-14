@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
-import { asStr, clearOauthStateCookie, readCookies, setOnboardingSessionCookie } from "@/lib/api/oauth";
+import { appendSetCookie, asStr, clearOauthStateCookie, readCookies, setOnboardingSessionCookie } from "@/lib/api/oauth";
 import { persistPlatformToken, persistOnboardingPlatformToken } from "@/lib/api/oauthTokens";
 import { serialize as serializeCookie } from "cookie";
 
@@ -10,12 +10,6 @@ type TokenExchangeResult = {
   expires_in?: number;
   refresh_token?: string;
 };
-
-function appendSetCookie(res: NextApiResponse, value: string) {
-  const existing = res.getHeader("Set-Cookie");
-  const next = Array.isArray(existing) ? [...existing, value] : existing ? [String(existing), value] : [value];
-  res.setHeader("Set-Cookie", next);
-}
 
 async function exchangeLinkedInToken(params: {
   code: string;

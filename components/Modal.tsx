@@ -25,13 +25,8 @@ interface FormState {
   email: string;
   phoneNumber: string;
   website: string;
-  socialMedia: string;
   monthlyRevenue: string;
   desiredRevenue: string;
-  startTimeline: string;
-  agencyExperience: string;
-  uniqueTraits: string;
-  businessIssues: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -39,17 +34,11 @@ const EMPTY_FORM: FormState = {
   email: "",
   phoneNumber: "",
   website: "",
-  socialMedia: "",
   monthlyRevenue: "",
   desiredRevenue: "",
-  startTimeline: "",
-  agencyExperience: "",
-  uniqueTraits: "",
-  businessIssues: "",
 };
 
-const STEP_TITLES = ["Your Details", "Business Information", "A Few More Details"];
-const TOTAL_STEPS = STEP_TITLES.length;
+const TOTAL_STEPS = 2;
 
 const REVENUE_OPTIONS = [
   { value: "$10k - $25k", label: "$10k - $25k" },
@@ -101,9 +90,9 @@ export function Modal({ isOpen, onClose }: ModalProps) {
   const step2Valid =
     !!formData.website.trim() &&
     websiteValid &&
-    !!formData.monthlyRevenue &&
-    !!formData.desiredRevenue.trim() &&
-    desiredValid;
+    // Revenue fields are optional (lower form friction) — only validate the
+    // desired-revenue format if the user actually entered something.
+    (!formData.desiredRevenue.trim() || desiredValid);
 
   const nextStep = () =>
     setStep((s) => {
@@ -144,14 +133,14 @@ export function Modal({ isOpen, onClose }: ModalProps) {
     <ModalShell
       onClose={onClose}
       zIndexClass="z-[200]"
-      backdropClassName="bg-[#1A1033]/50 backdrop-blur-xl"
-      cardClassName={`relative flex max-h-[92vh] min-h-[min(620px,92vh)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/70 bg-gradient-to-br from-white/78 via-white/70 to-[#EFE6FF]/64 shadow-[0_28px_90px_-24px_rgba(26,16,51,0.62),inset_0_1px_0_0_rgba(255,255,255,0.65)] ring-1 ring-inset ring-white/60 backdrop-blur-3xl backdrop-saturate-150 ${inter.className}`}
+      backdropClassName="bg-[#0F0F14]/70 backdrop-blur-md"
+      cardClassName={`relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white/90 shadow-[0_30px_80px_-28px_rgba(26,16,51,0.55)] ${inter.className}`}
       closeOnBackdrop={true}
       label="Book your free audit"
     >
       {!submitted && (
         <div className="px-7 pt-5 sm:px-10">
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/50 ring-1 ring-inset ring-white/40">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#701CC0]/10">
             <motion.div
               className="h-full rounded-full bg-gradient-to-r from-[#701CC0] to-[#8F42FF]"
               initial={false}
@@ -167,7 +156,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
       ) : (
         <>
           {/* Header */}
-          <div className="flex items-start justify-between gap-4 bg-gradient-to-br from-[#7A17C5]/[0.09] via-transparent to-transparent px-7 pb-6 pt-5 sm:px-10">
+          <div className="flex items-start justify-between gap-4 px-7 pb-6 pt-5 sm:px-10">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8F42FF]">
                 Free Audit · Step {step} of {TOTAL_STEPS}
@@ -175,7 +164,6 @@ export function Modal({ isOpen, onClose }: ModalProps) {
               <h2 className={`mt-2 text-2xl font-semibold tracking-tight text-[#1A1033] sm:text-[1.7rem] ${bricolage.className}`}>
                 Free Audit Call
               </h2>
-              <p className="mt-1.5 text-sm text-[#6B6480]">{STEP_TITLES[step - 1]}</p>
             </div>
             <button
               onClick={onClose}
@@ -205,7 +193,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                         type="text"
                         value={formData.fullName}
                         onChange={handleChange}
-                        className={`${inputClass} border-gray-200`}
+                        className={inputClass}
                         placeholder="John Doe"
                       />
                     </Field>
@@ -220,7 +208,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                           type="email"
                           value={formData.email}
                           onChange={handleChange}
-                          className={`${inputClass} ${formData.email && !emailValid ? "border-red-400 bg-red-50/50" : "border-gray-200"}`}
+                          className={`${inputClass} ${formData.email && !emailValid ? "border-red-400 bg-red-50/50" : ""}`}
                           placeholder="john@example.com"
                         />
                       </Field>
@@ -235,7 +223,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                           inputMode="numeric"
                           value={formData.phoneNumber}
                           onChange={handleChange}
-                          className={`${inputClass} ${formData.phoneNumber && !phoneValid ? "border-red-400 bg-red-50/50" : "border-gray-200"}`}
+                          className={`${inputClass} ${formData.phoneNumber && !phoneValid ? "border-red-400 bg-red-50/50" : ""}`}
                           placeholder="(555) 123-4567"
                         />
                       </Field>
@@ -255,22 +243,12 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                         type="url"
                         value={formData.website}
                         onChange={handleChange}
-                        className={`${inputClass} ${formData.website && !websiteValid ? "border-red-400 bg-red-50/50" : "border-gray-200"}`}
+                        className={`${inputClass} ${formData.website && !websiteValid ? "border-red-400 bg-red-50/50" : ""}`}
                         placeholder="https://yourwebsite.com"
                       />
                     </Field>
-                    <Field label="Social Media" htmlFor="socialMedia" optional>
-                      <input
-                        id="socialMedia"
-                        type="text"
-                        value={formData.socialMedia}
-                        onChange={handleChange}
-                        className={`${inputClass} border-gray-200`}
-                        placeholder="Instagram, LinkedIn, Facebook handles"
-                      />
-                    </Field>
                     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                      <Field label="Current Monthly Revenue" htmlFor="monthlyRevenue">
+                      <Field label="Current Monthly Revenue" htmlFor="monthlyRevenue" optional>
                         <ThemedSelect
                           id="monthlyRevenue"
                           value={formData.monthlyRevenue}
@@ -282,6 +260,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                       <Field
                         label="Desired Revenue (12 months)"
                         htmlFor="desiredRevenue"
+                        optional
                         error={formData.desiredRevenue && !desiredValid ? "Enter a valid amount." : undefined}
                       >
                         <input
@@ -289,55 +268,8 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                           type="text"
                           value={formData.desiredRevenue}
                           onChange={handleChange}
-                          className={`${inputClass} ${formData.desiredRevenue && !desiredValid ? "border-red-400 bg-red-50/50" : "border-gray-200"}`}
+                          className={`${inputClass} ${formData.desiredRevenue && !desiredValid ? "border-red-400 bg-red-50/50" : ""}`}
                           placeholder="$50,000+"
-                        />
-                      </Field>
-                    </div>
-                  </>
-                )}
-
-                {step === 3 && (
-                  <>
-                    <Field label="How soon can you get started?" htmlFor="startTimeline" optional>
-                      <input
-                        id="startTimeline"
-                        type="text"
-                        value={formData.startTimeline}
-                        onChange={handleChange}
-                        className={`${inputClass} border-gray-200`}
-                        placeholder="e.g. Within 2 weeks, Next month"
-                      />
-                    </Field>
-                    <Field label="Agency Experience" htmlFor="agencyExperience" optional>
-                      <textarea
-                        id="agencyExperience"
-                        value={formData.agencyExperience}
-                        onChange={handleChange}
-                        rows={3}
-                        className={`${inputClass} resize-none border-gray-200`}
-                        placeholder="Have you worked with agencies before? Share your experience..."
-                      />
-                    </Field>
-                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-                      <Field label="What sets you apart?" htmlFor="uniqueTraits" optional>
-                        <textarea
-                          id="uniqueTraits"
-                          value={formData.uniqueTraits}
-                          onChange={handleChange}
-                          rows={3}
-                          className={`${inputClass} resize-none border-gray-200`}
-                          placeholder="What makes your business unique?"
-                        />
-                      </Field>
-                      <Field label="Industry Challenges" htmlFor="businessIssues" optional>
-                        <textarea
-                          id="businessIssues"
-                          value={formData.businessIssues}
-                          onChange={handleChange}
-                          rows={3}
-                          className={`${inputClass} resize-none border-gray-200`}
-                          placeholder="What are the biggest challenges in your industry?"
                         />
                       </Field>
                     </div>
@@ -348,7 +280,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
           </div>
 
           {/* Footer */}
-          <div className="mt-2 flex items-center justify-between gap-3 border-t border-white/50 bg-white/30 px-7 py-4 sm:px-10">
+          <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#1A1033]/10 px-7 py-4 sm:px-10">
             {step > 1 ? (
               <button
                 onClick={prevStep}
@@ -363,7 +295,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
             {step < TOTAL_STEPS ? (
               <PrimaryButton
                 onClick={nextStep}
-                disabled={(step === 1 && !step1Valid) || (step === 2 && !step2Valid)}
+                disabled={step === 1 && !step1Valid}
               >
                 Continue
                 <motion.span

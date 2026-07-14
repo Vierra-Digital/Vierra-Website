@@ -5,9 +5,9 @@ import { motion } from "framer-motion"
 import { bricolage, inter } from "@/lib/fonts";
 
 
-export function CaseStudies() {
+export function ProductDemo() {
   return (
-    <div className="mt-16 md:mt-32 px-4 md:px-20" id="cases">
+    <div className="mt-16 md:mt-32 px-4 md:px-20" id="demo">
       {/* Header above the copy */}
       <div className="mx-auto max-w-3xl text-center mb-12 md:mb-16">
         <span

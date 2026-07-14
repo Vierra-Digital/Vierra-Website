@@ -179,6 +179,7 @@ export default function RootLayout({
                 "https://www.instagram.com/vierra.dev",
                 "https://www.facebook.com/vierradigital",
                 "https://x.com/vierradev",
+                "https://www.crunchbase.com/organization/vierra-digital",
               ],
               foundingDate: "2019",
               numberOfEmployees: {
@@ -317,6 +318,7 @@ export default function RootLayout({
                 "https://www.instagram.com/vierra.dev",
                 "https://www.facebook.com/vierradigital",
                 "https://x.com/vierradev",
+                "https://www.crunchbase.com/organization/vierra-digital",
               ],
             }),
           }}

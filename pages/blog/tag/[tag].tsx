@@ -130,7 +130,7 @@ export default function TagPage({ tag, posts }: TagPageProps) {
         </div>
 
         {/* Posts */}
-        <div className="bg-[#F3F3F3]">
+        <main className="bg-[#F3F3F3]">
           <div className="max-w-6xl mx-auto px-6 py-16">
             {posts.length === 0 ? (
               <div className="text-center text-sm text-[#6B7280]">No posts found.</div>
@@ -174,7 +174,7 @@ export default function TagPage({ tag, posts }: TagPageProps) {
               </div>
             )}
           </div>
-        </div>
+        </main>
         <Footer />
       </div>
     </>
@@ -217,7 +217,7 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
           tag: p.tag ?? null,
         }))
       },
-      revalidate: 60,
+      revalidate: 600,
     }
   } catch (error) {
     // Transient DB failure — rethrow (non-cached 500 + retry) instead of caching a 404.

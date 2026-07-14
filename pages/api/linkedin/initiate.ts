@@ -1,26 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { asStr, issueOauthStateCookie } from "@/lib/api/oauth";
+import { appendSetCookie, asStr, issueOauthStateCookie, resolveRuntimeBaseUrl } from "@/lib/api/oauth";
 import { serialize as serializeCookie } from "cookie";
 
 const BASIC_SCOPES = ["openid", "profile", "email", "w_member_social"];
 const COMPANY_SCOPES = ["r_organization_admin", "w_organization_social"];
-
-function resolveRuntimeBaseUrl(req: NextApiRequest) {
-  const host = req.headers.host || "localhost:3000";
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  const proto = Array.isArray(forwardedProto)
-    ? forwardedProto[0]
-    : forwardedProto || (host.includes("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
-  return `${proto}://${host}`.replace(/\/+$/, "");
-}
-
-function appendSetCookie(res: NextApiResponse, value: string) {
-  const existing = res.getHeader("Set-Cookie");
-  const next = Array.isArray(existing) ? [...existing, value] : existing ? [String(existing), value] : [value];
-  res.setHeader("Set-Cookie", next);
-}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") { res.status(405).end(); return; }

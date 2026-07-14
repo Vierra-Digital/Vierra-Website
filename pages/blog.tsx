@@ -294,6 +294,7 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                         </div>
                     </header>
                 </div>
+                <main>
                 <div id="view-section" className="bg-[#F3F3F3] px-8 lg:px-20">
                     <div className="max-w-7xl mx-auto py-20">
                         {/* Categories */}
@@ -424,6 +425,7 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                         )}
                     </div>
                 </div>
+            </main>
             </div>
             <Footer />
         </>

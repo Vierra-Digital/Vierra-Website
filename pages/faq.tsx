@@ -85,6 +85,7 @@ const FaqPage: React.FC = () => {
             '@type': 'WebPage',
             '@id': 'https://vierradev.com/faq#webpage',
             url: 'https://vierradev.com/faq',
+            isPartOf: { '@id': 'https://vierradev.com/#website' },
             speakable: {
               '@type': 'SpeakableSpecification',
               cssSelector: ['.faq-item summary', '.faq-answer'],
@@ -145,7 +146,7 @@ const FaqPage: React.FC = () => {
         </div>
 
         {/* Content */}
-        <div className="relative z-10 mx-auto max-w-4xl px-5 pb-24 pt-14 md:px-8">
+        <main className="relative z-10 mx-auto max-w-4xl px-5 pb-24 pt-14 md:px-8">
           <div className="space-y-5">
             {FAQ_ITEMS.map((item, i) => (
               <details
@@ -183,7 +184,7 @@ const FaqPage: React.FC = () => {
               </button>
             </section>
           </div>
-        </div>
+        </main>
 
         <Footer />
       </div>
