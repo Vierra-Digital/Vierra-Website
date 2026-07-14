@@ -6,7 +6,7 @@
 //   cta_click        — a "Let's Talk"/primary CTA was clicked (params: location)
 //   lead_form_open   — the lead modal opened
 //   lead_form_step   — advanced to a step (params: step)
-//   generate_lead — the lead form was submitted  ← mark as a GA4 Key Event
+//   generate_lead    — the lead form was submitted  ← mark as a GA4 Key Event
 //   outbound_click   — an external link was clicked (params: url, label)
 //
 // After deploy: in GA4 → Admin → Events, toggle `generate_lead` as a Key Event
