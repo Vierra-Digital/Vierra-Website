@@ -9,8 +9,6 @@ import {
 
 interface ClientLayoutProps {
   children: React.ReactNode;
-  geistSansVariable: string;
-  geistMonoVariable: string;
 }
 if (typeof window !== "undefined") {
   const originalError = console.error.bind(console)
@@ -57,8 +55,6 @@ if (typeof window !== "undefined") {
 
 export default function RootLayoutClient({
   children,
-  geistSansVariable,
-  geistMonoVariable,
 }: ClientLayoutProps) {
   // Analytics validation runs in the background as a side effect. It must NOT
   // gate rendering: blocking children behind this client-only fetch left every
@@ -98,7 +94,7 @@ export default function RootLayoutClient({
   }, []);
 
   return (
-    <div className={`${geistSansVariable} ${geistMonoVariable} antialiased`}>
+    <div className="antialiased">
       {children}
     </div>
   );

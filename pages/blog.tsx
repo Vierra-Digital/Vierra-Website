@@ -225,37 +225,20 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                         name: "Vierra Blog",
                         description: "Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients.",
                         url: "https://vierradev.com/blog",
-                        publisher: {
-                            "@type": "Organization",
-                            name: "Vierra Digital",
-                            logo: {
-                                "@type": "ImageObject",
-                                url: "https://vierradev.com/assets/vierra-logo.png",
-                                width: 464,
-                                height: 188,
-                            },
-                        },
+                        publisher: { "@id": "https://vierradev.com/#organization" },
                         blogPost: latestPosts.slice(0, 10).map(post => ({
                             "@type": "BlogPosting",
                             headline: post.title,
                             description: post.description || stripHtml(post.content).substring(0, 200),
                             url: `https://vierradev.com/blog/${post.slug}`,
                             datePublished: post.published_date,
+                            dateModified: post.published_date,
                             author: {
                                 "@type": "Person",
                                 name: post.author.name,
                                 url: `https://vierradev.com/blog/author/${encodeURIComponent(post.author.name)}`,
                             },
-                            publisher: {
-                                "@type": "Organization",
-                                name: "Vierra Digital",
-                                logo: {
-                                    "@type": "ImageObject",
-                                    url: "https://vierradev.com/assets/vierra-logo.png",
-                                    width: 464,
-                                    height: 188,
-                                },
-                            },
+                            publisher: { "@id": "https://vierradev.com/#organization" },
                         })),
                     }),
                 }}

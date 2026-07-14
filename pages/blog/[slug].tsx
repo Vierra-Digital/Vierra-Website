@@ -52,6 +52,9 @@ const BlogViewPage = ({
     const modifiedDateISO = new Date(updatedDate ?? publishedDate).toISOString();
     const authorProfile = getAuthorProfile(author.name);
     const authorImageUrl = authorProfile.image ? `https://vierradev.com${authorProfile.image}` : undefined;
+    // Per-post social/AI card generated on the fly from the title (app/api/og),
+    // so every post has a unique OG image instead of the shared meta-banner.
+    const ogImage = `https://vierradev.com/api/og?title=${encodeURIComponent(title)}${tag ? `&tag=${encodeURIComponent(tag.split(',')[0].trim())}` : ''}`;
 
     const [progress, setProgress] = useState(0);
 
@@ -96,7 +99,9 @@ const BlogViewPage = ({
                 <meta property="og:description" content={description || `${title} - Insights and strategies from Vierra.`} />
                 <meta property="og:url" content={blogUrl} />
                 <meta property="og:site_name" content="Vierra" />
-                <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
+                <meta property="og:image" content={ogImage} />
+                <meta property="og:image:width" content="1200" />
+                <meta property="og:image:height" content="630" />
                 <meta property="article:published_time" content={publishedDateISO} />
                 <meta property="article:modified_time" content={modifiedDateISO} />
                 <meta property="article:author" content={author.name} />
@@ -109,7 +114,7 @@ const BlogViewPage = ({
                 <meta name="twitter:title" content={title} />
                 <meta name="twitter:description" content={description || `${title} - Insights and strategies from Vierra.`} />
                 <meta name="twitter:creator" content="@vierradev" />
-                <meta name="twitter:image" content="https://vierradev.com/assets/meta-banner.png" />
+                <meta name="twitter:image" content={ogImage} />
             </Head>
             <script
                 id="schema-org-breadcrumbs"
@@ -150,7 +155,7 @@ const BlogViewPage = ({
                         "@type": "BlogPosting",
                         headline: title,
                         description: description || `${title} - Insights and strategies from Vierra.`,
-                        image: ["https://vierradev.com/assets/meta-banner.png"],
+                        image: [ogImage],
                         datePublished: publishedDateISO,
                         dateModified: modifiedDateISO,
                         author: {
@@ -165,16 +170,7 @@ const BlogViewPage = ({
                                 ? { "@type": "Organization", name: authorProfile.company }
                                 : { "@id": "https://vierradev.com/#organization" },
                         },
-                        publisher: {
-                            "@type": "Organization",
-                            name: "Vierra Digital",
-                            logo: {
-                                "@type": "ImageObject",
-                                url: "https://vierradev.com/assets/vierra-logo.png",
-                                width: 464,
-                                height: 188,
-                            },
-                        },
+                        publisher: { "@id": "https://vierradev.com/#organization" },
                         mainEntityOfPage: {
                             "@type": "WebPage",
                             "@id": blogUrl,
@@ -185,6 +181,8 @@ const BlogViewPage = ({
                             name: "Vierra Blog",
                         },
                         keywords: tag || "marketing, lead generation, business growth",
+                        wordCount: (content || "").replace(/<[^>]+>/g, " ").split(/\s+/).filter(Boolean).length || undefined,
+                        about: (tag || "B2B Lead Generation").split(",").map((t) => ({ "@type": "Thing", name: t.trim() })),
                     }),
                 }}
             />
