@@ -333,7 +333,6 @@ const chatScript: ChatMsg[] = [
 ]
 
 function ChatAvatar({ src, name }: { src: string; name: string }) {
-  // eslint-disable-next-line @next/next/no-img-element
   return <Image src={src} alt={name} width={36} height={36} className="h-9 w-9 shrink-0 rounded-xl object-cover" />
 }
 
@@ -557,7 +556,6 @@ function OrbitVisual() {
       {/* center Vierra badge (static, on top) — the 2D V mark on a white tile */}
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white ring-1 ring-[#701CC0]/15 shadow-[0_14px_34px_-10px_rgba(112,28,192,0.55)]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <Image src="/assets/vierra-v-2d.png" alt="Vierra" width={210} height={184} className="h-8 w-auto" />
         </div>
       </div>

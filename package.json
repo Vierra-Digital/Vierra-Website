@@ -17,6 +17,7 @@
     "connect-ga4": "node scripts/connect-ga4.js"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
     "@prisma/client": "^6.19.3",
     "@radix-ui/react-slot": "^1.1.1",
     "@react-three/drei": "^10.7.7",
