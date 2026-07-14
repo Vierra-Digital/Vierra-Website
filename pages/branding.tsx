@@ -366,7 +366,7 @@ const BrandingPage: React.FC = () => {
                       <div className="h-28" style={{ background: 'conic-gradient(from 0deg, #701cc0, #8f42ff, #d4a5ff, #8f42ff, #701cc0)' }} />
                       <div className="p-4">
                         <p className="text-sm font-semibold text-[#1A1033]">Glow Conic</p>
-                        <p className="mt-1 text-[12px] text-[#6B6480]">Animated trim on the “Free Audit Call” button</p>
+                        <p className="mt-1 text-[12px] text-[#6B6480]">Animated trim on the “Let’s Talk” button</p>
                       </div>
                     </div>
                   </div>

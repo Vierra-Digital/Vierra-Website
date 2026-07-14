@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import { motion } from "framer-motion"
 
+// 6x6 grid; `true` marks a visible (filled) cell.
 const gridLayout = [
   [false, false, true, false, false, false],
   [true, false, false, true, true, false],
@@ -11,674 +12,222 @@ const gridLayout = [
   [false, true, false, false, false, false],
 ]
 
-
-
-const animationSets = [
-  {
-    source: "2-2",
-    targets: ["0-2", "3-3"],
-    paths: [
-      "M250,200 L250,60",
-      "M250,290 L250,335 C250,343 258,350 266,350 L310,350",
-    ],
-    colors: ["#9966ff", "#ff5996"],
-  },
-  {
-    source: "2-2",
-    targets: ["3-0", "4-2"],
-    paths: [
-      "M240,290 L240,340 C240,348 232,355 224,355 L93,355",
-      "M255,290 L255,425",
-    ],
-    colors: ["#F50478", "#1877F2"],
-  },
-  {
-    source: "1-0",
-    targets: ["2-1", "1-3"],
-    paths: [
-      "M93,150 L138,150 C144,150 150,156 150,165 L150,210",
-      "M93,135 L310,135",
-    ],
-    colors: ["#F50478", "#1877F2"],
-  },
-  {
-    source: "4-4",
-    targets: ["2-5", "1-4"],
-    paths: [
-      "M460,426 L460,270 C460,262 468,255 476,255 L512,255",
-      "M445,426 L445,175",
-    ],
-    colors: ["#E93948", "#FFC600"],
-  },
-  {
-    source: "4-4",
-    targets: ["2-3", "5-1"],
-    paths: [
-      "M455,426 L455,275 C455,255 450,250 440,250 L395,250",
-      "M455,500 L455,555 C455,560 450,565 440,565 L190,565",
-    ],
-    colors: ["#E93948", "#FFC600"],
-  },
+// Stripe-style traveling lines. Each set fires from one source cell to one or
+// two target cells. Path coordinates are tuned to the 600x600 viewBox; the line
+// colors are derived from the connected icons (source -> target gradient) rather
+// than hard-coded.
+const animationSets: { source: string; targets: string[]; paths: string[] }[] = [
+  { source: "2-2", targets: ["0-2", "3-3"], paths: ["M250,200 L250,60", "M250,290 L250,335 C250,343 258,350 266,350 L310,350"] },
+  { source: "2-2", targets: ["3-0", "4-2"], paths: ["M240,290 L240,340 C240,348 232,355 224,355 L93,355", "M255,290 L255,425"] },
+  { source: "1-0", targets: ["2-1", "1-3"], paths: ["M93,150 L138,150 C144,150 150,156 150,165 L150,210", "M93,135 L310,135"] },
+  { source: "4-4", targets: ["2-5", "1-4"], paths: ["M460,426 L460,270 C460,262 468,255 476,255 L512,255", "M445,426 L445,175"] },
+  { source: "4-4", targets: ["2-3", "5-1"], paths: ["M455,426 L455,275 C455,255 450,250 440,250 L395,250", "M455,500 L455,555 C455,560 450,565 440,565 L190,565"] },
 ]
+
+// Every social icon plus a representative brand color used for the connecting-line
+// gradients. All logos are cycled through the grid over time (round-robin).
+type Social = { src: string; alt: string; color: string }
+const SOCIAL: Social[] = [
+  { src: "/assets/Socials/Discord.png", alt: "Discord", color: "#5865F2" },
+  { src: "/assets/Socials/Email.png", alt: "Email", color: "#EA4335" },
+  { src: "/assets/Socials/Facebook.png", alt: "Facebook", color: "#1877F2" },
+  { src: "/assets/Socials/GoHighLevel.png", alt: "GoHighLevel", color: "#2DD4BF" },
+  { src: "/assets/Socials/GoogleAnalytics.png", alt: "Google Analytics", color: "#E37400" },
+  { src: "/assets/Socials/GoogleBusiness.png", alt: "Google Business", color: "#4285F4" },
+  { src: "/assets/Socials/Instagram.png", alt: "Instagram", color: "#E4405F" },
+  { src: "/assets/Socials/LinkedIn.png", alt: "LinkedIn", color: "#0A66C2" },
+  { src: "/assets/Socials/SEO.png", alt: "SEO", color: "#16A34A" },
+  { src: "/assets/Socials/SnapChat.png", alt: "Snapchat", color: "#FACC15" },
+  { src: "/assets/Socials/TikTok.png", alt: "TikTok", color: "#EE1D52" },
+  { src: "/assets/Socials/Twitter.png", alt: "Twitter", color: "#1DA1F2" },
+  { src: "/assets/Socials/YouTube.png", alt: "YouTube", color: "#FF0000" },
+]
+
+const WIDTH = 600
+const HEIGHT = 600
+
+// First and last coordinate of a path — used to orient the source->target gradient.
+function pathEndpoints(d: string) {
+  const nums = (d.match(/-?\d+(?:\.\d+)?/g) || []).map(Number)
+  return {
+    x1: nums[0] ?? 0,
+    y1: nums[1] ?? 0,
+    x2: nums[nums.length - 2] ?? 0,
+    y2: nums[nums.length - 1] ?? 0,
+  }
+}
+
+const pathVariants = {
+  initial: { opacity: 0, pathLength: 0, pathOffset: 0 },
+  drawing: {
+    opacity: 1,
+    pathLength: 1,
+    transition: { pathLength: { duration: 0.6, ease: "easeInOut" as const }, opacity: { duration: 0.15 } },
+  },
+  showing: { opacity: 1, pathLength: 1, pathOffset: 0 },
+  erasing: {
+    opacity: 1,
+    pathLength: 1,
+    pathOffset: 1,
+    transition: { pathOffset: { duration: 0.6, ease: "easeInOut" as const }, opacity: { duration: 0.5 } },
+  },
+  idle: { opacity: 0 },
+}
 
 function GridComponent() {
   const [activeSet, setActiveSet] = useState(0)
+  const [phase, setPhase] = useState<"drawing" | "showing" | "erasing" | "idle">("idle")
   const [isAnimating, setIsAnimating] = useState(false)
-  const [animationPhase, setAnimationPhase] = useState<
-    "drawing" | "showing" | "erasing" | "idle"
-  >("idle")
   const [activeNodes, setActiveNodes] = useState<string[]>([])
-  const iconCursorRef = React.useRef(0)
-  const [cellIconMap, setCellIconMap] = useState<Record<string, number>>({})
-  const usedIconsRef = React.useRef<Set<number>>(new Set())
-
-  type IconEntry = { src: string; alt: string; gradient: string }
-  const socialIcons = useMemo<IconEntry[]>(() => [
-    { src: "/assets/Socials/Discord.png", alt: "Discord", gradient: "linear-gradient(135deg,#EEF0FF,#F2EFFF)" },
-    { src: "/assets/Socials/Email.png", alt: "Email", gradient: "linear-gradient(135deg,#EAFBF1,#F0FFFB)" },
-    { src: "/assets/Socials/Facebook.png", alt: "Facebook", gradient: "linear-gradient(135deg,#EAF2FF,#F5E9FF)" },
-    { src: "/assets/Socials/GoHighLevel.png", alt: "GoHighLevel", gradient: "linear-gradient(135deg,#EAF8FF,#EFFFF7)" },
-    { src: "/assets/Socials/GoogleAnalytics.png", alt: "Google Analytics", gradient: "linear-gradient(135deg,#FFF4E6,#FFF9E6)" },
-    { src: "/assets/Socials/GoogleBusiness.png", alt: "Google Business", gradient: "linear-gradient(135deg,#E6F3FF,#EAF0FF)" },
-    { src: "/assets/Socials/Instagram.png", alt: "Instagram", gradient: "linear-gradient(135deg,#FFE6F2,#FFF0E6)" },
-    { src: "/assets/Socials/LinkedIn.png", alt: "LinkedIn", gradient: "linear-gradient(135deg,#E6F0FF,#EAF7FF)" },
-    { src: "/assets/Socials/SEO.png", alt: "SEO", gradient: "linear-gradient(135deg,#F2F6FF,#F6F2FF)" },
-    { src: "/assets/Socials/SnapChat.png", alt: "Snapchat", gradient: "linear-gradient(135deg,#FFFDE6,#FFFCEB)" },
-    { src: "/assets/Socials/TikTok.png", alt: "TikTok", gradient: "linear-gradient(135deg,#FDECF0,#EAFBFB)" },
-    { src: "/assets/Socials/Twitter.png", alt: "Twitter", gradient: "linear-gradient(135deg,#E7F6FF,#F0FBFF)" },
-    { src: "/assets/Socials/YouTube.png", alt: "YouTube", gradient: "linear-gradient(135deg,#FFECEC,#FFF6F6)" },
-  ], [])
-
-  const getIconIndexByAlt = useCallback((alt: string) => socialIcons.findIndex((i) => i.alt === alt), [socialIcons])
-
-  const assignIconToKey = useCallback((key: string) => {
-    setCellIconMap((prev) => {
-      if (prev[key] !== undefined) return prev
-      
-      const total = socialIcons.length
-      if (usedIconsRef.current.size >= total) {
-        usedIconsRef.current.clear()
-        iconCursorRef.current = 0
-      }
-      let probe = iconCursorRef.current
-      let attempts = 0
-      while (usedIconsRef.current.has(probe % total) && attempts < total) {
-        probe++
-        attempts++
-      }
-      
-      const assigned = probe % total
-      usedIconsRef.current.add(assigned)
-      iconCursorRef.current = (assigned + 1) % total
-      return { ...prev, [key]: assigned }
-    })
-  }, [socialIcons])
+  const [cellIcon, setCellIcon] = useState<Record<string, number>>({})
+  const iconCursor = useRef(0)
+  const lastSetRef = useRef(-1)
 
   useEffect(() => {
-    let targetTimer: NodeJS.Timeout
-    let eraseTimer: NodeJS.Timeout
-    let resetTimer: NodeJS.Timeout
-    let intervalTimer: ReturnType<typeof setInterval>
+    let timers: ReturnType<typeof setTimeout>[] = []
+    let cancelled = false
+    const after = (ms: number, fn: () => void) => { timers.push(setTimeout(() => !cancelled && fn(), ms)) }
+    const clearTimers = () => { timers.forEach(clearTimeout); timers = [] }
 
-    const runAnimation = () => {
-      const currentSet = animationSets[activeSet]
-
-      setIsAnimating(true)
-      setAnimationPhase("drawing")
-      setActiveNodes([currentSet.source])
-      assignIconToKey(currentSet.source)
-
-      targetTimer = setTimeout(() => {
-        setActiveNodes([currentSet.source, ...currentSet.targets])
-          currentSet.targets.forEach(assignIconToKey)
-        setAnimationPhase("showing")
-      }, 500)
-
-      eraseTimer = setTimeout(() => {
-        setAnimationPhase("erasing")
-      }, 4000)
-
-      resetTimer = setTimeout(() => {
-        setIsAnimating(false)
-        setAnimationPhase("idle")
-        setActiveNodes([])
-        setActiveSet((prev) => {
-          const next = (prev + 1) % animationSets.length
-          if (next === 0) {
-            setCellIconMap({})
-            iconCursorRef.current = 0
-            usedIconsRef.current.clear()
-          }
-          return next
+    // Give each connected cell the next icon in the round-robin, so every logo
+    // continuously cycles through the grid over time.
+    const assignIcons = (keys: string[]) =>
+      setCellIcon((prev) => {
+        const next = { ...prev }
+        keys.forEach((k) => {
+          next[k] = iconCursor.current % SOCIAL.length
+          iconCursor.current += 1
         })
-      }, 5000)
+        return next
+      })
+
+    const runCycle = () => {
+      if (cancelled) return
+      // Random set each cycle (never the same one twice in a row).
+      let idx = Math.floor(Math.random() * animationSets.length)
+      if (animationSets.length > 1 && idx === lastSetRef.current) idx = (idx + 1) % animationSets.length
+      lastSetRef.current = idx
+      const set = animationSets[idx]
+
+      setActiveSet(idx)
+      setIsAnimating(true)
+      setPhase("drawing")
+      // Assign icons to source AND targets up front so line gradients know both
+      // colors, but only reveal the source logo until the line arrives.
+      assignIcons([set.source, ...set.targets])
+      setActiveNodes([set.source])
+
+      after(600, () => { setActiveNodes([set.source, ...set.targets]); setPhase("showing") })
+      after(3400, () => setPhase("erasing"))
+      after(4100, () => { setIsAnimating(false); setPhase("idle"); setActiveNodes([]); after(500, runCycle) })
     }
 
-    const startAnimationLoop = () => {
-      runAnimation()
-      intervalTimer = setInterval(runAnimation, 5500)
-    }
+    runCycle()
+    return () => { cancelled = true; clearTimers() }
+  }, [])
 
-    const stopAnimationLoop = () => {
-      clearTimeout(targetTimer)
-      clearTimeout(eraseTimer)
-      clearTimeout(resetTimer)
-      clearInterval(intervalTimer)
-    }
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        stopAnimationLoop()
-        setActiveSet(0)
-        setAnimationPhase("idle")
-        setActiveNodes([])
-        setIsAnimating(false)
-        startAnimationLoop()
-      } else {
-        stopAnimationLoop()
-      }
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-    startAnimationLoop()
-
-    return () => {
-      stopAnimationLoop()
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
-    }
-  }, [assignIconToKey, getIconIndexByAlt, activeSet])
-
-  const isNodeActive = (key: string) => {
-    return activeNodes.includes(key)
+  const isNodeActive = (key: string) => activeNodes.includes(key)
+  const colorOf = (key: string) => {
+    const i = cellIcon[key]
+    return i != null ? SOCIAL[i].color : "#701CC0"
   }
 
-  const pathVariants = useMemo(
-    () => ({
-      initial: {
-        opacity: 0,
-        pathLength: 0,
-        pathOffset: 0,
-      },
-      drawing: {
-        opacity: 1,
-        pathLength: 1,
-        transition: {
-          pathLength: { duration: 0.5, ease: "easeInOut" as const },
-          opacity: { duration: 0.1 },
-        },
-      },
-      showing: {
-        opacity: 1,
-        pathLength: 1,
-        pathOffset: 0,
-      },
-      erasing: {
-        opacity: 1,
-        pathLength: 1,
-        pathOffset: 1,
-        transition: {
-          pathOffset: { duration: 0.5, ease: "easeInOut" as const },
-          opacity: { duration: 0.4 },
-        },
-      },
-      exit: {
-        opacity: 0,
-        transition: {
-          opacity: { duration: 0.1 },
-        },
-      },
-    }),
-    []
-  )
-
-  const iconVariants = {
-    inactive: {
-      backgroundColor: "#F3F3F3",
-      transition: {
-        duration: 0.3,
-        ease: "easeOut" as const,
-      },
-    },
-    active: {
-      backgroundColor: "#FFFFFF",
-      transition: {
-        backgroundColor: {
-          duration: 2.5,
-          ease: "easeInOut" as const,
-        },
-        duration: 0.3,
-        ease: "easeOut" as const,
-      },
-    },
-  }
-  const renderSVG = (key: string, isActive: boolean, cellIconMap: Record<string, number>) => {
-    switch (key) {
-      case "3-0":
-        return (
-          <div
-            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}
-          >
-            {isActive && (
-              <motion.div
-                whileHover={{ scale: 1.15, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              >
-              <Image
-                src="/assets/Socials/Facebook.png"
-                alt="Facebook"
-                width={56}
-                height={56}
-                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-              />
-              </motion.div>
-            )}
-          </div>
-        )
-      case "1-4":
-        return (
-          <div
-            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}
-          >
-            {isActive && (
-              <motion.div
-                whileHover={{ scale: 1.15, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              >
-              <Image
-                src="/assets/Socials/GoogleAnalytics.png"
-                alt="GoogleAnalytics"
-                width={56}
-                height={56}
-                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-              />
-              </motion.div>
-            )}
-          </div>
-        )
-      case "2-2":
-        return (
-          <div
-            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}
-          >
-            {isActive && (
-              <motion.div
-                whileHover={{ scale: 1.15, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              >
-              <Image
-                src="/assets/Socials/Instagram.png"
-                alt="Instagram"
-                width={56}
-                height={56}
-                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-              />
-              </motion.div>
-            )}
-          </div>
-        )
-
-      case "2-5":
-        return (
-          <div
-            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}
-          >
-            {isActive && (
-              <motion.div
-                whileHover={{ scale: 1.15, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              >
-              <Image
-                src="/assets/Socials/SEO.png"
-                alt="SEO"
-                width={56}
-                height={56}
-                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-              />
-              </motion.div>
-            )}
-          </div>
-        )
-      case "0-0":
-        return (
-          <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
-            {isActive && (
-              <motion.div
-                whileHover={{ scale: 1.15, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              >
-              <Image src="/assets/Socials/TikTok.png" alt="TikTok" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
-              </motion.div>
-            )}
-          </div>
-        )
-      case "0-5":
-        return (
-          <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
-            {isActive && (
-              <motion.div
-                whileHover={{ scale: 1.15, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              >
-              <Image src="/assets/Socials/Twitter.png" alt="Twitter" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
-              </motion.div>
-            )}
-          </div>
-        )
-      case "5-0":
-        return (
-          <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
-            {isActive && (
-              <motion.div
-                whileHover={{ scale: 1.15, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              >
-              <Image src="/assets/Socials/YouTube.png" alt="YouTube" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
-              </motion.div>
-            )}
-          </div>
-        )
-      case "1-0":
-        return (
-          <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
-            {isActive && (
-              <motion.div
-                whileHover={{ scale: 1.15, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              >
-              <Image src="/assets/Socials/SnapChat.png" alt="SnapChat" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
-              </motion.div>
-            )}
-          </div>
-        )
-      case "1-5":
-        return (
-          <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
-            {isActive && (
-              <motion.div
-                whileHover={{ scale: 1.15, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              >
-              <Image src="/assets/Socials/Discord.png" alt="Discord" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
-              </motion.div>
-            )}
-          </div>
-        )
-      case "5-5":
-        return (
-          <div className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full flex items-center justify-center`}>
-            {isActive && (
-              <motion.div
-                whileHover={{ scale: 1.15, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              >
-              <Image src="/assets/Socials/GoogleBusiness.png" alt="Google Business" width={56} height={56} className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain" />
-              </motion.div>
-            )}
-          </div>
-        )
-      case "4-2":
-        return (
-          <div
-            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${
-              isActive ? "border-transparent" : "border-[#D9DEDD]"
-            } border flex items-center justify-center`}
-          >
-            {isActive && (
-              <motion.div
-                whileHover={{ scale: 1.15, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              >
-              <Image
-                src="/assets/Socials/LinkedIn.png"
-                alt="LinkedIn"
-                width={56}
-                height={56}
-                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-              />
-              </motion.div>
-            )}
-          </div>
-        )
-      case "4-4":
-        return (
-          <div
-            className={`w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full ${
-              isActive ? "border-transparent" : "border-[#D9DEDD]"
-            } border flex items-center justify-center`}
-          >
-            {isActive && (
-              <motion.div
-                whileHover={{ scale: 1.15, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}
-              >
-              <Image
-                src="/assets/Socials/Email.png"
-                alt="Email"
-                width={56}
-                height={56}
-                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-              />
-              </motion.div>
-            )}
-          </div>
-        )
-      default:
-        if (isActive && cellIconMap[key] !== undefined) {
-          return (
-            <motion.div
-              whileHover={{ scale: 1.15, rotate: 5 }}
-              transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            >
-              <Image
-                src={socialIcons[cellIconMap[key]].src}
-                alt={socialIcons[cellIconMap[key]].alt}
-                width={56}
-                height={56}
-                className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 object-contain"
-              />
-            </motion.div>
-          )
-        }
-        return (
-          <div className="w-[30px] h-[30px] sm:w-[40px] sm:h-[40px] md:w-[57px] md:h-[57px] rounded-full border border-[#D9DEDD]" />
-        )
-    }
-  }
-  const GridCell = ({
-    cellKey,
-    isFilled,
-    isActive,
-    cellIconMap,
-    socialIcons,
-  }: {
-    cellKey: string
-    isFilled: boolean
-    isActive: boolean
-    cellIconMap: Record<string, number>
-    socialIcons: IconEntry[]
-  }) => {
-    if (!isFilled) return null
-    const getBackground = () => {
-      if (!isActive) return "#F7F7F8"
-      if (cellKey === "3-0") return "linear-gradient(135deg,#EAF2FF,#F5E9FF)"
-      if (cellKey === "2-2") return "linear-gradient(135deg,#FFE6F2,#FFF0E6)"
-      if (cellKey === "4-2") return "linear-gradient(135deg,#E6F0FF,#EAF7FF)"
-      if (cellKey === "1-4") return "linear-gradient(135deg,#FFF4E6,#FFF9E6)"
-      if (cellKey === "5-5") return "linear-gradient(135deg,#E6F3FF,#EAF0FF)"
-      if (cellKey === "4-4") return "linear-gradient(135deg,#EAFBF1,#F0FFFB)"
-      if (cellKey === "2-5") return "linear-gradient(135deg,#F2F6FF,#F6F2FF)"
-      if (cellKey === "0-0") return "linear-gradient(135deg,#FDECF0,#EAFBFB)"
-      if (cellKey === "0-5") return "linear-gradient(135deg,#E7F6FF,#F0FBFF)"
-      if (cellKey === "5-0") return "linear-gradient(135deg,#FFECEC,#FFF6F6)"
-      if (cellKey === "1-0") return "linear-gradient(135deg,#FFFDE6,#FFFCEB)"
-      if (cellKey === "1-5") return "linear-gradient(135deg,#EEF0FF,#F2EFFF)"
-      if (cellKey === "3-5") return "linear-gradient(135deg,#EAF8FF,#EFFFF7)"
-      if (cellIconMap[cellKey] !== undefined) {
-        const iconIndex = cellIconMap[cellKey]
-        return socialIcons[iconIndex]?.gradient || "#F7F7F8"
-      }
-      
-      return "#F7F7F8"
-    }
-
-    return (
-      <motion.div
-        key={cellKey}
-        role="gridcell"
-        aria-label={`Grid cell ${cellKey}`}
-        className={`w-full h-full flex flex-col items-center justify-center rounded-lg ${isActive ? "shadow-md" : ""}`}
-        style={{
-          background: getBackground(),
-        }}
-        variants={iconVariants}
-        initial={false}
-        animate={isActive ? "active" : "inactive"}
-      >
-        {renderSVG(cellKey, isActive, cellIconMap)}
-        
-      </motion.div>
-    )
-  }
-
-  const width = 600
-  const height = 600
+  const set = animationSets[activeSet]
 
   return (
     <div className="relative" style={{ width: "fit-content" }}>
+      {/* Traveling source -> target lines, each colored with a gradient from the
+          source icon's color to the target icon's color. */}
       <svg
         className="absolute top-0 left-0 w-full h-full pointer-events-none"
         style={{ minWidth: "100%", minHeight: "100%" }}
         preserveAspectRatio="xMidYMid meet"
-        viewBox={`0 0 ${width} ${height}`}
+        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
       >
         {isAnimating && (
           <>
             <defs>
-              <mask id="curveMask">
-                {animationSets[activeSet].paths.map((path, index) => {
-                  return (
-                    <motion.path
-                      key={`${activeSet}-${index}`}
-                      d={path}
-                      stroke="white"
-                      strokeWidth="5"
-                      fill="none"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      variants={pathVariants}
-                      initial="initial"
-                      animate={animationPhase}
-                      exit="erasing"
-                    />
-                  )
-                })}
-              </mask>
-              {animationSets[activeSet].paths.map((path, index) => {
-                const isLastSet = activeSet === animationSets.length - 1
-                const isFirstSet = activeSet === 0
-                const gradientDirection = isFirstSet
-                  ? index === 0
-                    ? { y1: "1", y2: "0" }
-                    : { y1: "0", y2: "1" }
-                  : isLastSet
-                  ? { y1: "1", y2: "0" }
-                  : { y1: "0", y2: "1" }
+              {set.paths.map((d, i) => {
+                const e = pathEndpoints(d)
                 return (
-                  <React.Fragment key={`${activeSet}-${index}`}>
-                    <linearGradient
-                      id="gradient"
-                      x1="0"
-                      x2="0"
-                      y1={gradientDirection.y1}
-                      y2={gradientDirection.y2}
-                    >
-                      <motion.stop
-                        stopColor={animationSets[activeSet].colors[0]}
-                        animate={{ offset: ["-150%", "100%"] }}
-                        transition={{
-                          duration: 3,
-                          repeat: Infinity,
-                          ease: "easeInOut" as const,
-                        }}
-                      />
-                      <motion.stop
-                        stopColor={animationSets[activeSet].colors[1]}
-                        animate={{ offset: ["-20%", "100%"] }}
-                        transition={{
-                          duration: 3,
-                          repeat: Infinity,
-                          ease: "easeInOut" as const,
-                        }}
-                      />
-                      <motion.stop
-                        stopColor={animationSets[activeSet].colors[1]}
-                        animate={{ offset: ["-12%", "108%"] }}
-                        transition={{
-                          duration: 3,
-                          repeat: Infinity,
-                          ease: "easeInOut" as const,
-                        }}
-                      />
-                      <motion.stop
-                        stopColor={animationSets[activeSet].colors[0]}
-                        animate={{ offset: ["-8%", "112%"] }}
-                        transition={{
-                          duration: 3,
-                          repeat: Infinity,
-                          ease: "easeInOut" as const,
-                        }}
-                      />
-                    </linearGradient>
-                  </React.Fragment>
+                  <linearGradient
+                    key={`g-${activeSet}-${i}`}
+                    id={`ln-${activeSet}-${i}`}
+                    gradientUnits="userSpaceOnUse"
+                    x1={e.x1}
+                    y1={e.y1}
+                    x2={e.x2}
+                    y2={e.y2}
+                  >
+                    <stop offset="0%" stopColor={colorOf(set.source)} />
+                    <stop offset="100%" stopColor={colorOf(set.targets[i])} />
+                  </linearGradient>
                 )
               })}
             </defs>
-            {animationSets[activeSet].paths.map((path, index) => {
-              return (
-                <g mask="url(#curveMask)" key={`${activeSet}-${index}`}>
-                  <rect
-                    x="0"
-                    y="0"
-                    width={width}
-                    height={height}
-                    fill={animationSets[activeSet].colors[0]}
-                  />
-                  <rect
-                    x="0"
-                    y="0"
-                    width={width}
-                    height={height}
-                    fill="url(#gradient)"
-                  />
-                </g>
-              )
-            })}
+            {set.paths.map((d, i) => (
+              <motion.path
+                key={`${activeSet}-${i}`}
+                d={d}
+                stroke={`url(#ln-${activeSet}-${i})`}
+                strokeWidth={3}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                variants={pathVariants}
+                initial="initial"
+                animate={phase}
+              />
+            ))}
           </>
         )}
       </svg>
 
-      <div
-        role="grid"
-        className="grid grid-cols-6 gap-x-2 gap-y-3 mx-auto"
-        style={{ width: "fit-content" }}
-      >
-        {gridLayout.map((row, rowIndex) =>
-          row.map((isFilled, colIndex) => {
-            const key = `${rowIndex}-${colIndex}`
-            const isActive = isNodeActive(key)
-
+      {/* 6x6 grid. Filled cells always render a box (faint when empty); logos fade
+          in when a line connects. Hover enlarges the whole box (no rotation). */}
+      <div role="grid" className="grid grid-cols-6 gap-x-2 gap-y-3 mx-auto" style={{ width: "fit-content" }}>
+        {gridLayout.map((row, r) =>
+          row.map((filled, c) => {
+            const key = `${r}-${c}`
+            if (!filled) {
+              return <div key={key} className="w-[45px] h-[45px] sm:w-[55px] sm:h-[55px] md:w-[80px] md:h-[80px]" aria-hidden />
+            }
+            const iconIndex = cellIcon[key]
+            const showIcon = isNodeActive(key) && iconIndex != null
+            const icon = iconIndex != null ? SOCIAL[iconIndex] : null
             return (
-              <div
-                key={key}
-                className="w-[45px] h-[45px] sm:w-[55px] sm:h-[55px] md:w-[80px] md:h-[80px] flex items-center justify-center z-10"
-              >
-                <GridCell
-                  cellKey={key}
-                  isFilled={isFilled}
-                  isActive={isActive}
-                  cellIconMap={cellIconMap}
-                  socialIcons={socialIcons}
-                />
+              <div key={key} className="w-[45px] h-[45px] sm:w-[55px] sm:h-[55px] md:w-[80px] md:h-[80px] z-10">
+                <div className="group relative flex h-full w-full items-center justify-center">
+                  {/* The box frame — this is what enlarges on hover (the icon stays put). */}
+                  <div
+                    className={`absolute inset-0 rounded-xl border transition-all duration-300 ease-out group-hover:scale-[1.12] group-hover:border-[#701CC0]/40 group-hover:shadow-[0_6px_18px_-8px_rgba(112,28,192,0.35)] ${
+                      showIcon
+                        ? "border-transparent bg-white shadow-[0_8px_22px_-10px_rgba(17,24,39,0.35)]"
+                        : "border-[#C4C2D6] bg-transparent"
+                    }`}
+                  >
+                    {/* Empty-state marker — inner circle, fades out when a logo shows. */}
+                    <span
+                      className={`absolute left-1/2 top-1/2 h-1/3 w-1/3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#AEACC4] transition-opacity duration-300 ${
+                        showIcon ? "opacity-0" : "opacity-100"
+                      }`}
+                    />
+                  </div>
+                  {/* Icon sits above the frame and does NOT scale on hover. */}
+                  {icon && (
+                    <Image
+                      src={icon.src}
+                      alt={icon.alt}
+                      width={48}
+                      height={48}
+                      draggable={false}
+                      onDragStart={(e) => e.preventDefault()}
+                      className={`grid-social-icon relative z-10 w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 object-contain transition-opacity duration-300 ease-out ${
+                        showIcon ? "opacity-100" : "opacity-0"
+                      }`}
+                    />
+                  )}
+                </div>
               </div>
             )
           })

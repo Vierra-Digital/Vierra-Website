@@ -181,7 +181,7 @@ const FaqPage: React.FC = () => {
                 onClick={() => setIsModalOpen(true)}
                 className="audit-glow mt-7 inline-flex items-center gap-2 rounded-lg border-2 border-[#701CC0] bg-transparent px-8 py-4 font-medium text-white transition-all duration-300 hover:border-[#8F42FF]"
               >
-                Claim Your Free Audit Call
+                Let&apos;s Talk
               </button>
             </section>
           </div>
