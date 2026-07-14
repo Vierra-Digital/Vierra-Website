@@ -2,7 +2,7 @@
 
 import { Bricolage_Grotesque, Figtree } from "next/font/google"
 import { useRef, useState } from "react"
-import { motion, AnimatePresence, useScroll, useTransform, useMotionValueEvent } from "framer-motion"
+import { motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion"
 import { OnboardingStepAnim, TamMiningAnim } from "./OnboardingSteps"
 
 const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
@@ -14,12 +14,12 @@ const steps = [
   {
     n: 1,
     title: "Initial Meeting & Evaluation",
-    text: "We meet, map your goals, and evaluate fit — we only move forward if we can genuinely fill your pipeline.",
+    text: "We meet, map your goals, and see if we are compatible to work with each other. We only move forward if we're confident in filling your pipeline.",
   },
   {
     n: 2,
-    title: "Onboard Into Vierra",
-    text: "You onboard through our custom module — connect inboxes, CRM, and tools in minutes, guided end to end.",
+    title: "Onboard Onto Our Platform",
+    text: "Go through our onboarding module in under an hour. Connect inboxes, tools, and tell us more about your ICPs.",
   },
   {
     n: 3,
@@ -28,7 +28,7 @@ const steps = [
   },
   {
     n: 4,
-    title: "TAM Sort & Mining",
+    title: "TAM Sorting & Mining",
     text: "We mine your total addressable market and sort it by ICP fit, surfacing only the accounts worth pursuing.",
   },
   {
@@ -43,10 +43,9 @@ const steps = [
   },
 ]
 
-// Intro title stays centered & locked until HOLD_END, then docks to the top by
-// DOCK_END; the steps play out across the rest of the scroll.
-const HOLD_END = 0.16
-const DOCK_END = 0.26
+// The intro title holds until DOCK_END, then simply crossfades into the steps
+// (no upward slide) while the steps play out across the rest of the scroll.
+const DOCK_END = 0.18
 
 const Timeline = () => {
   const sectionRef = useRef<HTMLDivElement>(null)
@@ -55,19 +54,12 @@ const Timeline = () => {
   const [dir, setDir] = useState(1) // scroll direction: 1 = forward, -1 = back
   const activeRef = useRef(0)
 
-  // Only the header's POSITION is scroll-linked (the smooth dock). Every opacity
-  // is state-driven via AnimatePresence below, so nothing can get stuck at a
-  // partial opacity when you stop mid-scroll (the old "opacity broken" bug).
+  // Scroll drives which step is shown; all opacity is state-driven via
+  // AnimatePresence so nothing sticks at a partial opacity mid-scroll.
   const { scrollYProgress } = useScroll({ target: sectionRef, offset: ["start start", "end end"] })
-  // Intro: centered (top 50% + translateY -50%). Docked: top-anchored near the
-  // top (top 11% + translateY 0) so the title sits cleanly above the animation
-  // with consistent spacing (no weird mid-screen gap).
-  const headerTop = useTransform(scrollYProgress, [HOLD_END, DOCK_END], ["50%", "11%"])
-  const headerTY = useTransform(scrollYProgress, [HOLD_END, DOCK_END], ["-50%", "0%"])
-  const headerScale = useTransform(scrollYProgress, [HOLD_END, DOCK_END], [1, 0.84])
 
   useMotionValueEvent(scrollYProgress, "change", (p) => {
-    setShowIntro(p < DOCK_END - 0.02)
+    setShowIntro(p < DOCK_END - 0.01)
     const t = (p - DOCK_END) / (1 - DOCK_END)
     const idx = Math.max(0, Math.min(steps.length - 1, Math.floor(t * steps.length)))
     if (idx !== activeRef.current) {
@@ -99,16 +91,16 @@ const Timeline = () => {
           {/* Animation stage — the active step's animation, centered in the band
               below the docked title. TAM uses the WebGL sphere; it only mounts
               when active so its canvas isn't rendered behind the other steps. */}
-          <div className="absolute inset-x-0 top-[31%] bottom-[9%] z-10">
+          <div className="absolute inset-x-0 top-[27%] bottom-[14%] z-10 flex items-center justify-center">
             <AnimatePresence mode="wait">
               {!showIntro && (
                 <motion.div
                   key={active === 3 ? "tam" : `anim-${active}`}
                   className="absolute inset-0"
-                  initial={{ opacity: 0, scale: 0.94, y: dir > 0 ? 70 : -70 }}
+                  initial={{ opacity: 0, scale: 0.97, y: dir > 0 ? 40 : -40 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.94, y: dir > 0 ? -70 : 70 }}
-                  transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                  exit={{ opacity: 0, scale: 0.97, y: dir > 0 ? -40 : 40 }}
+                  transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
                 >
                   {active === 3 ? <TamMiningAnim /> : <OnboardingStepAnim step={active} />}
                 </motion.div>
@@ -116,42 +108,61 @@ const Timeline = () => {
             </AnimatePresence>
           </div>
 
-          {/* Header — moves center → top; content crossfades intro → step. */}
-          <motion.div style={{ top: headerTop, y: headerTY, scale: headerScale }} className="absolute inset-x-0 z-20 px-8">
-            <div className="mx-auto max-w-3xl text-center">
-              <AnimatePresence mode="wait">
-                {showIntro ? (
-                  <motion.div key="intro" initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -22 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
-                    <span className={`${figtree.className} text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]`}>
-                      Getting Started
-                    </span>
-                    <h2
-                      style={{ fontSize: "clamp(1.5rem, 6.2vw, 3.75rem)" }}
-                      className={`${bricolage.className} mt-4 whitespace-nowrap font-bold leading-[1.05] text-[#EFF3FF]`}
-                    >
-                      How Onboarding Works
-                    </h2>
-                    <p className={`${figtree.className} mx-auto mt-5 max-w-xl text-lg text-[#B9A9D6]`}>
-                      From the first call to a calendar full of qualified meetings — here&apos;s exactly how we get you live.
-                    </p>
-                  </motion.div>
-                ) : (
-                  <motion.div key={`step-${active}`} initial={{ opacity: 0, y: dir > 0 ? 22 : -22 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: dir > 0 ? -22 : 22 }} transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}>
-                    <span className={`${figtree.className} text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]`}>
-                      Step {step.n} of {steps.length}
-                    </span>
-                    <h2
-                      style={{ fontSize: "clamp(1.5rem, 6.2vw, 3.75rem)" }}
-                      className={`${bricolage.className} mt-4 whitespace-nowrap font-bold leading-[1.05] text-[#EFF3FF]`}
-                    >
-                      {step.title}
-                    </h2>
-                    <p className={`${figtree.className} mx-auto mt-5 max-w-xl text-lg text-[#B9A9D6]`}>{step.text}</p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </motion.div>
+          {/* Intro — centered hero; simply fades out into the steps (no slide). */}
+          <AnimatePresence>
+            {showIntro && (
+              <motion.div
+                key="intro"
+                className="absolute inset-x-0 top-1/2 z-20 -translate-y-1/2 px-8"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <div className="mx-auto max-w-4xl text-center">
+                  <span className={`${figtree.className} text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]`}>
+                    Getting Started
+                  </span>
+                  <h2
+                    style={{ fontSize: "clamp(1.75rem, 6vw, 3.75rem)" }}
+                    className={`${bricolage.className} mt-4 whitespace-nowrap font-bold leading-[1.05] text-[#EFF3FF]`}
+                  >
+                    Triple Your MRR In Under 6 Steps
+                  </h2>
+                  <p className={`${figtree.className} mx-auto mt-5 max-w-xl text-lg text-[#B9A9D6]`}>
+                    From the first call to a calendar exploding with qualified leads. Here&apos;s exactly what you need to do.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Step header — docked near the top; crossfades between steps. */}
+          <div className="absolute inset-x-0 top-[10%] z-20 px-8">
+            <AnimatePresence mode="wait">
+              {!showIntro && (
+                <motion.div
+                  key={`step-${active}`}
+                  className="mx-auto max-w-3xl text-center"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <span className={`${figtree.className} text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]`}>
+                    Step {step.n} of {steps.length}
+                  </span>
+                  <h2
+                    style={{ fontSize: "clamp(1.5rem, 5vw, 3rem)" }}
+                    className={`${bricolage.className} mt-4 whitespace-nowrap font-bold leading-[1.05] text-[#EFF3FF]`}
+                  >
+                    {step.title}
+                  </h2>
+                  <p className={`${figtree.className} mx-auto mt-4 max-w-xl text-base text-[#B9A9D6]`}>{step.text}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           {/* Progress rail — appears once the steps begin. */}
           <AnimatePresence>
@@ -189,10 +200,10 @@ function MobileTimeline() {
         <div className="mb-8 text-center">
           <span className={`${figtree.className} text-[11px] font-semibold uppercase tracking-[0.35em] text-[#C99DFF]`}>Getting Started</span>
           <h2
-            style={{ fontSize: "clamp(1.75rem, 9vw, 3rem)" }}
+            style={{ fontSize: "clamp(1.9rem, 9vw, 3rem)" }}
             className={`${bricolage.className} mt-3 font-bold leading-[1.05] text-[#EFF3FF]`}
           >
-            How Onboarding Works
+            Triple Your MRR In Under 6 Steps
           </h2>
         </div>
 
