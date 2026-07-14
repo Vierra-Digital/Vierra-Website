@@ -1,14 +1,13 @@
 import React, { useState } from "react";
 import Head from "next/head";
 import Image from "next/image";
-import { Inter } from "next/font/google";
+import { inter } from "@/lib/fonts";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/router";
 import type { GetServerSideProps } from "next";
 import { requireSession } from "@/lib/auth";
 import { signOut } from "@/lib/session-client";
 
-const inter = Inter({ subsets: ["latin"] });
 
 export default function OnboardingStartPage() {
   const router = useRouter();

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, type ReactNode } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Bricolage_Grotesque, Inter } from "next/font/google"
+import Image from "next/image"
+import { bricolage, inter } from "@/lib/fonts";
 import { ArrowUpRight } from "lucide-react"
 import { Modal } from "@/components/Modal"
 import type { IconType } from "react-icons"
@@ -23,8 +24,6 @@ import {
   SiDropbox,
 } from "react-icons/si"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const inter = Inter({ subsets: ["latin"] })
 
 // Illustrative booked-meeting feed (sample data, not real bookings).
 type Meeting = { company: string; source: string; Icon: IconType; color: string; time: string }
@@ -335,7 +334,7 @@ const chatScript: ChatMsg[] = [
 
 function ChatAvatar({ src, name }: { src: string; name: string }) {
   // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt={name} className="h-9 w-9 shrink-0 rounded-xl object-cover" />
+  return <Image src={src} alt={name} width={36} height={36} className="h-9 w-9 shrink-0 rounded-xl object-cover" />
 }
 
 function ChatBubble({ m }: { m: ChatMsg }) {
@@ -559,7 +558,7 @@ function OrbitVisual() {
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white ring-1 ring-[#701CC0]/15 shadow-[0_14px_34px_-10px_rgba(112,28,192,0.55)]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/assets/vierra-v-2d.png" alt="Vierra" className="h-8 w-auto" />
+          <Image src="/assets/vierra-v-2d.png" alt="Vierra" width={210} height={184} className="h-8 w-auto" />
         </div>
       </div>
     </div>

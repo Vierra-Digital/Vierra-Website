@@ -2,10 +2,8 @@
 
 import { Play } from "lucide-react"
 import { motion } from "framer-motion"
-import { Bricolage_Grotesque, Inter } from "next/font/google"
+import { bricolage, inter } from "@/lib/fonts";
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const inter = Inter({ subsets: ["latin"] })
 
 export function CaseStudies() {
   return (

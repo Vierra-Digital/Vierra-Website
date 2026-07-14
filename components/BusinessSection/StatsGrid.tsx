@@ -1,11 +1,9 @@
 "use client"
 import { TrendingUp } from "lucide-react"
-import { Bricolage_Grotesque, Inter } from "next/font/google"
+import { bricolage, inter } from "@/lib/fonts";
 import { useEffect, useState, useRef } from "react"
 import { motion, animate, useInView } from "framer-motion"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const inter = Inter({ subsets: ["latin"] })
 
 const cardVar = {
   hidden: { opacity: 0, y: 28, scale: 0.97 },
@@ -147,7 +145,7 @@ export function StatsGrid() {
           <div
             className={`relative z-10 text-5xl tracking-tight leading-none text-white max-md:text-2xl ${bricolage.className}`}
           >
-            <span>Scale Your Business</span>
+            <h2 className="inline">Scale Your Business</h2>
           </div>
           <div className="relative z-10 w-full h-full">
             <svg

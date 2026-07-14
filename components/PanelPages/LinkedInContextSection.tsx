@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Inter } from "next/font/google";
+import { inter } from "@/lib/fonts";
 import PanelSectionHeader from "@/components/ui/PanelSectionHeader";
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
-const inter = Inter({ subsets: ["latin"] });
 const NON_RESIZABLE_TEXT_KEYS = new Set(["website", "brandTone"]);
 
 export type LinkedInContextData = {

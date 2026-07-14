@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Bricolage_Grotesque, Inter } from 'next/font/google';
+import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import Link from 'next/link';
 import { ArrowUpRight, MapPin } from 'lucide-react';
@@ -8,8 +8,6 @@ import { Header } from '@/components/Header';
 import Footer from '@/components/FooterSection/Footer';
 import { JOB_ROLES } from '@/lib/careers';
 
-const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
-const inter = Inter({ subsets: ['latin'] });
 
 const CareersPage: React.FC = () => {
   return (

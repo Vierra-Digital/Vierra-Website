@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Head from "next/head";
-import { Inter } from "next/font/google";
+import { inter } from "@/lib/fonts";
 import { motion } from "framer-motion";
 import { Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
 import { useRouter } from "next/router";
 import { useSession } from "@/lib/session-client";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
-const inter = Inter({ subsets: ["latin"] });
 
 function resolveCredentialErrorMessage(rawError?: string | null) {
   const normalized = (rawError || "").toLowerCase();

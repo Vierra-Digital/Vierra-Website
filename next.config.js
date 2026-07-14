@@ -8,6 +8,13 @@ const nextConfig = {
   reactStrictMode: true,
   compress: true,
   poweredByHeader: false,
+  // Strip console.* (except error/warn) from PRODUCTION builds only. Removes
+  // leftover debug/info logging across the app — including anything echoing PII
+  // (recipient emails, session cookies) — without editing each call site, and
+  // trims a little client JS. Dev builds keep all logs.
+  compiler: {
+    removeConsole: { exclude: ['error', 'warn'] },
+  },
   // Tree-shake heavy barrel-import libraries so importing one symbol doesn't pull
   // the whole package into the client bundle. react-icons (30 files) and recharts
   // aren't in Next's default optimize list, so this is a real bundle/LCP/INP win.
@@ -53,11 +60,11 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com https://www.google.com",
-              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com https://www.google.com https://www.clarity.ms",
+              "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https: blob:",
-              "font-src 'self' https://fonts.gstatic.com data:",
-              "connect-src 'self' https://*.supabase.co https://vierra-server.vercel.app https://api.linkedin.com https://graph.facebook.com https://www.googleapis.com https://www.linkedin.com https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com https://www.google.com https://stats.g.doubleclick.net",
+              "font-src 'self' data:",
+              "connect-src 'self' https://*.supabase.co https://vierra-server.vercel.app https://api.linkedin.com https://graph.facebook.com https://www.googleapis.com https://www.linkedin.com https://www.google-analytics.com https://region1.google-analytics.com https://analytics.google.com https://www.google.com https://stats.g.doubleclick.net https://www.clarity.ms https://c.clarity.ms",
               "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
               "media-src 'self'",
               "object-src 'none'",

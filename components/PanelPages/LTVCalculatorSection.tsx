@@ -1,7 +1,6 @@
 import React, { useState } from "react"
-import { Inter } from "next/font/google"
+import { inter } from "@/lib/fonts";
 
-const inter = Inter({ subsets: ["latin"] })
 
 const LTVCalculatorSection = () => {
     const [averagePurchaseValue, setAveragePurchaseValue] = useState(0);

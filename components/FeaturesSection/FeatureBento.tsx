@@ -1,14 +1,13 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Bricolage_Grotesque, Inter } from "next/font/google"
+import Image from "next/image"
+import { bricolage, inter } from "@/lib/fonts";
 import type { ReactNode } from "react"
 import { SiGmail } from "react-icons/si"
 import { FaLinkedin, FaInstagram, FaFacebook, FaCommentSms, FaWhatsapp } from "react-icons/fa6"
 import BrandSphere from "./BrandSphere"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const inter = Inter({ subsets: ["latin"] })
 
 // Shared reveal-on-scroll motion + card chrome, kept DRY across the bento.
 const reveal = {
@@ -53,14 +52,15 @@ function LeadResearchAnim() {
           animate={{ boxShadow: ["0 0 0 0 rgba(179,102,255,0.55)", "0 0 0 8px rgba(179,102,255,0)"] }}
           transition={{ duration: 1.9, repeat: Infinity, ease: "easeOut" }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src={LEAD.avatar}
             alt=""
             aria-hidden
+            fill
+            sizes="40px"
             draggable={false}
             onDragStart={(e) => e.preventDefault()}
-            className="h-full w-full select-none object-cover object-top"
+            className="select-none object-cover object-top"
           />
         </motion.span>
         <div className="min-w-0 flex-1 leading-tight">
@@ -292,11 +292,12 @@ const OUTREACH_MSGS = [
 function OutreachAvatar({ you }: { you: boolean }) {
   // "you" = Alex (Vierra rep) on the right; the other side is Shelby.
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
+    <Image
       src={you ? "/assets/Team/Alex.png" : "/assets/leads/shelby.png"}
       alt=""
       aria-hidden
+      width={24}
+      height={24}
       draggable={false}
       className="h-6 w-6 shrink-0 select-none rounded-full object-cover object-top"
     />

@@ -1,9 +1,7 @@
 "use client"
 import { motion } from "framer-motion"
-import { Bricolage_Grotesque, Figtree } from "next/font/google"
+import { bricolage, figtree } from "@/lib/fonts";
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const figtree = Figtree({ subsets: ["latin"] })
 
 interface Service {
   id: string

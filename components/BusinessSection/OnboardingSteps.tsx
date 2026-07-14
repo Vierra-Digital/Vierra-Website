@@ -7,11 +7,10 @@
 import { useEffect, useRef, useState } from "react"
 import { motion, AnimatePresence, useSpring } from "framer-motion"
 import dynamic from "next/dynamic"
-import { Inter } from "next/font/google"
+import { inter } from "@/lib/fonts";
 import { SiGmail } from "react-icons/si"
 import { FaLinkedin, FaInstagram, FaWhatsapp, FaCommentSms, FaLinkedinIn, FaFacebookF, FaGoogle, FaPaperPlane } from "react-icons/fa6"
 
-const inter = Inter({ subsets: ["latin"] })
 
 // 3 — TAM Sort & Mining: dense WebGL logo cloud with an ICP-sort countdown.
 const TamSphere3D = dynamic(() => import("./TamSphere3D"), {

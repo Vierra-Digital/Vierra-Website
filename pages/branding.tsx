@@ -1,14 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bricolage_Grotesque, Inter, Figtree } from 'next/font/google';
+import { bricolage, inter, figtree } from "@/lib/fonts";
 import Head from 'next/head';
 import Image from 'next/image';
 import { Header } from '@/components/Header';
 import Footer from '@/components/FooterSection/Footer';
 
-const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
-const inter = Inter({ subsets: ['latin'] });
-const figtree = Figtree({ subsets: ['latin'] });
 
 type SectionMeta = { id: string; title: string };
 

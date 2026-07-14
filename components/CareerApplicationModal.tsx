@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { bricolage, inter } from "@/lib/fonts";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiUploadCloud, FiFileText, FiX, FiArrowLeft, FiArrowRight } from "react-icons/fi";
 import Modal from "@/components/ui/Modal";
@@ -14,8 +14,6 @@ import {
   formatPhone,
 } from "@/components/ui/modalForm";
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
-const inter = Inter({ subsets: ["latin"] });
 
 interface CareerApplicationModalProps {
   isOpen: boolean;

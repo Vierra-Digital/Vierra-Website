@@ -6,6 +6,7 @@ const SITE_URL = "https://vierradev.com"
 const META_IMAGE_URL = `${SITE_URL}/assets/meta-banner.png`
 const LOGO_URL = `${SITE_URL}/assets/vierra-logo.png`
 const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID
+const CLARITY_ID = process.env.NEXT_PUBLIC_CLARITY_ID
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),
@@ -116,14 +117,19 @@ export default function RootLayout({
             </Script>
           </>
         ) : null}
+        {/* Microsoft Clarity — free heatmaps + session recordings (CRO insight).
+            Inert until NEXT_PUBLIC_CLARITY_ID is set (create a project at clarity.microsoft.com). */}
+        {CLARITY_ID ? (
+          <Script id="ms-clarity" strategy="afterInteractive">
+            {`(function(c,l,a,r,i,t,y){c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);})(window,document,"clarity","script","${CLARITY_ID}");`}
+          </Script>
+        ) : null}
         {/* SEO meta (title, description, canonical, OpenGraph, Twitter) is
             generated from the `metadata` export above — do not duplicate it here. */}
         <link rel="manifest" href="/manifest.json" />
         <link rel="alternate" type="application/rss+xml" title="Vierra Blog RSS Feed" href="https://vierradev.com/blog/rss.xml" />
         
         
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://cdn.jsdelivr.net" />
         <link rel="preconnect" href="https://vierra-server.vercel.app" />
         <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
@@ -171,7 +177,7 @@ export default function RootLayout({
               sameAs: [
                 "https://www.linkedin.com/company/vierra/",
                 "https://www.instagram.com/vierra.dev",
-                "https://www.facebook.com/share/1GXE6s4NSX/",
+                "https://www.facebook.com/vierradigital",
                 "https://x.com/vierradev",
               ],
               foundingDate: "2019",
@@ -309,7 +315,7 @@ export default function RootLayout({
               sameAs: [
                 "https://www.linkedin.com/company/vierra/",
                 "https://www.instagram.com/vierra.dev",
-                "https://www.facebook.com/share/1GXE6s4NSX/",
+                "https://www.facebook.com/vierradigital",
                 "https://x.com/vierradev",
               ],
             }),

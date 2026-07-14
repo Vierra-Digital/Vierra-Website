@@ -1,7 +1,7 @@
 import { GetStaticPaths, GetStaticProps } from "next"
 import Head from "next/head"
 import Link from "next/link"
-import { Bricolage_Grotesque, Inter } from "next/font/google"
+import { bricolage, inter } from "@/lib/fonts";
 import { getPostsByAuthor, getAllAuthorNames } from "@/lib/blog"
 import { Header } from "@/components/Header"
 import Footer from "@/components/FooterSection/Footer"
@@ -10,8 +10,6 @@ import { motion } from "framer-motion"
 import { ChevronRight } from "lucide-react"
 import Image from "next/image"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const inter = Inter({ subsets: ["latin"] })
 
 type AuthorPageProps = {
   authorName: string

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react"
 import Head from "next/head"
-import { Inter } from "next/font/google"
+import { inter } from "@/lib/fonts";
 import Image from "next/image"
 import ProfileImage from "@/components/ProfileImage"
 import { profileImageSrc } from "@/lib/profileImage"
@@ -78,7 +78,6 @@ const UserSettingsPage = dynamic(() => import("@/components/UserSettingsPage"), 
   ssr: false,
 })
 
-const inter = Inter({ subsets: ["latin"] })
 
 type PanelPageProps = {
   initialUserRole: "admin" | "staff"

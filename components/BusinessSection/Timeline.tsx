@@ -1,12 +1,10 @@
 "use client"
 
-import { Bricolage_Grotesque, Figtree } from "next/font/google"
+import { bricolage, figtree } from "@/lib/fonts";
 import { useRef, useState } from "react"
 import { motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion"
 import { OnboardingStepAnim, TamMiningAnim } from "./OnboardingSteps"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const figtree = Figtree({ subsets: ["latin"] })
 
 // The onboarding journey, start to signed client. Each step's animation lives in
 // OnboardingSteps (index-matched); step 3 (TAM) uses the WebGL Brand sphere.

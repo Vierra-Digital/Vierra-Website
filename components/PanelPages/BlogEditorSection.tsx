@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
-import { Inter } from "next/font/google"
+import { inter } from "@/lib/fonts";
 import { FiPlus, FiFileText, FiFilter, FiSearch, FiEdit2, FiTrash2 } from "react-icons/fi"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
@@ -7,7 +7,6 @@ import RichTextEditor from "@/components/ui/RichTextEditor"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import { useFetch } from "@/hooks/useFetch"
 
-const inter = Inter({ subsets: ["latin"] })
 
 type Post = {
   id: string

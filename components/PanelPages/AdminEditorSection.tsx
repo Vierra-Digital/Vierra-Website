@@ -4,14 +4,13 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from "react"
 import { Users, FileText, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, X, Trash2, RotateCw, Link as LinkIcon } from "lucide-react"
 import { FiCheck } from "react-icons/fi"
 import { FiSearch, FiFilter, FiPlus, FiTrash2 } from "react-icons/fi"
-import { Inter } from "next/font/google"
+import { inter } from "@/lib/fonts";
 import Image from "next/image"
 import { motion } from "framer-motion"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import Modal from "@/components/ui/Modal"
 
-const inter = Inter({ subsets: ["latin"] })
 
 type ViewType = "users" | "sessions"
 

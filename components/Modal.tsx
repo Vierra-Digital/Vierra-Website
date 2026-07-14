@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { track } from "@/lib/track";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { bricolage, inter } from "@/lib/fonts";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiX, FiArrowLeft, FiArrowRight } from "react-icons/fi";
 import ModalShell from "@/components/ui/Modal";
@@ -14,8 +14,6 @@ import {
   formatPhone,
 } from "@/components/ui/modalForm";
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
-const inter = Inter({ subsets: ["latin"] });
 
 interface ModalProps {
   isOpen: boolean;
@@ -50,7 +48,7 @@ const EMPTY_FORM: FormState = {
   businessIssues: "",
 };
 
-const STEP_TITLES = ["Your details", "Business information", "A few more details"];
+const STEP_TITLES = ["Your Details", "Business Information", "A Few More Details"];
 const TOTAL_STEPS = STEP_TITLES.length;
 
 const REVENUE_OPTIONS = [
@@ -146,8 +144,8 @@ export function Modal({ isOpen, onClose }: ModalProps) {
     <ModalShell
       onClose={onClose}
       zIndexClass="z-[200]"
-      backdropClassName="bg-[#1A1033]/45 backdrop-blur-lg"
-      cardClassName={`relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/60 bg-gradient-to-b from-white/85 to-[#F1E9FF]/75 shadow-[0_28px_90px_-24px_rgba(26,16,51,0.6)] ring-1 ring-inset ring-white/50 backdrop-blur-2xl backdrop-saturate-150 ${inter.className}`}
+      backdropClassName="bg-[#1A1033]/50 backdrop-blur-xl"
+      cardClassName={`relative flex max-h-[92vh] min-h-[min(620px,92vh)] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/70 bg-gradient-to-br from-white/78 via-white/70 to-[#EFE6FF]/64 shadow-[0_28px_90px_-24px_rgba(26,16,51,0.62),inset_0_1px_0_0_rgba(255,255,255,0.65)] ring-1 ring-inset ring-white/60 backdrop-blur-3xl backdrop-saturate-150 ${inter.className}`}
       closeOnBackdrop={true}
       label="Book your free audit"
     >
@@ -175,7 +173,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                 Free Audit · Step {step} of {TOTAL_STEPS}
               </p>
               <h2 className={`mt-2 text-2xl font-semibold tracking-tight text-[#1A1033] sm:text-[1.7rem] ${bricolage.className}`}>
-                Get Your Free Audit
+                Free Audit Call
               </h2>
               <p className="mt-1.5 text-sm text-[#6B6480]">{STEP_TITLES[step - 1]}</p>
             </div>

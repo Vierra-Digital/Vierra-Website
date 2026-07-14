@@ -2,13 +2,12 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { FiSearch, FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck } from "react-icons/fi";
 import Image from "next/image";
 import ProfileImage from "../ProfileImage";
-import { Inter } from "next/font/google";
+import { inter } from "@/lib/fonts";
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import Modal from "@/components/ui/Modal";
 
-const inter = Inter({ subsets: ["latin"] });
 
 const StaffActionsMenu: React.FC<{
     staffId: string

@@ -4,7 +4,7 @@ import Head from 'next/head';
 import type { GetServerSideProps } from 'next';
 import { Document, Page, pdfjs } from 'react-pdf';
 import SignatureCanvas from 'react-signature-canvas';
-import { Inter } from 'next/font/google';
+import { inter } from "@/lib/fonts";
 import Image from 'next/image';
 import { FiCheck, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
@@ -16,7 +16,6 @@ if (typeof window !== 'undefined') {
   pdfjs.GlobalWorkerOptions.workerSrc = `${window.location.origin}/pdf.worker.min.mjs`;
 }
 
-const inter = Inter({ subsets: ['latin'] });
 
 const base64ToArrayBuffer = (base64: string): ArrayBuffer => {
   const binaryString = window.atob(base64);

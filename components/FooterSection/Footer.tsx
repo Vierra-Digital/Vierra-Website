@@ -1,22 +1,20 @@
 import Image from "next/image";
 import Link from "next/link";
 import { FaEnvelope, FaFacebookF, FaLinkedinIn } from "react-icons/fa";
-import { Figtree, Inter } from "next/font/google";
+import { figtree, inter } from "@/lib/fonts";
 
-const figtree = Figtree({ subsets: ["latin"] });
-const inter = Inter({ subsets: ["latin"] });
 
 const Footer = ({ bare = false }: { bare?: boolean }) => {
   const socialLinks = [
     { icon: <FaEnvelope size={20} />, text: "Send Us An Email", link: "mailto:alex@vierradev.com" },
     { icon: <FaLinkedinIn size={20} />, text: "Connect On LinkedIn", link: "https://www.linkedin.com/company/vierra/" },
-    { icon: <FaFacebookF size={20} />, text: "Friend Us On Facebook", link: "https://www.facebook.com/share/1GXE6s4NSX/" },
+    { icon: <FaFacebookF size={20} />, text: "Friend Us On Facebook", link: "https://www.facebook.com/vierradigital" },
   ];
 
   const platforms: { label: string; link: string | null }[] = [
     { label: "LinkedIn", link: "https://www.linkedin.com/company/vierra/" },
     { label: "Instagram", link: null },
-    { label: "Facebook", link: "https://www.facebook.com/share/1GXE6s4NSX/" },
+    { label: "Facebook", link: "https://www.facebook.com/vierradigital" },
     { label: "GitHub", link: "https://github.com/Vierra-Digital" },
   ];
 

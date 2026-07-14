@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
+import { asQueryStr } from "@/lib/api/parsing";
 
 type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive";
 const OPEN_BASE_WINDOW_MS = 15_000;
@@ -57,9 +58,6 @@ type MessageRow = {
   composePreviewHtml?: string;
 };
 
-function asStr(v: string | string[] | undefined) {
-  return Array.isArray(v) ? v[0] : v;
-}
 
 function parseMailbox(v: string | undefined): Mailbox {
   const value = (v || "").toLowerCase();
@@ -203,13 +201,13 @@ export default withAuth(async (req, res, session) => {
   res.setHeader("Expires", "0");
 
   const userId = session.user.id;
-  const mailbox = parseMailbox(asStr(req.query.mailbox));
-  const pageRaw = Number(asStr(req.query.page));
+  const mailbox = parseMailbox(asQueryStr(req.query.mailbox));
+  const pageRaw = Number(asQueryStr(req.query.page));
   const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
-  const pageSizeRaw = Number(asStr(req.query.limit));
+  const pageSizeRaw = Number(asQueryStr(req.query.limit));
   const pageSize = Number.isFinite(pageSizeRaw) && pageSizeRaw > 0 ? Math.min(Math.floor(pageSizeRaw), 50) : 50;
   const maxResults = Math.min(page * pageSize, 500);
-  const accountsParam = asStr(req.query.accounts);
+  const accountsParam = asQueryStr(req.query.accounts);
   const selectedEmails = (accountsParam || "")
     .split(",")
     .map((s) => s.trim().toLowerCase())

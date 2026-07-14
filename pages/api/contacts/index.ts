@@ -3,11 +3,7 @@ import { withAuth } from "@/lib/api/withAuth";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { serializeContact } from "@/lib/api/contacts";
-import { asStr } from "@/lib/api/parsing";
-
-function asQueryStr(v: string | string[] | undefined) {
-  return Array.isArray(v) ? v[0] : v || "";
-}
+import { asStr, asQueryStr } from "@/lib/api/parsing";
 
 export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
