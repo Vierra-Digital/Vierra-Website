@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { track } from "@/lib/track";
 import { Bricolage_Grotesque, Inter } from "next/font/google";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiX, FiArrowLeft, FiArrowRight } from "react-icons/fi";
@@ -75,6 +76,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
       setFormData(EMPTY_FORM);
       setSubmitted(false);
       setSubmitting(false);
+      track("lead_form_open");
     }
   }, [isOpen]);
 
@@ -105,7 +107,12 @@ export function Modal({ isOpen, onClose }: ModalProps) {
     !!formData.desiredRevenue.trim() &&
     desiredValid;
 
-  const nextStep = () => setStep((s) => Math.min(TOTAL_STEPS, s + 1));
+  const nextStep = () =>
+    setStep((s) => {
+      const next = Math.min(TOTAL_STEPS, s + 1);
+      if (next !== s) track("lead_form_step", { step: next });
+      return next;
+    });
   const prevStep = () => setStep((s) => Math.max(1, s - 1));
 
   const handleSubmit = async () => {
@@ -122,6 +129,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
         return;
       }
       setSubmitted(true);
+      track("generate_lead");
     } catch (error) {
       console.error("Error submitting form:", error);
       alert("An error occurred. Please try again.");
@@ -138,14 +146,14 @@ export function Modal({ isOpen, onClose }: ModalProps) {
     <ModalShell
       onClose={onClose}
       zIndexClass="z-[200]"
-      backdropClassName="bg-[#1A1033]/50 backdrop-blur-md"
-      cardClassName={`relative flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ${inter.className}`}
+      backdropClassName="bg-[#1A1033]/45 backdrop-blur-lg"
+      cardClassName={`relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/60 bg-gradient-to-b from-white/85 to-[#F1E9FF]/75 shadow-[0_28px_90px_-24px_rgba(26,16,51,0.6)] ring-1 ring-inset ring-white/50 backdrop-blur-2xl backdrop-saturate-150 ${inter.className}`}
       closeOnBackdrop={true}
       label="Book your free audit"
     >
       {!submitted && (
-        <div className="px-6 pt-4 sm:px-8">
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+        <div className="px-7 pt-5 sm:px-10">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/50 ring-1 ring-inset ring-white/40">
             <motion.div
               className="h-full rounded-full bg-gradient-to-r from-[#701CC0] to-[#8F42FF]"
               initial={false}
@@ -161,14 +169,15 @@ export function Modal({ isOpen, onClose }: ModalProps) {
       ) : (
         <>
           {/* Header */}
-          <div className="flex items-start justify-between gap-4 px-6 pb-5 pt-4 sm:px-8">
+          <div className="flex items-start justify-between gap-4 bg-gradient-to-br from-[#7A17C5]/[0.09] via-transparent to-transparent px-7 pb-6 pt-5 sm:px-10">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8F42FF]">
                 Free Audit · Step {step} of {TOTAL_STEPS}
               </p>
-              <h2 className={`mt-1.5 text-xl font-semibold tracking-tight text-[#1A1033] sm:text-2xl ${bricolage.className}`}>
+              <h2 className={`mt-2 text-2xl font-semibold tracking-tight text-[#1A1033] sm:text-[1.7rem] ${bricolage.className}`}>
                 Get Your Free Audit
               </h2>
+              <p className="mt-1.5 text-sm text-[#6B6480]">{STEP_TITLES[step - 1]}</p>
             </div>
             <button
               onClick={onClose}
@@ -180,7 +189,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
           </div>
 
           {/* Scrollable body */}
-          <div className="flex-1 overflow-y-auto px-6 pb-2 sm:px-8">
+          <div className="flex-1 overflow-y-auto px-7 pb-2 pt-1 sm:px-10">
             <AnimatePresence mode="wait">
               <motion.div
                 key={step}
@@ -188,7 +197,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -12 }}
                 transition={{ duration: 0.2 }}
-                className="space-y-4"
+                className="space-y-5"
               >
                 {step === 1 && (
                   <>
@@ -202,35 +211,37 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                         placeholder="John Doe"
                       />
                     </Field>
-                    <Field
-                      label="Email"
-                      htmlFor="email"
-                      error={formData.email && !emailValid ? "Enter a valid email address." : undefined}
-                    >
-                      <input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={handleChange}
-                        className={`${inputClass} ${formData.email && !emailValid ? "border-red-400 bg-red-50/50" : "border-gray-200"}`}
-                        placeholder="john@example.com"
-                      />
-                    </Field>
-                    <Field
-                      label="Phone Number"
-                      htmlFor="phoneNumber"
-                      error={formData.phoneNumber && !phoneValid ? "Enter a valid phone number." : undefined}
-                    >
-                      <input
-                        id="phoneNumber"
-                        type="tel"
-                        inputMode="numeric"
-                        value={formData.phoneNumber}
-                        onChange={handleChange}
-                        className={`${inputClass} ${formData.phoneNumber && !phoneValid ? "border-red-400 bg-red-50/50" : "border-gray-200"}`}
-                        placeholder="(555) 123-4567"
-                      />
-                    </Field>
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                      <Field
+                        label="Email"
+                        htmlFor="email"
+                        error={formData.email && !emailValid ? "Enter a valid email address." : undefined}
+                      >
+                        <input
+                          id="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={handleChange}
+                          className={`${inputClass} ${formData.email && !emailValid ? "border-red-400 bg-red-50/50" : "border-gray-200"}`}
+                          placeholder="john@example.com"
+                        />
+                      </Field>
+                      <Field
+                        label="Phone Number"
+                        htmlFor="phoneNumber"
+                        error={formData.phoneNumber && !phoneValid ? "Enter a valid phone number." : undefined}
+                      >
+                        <input
+                          id="phoneNumber"
+                          type="tel"
+                          inputMode="numeric"
+                          value={formData.phoneNumber}
+                          onChange={handleChange}
+                          className={`${inputClass} ${formData.phoneNumber && !phoneValid ? "border-red-400 bg-red-50/50" : "border-gray-200"}`}
+                          placeholder="(555) 123-4567"
+                        />
+                      </Field>
+                    </div>
                   </>
                 )}
 
@@ -260,7 +271,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                         placeholder="Instagram, LinkedIn, Facebook handles"
                       />
                     </Field>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                       <Field label="Current Monthly Revenue" htmlFor="monthlyRevenue">
                         <ThemedSelect
                           id="monthlyRevenue"
@@ -305,31 +316,33 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                         id="agencyExperience"
                         value={formData.agencyExperience}
                         onChange={handleChange}
-                        rows={2}
+                        rows={3}
                         className={`${inputClass} resize-none border-gray-200`}
                         placeholder="Have you worked with agencies before? Share your experience..."
                       />
                     </Field>
-                    <Field label="What sets you apart?" htmlFor="uniqueTraits" optional>
-                      <textarea
-                        id="uniqueTraits"
-                        value={formData.uniqueTraits}
-                        onChange={handleChange}
-                        rows={2}
-                        className={`${inputClass} resize-none border-gray-200`}
-                        placeholder="What makes your business unique?"
-                      />
-                    </Field>
-                    <Field label="Industry Challenges" htmlFor="businessIssues" optional>
-                      <textarea
-                        id="businessIssues"
-                        value={formData.businessIssues}
-                        onChange={handleChange}
-                        rows={2}
-                        className={`${inputClass} resize-none border-gray-200`}
-                        placeholder="What are the biggest challenges in your industry?"
-                      />
-                    </Field>
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                      <Field label="What sets you apart?" htmlFor="uniqueTraits" optional>
+                        <textarea
+                          id="uniqueTraits"
+                          value={formData.uniqueTraits}
+                          onChange={handleChange}
+                          rows={3}
+                          className={`${inputClass} resize-none border-gray-200`}
+                          placeholder="What makes your business unique?"
+                        />
+                      </Field>
+                      <Field label="Industry Challenges" htmlFor="businessIssues" optional>
+                        <textarea
+                          id="businessIssues"
+                          value={formData.businessIssues}
+                          onChange={handleChange}
+                          rows={3}
+                          className={`${inputClass} resize-none border-gray-200`}
+                          placeholder="What are the biggest challenges in your industry?"
+                        />
+                      </Field>
+                    </div>
                   </>
                 )}
               </motion.div>
@@ -337,7 +350,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
           </div>
 
           {/* Footer */}
-          <div className="mt-2 flex items-center justify-between gap-3 border-t border-gray-100 px-6 py-4 sm:px-8">
+          <div className="mt-2 flex items-center justify-between gap-3 border-t border-white/50 bg-white/30 px-7 py-4 sm:px-10">
             {step > 1 ? (
               <button
                 onClick={prevStep}
