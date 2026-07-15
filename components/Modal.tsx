@@ -245,7 +245,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                         value={formData.website}
                         onChange={handleChange}
                         className={`${inputClass} ${formData.website && !websiteValid ? "border-red-400 bg-red-50/50" : ""}`}
-                        placeholder="https://yourwebsite.com"
+                        placeholder="https://vierradev.com"
                       />
                     </Field>
                     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -284,7 +284,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
             {step > 1 ? (
               <button
                 onClick={prevStep}
-                className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-medium text-[#6B6480] transition-colors hover:text-[#1A1033]"
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium text-[#6B6480] transition-colors hover:text-[#1A1033]"
               >
                 <FiArrowLeft className="h-4 w-4" /> Back
               </button>
@@ -335,17 +335,20 @@ const SuccessView: React.FC<{ onClose: () => void }> = ({ onClose }) => (
       <FiX className="h-5 w-5" />
     </button>
     <motion.div
-      className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#701CC0] to-[#8F42FF] shadow-[0_12px_30px_-8px_rgba(112,28,192,0.6)]"
+      className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#16A34A] to-[#22C55E] shadow-[0_12px_30px_-8px_rgba(22,163,74,0.6)]"
       initial={{ scale: 0, rotate: -90 }}
       animate={{ scale: 1, rotate: 0 }}
       transition={{ duration: 0.5, type: "spring", bounce: 0.45 }}
     >
-      <motion.span
-        className="absolute inset-0 rounded-full bg-[#8F42FF]/40"
-        initial={{ scale: 1, opacity: 0.6 }}
-        animate={{ scale: 1.6, opacity: 0 }}
-        transition={{ duration: 1, ease: "easeOut", delay: 0.2 }}
-      />
+      {[0, 1].map((i) => (
+        <motion.span
+          key={i}
+          className="absolute inset-0 rounded-full border-2 border-[#22C55E]"
+          initial={{ scale: 1, opacity: 0.5 }}
+          animate={{ scale: 1.85, opacity: 0 }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeOut", delay: i }}
+        />
+      ))}
       <svg className="h-9 w-9 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
         <motion.path
           d="M5 13l4 4L19 7"
@@ -356,17 +359,17 @@ const SuccessView: React.FC<{ onClose: () => void }> = ({ onClose }) => (
       </svg>
     </motion.div>
     <h2 className={`text-2xl font-semibold tracking-tight text-[#1A1033] ${bricolage.className}`}>
-      Audit requested
+      Free Audit Claimed
     </h2>
     <p className="mx-auto mt-2 max-w-sm text-[15px] leading-7 text-[#6B6480]">
-      Thanks for your interest in Vierra. We’ve received your details and our team will be in touch within 24 to 48 hours.
+      We’ve received your details and our team will be in touch within 24 hours.
     </p>
     <motion.button
       type="button"
       onClick={onClose}
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
-      className="mt-7 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#701CC0] to-[#8F42FF] px-7 py-2.5 text-sm font-medium text-white shadow-[0_6px_20px_-6px_rgba(112,28,192,0.6)] transition-all duration-200 hover:shadow-[0_8px_26px_-6px_rgba(112,28,192,0.7)]"
+      className="mt-7 inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#701CC0] to-[#8F42FF] px-7 py-2.5 text-sm font-medium text-white shadow-[0_6px_20px_-6px_rgba(112,28,192,0.6)] transition-all duration-200 hover:shadow-[0_8px_26px_-6px_rgba(112,28,192,0.7)]"
     >
       Done
     </motion.button>
