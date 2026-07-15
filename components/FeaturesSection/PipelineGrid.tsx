@@ -127,7 +127,12 @@ export default function PipelineGrid() {
         aria-hidden
         className="pointer-events-none absolute inset-0 [background-image:radial-gradient(circle,_rgba(255,255,255,0.06)_1px,_transparent_1px)] [background-size:22px_22px]"
       />
-      <svg viewBox="150 56 1550 646" className="relative mx-auto w-full" preserveAspectRatio="xMidYMid meet">
+      {/* On narrow screens the diagram would shrink until its labels are
+          unreadable (it lives in a 1550-unit-wide viewBox), so we keep it at a
+          legible min width and let it scroll horizontally; on wide screens the
+          container exceeds the min width and it simply fits full-width. */}
+      <div className="relative -mx-4 overflow-x-auto px-4 md:-mx-6 md:px-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <svg viewBox="150 56 1550 646" className="relative mx-auto w-full min-w-[960px]" preserveAspectRatio="xMidYMid meet">
         <style>{`
           @keyframes pl-engine-pulse {
             0%, 100% { box-shadow: 0 18px 50px -18px rgba(112,28,192,1), 0 0 0 rgba(143,66,255,0); }
@@ -187,6 +192,7 @@ export default function PipelineGrid() {
           <NodeBox key={n.id} n={n} />
         ))}
       </svg>
+      </div>
     </div>
   )
 }
