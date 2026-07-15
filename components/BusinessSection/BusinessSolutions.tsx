@@ -88,7 +88,7 @@ export function BusinessSolutions() {
         </div>
 
         {/* Outlet showcase (left, auto-cycling) + Stripe animation (right) */}
-        <div className="grid items-center gap-12 md:grid-cols-2">
+        <div className="grid items-center gap-12 lg:grid-cols-2">
           <div>
             <div className="relative flex min-h-[240px] w-full items-center">
               <motion.div

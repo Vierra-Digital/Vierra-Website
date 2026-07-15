@@ -74,7 +74,7 @@ const Timeline = () => {
       {/* Desktop — scroll-locked stage. An intro header sits centered on screen,
           then docks to the top while its text morphs into the active step; the
           step's animation plays in the band beneath it. */}
-      <div id="timeline-section" ref={sectionRef} className="relative mx-[-1.5rem] hidden h-[560vh] lg:block">
+      <div id="timeline-section" ref={sectionRef} className="relative hidden h-[560vh] lg:block">
         <div className="sticky top-0 h-screen w-full overflow-hidden bg-[#0A0414] text-white">
           {/* Soft purple glow behind the stage — one clean highlight, not a busy gradient. */}
           <div
