@@ -77,17 +77,17 @@ export function StatsGrid() {
       variants={container}
       className="flex flex-col mx-auto my-0 items-center max-w-[1200px] z-10 relative"
     >
-      <div className="absolute w-[893px] h-[510px] rounded-[60px] top-[50px] left-1/4 bg-[#4F14881A] max-md:hidden -z-10" />
-      <div className="flex gap-20 mb-14 items-end max-md:flex-col max-md:items-center max-md:gap-4 max-md:mb-4">
+      <div className="absolute w-[893px] h-[510px] rounded-[60px] top-[50px] left-1/4 bg-[#4F14881A] max-xl:hidden -z-10" />
+      <div className="flex gap-20 mb-14 items-end max-xl:flex-col max-xl:items-center max-xl:gap-4 max-xl:mb-4">
         <motion.div
           variants={cardVar}
           whileHover={{ scale: 1.05 }}
           transition={{ type: "spring", stiffness: 300, damping: 22 }}
-          className="relative flex flex-col justify-center w-[350px] h-[231px] bg-[#701CC0] rounded-[60px] max-md:w-[300px] max-md:h-[250px] max-md:px-5 max-md:py-10 max-sm:w-[260px] max-sm:h-[200px] max-sm:px-8 max-sm:py-8 max-sm:rounded-[30px]"
+          className="relative flex flex-col justify-center w-[350px] h-[231px] bg-[#701CC0] rounded-[60px] max-xl:w-[300px] max-xl:h-[250px] max-xl:px-5 max-xl:py-10 max-sm:w-[260px] max-sm:h-[200px] max-sm:px-8 max-sm:py-8 max-sm:rounded-[30px]"
         >
-          <div className="relative z-10 mx-8 max-w-[230px] text-left max-md:mx-0 max-md:max-w-full">
+          <div className="relative z-10 mx-8 max-w-[230px] text-left max-xl:mx-0 max-xl:max-w-full">
             <div
-              className={`text-7xl font-extrabold leading-none text-white max-md:text-4xl ${bricolage.className}`}
+              className={`text-7xl font-extrabold leading-none text-white max-xl:text-4xl ${bricolage.className}`}
             >
               <CountUp value="250%" />
             </div>
@@ -97,12 +97,12 @@ export function StatsGrid() {
               return on investment.
             </div>
           </div>
-          <div className="absolute top-1/2 right-[-30px] z-10 -translate-y-1/2 w-[60px] h-[60px] md:w-[108px] md:h-[108px] bg-[#010205] shadow-[0px_30.08px_50.58px_-6.84px_#701CC0] rounded-full flex items-center justify-center">
+          <div className="absolute top-1/2 right-[-30px] z-10 -translate-y-1/2 w-[60px] h-[60px] xl:w-[108px] xl:h-[108px] bg-[#010205] shadow-[0px_30.08px_50.58px_-6.84px_#701CC0] rounded-full flex items-center justify-center">
             <motion.div
               animate={{ y: [0, -6, 0] }}
               transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
             >
-              <TrendingUp className="w-6 h-6 md:w-12 md:h-12 text-white" />
+              <TrendingUp className="w-6 h-6 xl:w-12 xl:h-12 text-white" />
             </motion.div>
           </div>
         </motion.div>
@@ -110,16 +110,16 @@ export function StatsGrid() {
           variants={cardVar}
           whileHover={{ scale: 1.05 }}
           transition={{ type: "spring", stiffness: 300, damping: 22 }}
-          className="relative flex flex-col w-[409px] h-[338px] bg-[#18042A] rounded-[60px] max-md:w-[300px] max-md:h-[250px] max-md:px-5 max-md:py-10 max-sm:w-[260px] max-sm:h-[200px] max-sm:px-8 max-sm:py-8 max-sm:rounded-[30px]"
+          className="relative flex flex-col w-[409px] h-[338px] bg-[#18042A] rounded-[60px] max-xl:w-[300px] max-xl:h-[250px] max-xl:px-5 max-xl:py-10 max-sm:w-[260px] max-sm:h-[200px] max-sm:px-8 max-sm:py-8 max-sm:rounded-[30px]"
         >
           {/* moving particle backdrop (clipped to the rounded card) */}
           <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-[60px] max-sm:rounded-[30px]">
             <div className="cta-stars" />
             <div className="cta-stars cta-stars--2" />
           </div>
-          <div className="relative z-10 flex flex-col justify-center mx-12 my-auto w-[310px] h-[219px] max-md:mx-0 max-md:my-0 max-md:h-auto max-md:w-full">
+          <div className="relative z-10 flex flex-col justify-center mx-12 my-auto w-[310px] h-[219px] max-xl:mx-0 max-xl:my-0 max-xl:h-auto max-xl:w-full">
             <div
-              className={`text-7xl font-extrabold leading-none text-white max-md:text-4xl ${bricolage.className}`}
+              className={`text-7xl font-extrabold leading-none text-white max-xl:text-4xl ${bricolage.className}`}
             >
               <span className="font-extrabold text-[#701CC0]">$</span>
               <CountUp value="15M+" />
@@ -132,27 +132,27 @@ export function StatsGrid() {
           </div>
         </motion.div>
       </div>
-      <div className="flex gap-16 items-center max-md:flex-col max-md:gap-4">
+      <div className="flex gap-16 items-center max-xl:flex-col max-xl:gap-4">
         <motion.div
           variants={cardVar}
           whileHover={{ scale: 1.05 }}
           transition={{ type: "spring", stiffness: 300, damping: 22 }}
-          className="px-10 py-10 w-[687px] h-[283px] bg-[#18042A] rounded-[60px] max-md:w-[300px] max-md:h-[250px] max-md:px-5 max-md:py-10 max-sm:w-[260px] max-sm:h-[200px] max-sm:px-8 max-sm:py-8 max-sm:rounded-[30px] overflow-hidden relative z-10"
+          className="px-10 py-10 w-[687px] h-[283px] bg-[#18042A] rounded-[60px] max-xl:w-[300px] max-xl:h-[250px] max-xl:px-5 max-xl:py-10 max-sm:w-[260px] max-sm:h-[200px] max-sm:px-8 max-sm:py-8 max-sm:rounded-[30px] overflow-hidden relative z-10"
         >
-          <div className="absolute top-[2px] left-[50] w-[285px] h-[285px] opacity-80 blur-[50px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10 max-md:hidden" />
+          <div className="absolute top-[2px] left-[50] w-[285px] h-[285px] opacity-80 blur-[50px] rotate-[60deg] rounded-full bg-gradient-to-t from-[#18042A] to-[#701CC0] -z-10 max-xl:hidden" />
           {/* moving particle backdrop */}
           <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden rounded-[60px] max-sm:rounded-[30px]">
             <div className="cta-stars" />
             <div className="cta-stars cta-stars--2" />
           </div>
           <div
-            className={`relative z-10 text-5xl tracking-tight leading-none text-white max-md:text-2xl ${bricolage.className}`}
+            className={`relative z-10 text-5xl tracking-tight leading-none text-white max-xl:text-2xl ${bricolage.className}`}
           >
             <h2 className="inline">Scale Your Business</h2>
           </div>
           <div className="relative z-10 w-full h-full">
             <svg
-              className="absolute top-[3px] left-[150px] w-[494px] h-[192px] max-md:w-[217px] max-md:h-[84px] max-md:top-[86px] max-md:left-[63px] max-sm:w-[160px] max-sm:h-[100px] max-sm:top-[52px] max-sm:left-[68px]"
+              className="absolute top-[3px] left-[150px] w-[494px] h-[192px] max-xl:w-[217px] max-xl:h-[84px] max-xl:top-[86px] max-xl:left-[63px] max-sm:w-[160px] max-sm:h-[100px] max-sm:top-[52px] max-sm:left-[68px]"
               viewBox="0 0 494 192"
               fill="none"
             >
@@ -167,7 +167,7 @@ export function StatsGrid() {
               />
             </svg>
             <svg
-              className="absolute top-[59px] left-[218px] w-[427px] h-[136px] max-md:w-[200px] max-md:h-[80px] max-md:top-[96px] max-md:left-[77px] max-sm:w-[160px] max-sm:h-[100px] max-sm:top-[59px] max-sm:left-[68px]"
+              className="absolute top-[59px] left-[218px] w-[427px] h-[136px] max-xl:w-[200px] max-xl:h-[80px] max-xl:top-[96px] max-xl:left-[77px] max-sm:w-[160px] max-sm:h-[100px] max-sm:top-[59px] max-sm:left-[68px]"
               viewBox="0 0 427 136"
               fill="none"
             >
@@ -187,15 +187,15 @@ export function StatsGrid() {
           variants={cardVar}
           whileHover={{ scale: 1.05 }}
           transition={{ type: "spring", stiffness: 300, damping: 22 }}
-          className="relative flex flex-col w-[328px] h-[319px] bg-[#701CC0] rounded-[60px] md:mt-16 max-md:w-[300px] max-md:h-[300px] max-md:px-5 max-md:py-10 max-sm:w-[260px] max-sm:h-[250px] max-sm:px-8 max-sm:py-8 max-sm:rounded-[30px]"
+          className="relative flex flex-col w-[328px] h-[319px] bg-[#701CC0] rounded-[60px] xl:mt-16 max-xl:w-[300px] max-xl:h-[300px] max-xl:px-5 max-xl:py-10 max-sm:w-[260px] max-sm:h-[250px] max-sm:px-8 max-sm:py-8 max-sm:rounded-[30px]"
         >
-          <div className="flex flex-1 flex-col justify-center mx-12 mt-8 w-[250px] max-md:mx-4 max-md:mt-4 max-md:h-auto max-md:w-full max-sm:mx-2">
+          <div className="flex flex-1 flex-col justify-center mx-12 mt-8 w-[250px] max-xl:mx-4 max-xl:mt-4 max-xl:h-auto max-xl:w-full max-sm:mx-2">
             <motion.div
               key={`num-${step}`}
               initial={{ opacity: 0, x: 28 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-              className={`text-7xl font-extrabold leading-none text-white max-md:text-4xl max-sm:text-3xl ${bricolage.className}`}
+              className={`text-7xl font-extrabold leading-none text-white max-xl:text-4xl max-sm:text-3xl ${bricolage.className}`}
             >
               <CountUp value={currentContent.number} />
             </motion.div>
@@ -204,13 +204,13 @@ export function StatsGrid() {
               initial={{ opacity: 0, x: 28 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.5, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
-              className={`mt-6 text-base font-light leading-6 max-w-[210px] text-[#ECF2FDCC] max-md:mt-6 max-sm:mt-4 max-md:max-w-[180px] max-sm:max-w-[160px] max-sm:text-sm max-sm:leading-5 ${inter.className}`}
+              className={`mt-6 text-base font-light leading-6 max-w-[210px] text-[#ECF2FDCC] max-xl:mt-6 max-sm:mt-4 max-xl:max-w-[180px] max-sm:max-w-[160px] max-sm:text-sm max-sm:leading-5 ${inter.className}`}
             >
               {currentContent.text}
             </motion.div>
           </div>
           {/* progress bar fills continuously across all three slides, then resets */}
-          <div className="mx-12 mt-auto mb-8 max-md:mx-6 max-sm:mx-4 max-md:mb-6 max-sm:mb-4">
+          <div className="mx-12 mt-auto mb-8 max-xl:mx-6 max-sm:mx-4 max-xl:mb-6 max-sm:mb-4">
             <div className="h-1 w-full bg-[rgba(255,255,255,0.2)]">
               <motion.div
                 key={`bar-${cycle}`}
