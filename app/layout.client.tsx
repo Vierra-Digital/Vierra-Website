@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useReportWebVitals } from "next/web-vitals";
+import ConsentBanner from "@/components/ConsentBanner";
 import {
   initializeAnalytics,
   storeAnalyticsData,
@@ -111,6 +112,7 @@ export default function RootLayoutClient({
   return (
     <div className="antialiased">
       {children}
+      <ConsentBanner />
     </div>
   );
 }

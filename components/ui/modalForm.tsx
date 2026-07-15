@@ -84,7 +84,7 @@ export const PrimaryButton: React.FC<{
     disabled={disabled}
     whileHover={disabled ? undefined : { scale: 1.02 }}
     whileTap={disabled ? undefined : { scale: 0.98 }}
-    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#701CC0] via-[#8F42FF] to-[#701CC0] animate-gradient px-6 py-2.5 text-sm font-medium text-white shadow-[0_6px_20px_-6px_rgba(112,28,192,0.6)] transition-all duration-200 hover:shadow-[0_8px_26px_-6px_rgba(112,28,192,0.7)] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+    className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#701CC0] via-[#8F42FF] to-[#701CC0] animate-gradient px-6 py-2.5 text-sm font-medium text-white shadow-[0_6px_20px_-6px_rgba(112,28,192,0.6)] transition-all duration-200 hover:shadow-[0_8px_26px_-6px_rgba(112,28,192,0.7)] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
   >
     {children}
   </motion.button>

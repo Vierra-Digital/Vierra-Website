@@ -1,0 +1,116 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+/**
+ * GDPR / ePrivacy consent gate for analytics.
+ *
+ * - Google Analytics uses Consent Mode v2: the gtag snippet in app/layout.tsx and
+ *   pages/_app.tsx sets all consent signals to "denied" by default, so GA loads
+ *   but stores nothing (modeled/cookieless) until the visitor accepts here.
+ * - Microsoft Clarity has no Consent Mode, so it is NOT loaded at all until the
+ *   visitor accepts — this component injects it on "Accept".
+ *
+ * The choice is remembered in localStorage; the banner only shows to visitors who
+ * haven't chosen yet. Rendered in both routers (app/layout.client.tsx + _app.tsx).
+ */
+const CONSENT_KEY = "vierra_consent_v1";
+const CLARITY_ID = process.env.NEXT_PUBLIC_CLARITY_ID;
+
+type Gtag = (...args: unknown[]) => void;
+type ClarityFn = { (...args: unknown[]): void; q?: unknown[] };
+
+let clarityLoaded = false;
+function loadClarity() {
+  if (clarityLoaded || !CLARITY_ID) return;
+  clarityLoaded = true;
+  const w = window as unknown as { clarity?: ClarityFn };
+  if (!w.clarity) {
+    const stub = ((...a: unknown[]) => {
+      (stub.q = stub.q || []).push(a);
+    }) as ClarityFn;
+    w.clarity = stub;
+  }
+  const t = document.createElement("script");
+  t.async = true;
+  t.src = "https://www.clarity.ms/tag/" + CLARITY_ID;
+  const first = document.getElementsByTagName("script")[0];
+  first?.parentNode?.insertBefore(t, first);
+}
+
+function grantConsent() {
+  const w = window as unknown as { gtag?: Gtag };
+  if (typeof w.gtag === "function") {
+    w.gtag("consent", "update", {
+      ad_storage: "granted",
+      ad_user_data: "granted",
+      ad_personalization: "granted",
+      analytics_storage: "granted",
+    });
+  }
+  loadClarity();
+}
+
+export default function ConsentBanner() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    let stored: string | null = null;
+    try {
+      stored = window.localStorage.getItem(CONSENT_KEY);
+    } catch {
+      // localStorage blocked (private mode / cookies off) — show the banner.
+    }
+    if (stored === "granted") {
+      grantConsent(); // returning visitor who already opted in
+    } else if (stored !== "denied") {
+      setVisible(true); // no choice made yet
+    }
+  }, []);
+
+  const decide = (choice: "granted" | "denied") => {
+    try {
+      window.localStorage.setItem(CONSENT_KEY, choice);
+    } catch {
+      // ignore — choice just won't persist across sessions
+    }
+    if (choice === "granted") grantConsent();
+    setVisible(false);
+  };
+
+  if (!visible) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-label="Cookie consent"
+      className="fixed inset-x-0 bottom-0 z-[300] mx-auto flex max-w-3xl flex-col gap-3 border border-white/10 bg-[#18042A]/95 p-5 text-white shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.5)] backdrop-blur-md sm:bottom-4 sm:left-4 sm:right-auto sm:max-w-md sm:flex-row sm:items-center sm:rounded-2xl"
+    >
+      <p className="flex-1 text-sm leading-6 text-white/80">
+        We use cookies for analytics to understand how visitors use our site and improve it.{" "}
+        <a
+          href="/privacy-policy"
+          className="font-medium text-[#C99DFF] underline underline-offset-2 hover:text-white"
+        >
+          Privacy Policy
+        </a>
+      </p>
+      <div className="flex shrink-0 gap-3">
+        <button
+          type="button"
+          onClick={() => decide("denied")}
+          className="rounded-lg border border-white/20 px-4 py-2 text-sm font-medium text-white/80 transition-colors hover:bg-white/10"
+        >
+          Decline
+        </button>
+        <button
+          type="button"
+          onClick={() => decide("granted")}
+          className="rounded-lg bg-[#701CC0] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#8F42FF]"
+        >
+          Accept
+        </button>
+      </div>
+    </div>
+  );
+}

@@ -6,7 +6,6 @@ const SITE_URL = "https://vierradev.com"
 const META_IMAGE_URL = `${SITE_URL}/assets/meta-banner.png`
 const LOGO_URL = `${SITE_URL}/assets/vierra-logo.png`
 const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID
-const CLARITY_ID = process.env.NEXT_PUBLIC_CLARITY_ID
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),
@@ -111,19 +110,24 @@ export default function RootLayout({
               {`
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
+                // Consent Mode v2 — deny all storage by default until the visitor
+                // accepts via the consent banner. GA still loads (modeled/cookieless).
+                gtag('consent', 'default', {
+                  ad_storage: 'denied',
+                  ad_user_data: 'denied',
+                  ad_personalization: 'denied',
+                  analytics_storage: 'denied',
+                  wait_for_update: 500,
+                });
                 gtag('js', new Date());
                 gtag('config', '${GA_MEASUREMENT_ID}');
               `}
             </Script>
           </>
         ) : null}
-        {/* Microsoft Clarity — free heatmaps + session recordings (CRO insight).
-            Inert until NEXT_PUBLIC_CLARITY_ID is set (create a project at clarity.microsoft.com). */}
-        {CLARITY_ID ? (
-          <Script id="ms-clarity" strategy="afterInteractive">
-            {`(function(c,l,a,r,i,t,y){c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);})(window,document,"clarity","script","${CLARITY_ID}");`}
-          </Script>
-        ) : null}
+        {/* Microsoft Clarity loads only AFTER consent — see components/ConsentBanner,
+            which reads NEXT_PUBLIC_CLARITY_ID and injects Clarity when the visitor
+            accepts (Clarity has no Consent Mode, so it must be consent-gated). */}
         {/* SEO meta (title, description, canonical, OpenGraph, Twitter) is
             generated from the `metadata` export above — do not duplicate it here. */}
         <link rel="manifest" href="/manifest.json" />
