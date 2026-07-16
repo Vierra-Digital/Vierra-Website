@@ -47,6 +47,7 @@ export default function TagPage({ tag, posts }: TagPageProps) {
         <meta property="og:description" content={`Browse Vierra blog posts tagged with ${tag}.`} />
         <meta property="og:url" content={pageUrl} />
         <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Vierra Digital" />
         <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={`Vierra | ${tag} Blog Posts`} />
