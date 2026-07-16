@@ -14,7 +14,9 @@ type ActionType =
   | "archive"
   | "moveToInbox"
   | "moveToSpam"
-  | "moveToTrash";
+  | "moveToTrash"
+  | "star"
+  | "unstar";
 
 type ActionItem = {
   accountEmail: string;
@@ -74,6 +76,10 @@ async function callGmailAction(accessToken: string, action: ActionType, messageI
     body.removeLabelIds = ["UNREAD"];
   } else if (action === "markUnread") {
     body.addLabelIds = ["UNREAD"];
+  } else if (action === "star") {
+    body.addLabelIds = ["STARRED"];
+  } else if (action === "unstar") {
+    body.removeLabelIds = ["STARRED"];
   }
 
   return fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/modify`, {
@@ -101,6 +107,8 @@ export default withAuth(async (req, res, session) => {
     "moveToInbox",
     "moveToSpam",
     "moveToTrash",
+    "star",
+    "unstar",
   ];
   if (!validActions.includes(action)) {
     res.status(400).json({ message: "Invalid action." });
