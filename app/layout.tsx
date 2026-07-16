@@ -42,7 +42,7 @@ export const metadata = {
     title: "Vierra | Risk-Averse Lead Engine For Your Business",
     description:
       "Risk-averse, results-based B2B lead generation. Fill your sales calendar and eliminate risky marketing investments.",
-    siteName: "Vierra",
+    siteName: "Vierra Digital",
     locale: "en_US",
     images: [
       {
@@ -184,6 +184,7 @@ export default function RootLayout({
                 "https://www.facebook.com/vierradigital",
                 "https://x.com/vierradev",
                 "https://www.crunchbase.com/organization/vierra-digital",
+                "https://clutch.co/profile/vierra",
               ],
               foundingDate: "2019",
               numberOfEmployees: {
@@ -323,6 +324,7 @@ export default function RootLayout({
                 "https://www.facebook.com/vierradigital",
                 "https://x.com/vierradev",
                 "https://www.crunchbase.com/organization/vierra-digital",
+                "https://clutch.co/profile/vierra",
               ],
             }),
           }}

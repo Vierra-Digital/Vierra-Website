@@ -125,10 +125,16 @@ export function BusinessSolutions() {
                   type="button"
                   onClick={() => setActive(i)}
                   aria-label={t.title}
-                  className={`h-1.5 rounded-full transition-all duration-300 ${
-                    i === active ? "w-10 bg-[#701CC0]" : "w-1.5 bg-[#701CC0]/25 hover:bg-[#701CC0]/50"
-                  }`}
-                />
+                  className="group -m-2.5 flex items-center justify-center p-2.5"
+                >
+                  {/* Visible dot stays small; the button's padding (offset by the
+                      negative margin) gives it a ~26px hit area for WCAG 2.5.8. */}
+                  <span
+                    className={`block h-1.5 rounded-full transition-all duration-300 ${
+                      i === active ? "w-10 bg-[#701CC0]" : "w-1.5 bg-[#701CC0]/25 group-hover:bg-[#701CC0]/50"
+                    }`}
+                  />
+                </button>
               ))}
             </div>
           </div>

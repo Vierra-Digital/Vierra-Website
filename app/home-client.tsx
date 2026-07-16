@@ -150,15 +150,14 @@ export default function HomeClient() {
         {gridLines.map((index) => (
           <motion.div
             key={index}
-            className="absolute top-0 h-full border-l border-white opacity-[0.07] -z-10"
+            className="grid-drift absolute top-0 h-full border-l border-white opacity-[0.07] -z-10"
             style={{ left: `${(index + 1) * (100 / 8)}%` }}
             initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "100%", opacity: 0.07, x: [0, 10, 0] }}
+            animate={{ height: "100%", opacity: 0.07 }}
             transition={{
               duration: 1.1,
               delay: index * 0.06,
               ease: "easeInOut" as const,
-              x: { duration: 4, repeat: Infinity, ease: "easeInOut" as const },
             }}
           />
         ))}
