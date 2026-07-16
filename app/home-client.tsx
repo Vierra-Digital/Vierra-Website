@@ -11,6 +11,7 @@ import { Modal } from "@/components/Modal"
 import { track } from "@/lib/track"
 import LazyMount from "@/components/LazyMount"
 import { BusinessSolutions } from "@/components/BusinessSection/BusinessSolutions"
+import { SECTION_SCROLL_KEY, scrollWindowToSection } from "@/lib/sectionScroll"
 
 // Below-the-fold sections are code-split so they stay out of the homepage's
 // initial JS chunk. Text-bearing sections keep SSR (next/dynamic defaults to
@@ -96,26 +97,43 @@ export default function HomeClient() {
 
   useEffect(() => {
     if (typeof window === "undefined") return
-    const hash = window.location.hash
-    if (!hash) return
-    const sectionId = hash.replace("#", "")
+    // Prefer a section stashed by the header nav / footer link (keeps the URL
+    // clean — no #hash ever appears). Fall back to a real hash only for direct or
+    // shared links like /#services.
+    let sectionId = ""
+    let cameFromHash = false
+    try {
+      const stored = sessionStorage.getItem(SECTION_SCROLL_KEY)
+      if (stored) {
+        sectionId = stored
+        sessionStorage.removeItem(SECTION_SCROLL_KEY)
+      }
+    } catch {
+      /* sessionStorage blocked — ignore */
+    }
+    if (!sectionId && window.location.hash) {
+      sectionId = window.location.hash.replace("#", "")
+      cameFromHash = true
+    }
+    if (!sectionId) return
     // Sections below the fold are lazy-loaded, so the target (and sections above
     // it) may mount after this runs and shift layout. Re-align repeatedly for a
     // few seconds: the first scroll is smooth, later ones snap to correct for any
-    // shift from late-mounting siblings. Clean the hash from the URL at the end.
+    // shift from late-mounting siblings. Clean any hash from the URL at the end.
     let cancelled = false
     let scrolledOnce = false
     const start = Date.now()
     const settle = () => {
       if (cancelled) return
-      const target = document.getElementById(sectionId)
-      if (target) {
-        target.scrollIntoView({ behavior: scrolledOnce ? "auto" : "smooth" })
+      // Land directly on the section (instant), re-aligning as lazy sections
+      // below mount and shift layout. This mirrors hash-link behavior: you arrive
+      // at the section rather than watching a long auto-scroll from the top.
+      if (scrollWindowToSection(sectionId, false)) {
         scrolledOnce = true
       }
       if (Date.now() - start < 4000) {
         window.setTimeout(settle, 250)
-      } else if (scrolledOnce) {
+      } else if (scrolledOnce && cameFromHash) {
         window.history.replaceState(null, "", window.location.pathname)
       }
     }

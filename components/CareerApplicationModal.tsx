@@ -359,7 +359,15 @@ export function CareerApplicationModal({
               </PrimaryButton>
             ) : (
               <PrimaryButton onClick={handleSubmit} disabled={!basicInfoValid || !attachmentsValid || submitting}>
-                {submitting ? "Submitting…" : "Submit Application"}
+                {submitting ? "Submitting…" : "Submit"}
+                {!submitting && (
+                  <motion.span
+                    animate={{ x: [0, 4, 0] }}
+                    transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+                  >
+                    <FiArrowRight className="h-4 w-4" />
+                  </motion.span>
+                )}
               </PrimaryButton>
             )}
           </div>
@@ -440,7 +448,7 @@ const SuccessView: React.FC<{ roleTitle: string; firstTime: boolean; onClose: ()
       <FiX className="h-5 w-5" />
     </button>
     <motion.div
-      className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#701CC0] to-[#8F42FF] shadow-[0_12px_30px_-8px_rgba(112,28,192,0.6)]"
+      className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#16A34A] to-[#22C55E] shadow-[0_12px_30px_-8px_rgba(22,163,74,0.6)]"
       initial={{ scale: 0, rotate: -90 }}
       animate={{ scale: 1, rotate: 0 }}
       transition={{ duration: 0.5, type: "spring", bounce: 0.45 }}
@@ -449,7 +457,7 @@ const SuccessView: React.FC<{ roleTitle: string; firstTime: boolean; onClose: ()
       {[0, 1].map((i) => (
         <motion.span
           key={i}
-          className="absolute inset-0 rounded-full border-2 border-[#8F42FF]"
+          className="absolute inset-0 rounded-full border-2 border-[#22C55E]"
           initial={{ scale: 1, opacity: 0.5 }}
           animate={{ scale: 1.85, opacity: 0 }}
           transition={{ duration: 2, repeat: Infinity, ease: "easeOut", delay: i }}

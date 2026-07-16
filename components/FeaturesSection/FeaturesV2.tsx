@@ -18,7 +18,7 @@ const stagger = {
 
 export default function FeaturesV2() {
   return (
-    <section className="w-full bg-[#18042A] px-6 py-24 md:py-32 overflow-hidden">
+    <section id="services" className="w-full scroll-mt-24 bg-[#18042A] px-6 py-24 md:py-32 overflow-hidden">
       <motion.div
         initial="hidden"
         whileInView="visible"

@@ -245,7 +245,6 @@ export default function Tailored() {
   return (
     <section
       ref={ref}
-      id="services"
       className="relative bg-[#F3F3F3] text-[#18042A]"
       style={{ height: `${steps.length * 85}vh` }}
     >

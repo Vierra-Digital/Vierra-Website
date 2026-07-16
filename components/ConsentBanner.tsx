@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 
 /**
  * GDPR / ePrivacy consent gate for analytics.
@@ -63,9 +64,25 @@ export default function ConsentBanner() {
     }
     if (stored === "granted") {
       grantConsent(); // returning visitor who already opted in
-    } else if (stored !== "denied") {
-      setVisible(true); // no choice made yet
+      return;
     }
+    if (stored === "denied") return; // already declined — stay hidden
+
+    // No choice made yet: hold the banner back until the visitor scrolls into
+    // the page, so it doesn't cover the hero the instant they land.
+    const REVEAL_AT = 300; // px
+    if (window.scrollY > REVEAL_AT) {
+      setVisible(true);
+      return;
+    }
+    const onScroll = () => {
+      if (window.scrollY > REVEAL_AT) {
+        setVisible(true);
+        window.removeEventListener("scroll", onScroll);
+      }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   const decide = (choice: "granted" | "denied") => {
@@ -78,18 +95,24 @@ export default function ConsentBanner() {
     setVisible(false);
   };
 
-  if (!visible) return null;
-
   return (
-    <div
-      role="dialog"
-      aria-label="Cookie consent"
-      className="fixed inset-x-0 bottom-0 z-[300] mx-auto flex max-w-3xl flex-col gap-3 border border-white/10 bg-[#18042A]/95 p-5 text-white shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.5)] backdrop-blur-md sm:bottom-4 sm:left-4 sm:right-auto sm:max-w-md sm:flex-row sm:items-center sm:rounded-2xl"
-    >
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          role="dialog"
+          aria-label="Cookie consent"
+          initial={{ opacity: 0, y: 28 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 28 }}
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+          className="fixed inset-x-0 bottom-0 z-[300] mx-auto flex max-w-3xl flex-col gap-3 border border-white/10 bg-[#18042A]/95 p-5 text-white shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.5)] backdrop-blur-md sm:bottom-4 sm:left-4 sm:right-auto sm:max-w-md sm:flex-row sm:items-center sm:rounded-2xl"
+        >
       <p className="flex-1 text-sm leading-6 text-white/80">
         We use cookies for analytics to understand how visitors use our site and improve it.{" "}
         <a
           href="/privacy-policy"
+          target="_blank"
+          rel="noopener noreferrer"
           className="font-medium text-[#C99DFF] underline underline-offset-2 hover:text-white"
         >
           Privacy Policy
@@ -111,6 +134,8 @@ export default function ConsentBanner() {
           Accept
         </button>
       </div>
-    </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

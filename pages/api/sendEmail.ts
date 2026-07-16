@@ -1,10 +1,18 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { sendEmail } from "@/lib/emailSender";
+import { sendEmail, sendAuditConfirmationEmail } from "@/lib/emailSender";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ message: "Method not allowed" });
   try {
     await sendEmail(req.body);
+    // Best-effort auto-reply to the submitter; a bounce here must not fail the form.
+    if (req.body?.email) {
+      try {
+        await sendAuditConfirmationEmail(req.body);
+      } catch (confirmError) {
+        console.error("Audit confirmation email failed:", confirmError);
+      }
+    }
     res.status(200).json({ message: "Email sent successfully!" });
   } catch (error) {
     res.status(500).json({

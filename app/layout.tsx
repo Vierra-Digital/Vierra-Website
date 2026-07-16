@@ -93,7 +93,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" style={{ scrollBehavior: "smooth" }}>
+    <html lang="en" style={{ scrollBehavior: "smooth" }} suppressHydrationWarning>
       <head>
         {/* Google Analytics — rendered by next/script on every environment so the
             tag is part of React's tree (hydration-safe). `afterInteractive` loads
@@ -328,7 +328,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <RootLayoutClient>
           {children}
         </RootLayoutClient>
