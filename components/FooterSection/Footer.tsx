@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { FaEnvelope, FaFacebookF, FaLinkedinIn } from "react-icons/fa";
 import { figtree, inter } from "@/lib/fonts";
+import { SectionScrollLink } from "@/components/ui/SectionScrollLink";
 
 
 const Footer = ({ bare = false }: { bare?: boolean }) => {
@@ -45,7 +46,7 @@ const Footer = ({ bare = false }: { bare?: boolean }) => {
             <h3 className={`text-lg font-medium mb-4 md:mb-6 ${figtree.className}`}>Company</h3>
             <ul className={`space-y-3 md:space-y-4 text-white/80 ${inter.className}`}>
               <li>
-                <Link href="/#services" className="hover:text-white transition-colors">GTM Engine</Link>
+                <SectionScrollLink sectionId="services" className="hover:text-white transition-colors">GTM Engine</SectionScrollLink>
               </li>
               <li>
                 <Link href="/careers" className="inline-flex items-center justify-center xl:justify-start gap-2 text-white/80 transition-colors hover:text-white">

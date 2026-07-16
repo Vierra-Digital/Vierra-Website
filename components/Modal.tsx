@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { track } from "@/lib/track";
 import { bricolage, inter } from "@/lib/fonts";
 import { motion, AnimatePresence } from "framer-motion";
@@ -49,6 +49,32 @@ const REVENUE_OPTIONS = [
   { value: "$500k+", label: "$500k+" },
 ];
 
+// Format a free-typed amount as US currency ($ + thousands separators) while the
+// user types, preserving a trailing "+" (e.g. "50000+" -> "$50,000+"). Empty or
+// all-zero input formats to an empty string so deletion clears cleanly.
+function formatCurrency(value: string): string {
+  const hasPlus = /\+\s*$/.test(value);
+  const amount = Number(value.replace(/\D/g, ""));
+  if (!amount) return "";
+  return `$${amount.toLocaleString("en-US")}${hasPlus ? "+" : ""}`;
+}
+
+// Number of digit characters to the left of `pos` in `str`.
+function digitsBefore(str: string, pos: number): number {
+  return str.slice(0, pos).replace(/\D/g, "").length;
+}
+
+// Caret index in `formatted` that keeps `digitCount` digits to its left — used to
+// restore the cursor after re-formatting so backspace/delete edit in place.
+function caretForDigits(formatted: string, digitCount: number): number {
+  if (digitCount <= 0) return formatted.startsWith("$") ? 1 : 0;
+  let count = 0;
+  for (let i = 0; i < formatted.length; i++) {
+    if (/\d/.test(formatted[i]) && ++count === digitCount) return i + 1;
+  }
+  return formatted.length;
+}
+
 export function Modal({ isOpen, onClose }: ModalProps) {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<FormState>(EMPTY_FORM);
@@ -67,12 +93,37 @@ export function Modal({ isOpen, onClose }: ModalProps) {
     }
   }, [isOpen]);
 
+  // The desired-revenue field is UNCONTROLLED (defaultValue + a ref). We format
+  // it imperatively on each keystroke and set the caret ourselves, so React's
+  // controlled-input cursor handling never fights us — deletion, mid-string
+  // edits, and separator removal all stay put and behave predictably.
+  const desiredRef = useRef<HTMLInputElement>(null);
+
   const setField = (key: keyof FormState) => (value: string) =>
     setFormData((prev) => ({ ...prev, [key]: value }));
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { id, value } = e.target;
-    setFormData((prev) => ({ ...prev, [id]: id === "phoneNumber" ? formatPhone(value) : value }));
+    setFormData((prev) => ({
+      ...prev,
+      [id]: id === "phoneNumber" ? formatPhone(value) : value,
+    }));
+  };
+
+  const handleDesiredRevenue = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const raw = input.value;
+    // How many digits sit left of the caret in the raw (pre-format) text, so we
+    // can put the caret back after the same digit once it's re-formatted.
+    const digitsLeft = digitsBefore(raw, input.selectionStart ?? raw.length);
+    const formatted = formatCurrency(raw);
+    // Write the formatted value straight to the DOM (input is uncontrolled) and
+    // restore the caret in one synchronous pass — no React re-render race.
+    input.value = formatted;
+    const caret = caretForDigits(formatted, digitsLeft);
+    input.setSelectionRange(caret, caret);
+    // Keep form state in sync for validation/submit (does not re-render the input).
+    setFormData((prev) => ({ ...prev, desiredRevenue: formatted }));
   };
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim());
@@ -264,10 +315,12 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                         error={formData.desiredRevenue && !desiredValid ? "Enter a valid amount." : undefined}
                       >
                         <input
+                          ref={desiredRef}
                           id="desiredRevenue"
                           type="text"
-                          value={formData.desiredRevenue}
-                          onChange={handleChange}
+                          inputMode="numeric"
+                          defaultValue={formData.desiredRevenue}
+                          onChange={handleDesiredRevenue}
                           className={`${inputClass} ${formData.desiredRevenue && !desiredValid ? "border-red-400 bg-red-50/50" : ""}`}
                           placeholder="$50,000+"
                         />

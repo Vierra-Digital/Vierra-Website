@@ -7,6 +7,7 @@ import { ArrowUpRight, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/Modal";
 import { track } from "@/lib/track";
+import { scrollToHomeSection } from "@/lib/sectionScroll";
 
 
 export function Header() {
@@ -26,12 +27,7 @@ export function Header() {
     if (closeMobile) {
       setIsMobileMenuOpen(false)
     }
-    if (typeof window === "undefined") return
-    if (window.location.pathname !== "/") {
-      window.location.href = `/#${sectionId}`
-      return
-    }
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth" })
+    scrollToHomeSection(sectionId)
   }
 
   return (
@@ -43,7 +39,7 @@ export function Header() {
           </Link>
           <nav className={`hidden md:flex items-center gap-8 text-[16px] ${bricolage.className}`}>
             <Link
-              href="/#services"
+              href="/"
               className="relative group transition-colors duration-300 hover:text-white"
               onClick={(event) => handleSectionClick(event, "services")}
             >
@@ -87,7 +83,7 @@ export function Header() {
                 </div>
                 <nav className={`flex flex-col p-4 ${bricolage.className}`}>
                   <Link
-                    href="/#services"
+                    href="/"
                     className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors"
                     onClick={(event) => handleSectionClick(event, "services", true)}
                   >
