@@ -175,13 +175,14 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                 <meta name="description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients. Learn about marketing, lead generation, business growth, and digital optimization." />
                 <meta name="author" content="Vierra Digital" />
                 <meta name="keywords" content="marketing blog, business growth strategies, lead generation tips, digital marketing insights, case studies, business scaling, marketing automation" />
-                {hasFetchError && <meta name="robots" content="noindex, nofollow" />}
+                {hasFetchError ? <meta name="robots" content="noindex, nofollow" /> : <meta name="robots" content="index, follow" />}
                 <link rel="canonical" href={canonicalUrl} />
                 <link rel="alternate" type="application/rss+xml" title="Vierra Blog RSS Feed" href="https://vierradev.com/blog/rss.xml" />
                 <meta property="og:title" content="Vierra | Blog" />
                 <meta property="og:description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients." />
                 <meta property="og:url" content={canonicalUrl} />
                 <meta property="og:type" content="website" />
+                <meta property="og:site_name" content="Vierra Digital" />
                 <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
                 <meta name="twitter:card" content="summary_large_image" />
                 <meta name="twitter:title" content="Vierra | Blog" />

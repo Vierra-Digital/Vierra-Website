@@ -312,17 +312,19 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
   if (!role) {
     return { notFound: true };
   }
-  // Build-time timestamp used for JobPosting structured data (datePosted).
-  // validThrough is required-recommended by Google for Jobs — without it a
-  // posting can be silently expired/de-prioritized. We use a rolling 90-day
-  // window from build time; each deploy refreshes it so listings stay valid.
-  const now = new Date();
-  const validThrough = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+  // Both JobPosting dates are STABLE (not recomputed each build): datePosted is
+  // fixed per role, and validThrough is a fixed 1-year window derived from it —
+  // so redeploys never shift the posting dates (which Google Jobs can read as
+  // churn). Bump the role's datePosted to re-open/refresh a listing.
+  const datePosted = role.datePosted ?? DEFAULT_DATE_POSTED;
+  const validThrough = new Date(
+    new Date(datePosted).getTime() + 365 * 24 * 60 * 60 * 1000
+  ).toISOString();
   return {
     props: {
       role,
-      datePosted: role.datePosted ?? DEFAULT_DATE_POSTED,
-      validThrough: validThrough.toISOString(),
+      datePosted,
+      validThrough,
     },
   };
 };
