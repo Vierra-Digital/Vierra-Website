@@ -1,11 +1,8 @@
 import React from "react";
 import Head from "next/head";
 import dynamic from "next/dynamic";
-import Image from "next/image";
-import Link from "next/link";
 import type { GetServerSideProps } from "next";
 import { requireSession } from "@/lib/auth";
-import { FiSettings } from "react-icons/fi";
 
 const EmailingPlatformSection = dynamic(
   () => import("@/components/PanelPages/EmailingPlatformSection"),
@@ -23,32 +20,8 @@ const EmailPanelStandalonePage: React.FC<Props> = ({ initialSelectedAccounts }) 
         <title>Vierra | Email Panel</title>
         <meta name="robots" content="noindex,nofollow" />
       </Head>
-      <div className="fixed inset-0 bg-[#F7F8FC] overflow-hidden">
-        <header className="h-16 border-b border-[#E5E7EB] bg-white px-5 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/panel" className="inline-flex items-center gap-2">
-              <Image
-                src="/assets/vierra-logo-black-3.png"
-                alt="Vierra"
-                width={110}
-                height={32}
-                className="w-[110px] h-auto"
-                priority
-              />
-            </Link>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/panel/email/settings"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#E5E7EB] text-[#6B7280] hover:bg-[#F9FAFB] hover:text-[#701CC0]"
-              aria-label="Email settings"
-              title="Email settings"
-            >
-              <FiSettings className="h-4 w-4" />
-            </Link>
-          </div>
-        </header>
-        <main className="h-[calc(100vh-64px)] overflow-hidden">
+      <div className="fixed inset-0 overflow-hidden">
+        <main className="h-screen overflow-hidden">
           <EmailingPlatformSection standalone initialSelectedAccounts={initialSelectedAccounts} />
         </main>
       </div>

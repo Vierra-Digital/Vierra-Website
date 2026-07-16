@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { inter } from "@/lib/fonts";
+import { Geist } from "next/font/google";
 import Image from "next/image";
+import Link from "next/link";
+import dynamic from "next/dynamic";
 import { FaGoogle } from "react-icons/fa";
 import {
   FiAlertCircle,
@@ -19,7 +21,6 @@ import {
   FiLink,
   FiPaperclip,
   FiPrinter,
-  FiKey,
   FiMail,
   FiMaximize2,
   FiMinimize2,
@@ -28,6 +29,7 @@ import {
   FiRefreshCw,
   FiSearch,
   FiSend,
+  FiSettings,
   FiUpload,
   FiUserPlus,
   FiTrash2,
@@ -39,216 +41,45 @@ import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import ComposeRichEditor, { printComposeContent, type ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
+import { APP_BACKGROUND, GLASS_CHROME, GLASS_SURFACE, SHADOW_SOFT, SHADOW_SM, BRAND_GRADIENT, BRAND_LOGO } from "@/components/email/emailTheme";
+import {
+  PAGE_SIZE,
+  CONTACTS_PAGE_SIZE,
+  COMPOSE_NEUTRAL_SCROLLBAR,
+  validateRecipientCsv,
+  EMPTY_COUNTS,
+  MODULES,
+  BADGE_MODULES,
+  BADGE_MAILBOXES,
+} from "@/components/email/constants";
+import type {
+  ModuleKey,
+  GmailAccountConnection,
+  MessageRow,
+  MessageDetail,
+  ThreadMessage,
+  MailboxCounts,
+  ModuleUnreadBadgeCounts,
+  ContactTag,
+  ContactRow,
+  ContactVisibility,
+  ProviderAccount,
+  BlockedSenderRow,
+  LocalEmailDraft,
+} from "@/components/email/types";
 
-const PAGE_SIZE = 50;
-const CONTACTS_PAGE_SIZE = 50;
+// Site brand font (matches vierradev.com); replaces the panel's former Inter.
+const panelFont = Geist({ subsets: ["latin"] });
 
-/** Neutral scrollbar; overrides global purple `::-webkit-scrollbar` in app/globals.css for compose UI */
-
-/** Basic validation for comma-separated recipient fields (Cc / Bcc). */
-function validateRecipientCsv(label: "Cc" | "Bcc", raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  const parts = trimmed.split(",").map((entry) => entry.trim()).filter(Boolean);
-  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  for (const part of parts) {
-    const addr = part.includes("<") ? (part.match(/<([^>]+)>/)?.[1] || part).trim() : part;
-    if (!emailOk.test(addr)) return `${label}: invalid address "${part}"`;
-  }
-  return null;
-}
-
-const COMPOSE_NEUTRAL_SCROLLBAR =
-  "[scrollbar-width:thin] [scrollbar-color:rgb(203_213_225)_rgb(241_245_249)] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb:hover]:bg-slate-400";
-
-type ModuleKey =
-  | "inbox"
-  | "sent"
-  | "drafts"
-  | "campaigns"
-  | "cryptography"
-  | "contacts"
-  | "archive"
-  | "spam"
-  | "trash";
-
-type GmailAccountConnection = {
-  email: string;
-  connected: boolean;
-  expiresAt: string | null;
-  reconnectReason?: string | null;
-};
-
-type MessageRow = {
-  id: string;
-  threadId: string;
-  accountEmail: string;
-  subject: string;
-  from: string;
-  to: string;
-  fromRaw: string;
-  toRaw: string;
-  date: string;
-  timestamp: number;
-  snippet: string;
-  mailbox: "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive";
-  replyTo: string;
-  messageIdHeader: string;
-  references: string;
-  unread: boolean;
-  tracked: boolean;
-  trackingOpenCount?: number;
-  trackingClickCount?: number;
-  trackingFirstOpenedAt?: string | null;
-  trackingLastOpenedAt?: string | null;
-  trackingTotalOpenWindowMs?: number;
-  isComposeDraft?: boolean;
-  draftKey?: string;
-  composeCc?: string;
-  composeBcc?: string;
-  composeShowCc?: boolean;
-  composeShowBcc?: boolean;
-  composeBodyText?: string;
-  composeBodyHtml?: string;
-  composePreviewHtml?: string;
-};
-
-type MessageDetail = {
-  bodyHtml: string;
-  bodyText: string;
-  fromRaw?: string;
-  toRaw?: string;
-  subject?: string;
-  replyTo?: string;
-  date?: string;
-  timestamp?: number;
-  messageIdHeader?: string;
-  references?: string;
-  senderPhotoUrl?: string;
-  threadMessages?: ThreadMessage[];
-};
-
-type ThreadMessage = {
-  id: string;
-  threadId: string;
-  subject: string;
-  fromRaw: string;
-  toRaw: string;
-  replyTo: string;
-  date: string;
-  timestamp: number;
-  snippet: string;
-  bodyText: string;
-  bodyHtml: string;
-  messageIdHeader: string;
-  references: string;
-};
-
-type MailboxCounts = {
-  inbox: number;
-  sent: number;
-  drafts: number;
-  archive: number;
-  spam: number;
-  trash: number;
-};
-
-type ModuleUnreadBadgeCounts = {
-  inbox: number;
-  sent: number;
-  drafts: number;
-  archive: number;
-  spam: number;
-  trash: number;
-};
-
-type ContactTag = {
-  id: string;
-  name: string;
-  color: string;
-};
-
-type ContactRow = {
-  id: string;
-  firstName: string | null;
-  lastName: string | null;
-  email: string;
-  phone: string | null;
-  business: string | null;
-  website: string | null;
-  address: string | null;
-  source: "MANUAL" | "GMAIL" | "CSV";
-  accountEmail: string | null;
-  tags: ContactTag[];
-};
-
-type ContactVisibility = {
-  showPhone: boolean;
-  showBusiness: boolean;
-  showWebsite: boolean;
-};
-
-type ProviderAccount = {
-  id: string;
-  accountEmail: string;
-  providerLabel?: string | null;
-};
-
-type BlockedSenderRow = {
-  id: string;
-  email: string;
-  accountEmail: string | null;
-  name: string | null;
-};
-
-type LocalEmailDraft = {
-  to: string;
-  cc?: string;
-  bcc?: string;
-  showCc?: boolean;
-  showBcc?: boolean;
-  subject: string;
-  bodyText: string;
-  bodyHtml?: string;
-  previewHtml?: string;
-  accountEmail?: string;
-  threadId?: string;
-  inReplyTo?: string;
-  references?: string;
-  updatedAt: number;
-};
-
-const EMPTY_COUNTS: MailboxCounts = {
-  inbox: 0,
-  sent: 0,
-  drafts: 0,
-  archive: 0,
-  spam: 0,
-  trash: 0,
-};
-
-const MODULES: Array<{ key: ModuleKey; label: string; icon: React.ReactNode }> = [
-  { key: "inbox", label: "Inbox", icon: <FiInbox className="w-4 h-4" /> },
-  { key: "drafts", label: "Drafts", icon: <FiMail className="w-4 h-4" /> },
-  { key: "sent", label: "Sent", icon: <FiSend className="w-4 h-4" /> },
-  { key: "cryptography", label: "Cartography", icon: <FiKey className="w-4 h-4" /> },
-  { key: "campaigns", label: "Campaigns", icon: <FiCheckSquare className="w-4 h-4" /> },
-  { key: "contacts", label: "Contacts", icon: <FiUsers className="w-4 h-4" /> },
-  { key: "archive", label: "Archive", icon: <FiArchive className="w-4 h-4" /> },
-  { key: "spam", label: "Spam", icon: <FiMail className="w-4 h-4" /> },
-  { key: "trash", label: "Trash", icon: <FiTrash2 className="w-4 h-4" /> },
-];
-
-const BADGE_MODULES = new Set<ModuleKey>(["inbox", "sent", "drafts", "archive", "spam"]);
-const BADGE_MAILBOXES: Array<"inbox" | "sent" | "drafts" | "archive" | "spam" | "trash"> = [
-  "inbox",
-  "sent",
-  "drafts",
-  "archive",
-  "spam",
-  "trash",
-];
-
+// Lazy-load the Analytics view (recharts is heavy) so it stays out of the initial panel bundle.
+const EmailAnalyticsView = dynamic(() => import("@/components/email/EmailAnalyticsView"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center">
+      <div className="w-10 h-10 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] motion-safe:animate-spin" />
+    </div>
+  ),
+});
 type EmailingPlatformSectionProps = {
   standalone?: boolean;
   launchStandaloneOnContinue?: boolean;
@@ -258,7 +89,7 @@ type EmailingPlatformSectionProps = {
 const MailboxLoader: React.FC<{ label?: string }> = ({ label = "Loading messages..." }) => (
   <div className="h-full min-h-[320px] flex items-center justify-center px-6">
     <div className="text-center">
-      <div className="mx-auto w-12 h-12 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] animate-spin" />
+      <div className="mx-auto w-12 h-12 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] motion-safe:animate-spin" />
       <p className="mt-4 text-sm font-medium text-[#5B5E73]">{label}</p>
     </div>
   </div>
@@ -266,10 +97,12 @@ const MailboxLoader: React.FC<{ label?: string }> = ({ label = "Loading messages
 
 const MailboxEmpty: React.FC = () => (
   <div className="h-full min-h-[320px] flex items-center justify-center px-6">
-    <div className="text-center rounded-2xl border border-[#E7E9F2] bg-[#FBFCFF] px-8 py-10">
-      <FiInbox className="w-8 h-8 mx-auto text-[#701CC0] animate-bounce" />
-      <p className="mt-3 text-sm font-semibold text-[#2A2D3B]">No Messages Found</p>
-      <p className="text-xs text-[#7C829A] mt-1">Try another mailbox or refresh this view.</p>
+    <div className="text-center rounded-2xl border border-white/70 bg-white/60 backdrop-blur-md px-9 py-11 shadow-[0_10px_40px_-12px_rgba(46,16,80,0.18)]">
+      <div className="w-12 h-12 mx-auto rounded-full bg-[#701CC0]/10 flex items-center justify-center">
+        <FiInbox className="w-6 h-6 text-[#701CC0]" />
+      </div>
+      <p className="mt-4 text-sm font-semibold text-[#1E1B2E]">No messages here</p>
+      <p className="text-xs text-[#847FA0] mt-1">Try another mailbox or refresh this view.</p>
     </div>
   </div>
 );
@@ -315,6 +148,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [actionError, setActionError] = useState("");
   const [moveMenuOpen, setMoveMenuOpen] = useState<null | "list" | "message">(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [composeTo, setComposeTo] = useState("");
@@ -481,7 +315,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     activeModule === "drafts" ||
     activeModule === "spam" ||
     activeModule === "trash" ||
-    activeModule === "archive";
+    activeModule === "archive" ||
+    activeModule === "allmail" ||
+    activeModule === "starred" ||
+    activeModule === "important" ||
+    activeModule === "scheduled";
   const activeAccountForContacts = selectedAccounts[0] || "";
 
   const filteredMessages = useMemo(() => {
@@ -985,7 +823,17 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
   const formatDate = (timestamp: number, rawDate?: string) => {
     if (timestamp > 0) {
-      return new Date(timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      const date = new Date(timestamp);
+      const now = new Date();
+      const isToday =
+        date.getFullYear() === now.getFullYear() &&
+        date.getMonth() === now.getMonth() &&
+        date.getDate() === now.getDate();
+      // Gmail-style: today shows the time, older mail shows the date.
+      if (isToday) {
+        return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+      }
+      return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
     }
     return rawDate || "";
   };
@@ -1329,13 +1177,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       return;
     }
 
-    const mailbox = activeModule as "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive";
+    const mailbox = activeModule as "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive" | "allmail" | "starred" | "important" | "scheduled";
     const query = new URLSearchParams({
       mailbox,
       accounts: selectedAccounts.join(","),
       limit: String(PAGE_SIZE),
       page: String(currentPage),
     });
+    if (debouncedSearch) query.set("q", debouncedSearch);
 
     setMessagesLoading(true);
     setMessagesError("");
@@ -1348,7 +1197,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
       const nextMessages = Array.isArray(payload?.messages) ? payload.messages : [];
       const unreadCount = nextMessages.filter((message: MessageRow) => message.unread).length;
-      setModuleUnreadBadges((prev) => ({ ...prev, [mailbox]: unreadCount }));
+      setModuleUnreadBadges((prev) => ({ ...prev, [mailbox as keyof ModuleUnreadBadgeCounts]: unreadCount }));
       setMessages(nextMessages);
       setAccountErrors(Array.isArray(payload?.accountErrors) ? payload.accountErrors : []);
       setHasNextPage(Boolean(payload?.hasNextPage));
@@ -1363,18 +1212,28 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       if (requestId !== loadMessagesRequestRef.current) return;
       setMessages([]);
       setHasNextPage(false);
-      setModuleUnreadBadges((prev) => ({ ...prev, [mailbox]: 0 }));
+      setModuleUnreadBadges((prev) => ({ ...prev, [mailbox as keyof ModuleUnreadBadgeCounts]: 0 }));
       setAccountErrors([]);
       setMessagesError(error instanceof Error ? error.message : "Failed to load Gmail messages.");
     } finally {
       if (requestId !== loadMessagesRequestRef.current) return;
       setMessagesLoading(false);
     }
-  }, [activeModule, canLoadMessages, currentPage, selectedAccounts, step]);
+  }, [activeModule, canLoadMessages, currentPage, debouncedSearch, selectedAccounts, step]);
 
   useEffect(() => {
     loadMessages();
   }, [loadMessages]);
+
+  // Debounce the search box, then let loadMessages re-query the server (Gmail `q`).
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 400);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch]);
 
   useEffect(() => {
     loadUnreadBadges();
@@ -2308,12 +2167,13 @@ ${sourceText}`;
   }, [activeModule]);
 
   return (
-    <div className={`${standalone ? "w-full h-full" : "w-full h-full"} bg-white text-[#111014] flex flex-col overflow-x-hidden ${inter.className}`}>
+    <div style={{ backgroundImage: APP_BACKGROUND }} className={`w-full h-full text-[#1E1B2E] flex flex-col overflow-x-hidden ${panelFont.className}`}>
       {step === "gate" ? (
         <div className={`${standalone ? "h-full flex items-center justify-center px-6" : "flex-1 flex items-center justify-center px-6 py-10 overflow-y-auto"}`}>
-          <div className="w-full max-w-2xl rounded-2xl border border-[#E5E7EB] bg-white p-6 shadow-sm">
-            <h1 className="text-2xl font-semibold text-[#111827]">Email Panel</h1>
-            <p className="mt-2 text-sm text-[#6B7280]">Select which connected Google accounts should be used in this email instance.</p>
+          <div className={`w-full max-w-xl rounded-3xl ${GLASS_SURFACE} ${SHADOW_SOFT} p-8`}>
+            <Image src={BRAND_LOGO.wordmarkDark} alt="Vierra" width={140} height={36} className="h-8 w-auto mb-6" priority />
+            <h1 className="text-2xl font-semibold tracking-tight text-[#1E1B2E]">Email</h1>
+            <p className="mt-2 text-sm text-[#6B7280]">Choose which connected Google accounts to use in this inbox.</p>
 
             <div className="mt-5 flex items-center">
               <div className="flex items-center gap-2">
@@ -2395,20 +2255,24 @@ ${sourceText}`;
             {!standalone ? <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Email Panel</h1> : null}
 
             {standalone ? (
-              <div className="grid grid-cols-[250px_minmax(740px,1fr)] gap-4 h-[calc(100vh-148px)] min-h-[620px] overflow-hidden">
-                <div className="rounded-2xl border border-[#E5E7EB] bg-white p-3 shadow-sm h-full overflow-hidden">
+              <div className="grid grid-cols-[248px_minmax(720px,1fr)] gap-5 h-[calc(100vh-36px)] min-h-[620px] overflow-hidden">
+                <div className={`rounded-2xl ${GLASS_CHROME} ${SHADOW_SM} p-3 h-full overflow-hidden flex flex-col`}>
+                  <div className="flex items-center justify-center pt-3 pb-7">
+                    <Image src={BRAND_LOGO.wordmarkDark} alt="Vierra" width={168} height={42} className="h-10 w-auto" priority />
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
                       void openNewCompose();
                     }}
-                    className="w-full mb-3 rounded-xl bg-[#701CC0] text-white px-3 py-2.5 text-sm font-medium hover:bg-[#5f17a5] inline-flex items-center justify-center gap-2"
+                    style={{ backgroundImage: BRAND_GRADIENT }}
+                    className="w-full mb-3 rounded-xl text-white px-3 py-2.5 text-sm font-semibold hover:brightness-105 inline-flex items-center justify-center gap-2 shadow-[0_10px_22px_-8px_rgba(112,28,192,0.55)] transition"
                   >
                     <FiEdit3 className="w-4 h-4" />
                     Compose
                   </button>
 
-                  <div className="space-y-1">
+                  <div className="space-y-0.5 flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
                     {MODULES.map((item) => (
                       (() => {
                         const count = moduleCount(item.key);
@@ -2422,8 +2286,10 @@ ${sourceText}`;
                           setSearchTerm("");
                           setSelectedRows([]);
                         }}
-                        className={`w-full rounded-xl px-3 py-2.5 text-sm text-left flex items-center justify-between gap-2 transition ${
-                          activeModule === item.key ? "bg-[#701CC0] text-white" : "text-[#374151] hover:bg-[#F3F4F6]"
+                        className={`w-full rounded-xl px-3 py-2 text-[13px] text-left flex items-center justify-between gap-2 transition border ${
+                          activeModule === item.key
+                            ? "bg-[#701CC0]/10 text-[#4C1D95] font-semibold border-[#701CC0]/20"
+                            : "text-[#4A465C] hover:bg-white/60 border-transparent"
                         }`}
                       >
                         <span className="inline-flex items-center gap-2 min-w-0">
@@ -2438,14 +2304,25 @@ ${sourceText}`;
                       })()
                     ))}
                   </div>
+                  <div className="mt-2 pt-2 border-t border-white/60">
+                    <Link
+                      href="/panel/email/settings"
+                      className="w-full rounded-xl px-3 py-2 text-[13px] flex items-center gap-2 transition text-[#4A465C] hover:bg-white/60"
+                    >
+                      <FiSettings className="w-4 h-4 text-[#847FA0]" />
+                      <span>Settings</span>
+                    </Link>
+                  </div>
                 </div>
 
-                <div className="rounded-2xl border border-[#E5E7EB] bg-white shadow-sm h-full overflow-hidden flex flex-col">
-                  {viewMode === "list" ? (
+                <div className={`rounded-2xl ${GLASS_SURFACE} ${SHADOW_SM} h-full overflow-hidden flex flex-col`}>
+                  {activeModule === "analytics" ? (
+                    <EmailAnalyticsView accounts={selectedAccounts} />
+                  ) : viewMode === "list" ? (
                     <>
                       {activeModule !== "contacts" ? (
                         <>
-                          <div className="px-4 py-3 border-b border-[#E5E7EB] bg-[#FBFCFF] flex items-center justify-between gap-3">
+                          <div className="px-4 py-3 border-b border-[#E5E7EB]/70 bg-white/40 flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2 flex-wrap">
                               <input
                                 type="checkbox"
@@ -2462,9 +2339,10 @@ ${sourceText}`;
                                 onClick={() => Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()])}
                                 disabled={messagesLoading}
                                 className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                aria-label="Refresh"
                                 title="Refresh"
                               >
-                                <FiRefreshCw className={`w-4 h-4 ${messagesLoading ? "animate-spin" : ""}`} />
+                                <FiRefreshCw className={`w-4 h-4 ${messagesLoading ? "motion-safe:animate-spin" : ""}`} />
                               </button>
                               {hasSelectedEmails ? (
                                 <>
@@ -2475,6 +2353,7 @@ ${sourceText}`;
                                         onClick={() => applyAction("markRead")}
                                         disabled={actionLoading}
                                         className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                        aria-label="Mark As Read"
                                         title="Mark As Read"
                                       >
                                         <FiCheckSquare className="w-4 h-4" />
@@ -2919,7 +2798,7 @@ ${sourceText}`;
                         ) : filteredMessages.length === 0 ? (
                           <MailboxEmpty />
                         ) : (
-                          <div className="divide-y divide-[#F0F0F0]">
+                          <div className="divide-y divide-[#EEE6F7]/70">
                             {filteredMessages.map((message) => {
                               const key = rowKey(message);
                               const senderOrTo = activeModule === "sent" ? message.to || "-" : message.from || "-";
@@ -2952,8 +2831,8 @@ ${sourceText}`;
                                     setViewMode("message");
                                     setDetailError("");
                                   }}
-                                  className={`w-full text-left px-3 py-2.5 flex items-center gap-2 transition hover:bg-[#F4EDFF] ${
-                                    isSelected ? "bg-[#EDE1FF]" : message.unread ? "bg-[#FBFBFF]" : ""
+                                  className={`group w-full text-left px-4 py-3 flex items-center gap-2.5 transition hover:bg-[#701CC0]/[0.06] ${
+                                    isSelected ? "bg-[#701CC0]/10" : message.unread ? "bg-[#701CC0]/[0.035]" : ""
                                   }`}
                                 >
                                   <input
@@ -2961,15 +2840,17 @@ ${sourceText}`;
                                     checked={selectedRows.includes(key)}
                                     onClick={(event) => event.stopPropagation()}
                                     onChange={() => toggleRowSelection(message)}
-                                    className="h-4 w-4 shrink-0"
+                                    className={`h-4 w-4 shrink-0 accent-[#701CC0] transition-opacity ${
+                                      isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                    }`}
                                   />
                                   {message.tracked ? (
-                                    <span className="inline-flex items-center gap-1 shrink-0">
-                                      <span className="w-2 h-2 rounded-full bg-[#22C55E]" title="Tracking Enabled" />
-                                      <span
-                                        className="w-2 h-2 rounded-full bg-[#A855F7]"
-                                        title={trackingReportTooltip}
-                                      />
+                                    <span
+                                      className="inline-flex items-center shrink-0"
+                                      title={trackingReportTooltip}
+                                      aria-label={openCount > 0 ? "Opened by recipient" : "Tracked — not yet opened"}
+                                    >
+                                      <span className={`w-2 h-2 rounded-full ${openCount > 0 ? "bg-[#22C55E]" : "bg-[#9CA3AF]"}`} />
                                     </span>
                                   ) : null}
                                   <span
@@ -3013,11 +2894,11 @@ ${sourceText}`;
                     </>
                   ) : (
                     <div className="h-full flex flex-col">
-                      <div className="px-5 py-3 border-b border-[#E5E7EB] flex items-center justify-between">
+                      <div className="px-5 py-3 border-b border-[#E5E7EB]/70 bg-white/40 flex items-center justify-between">
                         <button
                           type="button"
                           onClick={() => setViewMode("list")}
-                          className="inline-flex items-center gap-2 text-sm text-[#374151] hover:text-[#111827]"
+                          className="inline-flex items-center gap-2 text-sm font-medium text-[#4A465C] hover:text-[#701CC0]"
                           title="Back"
                         >
                           <FiChevronsRight className="w-4 h-4 rotate-180" />
@@ -3030,6 +2911,7 @@ ${sourceText}`;
                               void openReplyCompose();
                             }}
                             className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            aria-label="Reply"
                             title="Reply"
                           >
                             <FiCornerUpLeft className="w-4 h-4" />
@@ -3040,6 +2922,7 @@ ${sourceText}`;
                               void openReplyAllCompose();
                             }}
                             className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            aria-label="Reply All"
                             title="Reply All"
                           >
                             <FiUsers className="w-4 h-4" />
@@ -3050,6 +2933,7 @@ ${sourceText}`;
                               void openForwardCompose();
                             }}
                             className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            aria-label="Forward"
                             title="Forward"
                           >
                             <FiSend className="w-4 h-4" />
@@ -3123,7 +3007,7 @@ ${sourceText}`;
 
                       {selectedMessage ? (
                         <div className="flex-1 overflow-y-auto px-6 py-5">
-                          <h2 className="text-xl font-semibold text-[#111827]">{selectedMessage.subject || "(No Subject)"}</h2>
+                          <h2 className="text-[22px] font-semibold tracking-tight text-[#1E1B2E]">{selectedMessage.subject || "(No Subject)"}</h2>
                           <div className="mt-4 flex items-start gap-3">
                             {selectedMessageDetail?.senderPhotoUrl ? (
                               <Image
@@ -3153,7 +3037,7 @@ ${sourceText}`;
                             ) : (
                               <div className="space-y-4">
                                 {threadMessages.map((threadMessage, index) => (
-                                  <div key={`${threadMessage.id || index}`} className="rounded-xl border border-[#E8EBF4] bg-white p-4">
+                                  <div key={`${threadMessage.id || index}`} className="rounded-2xl border border-white/70 bg-white/70 p-5">
                                     {threadMessage.bodyHtml ? (
                                       <div
                                         className="text-sm text-[#374151] leading-6"
@@ -3321,11 +3205,11 @@ ${sourceText}`;
 
       {isAddContactModalOpen ? (
         <div
-          className="fixed inset-0 z-[140] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-[140] flex items-center justify-center bg-[#2E1050]/30 backdrop-blur-md p-4"
           onClick={closeAddContactModal}
         >
           <div
-            className="w-full max-w-2xl rounded-lg bg-white shadow-xl border border-[#E5E7EB] p-6"
+            className="w-full max-w-2xl rounded-2xl bg-white/90 backdrop-blur-xl border border-white/70 shadow-[0_30px_70px_-20px_rgba(46,16,80,0.55)] p-6"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-5">
@@ -3471,17 +3355,17 @@ ${sourceText}`;
       ) : null}
 
       {isEditContactModalOpen ? (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[150] p-4">
+        <div className="fixed inset-0 bg-[#2E1050]/30 backdrop-blur-md flex items-center justify-center z-[150] p-4">
           <div
-            className="bg-white rounded-xl p-6 w-full max-w-2xl mx-4"
+            className="bg-white/90 backdrop-blur-xl border border-white/70 shadow-[0_30px_70px_-20px_rgba(46,16,80,0.55)] rounded-2xl p-6 w-full max-w-2xl mx-4"
             ref={editContactModalRef}
             role="dialog"
             aria-modal="true"
             aria-label="Edit Contact"
           >
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                <FiEdit3 className="w-6 h-6 text-blue-600" />
+              <div className="w-12 h-12 rounded-full bg-[#701CC0]/10 flex items-center justify-center">
+                <FiEdit3 className="w-6 h-6 text-[#701CC0]" />
               </div>
               <h3 className="text-xl font-semibold text-[#111827]">Edit Contact</h3>
             </div>
@@ -3625,7 +3509,7 @@ ${sourceText}`;
         <div
           className={
             composeExpanded
-              ? "fixed inset-0 z-[120] flex items-center justify-center bg-[#202124]/45 p-4"
+              ? "fixed inset-0 z-[120] flex items-center justify-center bg-[#2E1050]/45 backdrop-blur-sm p-4"
               : "contents"
           }
           onClick={composeExpanded ? () => setComposeExpanded(false) : undefined}
@@ -3633,7 +3517,7 @@ ${sourceText}`;
         >
           <div
             onClick={(event) => event.stopPropagation()}
-            className={`flex flex-col overflow-hidden bg-white shadow-[0_8px_10px_1px_rgba(0,0,0,0.14),0_3px_14px_2px_rgba(0,0,0,0.12)] border border-[#dadce0] ${
+            className={`flex flex-col overflow-hidden bg-white shadow-[0_8px_10px_1px_rgba(0,0,0,0.14),0_3px_14px_2px_rgba(0,0,0,0.12)] border border-[#EAE5F4] ${
               composeExpanded
                 ? "h-[75vh] w-[75vw] max-h-[75vh] max-w-[75vw] rounded-lg"
                 : "fixed bottom-6 right-6 z-[120] w-[min(100vw-1.5rem,572px)] max-h-[min(92vh,760px)] rounded-t-xl"
@@ -3675,13 +3559,13 @@ ${sourceText}`;
                 }`}
               >
                 <div className="shrink-0 px-3">
-                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#dadce0] py-2">
+                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
                     <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">From</span>
                     <div className="relative min-w-0">
                       <select
                         value={composeAccountEmail}
                         onChange={(event) => setComposeAccountEmail(event.target.value)}
-                        className="min-w-0 w-full cursor-pointer appearance-none border-0 bg-transparent py-1.5 pl-0 pr-7 text-sm text-[#202124] outline-none focus:ring-0"
+                        className="min-w-0 w-full cursor-pointer appearance-none border-0 bg-transparent py-1.5 pl-0 pr-7 text-sm text-[#1E1B2E] outline-none focus:ring-0"
                       >
                         {composeFromOptions.map((email) => (
                           <option key={email} value={email}>
@@ -3696,21 +3580,21 @@ ${sourceText}`;
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#dadce0] py-2">
+                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
                     <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">To</span>
                     <div className="flex min-w-0 items-center gap-2">
                       <input
                         value={composeTo}
                         onChange={(event) => setComposeTo(event.target.value)}
                         placeholder=""
-                        className="min-w-0 flex-1 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#202124] outline-none placeholder:text-[#70757a]"
+                        className="min-w-0 flex-1 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#1E1B2E] outline-none placeholder:text-[#70757a]"
                       />
                       <div className="flex shrink-0 items-center gap-2">
                         <button
                           type="button"
                           onClick={() => setShowCc((prev) => !prev)}
                           className={`whitespace-nowrap text-sm font-medium hover:underline ${
-                            showCc ? "text-[#701CC0]" : "text-[#1a73e8]"
+                            showCc ? "text-[#701CC0]" : "text-[#701CC0]"
                           }`}
                           aria-pressed={showCc}
                           title={showCc ? "Hide Cc field" : "Show Cc field"}
@@ -3721,7 +3605,7 @@ ${sourceText}`;
                           type="button"
                           onClick={() => setShowBcc((prev) => !prev)}
                           className={`whitespace-nowrap text-sm font-medium hover:underline ${
-                            showBcc ? "text-[#701CC0]" : "text-[#1a73e8]"
+                            showBcc ? "text-[#701CC0]" : "text-[#701CC0]"
                           }`}
                           aria-pressed={showBcc}
                           title={showBcc ? "Hide Bcc field" : "Show Bcc field"}
@@ -3733,36 +3617,36 @@ ${sourceText}`;
                   </div>
 
                   {showCc ? (
-                    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#dadce0] py-2">
+                    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
                       <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Cc</span>
                       <input
                         value={composeCc}
                         onChange={(event) => setComposeCc(event.target.value)}
                         placeholder=""
-                        className="min-w-0 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#202124] outline-none"
+                        className="min-w-0 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#1E1B2E] outline-none"
                       />
                     </div>
                   ) : null}
 
                   {showBcc ? (
-                    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#dadce0] py-2">
+                    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
                       <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Bcc</span>
                       <input
                         value={composeBcc}
                         onChange={(event) => setComposeBcc(event.target.value)}
                         placeholder=""
-                        className="min-w-0 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#202124] outline-none"
+                        className="min-w-0 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#1E1B2E] outline-none"
                       />
                     </div>
                   ) : null}
 
-                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#dadce0] py-2">
+                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
                     <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Subject</span>
                     <input
                       value={composeSubject}
                       onChange={(event) => setComposeSubject(event.target.value)}
                       placeholder=""
-                      className="min-w-0 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#202124] outline-none"
+                      className="min-w-0 border-0 bg-transparent py-1.5 pl-0 text-sm text-[#1E1B2E] outline-none"
                     />
                   </div>
                 </div>
@@ -3790,7 +3674,7 @@ ${sourceText}`;
                       {composeAttachments.map((attachment) => (
                         <span
                           key={attachment.id}
-                          className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#dadce0] bg-[#f8f9fa] px-2 py-0.5 text-xs text-[#202124]"
+                          className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#EAE5F4] bg-[#f8f9fa] px-2 py-0.5 text-xs text-[#1E1B2E]"
                         >
                           <span className="min-w-0 truncate">{attachment.filename}</span>
                           <button
@@ -3820,7 +3704,7 @@ ${sourceText}`;
                 </div>
               </div>
 
-              <div className="shrink-0 border-t border-[#dadce0] bg-white px-3 py-2">
+              <div className="shrink-0 border-t border-[#EAE5F4] bg-white px-3 py-2">
                 {composeError ? (
                   <div className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-800">{composeError}</div>
                 ) : null}
@@ -3840,18 +3724,18 @@ ${sourceText}`;
                         !composeHasMeaningfulBody ||
                         !composeAccountEmail
                       }
-                      className="inline-flex min-h-9 shrink-0 items-center rounded bg-[#0b57d0] px-4 text-sm font-medium text-white hover:bg-[#0842a0] disabled:pointer-events-none disabled:opacity-40"
+                      className="inline-flex min-h-9 shrink-0 items-center rounded bg-[#701CC0] px-4 text-sm font-medium text-white hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
                     >
                       {sendingCompose ? "Sending…" : "Send"}
                     </button>
-                    <span className="inline-block h-6 w-px shrink-0 self-center bg-[#dadce0]" aria-hidden />
+                    <span className="inline-block h-6 w-px shrink-0 self-center bg-[#EAE5F4]" aria-hidden />
                     <div className="relative flex min-w-0 flex-wrap items-center gap-0.5">
                       <button
                         type="button"
                         onClick={() => setComposeFormattingToolbarOpen((open) => !open)}
                         className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
                           composeFormattingToolbarOpen
-                            ? "bg-[#e8eaed] text-[#202124]"
+                            ? "bg-[#e8eaed] text-[#1E1B2E]"
                             : "text-[#5f6368] hover:bg-[#f1f3f4]"
                         }`}
                         title="Formatting options"
@@ -3907,7 +3791,7 @@ ${sourceText}`;
                         <FiFileText className="h-[18px] w-[18px]" aria-hidden />
                       </button>
                       {composeTemplateMenuOpen ? (
-                        <div className="absolute left-0 top-full z-[130] mt-1 max-h-56 w-56 overflow-y-auto rounded-md border border-[#dadce0] bg-white py-1 shadow-lg">
+                        <div className="absolute left-0 top-full z-[130] mt-1 max-h-56 w-56 overflow-y-auto rounded-md border border-[#EAE5F4] bg-white py-1 shadow-lg">
                           {composeTemplates.length === 0 ? (
                             <div className="px-3 py-2 text-xs text-[#5f6368]">No templates yet</div>
                           ) : (
@@ -3915,7 +3799,7 @@ ${sourceText}`;
                               <button
                                 key={template.id}
                                 type="button"
-                                className="block w-full truncate px-3 py-2 text-left text-sm text-[#202124] hover:bg-[#f1f3f4]"
+                                className="block w-full truncate px-3 py-2 text-left text-sm text-[#1E1B2E] hover:bg-[#f1f3f4]"
                                 onClick={() => applyComposeTemplate(template.id)}
                               >
                                 {template.name}
@@ -3925,7 +3809,7 @@ ${sourceText}`;
                           <div className="border-t border-[#e8eaed]" />
                           <button
                             type="button"
-                            className="block w-full px-3 py-2 text-left text-sm font-medium text-[#1a73e8] hover:bg-[#f1f3f4]"
+                            className="block w-full px-3 py-2 text-left text-sm font-medium text-[#701CC0] hover:bg-[#f1f3f4]"
                             onClick={() => {
                               setComposeTemplateMenuOpen(false);
                               setSaveTemplateName("");
@@ -3954,17 +3838,17 @@ ${sourceText}`;
 
       {saveTemplateModalOpen ? (
         <div
-          className="fixed inset-0 z-[130] flex items-center justify-center bg-[#202124]/45 p-4"
+          className="fixed inset-0 z-[130] flex items-center justify-center bg-[#2E1050]/45 backdrop-blur-sm p-4"
           onClick={() => !saveTemplateSaving && setSaveTemplateModalOpen(false)}
           role="presentation"
         >
           <div
-            className="w-full max-w-sm rounded-lg bg-white p-4 shadow-xl"
+            className="w-full max-w-sm rounded-2xl bg-white/90 backdrop-blur-xl border border-white/70 p-5 shadow-[0_30px_70px_-20px_rgba(46,16,80,0.55)]"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-label="Save template"
           >
-            <p className="text-sm font-semibold text-[#202124]">Save template</p>
+            <p className="text-sm font-semibold text-[#1E1B2E]">Save template</p>
             <label className="mt-3 block text-xs font-medium text-[#5f6368]" htmlFor="compose-template-name">
               Name
             </label>
@@ -3973,7 +3857,7 @@ ${sourceText}`;
               type="text"
               value={saveTemplateName}
               onChange={(event) => setSaveTemplateName(event.target.value)}
-              className="mt-1 w-full rounded-md border border-[#dadce0] px-3 py-2 text-sm text-[#202124] outline-none focus:ring-2 focus:ring-[#701CC0]"
+              className="mt-1 w-full rounded-md border border-[#EAE5F4] px-3 py-2 text-sm text-[#1E1B2E] outline-none focus:ring-2 focus:ring-[#701CC0]"
               placeholder="Template name"
               disabled={saveTemplateSaving}
             />
@@ -4015,7 +3899,7 @@ ${sourceText}`;
       />
       {contactsImportIssuesModal.open ? (
         <div
-          className="fixed inset-0 z-[170] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-[170] flex items-center justify-center bg-[#2E1050]/30 backdrop-blur-md p-4"
           onClick={() =>
             setContactsImportIssuesModal({
               open: false,
@@ -4027,7 +3911,7 @@ ${sourceText}`;
           }
         >
           <div
-            className="w-full max-w-2xl rounded-lg bg-white shadow-xl border border-[#E5E7EB] p-6"
+            className="w-full max-w-2xl rounded-2xl bg-white/90 backdrop-blur-xl border border-white/70 shadow-[0_30px_70px_-20px_rgba(46,16,80,0.55)] p-6"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"

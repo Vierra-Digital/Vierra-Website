@@ -3,7 +3,7 @@ import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { asQueryStr } from "@/lib/api/parsing";
 
-type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive";
+type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive" | "allmail" | "starred" | "important" | "scheduled";
 const OPEN_BASE_WINDOW_MS = 15_000;
 const OPEN_SESSION_GAP_MS = 5 * 60 * 1000;
 const OPEN_MAX_CONTINUOUS_STEP_MS = 60_000;
@@ -66,6 +66,10 @@ function parseMailbox(v: string | undefined): Mailbox {
   if (value === "spam") return "spam";
   if (value === "trash") return "trash";
   if (value === "archive") return "archive";
+  if (value === "allmail") return "allmail";
+  if (value === "starred") return "starred";
+  if (value === "important") return "important";
+  if (value === "scheduled") return "scheduled";
   return "inbox";
 }
 
@@ -76,6 +80,10 @@ function buildMailboxQuery(mailbox: Mailbox) {
   if (mailbox === "sent") {
     return { q: "in:sent -in:trash" };
   }
+  if (mailbox === "allmail") return { q: "-in:trash -in:spam" };
+  if (mailbox === "starred") return { q: "is:starred -in:trash" };
+  if (mailbox === "important") return { q: "is:important -in:trash -in:spam" };
+  if (mailbox === "scheduled") return { q: "in:scheduled" };
   if (mailbox === "drafts") return "DRAFT";
   if (mailbox === "spam") return "SPAM";
   if (mailbox === "trash") return "TRASH";
@@ -128,13 +136,15 @@ function firstRecipient(text: string) {
   return first || cleaned;
 }
 
-async function fetchGmailList(accessToken: string, mailbox: Mailbox, maxResults: number) {
+async function fetchGmailList(accessToken: string, mailbox: Mailbox, maxResults: number, search?: string) {
   const params = new URLSearchParams({ maxResults: String(maxResults) });
   const mailboxQuery = buildMailboxQuery(mailbox);
+  const searchTerm = (search || "").trim();
   if (typeof mailboxQuery === "string") {
     params.set("labelIds", mailboxQuery);
+    if (searchTerm) params.set("q", searchTerm);
   } else {
-    params.set("q", mailboxQuery.q);
+    params.set("q", searchTerm ? `${mailboxQuery.q} ${searchTerm}` : mailboxQuery.q);
   }
   const response = await fetchWithRetry(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params.toString()}`, {
     headers: {
@@ -208,6 +218,7 @@ export default withAuth(async (req, res, session) => {
   const pageSize = Number.isFinite(pageSizeRaw) && pageSizeRaw > 0 ? Math.min(Math.floor(pageSizeRaw), 50) : 50;
   const maxResults = Math.min(page * pageSize, 500);
   const accountsParam = asQueryStr(req.query.accounts);
+  const searchQuery = (asQueryStr(req.query.q) || "").trim();
   const selectedEmails = (accountsParam || "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
@@ -240,7 +251,7 @@ export default withAuth(async (req, res, session) => {
         }
 
         const loadAccountMessages = async (accessToken: string) => {
-          const list = await fetchGmailList(accessToken, mailbox, maxResults);
+          const list = await fetchGmailList(accessToken, mailbox, maxResults, searchQuery);
           accountHasMore.push(Boolean(list.nextPageToken));
           const ids = (list.messages || []).map((m) => m.id).filter(Boolean);
           if (ids.length === 0) return [] as MessageRow[];

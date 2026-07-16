@@ -3,7 +3,8 @@ import Head from "next/head";
 import Link from "next/link";
 import Image from "next/image";
 import type { GetServerSideProps } from "next";
-import { inter } from "@/lib/fonts";
+import { Geist } from "next/font/google";
+import { APP_BACKGROUND, GLASS_SURFACE } from "@/components/email/emailTheme";
 import type { IconType } from "react-icons";
 import {
   FiActivity,
@@ -19,6 +20,7 @@ import {
 } from "react-icons/fi";
 import { requireSession } from "@/lib/auth";
 
+const pageFont = Geist({ subsets: ["latin"] });
 
 function Toggle({
   checked,
@@ -63,14 +65,14 @@ function SettingsSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className={`rounded-xl border border-gray-100 bg-white p-6 shadow-sm ${inter.className}`}>
+    <section className={`rounded-2xl ${GLASS_SURFACE} p-6 shadow-[0_2px_12px_-4px_rgba(46,16,80,0.14)] ${pageFont.className}`}>
       <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <div className="rounded-lg bg-[#701CC0]/10 p-1.5">
               <Icon className="h-4 w-4 text-[#701CC0]" />
             </div>
-            <h2 className="text-lg font-semibold text-[#111827]">{title}</h2>
+            <h2 className="text-lg font-semibold text-[#1E1B2E]">{title}</h2>
           </div>
           {description ? <p className="mt-2 text-sm leading-relaxed text-[#6B7280]">{description}</p> : null}
         </div>
@@ -82,7 +84,7 @@ function SettingsSection({
 }
 
 const fieldClass =
-  "w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#111827] placeholder-[#9CA3AF] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]";
+  "w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#1E1B2E] placeholder-[#9CA3AF] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]";
 const btnPrimary =
   "inline-flex items-center justify-center rounded-xl bg-[#701CC0] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50";
 const btnSecondary =
@@ -515,8 +517,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       <Head>
         <title>Vierra | Email Settings</title>
       </Head>
-      <div className={`min-h-screen bg-[#F7F8FC] ${inter.className}`}>
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-[#E5E7EB] bg-white px-5">
+      <div style={{ backgroundImage: APP_BACKGROUND }} className={`min-h-screen ${pageFont.className}`}>
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-white/60 bg-white/50 backdrop-blur-xl px-5">
           <div className="flex items-center gap-4">
             <Link href="/panel" className="inline-flex items-center gap-2" aria-label="Admin panel">
               <Image
@@ -544,7 +546,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               <div className="rounded-lg bg-[#701CC0]/10 p-1.5">
                 <FiMail className="h-5 w-5 text-[#701CC0]" />
               </div>
-              <h1 className="text-2xl font-semibold tracking-tight text-[#111827] lg:text-3xl">Email settings</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-[#1E1B2E] lg:text-3xl">Email settings</h1>
             </div>
             <p className="text-sm leading-relaxed text-[#6B7280]">
               {roleLabel ? (
@@ -576,7 +578,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
                     <div>
-                      <p className="font-medium text-[#111827]">Enable email tracking</p>
+                      <p className="font-medium text-[#1E1B2E]">Enable email tracking</p>
                       <p className="text-sm text-[#6B7280]">Master switch for open and click analytics.</p>
                     </div>
                     <Toggle
@@ -586,7 +588,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   </div>
                   <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
                     <div>
-                      <p className="font-medium text-[#111827]">Track opens</p>
+                      <p className="font-medium text-[#1E1B2E]">Track opens</p>
                       <p className="text-sm text-[#6B7280]">Pixel-based open detection.</p>
                     </div>
                     <Toggle
@@ -597,7 +599,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="font-medium text-[#111827]">Track link clicks</p>
+                      <p className="font-medium text-[#1E1B2E]">Track link clicks</p>
                       <p className="text-sm text-[#6B7280]">Wrapped links for click counts.</p>
                     </div>
                     <Toggle
@@ -616,7 +618,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               >
                 <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-5">
                   <div>
-                    <p className="font-medium text-[#111827]">Enable vacation responder</p>
+                    <p className="font-medium text-[#1E1B2E]">Enable vacation responder</p>
                     <p className="text-sm text-[#6B7280]">Sends the message below to incoming mail.</p>
                   </div>
                   <Toggle
@@ -661,10 +663,10 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   {signatures.map((row) => (
                     <div
                       key={row.id}
-                      className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] px-4 py-3"
+                      className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-white/50 px-4 py-3"
                     >
                       <div>
-                        <p className="text-sm font-medium text-[#111827]">{row.name}</p>
+                        <p className="text-sm font-medium text-[#1E1B2E]">{row.name}</p>
                         {row.isDefault ? <p className="text-xs font-medium text-[#701CC0]">Default</p> : null}
                       </div>
                       <button type="button" onClick={() => deleteSignature(row.id)} className="text-sm font-medium text-red-600 hover:underline">
@@ -689,10 +691,10 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   {templates.map((row) => (
                     <div
                       key={row.id}
-                      className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] px-4 py-3"
+                      className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-white/50 px-4 py-3"
                     >
                       <div>
-                        <p className="text-sm font-medium text-[#111827]">{row.name}</p>
+                        <p className="text-sm font-medium text-[#1E1B2E]">{row.name}</p>
                         {row.isDefault ? <p className="text-xs font-medium text-[#701CC0]">Default</p> : null}
                       </div>
                       <button type="button" onClick={() => deleteTemplate(row.id)} className="text-sm font-medium text-red-600 hover:underline">
@@ -720,14 +722,14 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     contactTags.map((tag) => (
                       <div
                         key={tag.id}
-                        className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] px-4 py-3"
+                        className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-white/50 px-4 py-3"
                       >
                         <div className="inline-flex items-center gap-2">
                           <span
                             className="inline-block h-2.5 w-2.5 rounded-full"
                             style={{ backgroundColor: tag.color || "#701CC0" }}
                           />
-                          <p className="text-sm font-medium text-[#111827]">{tag.name}</p>
+                          <p className="text-sm font-medium text-[#1E1B2E]">{tag.name}</p>
                         </div>
                         <div className="flex items-center gap-3">
                           <button type="button" onClick={() => editTag(tag)} className="text-sm font-medium text-[#374151] hover:text-[#701CC0]">
@@ -751,7 +753,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
                     <div>
-                      <p className="font-medium text-[#111827]">Phone</p>
+                      <p className="font-medium text-[#1E1B2E]">Phone</p>
                       <p className="text-sm text-[#6B7280]">Show phone field on contact records.</p>
                     </div>
                     <Toggle
@@ -761,7 +763,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   </div>
                   <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
                     <div>
-                      <p className="font-medium text-[#111827]">Business</p>
+                      <p className="font-medium text-[#1E1B2E]">Business</p>
                       <p className="text-sm text-[#6B7280]">Show business name field.</p>
                     </div>
                     <Toggle
@@ -771,7 +773,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="font-medium text-[#111827]">Website</p>
+                      <p className="font-medium text-[#1E1B2E]">Website</p>
                       <p className="text-sm text-[#6B7280]">Show website field.</p>
                     </div>
                     <Toggle
@@ -790,10 +792,10 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     blockedSenders.map((sender) => (
                       <div
                         key={sender.id}
-                        className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] px-4 py-3"
+                        className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-white/50 px-4 py-3"
                       >
                         <div>
-                          <p className="text-sm font-medium text-[#111827]">{sender.name || sender.email}</p>
+                          <p className="text-sm font-medium text-[#1E1B2E]">{sender.name || sender.email}</p>
                           <p className="text-xs text-[#6B7280]">{sender.email}</p>
                         </div>
                         <button type="button" onClick={() => removeBlockedSender(sender.id)} className={btnDangerOutline}>
@@ -871,10 +873,10 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     providerAccounts.map((account) => (
                       <div
                         key={account.id}
-                        className="flex flex-col gap-3 rounded-xl border border-[#E5E7EB] bg-[#FAFAFA] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                        className="flex flex-col gap-3 rounded-xl border border-[#E5E7EB] bg-white/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div>
-                          <p className="text-sm font-medium text-[#111827]">{account.accountEmail}</p>
+                          <p className="text-sm font-medium text-[#1E1B2E]">{account.accountEmail}</p>
                           <p className="text-xs text-[#6B7280]">
                             SMTP {account.smtpHost}:{account.smtpPort}
                             {account.imapHost ? ` · IMAP ${account.imapHost}` : ""}
