@@ -9,35 +9,13 @@ import { AnimatePresence, motion } from "framer-motion";
  * - Google Analytics uses Consent Mode v2: the gtag snippet in app/layout.tsx and
  *   pages/_app.tsx sets all consent signals to "denied" by default, so GA loads
  *   but stores nothing (modeled/cookieless) until the visitor accepts here.
- * - Microsoft Clarity has no Consent Mode, so it is NOT loaded at all until the
- *   visitor accepts — this component injects it on "Accept".
  *
  * The choice is remembered in localStorage; the banner only shows to visitors who
  * haven't chosen yet. Rendered in both routers (app/layout.client.tsx + _app.tsx).
  */
 const CONSENT_KEY = "vierra_consent_v1";
-const CLARITY_ID = process.env.NEXT_PUBLIC_CLARITY_ID;
 
 type Gtag = (...args: unknown[]) => void;
-type ClarityFn = { (...args: unknown[]): void; q?: unknown[] };
-
-let clarityLoaded = false;
-function loadClarity() {
-  if (clarityLoaded || !CLARITY_ID) return;
-  clarityLoaded = true;
-  const w = window as unknown as { clarity?: ClarityFn };
-  if (!w.clarity) {
-    const stub = ((...a: unknown[]) => {
-      (stub.q = stub.q || []).push(a);
-    }) as ClarityFn;
-    w.clarity = stub;
-  }
-  const t = document.createElement("script");
-  t.async = true;
-  t.src = "https://www.clarity.ms/tag/" + CLARITY_ID;
-  const first = document.getElementsByTagName("script")[0];
-  first?.parentNode?.insertBefore(t, first);
-}
 
 function grantConsent() {
   const w = window as unknown as { gtag?: Gtag };
@@ -49,7 +27,6 @@ function grantConsent() {
       analytics_storage: "granted",
     });
   }
-  loadClarity();
 }
 
 export default function ConsentBanner() {

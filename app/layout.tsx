@@ -125,9 +125,6 @@ export default function RootLayout({
             </Script>
           </>
         ) : null}
-        {/* Microsoft Clarity loads only AFTER consent — see components/ConsentBanner,
-            which reads NEXT_PUBLIC_CLARITY_ID and injects Clarity when the visitor
-            accepts (Clarity has no Consent Mode, so it must be consent-gated). */}
         {/* SEO meta (title, description, canonical, OpenGraph, Twitter) is
             generated from the `metadata` export above — do not duplicate it here. */}
         <link rel="manifest" href="/manifest.json" />
