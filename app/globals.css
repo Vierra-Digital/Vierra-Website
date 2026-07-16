@@ -57,6 +57,20 @@ html::-webkit-scrollbar {
   .hero-reveal, .hero-reveal-solid { animation: none; }
 }
 
+/* Hero grid-line drift — a GPU/compositor CSS animation instead of 7 framer-motion
+   rAF loops, to keep the main thread free during the LCP window (main-thread work,
+   not fonts/render-blocking, is what delays LCP here). Same subtle horizontal sway. */
+@keyframes grid-drift {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(10px); }
+}
+.grid-drift {
+  animation: grid-drift 4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .grid-drift { animation: none; }
+}
+
 /* Continuously nudging arrow (used on the footer "Free Audit Call" button). */
 /* Flowing dotted connectors for the GTM pipeline diagram. */
 @keyframes pipe-flow {

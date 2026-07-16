@@ -10,53 +10,57 @@ export const revalidate = 3600;
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = 'https://vierradev.com';
   const now = new Date();
+  // Stable last-modified for static pages: a fixed date (bump when static content
+  // materially changes) instead of `now`, which advanced hourly under ISR and
+  // produced the "all-identical, ever-changing lastmod" anti-pattern Google ignores.
+  const CONTENT_LASTMOD = new Date('2026-07-15T00:00:00.000Z');
   const staticPages: MetadataRoute.Sitemap = [
     {
       url: baseUrl,
-      lastModified: now,
+      lastModified: CONTENT_LASTMOD,
       changeFrequency: 'weekly',
       priority: 1.0,
       images: [`${baseUrl}/assets/image1.png`, `${baseUrl}/assets/meta-banner.png`],
     },
     {
       url: `${baseUrl}/blog`,
-      lastModified: now,
+      lastModified: CONTENT_LASTMOD,
       changeFrequency: 'daily',
       priority: 0.9,
     },
     {
       url: `${baseUrl}/careers`,
-      lastModified: now,
+      lastModified: CONTENT_LASTMOD,
       changeFrequency: 'weekly',
       priority: 0.8,
     },
     {
       url: `${baseUrl}/faq`,
-      lastModified: now,
+      lastModified: CONTENT_LASTMOD,
       changeFrequency: 'monthly',
       priority: 0.6,
     },
     {
       url: `${baseUrl}/privacy-policy`,
-      lastModified: now,
+      lastModified: CONTENT_LASTMOD,
       changeFrequency: 'yearly',
       priority: 0.3,
     },
     {
       url: `${baseUrl}/terms-of-service`,
-      lastModified: now,
+      lastModified: CONTENT_LASTMOD,
       changeFrequency: 'yearly',
       priority: 0.3,
     },
     {
       url: `${baseUrl}/work-policy`,
-      lastModified: now,
+      lastModified: CONTENT_LASTMOD,
       changeFrequency: 'yearly',
       priority: 0.3,
     },
     {
       url: `${baseUrl}/branding`,
-      lastModified: now,
+      lastModified: CONTENT_LASTMOD,
       changeFrequency: 'monthly',
       priority: 0.4,
     },
@@ -70,6 +74,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         slug: true,
         title: true,
         published_date: true,
+        updated_date: true,
         tag: true,
         authors: { select: { name: true } },
       },
@@ -87,7 +92,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     blogPages = filteredPosts.map((post) => ({
       url: `${baseUrl}/blog/${post.slug}`,
-      lastModified: post.published_date ? new Date(post.published_date) : now,
+      lastModified: new Date(post.updated_date ?? post.published_date ?? now),
       changeFrequency: 'monthly' as const,
       priority: 0.7,
       images: [`${baseUrl}/assets/meta-banner.png`],
@@ -110,14 +115,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     tagPages = Array.from(tagSet).map((tag) => ({
       url: `${baseUrl}/blog/tag/${encodeURIComponent(tag)}`,
-      lastModified: now,
+      lastModified: CONTENT_LASTMOD,
       changeFrequency: 'weekly' as const,
       priority: 0.5,
     }));
 
     authorPages = Array.from(authorSet).map((name) => ({
       url: `${baseUrl}/blog/author/${encodeURIComponent(name)}`,
-      lastModified: now,
+      lastModified: CONTENT_LASTMOD,
       changeFrequency: 'weekly' as const,
       priority: 0.5,
     }));

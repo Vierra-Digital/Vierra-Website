@@ -62,6 +62,10 @@ const FaqPage: React.FC = () => {
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Vierra Digital" />
         <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:image:alt" content="Vierra - Risk-Averse Lead Engine For Your Business" />
+        <meta property="og:image:type" content="image/png" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={META_TITLE} />
         <meta name="twitter:description" content={META_DESCRIPTION} />
