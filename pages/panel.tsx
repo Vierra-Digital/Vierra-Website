@@ -70,10 +70,6 @@ const LinkedInContextSection = dynamic(
   () => import("@/components/PanelPages/LinkedInContextSection"),
   { ssr: false }
 )
-const EmailingPlatformSection = dynamic(
-  () => import("@/components/PanelPages/EmailingPlatformSection"),
-  { ssr: false }
-)
 const UserSettingsPage = dynamic(() => import("@/components/UserSettingsPage"), {
   ssr: false,
 })
@@ -241,7 +237,7 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
                   </span>
                 </div>
                 {canAccessEmailPanel && (
-                  <div id="panel-nav-item" onClick={() => { setCurrentSection(11); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 11 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
+                  <div id="panel-nav-item" onClick={() => { window.open('/panel/email', '_blank', 'noopener,noreferrer'); setIsSidebarOpen(false); }} className="w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:bg-white hover:text-black">
                     <FiMail />
                     <span className={`text-xs ${inter.className}`}>
                       Email Panel
@@ -450,9 +446,6 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
                       {currentSection === 2 && <TeamPanelSection userRole={resolvedUserRole} />}
                       {currentSection === 4 && <LtvCalculatorSection />}
                       {currentSection === 5 && <OutreachSection />}
-                      {currentSection === 11 && canAccessEmailPanel && (
-                        <EmailingPlatformSection launchStandaloneOnContinue />
-                      )}
                       {currentSection === 6 && <ProjectManagement />}
                       {currentSection === 7 && (
                         <div className="w-full pb-24">

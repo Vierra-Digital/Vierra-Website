@@ -34,6 +34,16 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
   const [data, setData] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  type ReportingSummary = {
+    campaigns: number;
+    activeCampaigns: number;
+    totalContacts: number;
+    statusMap: Record<string, number>;
+    replyRate: number;
+    bookings: number;
+    upcomingBookings: number;
+  };
+  const [report, setReport] = useState<ReportingSummary | null>(null);
   const accountsKey = accounts.join(",");
 
   useEffect(() => {
@@ -63,6 +73,21 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
       cancelled = true;
     };
   }, [accountsKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/reporting/summary", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d) setReport(d);
+      })
+      .catch(() => {
+        /* reporting is supplementary */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const derived = useMemo(() => {
     const messages = data?.messages ?? [];
@@ -159,6 +184,36 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
           </div>
         ))}
       </div>
+
+      {/* Outreach reporting — campaigns + meetings (supplementary to open/click tracking) */}
+      {report && (report.campaigns > 0 || report.totalContacts > 0 || report.bookings > 0) ? (
+        <div className={`${CARD} mb-4`}>
+          <h3 className="text-sm font-semibold text-[#1E1B2E] mb-3">Outreach reporting</h3>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { label: "Campaigns", value: String(report.campaigns), sub: `${report.activeCampaigns} active` },
+              { label: "Contacts", value: report.totalContacts.toLocaleString(), sub: "enrolled" },
+              { label: "Reply rate", value: `${Math.round(report.replyRate * 100)}%`, sub: "of enrolled" },
+              { label: "Meetings booked", value: String(report.bookings), sub: `${report.upcomingBookings} upcoming` },
+            ].map((k) => (
+              <div key={k.label}>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[#847FA0]">{k.label}</div>
+                <div className="mt-1 text-2xl font-bold tracking-tight text-[#1E1B2E] tabular-nums">{k.value}</div>
+                <div className="text-xs text-[#847FA0] tabular-nums">{k.sub}</div>
+              </div>
+            ))}
+          </div>
+          {Object.keys(report.statusMap).length > 0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {Object.entries(report.statusMap).map(([status, count]) => (
+                <span key={status} className="rounded-full bg-[#F5EFFF] px-2.5 py-1 text-xs font-medium text-[#701CC0]">
+                  {status.replace(/_/g, " ")}: {count}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Engagement funnel */}
       <div className={`${CARD} mb-4`}>

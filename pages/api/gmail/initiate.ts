@@ -12,6 +12,9 @@ const SCOPES = [
   "https://www.googleapis.com/auth/gmail.send",
   "https://www.googleapis.com/auth/contacts.readonly",
   "https://www.googleapis.com/auth/calendar.readonly",
+  // Create booking events on the host's calendar. Accounts connected before this scope
+  // was added keep read-only; the meeting booker falls back to emailed .ics invites for them.
+  "https://www.googleapis.com/auth/calendar.events",
 ];
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
