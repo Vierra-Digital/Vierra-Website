@@ -23,27 +23,31 @@ export const BRAND_LOGO = {
 /** Brand hero gradient (from the V logo: purple → magenta). Use for primary CTAs. */
 export const BRAND_GRADIENT = "linear-gradient(120deg,#7A17C5 0%,#A620AE 52%,#C42B9F 100%)";
 
-/** Vibrant Vierra field the glass sits over — deeper purple→magenta so the frosting has real colour to refract. */
+/** App canvas — light, cool near-white with soft drifting colour blobs so the frosted
+ *  chrome has something to refract (animated via `.email-anim-bg`). Kept light for legibility. */
 export const APP_BACKGROUND =
-  "radial-gradient(1200px 720px at -4% -20%, #DAC4FF 0%, rgba(218,196,255,0) 52%)," +
-  "radial-gradient(1120px 680px at 120% -10%, #F3CDE9 0%, rgba(243,205,233,0) 48%)," +
-  "radial-gradient(1020px 900px at 50% 145%, #D2C6FF 0%, rgba(210,198,255,0) 58%)," +
-  "linear-gradient(155deg,#EEE6FB 0%,#ECE9FC 46%,#F5E9FB 100%)";
+  "radial-gradient(1000px 620px at 12% 0%, #C4A0EC 0%, rgba(196,160,236,0) 55%)," +
+  "radial-gradient(940px 580px at 100% 8%, #AE81E2 0%, rgba(174,129,226,0) 52%)," +
+  "radial-gradient(860px 640px at 65% 120%, #CDB2F1 0%, rgba(205,178,241,0) 55%)," +
+  "linear-gradient(180deg,#ECE0F8 0%,#DDC9F1 100%)";
 
-/** Frosted glass chrome (rail, toolbars, overlays) — translucent + lavender-tinted so the brand field shows through; light-catching inset edge. */
-export const GLASS_CHROME =
-  "bg-gradient-to-b from-white/62 to-[#EDE3FF]/44 backdrop-blur-2xl backdrop-saturate-150 border border-white/55 ring-1 ring-inset ring-white/45";
+/** Unified frosted-glass surface — the sidebar, content pane, and their headers all use
+ *  this same recipe so the three areas read as one cohesive glass system. */
+const GLASS_BASE =
+  "bg-white/70 backdrop-blur-xl backdrop-saturate-150 border border-white/60 ring-1 ring-inset ring-white/40";
 
-/** Frosted-but-readable content surface (list, reader, cards) — solid enough for crisp text, with a glass edge. */
-export const GLASS_SURFACE =
-  "bg-gradient-to-b from-white/92 to-[#FBF9FF]/85 backdrop-blur-xl backdrop-saturate-150 border border-white/60 ring-1 ring-inset ring-white/50";
+/** Chrome surface (side rail). */
+export const GLASS_CHROME = GLASS_BASE;
 
-/** Glass modal/dialog surface. */
+/** Content surface (list, reader, cards). Same recipe as the chrome — kept synced. */
+export const GLASS_SURFACE = GLASS_BASE;
+
+/** Modal/dialog surface — mostly-opaque frosted white. */
 export const GLASS_MODAL =
-  "bg-white/80 backdrop-blur-2xl backdrop-saturate-150 border border-white/80 shadow-[0_30px_70px_-20px_rgba(46,16,80,0.6)]";
+  "bg-white/90 backdrop-blur-2xl border border-white/70 shadow-[0_24px_60px_-20px_rgba(30,27,46,0.28)]";
 
 /** Modal scrim. */
-export const GLASS_SCRIM = "bg-[#2E1050]/25 backdrop-blur-sm";
+export const GLASS_SCRIM = "bg-[#1E1B2E]/25 backdrop-blur-sm";
 
 /** Primary brand button (solid). */
 export const BTN_PRIMARY =

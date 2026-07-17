@@ -280,6 +280,10 @@ model EmailBlockedSender {
   account_id              String?                  @db.Uuid
   email                   String
   name                    String?
+  is_dnc                  Boolean                  @default(false)
+  soft_deleted_at         DateTime?                @db.Timestamptz(6)
+  scheduled_hard_delete_at DateTime?               @db.Timestamptz(6)
+  reason                  String?
   created_at              DateTime                 @default(now()) @db.Timestamptz(6)
   email_provider_accounts EmailProviderAccount? @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users                   User             @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -315,6 +319,317 @@ model EmailComposeDraft {
   @@map("email_compose_drafts")
   @@unique([user_id, draft_key], map: "uq_email_compose_drafts")
   @@index([user_id], map: "idx_email_compose_drafts_user_id")
+}
+
+model EmailScheduledSend {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id             String    @db.Uuid
+  account_email       String
+  scheduled_at        DateTime  @db.Timestamptz(6)
+  status              String    @default("PENDING")
+  payload             Json      @db.JsonB
+  attempts            Int       @default(0)
+  last_error          String?
+  outbound_message_id String?   @db.Uuid
+  sent_at             DateTime? @db.Timestamptz(6)
+  created_at          DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@map("email_scheduled_sends")
+  @@index([status, scheduled_at], map: "idx_email_scheduled_sends_due")
+  @@index([user_id], map: "idx_email_scheduled_sends_user_id")
+}
+
+model EmailConfidentialMessage {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String    @db.Uuid
+  token            String    @unique
+  subject          String?
+  body_html        String
+  body_text        String?
+  passcode_hash    String?
+  expires_at       DateTime? @db.Timestamptz(6)
+  revoked          Boolean   @default(false)
+  restrict_forward Boolean   @default(true)
+  restrict_copy    Boolean   @default(true)
+  restrict_print   Boolean   @default(true)
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+
+  email_confidential_views EmailConfidentialView[]
+
+  @@map("email_confidential_messages")
+  @@index([user_id], map: "idx_email_confidential_messages_user_id")
+}
+
+model EmailConfidentialView {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  message_id String   @db.Uuid
+  viewed_at  DateTime @default(now()) @db.Timestamptz(6)
+  ip_hash    String?
+  unlocked   Boolean  @default(false)
+
+  email_confidential_messages EmailConfidentialMessage @relation(fields: [message_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("email_confidential_views")
+  @@index([message_id], map: "idx_email_confidential_views_message_id")
+}
+
+model GmailInboxSyncState {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String    @db.Uuid
+  account_email String
+  history_id    String?
+  last_sync_at  DateTime? @db.Timestamptz(6)
+  last_status   String?
+  created_at    DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime  @default(now()) @db.Timestamptz(6)
+
+  @@map("gmail_inbox_sync_state")
+  @@unique([user_id, account_email], map: "uq_gmail_inbox_sync_state")
+}
+
+model EmailFilter {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String   @db.Uuid
+  account_email    String? // null = applies to all of the user's accounts
+  name             String
+  from_contains    String?
+  subject_contains String?
+  query_contains   String? // matched against subject + snippet + from
+  match_type       String   @default("all") // "all" | "any"
+  add_label_id     String?
+  add_label_name   String?
+  archive          Boolean  @default(false)
+  mark_read        Boolean  @default(false)
+  star             Boolean  @default(false)
+  trash            Boolean  @default(false)
+  enabled          Boolean  @default(true)
+  created_at       DateTime @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("email_filters")
+  @@index([user_id], map: "idx_email_filters_user_id")
+}
+
+model EmailAiPreference {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @unique @db.Uuid
+  autonomy   String   @default("suggest") // "off" | "suggest" | "autodraft"
+  tone       String   @default("professional and friendly")
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("email_ai_preferences")
+}
+
+model EmailSnooze {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String   @db.Uuid
+  account_email String
+  message_id    String
+  thread_id     String?
+  snooze_until  DateTime @db.Timestamptz(6)
+  status        String   @default("SNOOZED") // SNOOZED | RESURFACED | CANCELED
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("email_snoozes")
+  @@index([status, snooze_until], map: "idx_email_snoozes_due")
+  @@index([user_id], map: "idx_email_snoozes_user_id")
+}
+
+model EmailAccountPreference {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String   @db.Uuid
+  account_email String
+  enabled       Boolean  @default(true)
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("email_account_preferences")
+  @@unique([user_id, account_email], map: "uq_email_account_preferences")
+}
+
+// Meeting booker — custom scheduling links backed by Google Calendar free/busy.
+model BookingLink {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String    @db.Uuid
+  account_email    String
+  slug             String    @unique
+  title            String
+  description      String?
+  duration_minutes Int       @default(30)
+  buffer_minutes   Int       @default(0)
+  timezone         String    @default("UTC")
+  availability     Json?     @db.JsonB
+  active           Boolean   @default(true)
+  created_at       DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime  @default(now()) @db.Timestamptz(6)
+  bookings         Booking[]
+
+  @@map("booking_links")
+  @@index([user_id], map: "idx_booking_links_user_id")
+}
+
+model Booking {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  booking_link_id String      @db.Uuid
+  invitee_name    String
+  invitee_email   String
+  invitee_notes   String?
+  start_at        DateTime    @db.Timestamptz(6)
+  end_at          DateTime    @db.Timestamptz(6)
+  status          String      @default("confirmed")
+  google_event_id String?
+  created_at      DateTime    @default(now()) @db.Timestamptz(6)
+  booking_links   BookingLink @relation(fields: [booking_link_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("bookings")
+  @@index([booking_link_id], map: "idx_bookings_link_id")
+}
+
+// ---------------------------------------------------------------------------
+// Campaigns (automatic email sending). These models mirror the tables that ALREADY
+// EXIST in the live DB (created out-of-band with the old campaigns work). See
+// docs/CAMPAIGNS_PLAN.md. The campaign engine/UI (from branch 04654dc) can be built
+// against these; not yet wired to sending code on master.
+// ---------------------------------------------------------------------------
+
+model Campaign {
+  id                      String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id              String               @db.Uuid
+  account_id              String               @db.Uuid
+  created_by              String?              @db.Uuid
+  name                    String
+  status                  String               @default("draft")
+  audience_filter         Json?                @db.JsonB
+  audience_synced_at      DateTime?            @db.Timestamptz(6)
+  send_delay_seconds      Int                  @default(60)
+  send_jitter_seconds     Int                  @default(30)
+  daily_send_limit        Int                  @default(50)
+  scheduled_start_at      DateTime?            @db.Timestamptz(6)
+  started_at              DateTime?            @db.Timestamptz(6)
+  completed_at            DateTime?            @db.Timestamptz(6)
+  paused_at               DateTime?            @db.Timestamptz(6)
+  created_at              DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime             @default(now()) @db.Timestamptz(6)
+  campaign_steps          CampaignStep[]
+  campaign_contacts       CampaignContact[]
+  campaign_daily_stats    CampaignDailyStat[]
+  email_provider_accounts EmailProviderAccount @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("campaigns")
+}
+
+model CampaignStep {
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaign_id        String             @db.Uuid
+  step_order         Int
+  name               String?
+  template_id        String?            @db.Uuid
+  subject_override   String?
+  body_html_override String?
+  body_text_override String?
+  delay_days         Int                @default(0)
+  created_at         DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime           @default(now()) @db.Timestamptz(6)
+  campaigns          Campaign           @relation(fields: [campaign_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  email_templates    EmailTemplate?     @relation(fields: [template_id], references: [id], onUpdate: NoAction)
+  campaign_step_sends CampaignStepSend[]
+
+  @@map("campaign_steps")
+}
+
+model CampaignContact {
+  id                  String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaign_id         String             @db.Uuid
+  contact_id          String?            @db.Uuid
+  contact_email       String
+  contact_first_name  String?
+  contact_last_name   String?
+  contact_business    String?
+  assigned_to         String?            @db.Uuid
+  current_step_id     String?            @db.Uuid
+  lead_status         String             @default("no_response")
+  queue_status        String             @default("queued")
+  skip_reason         String?
+  enrolled_at         DateTime           @default(now()) @db.Timestamptz(6)
+  next_send_at        DateTime?          @db.Timestamptz(6)
+  last_sent_at        DateTime?          @db.Timestamptz(6)
+  completed_at        DateTime?          @db.Timestamptz(6)
+  created_at          DateTime           @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime           @default(now()) @db.Timestamptz(6)
+  campaigns           Campaign           @relation(fields: [campaign_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  campaign_step_sends CampaignStepSend[]
+
+  @@map("campaign_contacts")
+}
+
+model CampaignStepSend {
+  id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaign_contact_id String          @db.Uuid
+  step_id             String          @db.Uuid
+  status              String          @default("pending")
+  scheduled_at        DateTime        @db.Timestamptz(6)
+  rendered_subject    String?
+  rendered_body_html  String?
+  rendered_body_text  String?
+  outbound_message_id String?         @db.Uuid
+  attempted_at        DateTime?       @db.Timestamptz(6)
+  sent_at             DateTime?       @db.Timestamptz(6)
+  failed_at           DateTime?       @db.Timestamptz(6)
+  fail_reason         String?
+  retry_count         Int             @default(0)
+  created_at          DateTime        @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime        @default(now()) @db.Timestamptz(6)
+  campaign_contacts   CampaignContact @relation(fields: [campaign_contact_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  campaign_steps      CampaignStep    @relation(fields: [step_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("campaign_step_sends")
+  @@unique([campaign_contact_id, step_id], map: "uq_campaign_step_sends_contact_step")
+}
+
+model CampaignDailyStat {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaign_id  String   @db.Uuid
+  date         DateTime @db.Date
+  emails_sent  Int      @default(0)
+  opens        Int      @default(0)
+  clicks       Int      @default(0)
+  replies      Int      @default(0)
+  bounces      Int      @default(0)
+  unsubscribes Int      @default(0)
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @default(now()) @db.Timestamptz(6)
+  campaigns    Campaign @relation(fields: [campaign_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("campaign_daily_stats")
+  @@unique([campaign_id, date], map: "uq_campaign_daily_stats")
+}
+
+model LeadStatusEvent {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaign_contact_id String   @db.Uuid
+  from_status         String?
+  to_status           String
+  changed_by_user_id  String?  @db.Uuid
+  changed_by_rule     String?
+  note                String?
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  users               User?    @relation(fields: [changed_by_user_id], references: [id], onUpdate: NoAction)
+
+  @@map("lead_status_events")
+}
+
+model AssignmentEvent {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  campaign_contact_id String   @db.Uuid
+  from_user_id        String?  @db.Uuid
+  to_user_id          String   @db.Uuid
+  changed_by_user_id  String?  @db.Uuid
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("assignment_events")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -390,6 +705,7 @@ model EmailProviderAccount {
   email_signatures                  EmailSignature[]
   email_templates                   EmailTemplate[]
   gmail_contact_sync_states         GmailContactSyncState[]
+  campaigns                         Campaign[]
 
   @@map("email_provider_accounts")
   @@unique([user_id, account_email], map: "uq_email_provider_accounts")
@@ -428,6 +744,7 @@ model EmailTemplate {
   updated_at              DateTime                 @default(now()) @db.Timestamptz(6)
   email_provider_accounts EmailProviderAccount? @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users                   User             @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  campaign_steps          CampaignStep[]
 
   @@map("email_templates")
   @@index([user_id], map: "idx_email_templates_user_id")
@@ -754,6 +1071,7 @@ model User {
   contact_tags                                                  ContactTag[]
   contacts                                                      Contact[]
   email_blocked_senders                                         EmailBlockedSender[]
+  lead_status_events                                            LeadStatusEvent[]
   email_compose_drafts                                          EmailComposeDraft[]
   email_outbound_messages                                       EmailOutboundMessage[]
   email_provider_accounts                                       EmailProviderAccount[]

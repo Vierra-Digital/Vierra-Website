@@ -1,43 +1,24 @@
-import { randomUUID } from "crypto";
 import type { NextApiRequest } from "next";
-import nodemailer from "nodemailer";
-import sanitizeHtml from "sanitize-html";
 import { prisma } from "@/lib/prisma";
-import { decrypt } from "@/lib/crypto";
 import { withAuth } from "@/lib/api/withAuth";
-import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { asStr } from "@/lib/api/parsing";
+import { sendEmailCore, normalizeEmail, type SendEmailPayload } from "@/lib/gmail/sendCore";
+import { parseScheduledAt, enqueueScheduledSend } from "@/lib/gmail/scheduledSend";
+import {
+  createConfidentialMessage,
+  resolveExpiry,
+  buildConfidentialInviteHtml,
+  buildConfidentialInviteText,
+  type ConfidentialExpiry,
+} from "@/lib/email/confidential";
 
-function normalizeEmail(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function extractEmailAddress(input: string) {
-  const match = input.match(/<([^>]+)>/);
-  if (match?.[1]) return match[1].trim();
-  return input.trim();
-}
-
-function splitRecipients(value: string) {
+function escapeHtmlBasic(value: string) {
   return value
-    .split(",")
-    .map((entry) => extractEmailAddress(entry))
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-
-function ensureReplyPrefix(subject: string) {
-  if (/^re:/i.test(subject.trim())) return subject.trim();
-  return `Re: ${subject.trim() || "(No Subject)"}`;
-}
-
-function toBase64Url(value: string) {
-  return Buffer.from(value, "utf8")
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function getPublicBaseUrl(req: NextApiRequest) {
@@ -63,434 +44,93 @@ function getPublicBaseUrl(req: NextApiRequest) {
   return `${proto}://${host}`.replace(/\/$/, "");
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function linkifyText(value: string) {
-  const escaped = escapeHtml(value);
-  return escaped
-    .replace(
-      /(https?:\/\/[^\s<>"']+)/g,
-      '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:#5B21B6;text-decoration:underline;">$1</a>'
-    )
-    .replace(/\n/g, "<br>");
-}
-
-function rewriteTrackedLinksInHtml(value: string, replacements: Map<string, string>) {
-  if (!value || replacements.size === 0) return value;
-  return value.replace(/href=(['"])(https?:\/\/[^\s"'<>]+)\1/gi, (match, quote: string, href: string) => {
-    const trackedHref = replacements.get(href);
-    if (!trackedHref) return match;
-    return `href=${quote}${escapeHtml(trackedHref)}${quote}`;
-  });
-}
-
-function linkifyTextWithTrackedHrefs(value: string, replacements: Map<string, string>) {
-  if (!value) return "";
-  const urlRegex = /https?:\/\/[^\s<>"']+/g;
-  const chunks: string[] = [];
-  let lastIndex = 0;
-  let match = urlRegex.exec(value);
-  while (match) {
-    const rawUrl = match[0];
-    const start = match.index;
-    if (start > lastIndex) {
-      chunks.push(escapeHtml(value.slice(lastIndex, start)).replace(/\n/g, "<br>"));
-    }
-    const href = replacements.get(rawUrl) || rawUrl;
-    chunks.push(
-      `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="color:#5B21B6;text-decoration:underline;">${escapeHtml(rawUrl)}</a>`
-    );
-    lastIndex = start + rawUrl.length;
-    match = urlRegex.exec(value);
-  }
-  if (lastIndex < value.length) {
-    chunks.push(escapeHtml(value.slice(lastIndex)).replace(/\n/g, "<br>"));
-  }
-  return chunks.join("");
-}
-
-function uniqueUrls(value: string) {
-  const matches = value.match(/https?:\/\/[^\s<>"']+/g) || [];
-  return Array.from(new Set(matches));
-}
-
-function uniqueUrlsFromHtmlHref(html: string) {
-  const set = new Set<string>();
-  const re = /href\s*=\s*(["'])(https?:\/\/[^"']+)\1/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) {
-    set.add(m[2]);
-  }
-  return Array.from(set);
-}
-
-function mergeClickTrackUrls(plain: string, html: string) {
-  return Array.from(new Set([...uniqueUrls(plain), ...uniqueUrlsFromHtmlHref(html)]));
-}
-
-function sanitizeEmailHtml(html: string) {
-  return sanitizeHtml(html, {
-    allowedTags: [
-      ...sanitizeHtml.defaults.allowedTags,
-      "img",
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-      "span",
-      "div",
-      "font",
-    ],
-    allowedAttributes: {
-      ...sanitizeHtml.defaults.allowedAttributes,
-      a: ["href", "name", "target", "rel", "style", "class"],
-      img: ["src", "alt", "width", "height", "style", "class"],
-      p: ["style", "class"],
-      span: ["style", "class"],
-      div: ["style", "class"],
-      font: ["color", "face", "size"],
-      td: ["colspan", "rowspan", "style", "class"],
-      th: ["colspan", "rowspan", "style", "class"],
-      "*": ["style", "class"],
-    },
-    allowedSchemes: ["http", "https", "mailto", "data"],
-    allowedSchemesByTag: {
-      img: ["http", "https", "data"],
-    },
-  });
-}
-
-const ATTACHMENTS_MAX_BYTES = 24 * 1024 * 1024;
-
-function parseAttachments(raw: unknown): { ok: true; parts: Array<{ filename: string; contentType: string; base64: string }> } | { ok: false; message: string } {
-  if (raw == null || raw === undefined) return { ok: true, parts: [] };
-  if (!Array.isArray(raw)) return { ok: false, message: "attachments must be an array." };
-  const parts: Array<{ filename: string; contentType: string; base64: string }> = [];
-  let total = 0;
-  for (const item of raw) {
-    if (!item || typeof item !== "object") continue;
-    const row = item as Record<string, unknown>;
-    const filename = asStr(row.filename) || "attachment";
-    const contentType = asStr(row.contentType) || "application/octet-stream";
-    const contentBase64 = asStr(row.contentBase64);
-    if (!contentBase64) continue;
-    const buf = Buffer.from(contentBase64, "base64");
-    if (!buf.length) continue;
-    total += buf.length;
-    if (total > ATTACHMENTS_MAX_BYTES) {
-      return { ok: false, message: "Attachments exceed size limit." };
-    }
-    parts.push({ filename, contentType, base64: contentBase64.replace(/\r?\n/g, "") });
-  }
-  return { ok: true, parts };
-}
-
-function chunkBase64ForMime(b64: string) {
-  const clean = b64.replace(/\r?\n/g, "");
-  return clean.match(/.{1,76}/g)?.join("\r\n") || clean;
-}
-
-function buildRawMime(opts: {
-  to: string;
-  cc: string;
-  bcc: string;
-  subject: string;
-  textBody: string;
-  htmlBody: string;
-  attachments: Array<{ filename: string; contentType: string; base64: string }>;
-  inReplyTo: string;
-  references: string;
-}) {
-  const nl = "\r\n";
-  const mixedBoundary = `mixed_${randomUUID().replace(/-/g, "")}`;
-  const altBoundary = `alt_${randomUUID().replace(/-/g, "")}`;
-
-  const headers: string[] = [
-    `To: ${opts.to}`,
-    "MIME-Version: 1.0",
-    `Subject: ${opts.subject}`,
-  ];
-  if (opts.cc) headers.push(`Cc: ${opts.cc}`);
-  if (opts.bcc) headers.push(`Bcc: ${opts.bcc}`);
-  if (opts.inReplyTo) headers.push(`In-Reply-To: ${opts.inReplyTo}`);
-  if (opts.references) headers.push(`References: ${opts.references}`);
-  else if (opts.inReplyTo) headers.push(`References: ${opts.inReplyTo}`);
-
-  const altInner =
-    `--${altBoundary}${nl}Content-Type: text/plain; charset=UTF-8${nl}${nl}${opts.textBody}${nl}${nl}` +
-    `--${altBoundary}${nl}Content-Type: text/html; charset=UTF-8${nl}${nl}${opts.htmlBody}${nl}${nl}` +
-    `--${altBoundary}--`;
-
-  if (opts.attachments.length === 0) {
-    headers.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`);
-    return `${headers.join(nl)}${nl}${nl}${altInner}`;
-  }
-
-  headers.push(`Content-Type: multipart/mixed; boundary="${mixedBoundary}"`);
-
-  const firstPart =
-    `--${mixedBoundary}${nl}Content-Type: multipart/alternative; boundary="${altBoundary}"${nl}${nl}${altInner}${nl}`;
-
-  const rest = opts.attachments
-    .map((att) => {
-      const body = chunkBase64ForMime(att.base64);
-      const safeName = att.filename.replace(/[\r\n"]/g, "_");
-      return (
-        `--${mixedBoundary}${nl}Content-Type: ${att.contentType}; name="${safeName}"${nl}` +
-        `Content-Disposition: attachment; filename="${safeName}"${nl}` +
-        `Content-Transfer-Encoding: base64${nl}${nl}${body}${nl}`
-      );
-    })
-    .join("");
-
-  return `${headers.join(nl)}${nl}${nl}${firstPart}${rest}--${mixedBoundary}--`;
-}
-
 export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
-  const accountEmail = normalizeEmail(asStr(req.body?.accountEmail));
-  const toRecipients = splitRecipients(asStr(req.body?.to));
-  const ccRecipients = splitRecipients(asStr(req.body?.cc));
-  const bccRecipients = splitRecipients(asStr(req.body?.bcc));
-  const subjectRaw = asStr(req.body?.subject);
-  const body = asStr(req.body?.body);
-  const bodyHtmlInput = asStr(req.body?.bodyHtml);
-  const threadId = asStr(req.body?.threadId);
-  const inReplyTo = asStr(req.body?.inReplyTo);
-  const references = asStr(req.body?.references);
-  const draftKey = asStr(req.body?.draftKey);
-  const providerAccountId = asStr(req.body?.providerAccountId);
-  const isReply = Boolean(threadId || inReplyTo || references);
-  const subject = isReply ? ensureReplyPrefix(subjectRaw) : subjectRaw || "(No Subject)";
-
-  const attachmentParse = parseAttachments(req.body?.attachments);
-  if (!attachmentParse.ok) {
-    res.status(400).json({ message: attachmentParse.message });
-    return;
-  }
-  const attachmentParts = attachmentParse.parts;
-
-  if (!accountEmail) {
-    res.status(400).json({ message: "accountEmail is required." });
-    return;
-  }
-  if (toRecipients.length === 0) {
-    res.status(400).json({ message: "Recipient email is required." });
-    return;
-  }
-  if (!body.trim() && !bodyHtmlInput.trim()) {
-    res.status(400).json({ message: "Email body is required." });
-    return;
-  }
-
-  const providerAccount = providerAccountId
-    ? await prisma.emailProviderAccount.findFirst({
-        where: { id: providerAccountId, user_id: userId },
-      })
-    : await prisma.emailProviderAccount.findFirst({
-        where: { user_id: userId, account_email: accountEmail },
-      });
-
-  let tokenResult = await getValidGmailAccessToken(userId, accountEmail);
-  if (!tokenResult.ok && !providerAccount) {
-    const status = tokenResult.reason === "account_not_found" ? 404 : 401;
-    res.status(status).json({ message: tokenResult.message });
-    return;
-  }
-
-  const accountId = providerAccount?.id ?? (await resolveAccountId(userId, accountEmail));
-
-  const [accountSetting, fallbackSetting] = await Promise.all([
-    accountId
-      ? prisma.emailAccountSetting.findUnique({
-          where: { account_id: accountId },
-          select: { tracking_enabled: true, open_tracking_enabled: true, click_tracking_enabled: true },
-        })
-      : null,
-    prisma.emailAccountSetting.findFirst({
-      where: { email_provider_accounts: { user_id: userId } },
-      orderBy: { updated_at: "desc" },
-      select: { tracking_enabled: true, open_tracking_enabled: true, click_tracking_enabled: true },
-    }),
-  ]);
-  const setting = accountSetting || fallbackSetting;
-
-  const trackingEnabled = Boolean(setting?.tracking_enabled);
-  const openTrackingEnabled = trackingEnabled && Boolean(setting?.open_tracking_enabled ?? true);
-  const clickTrackingEnabled = trackingEnabled && Boolean(setting?.click_tracking_enabled ?? true);
-
-  const sanitizedHtmlInput = bodyHtmlInput ? sanitizeEmailHtml(bodyHtmlInput) : "";
-  const plainTextBody =
-    body.trim() ||
-    (sanitizedHtmlInput
-      ? sanitizedHtmlInput.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
-      : "");
-
-  const openToken = openTrackingEnabled ? randomUUID().replace(/-/g, "") : null;
-  const outbound = await prisma.emailOutboundMessage.create({
-    data: {
-      user_id: userId,
-      account_id: accountId ?? "",
-      subject,
-      body_text: plainTextBody,
-      body_html: sanitizedHtmlInput || linkifyText(plainTextBody),
-      tracking_enabled: trackingEnabled,
-      open_token: openToken,
-      email_outbound_recipients: {
-        create: [
-          ...toRecipients.map((email) => ({ email, recipient_type: "TO" })),
-          ...ccRecipients.map((email) => ({ email, recipient_type: "CC" })),
-          ...bccRecipients.map((email) => ({ email, recipient_type: "BCC" })),
-        ],
-      },
-    },
-  });
-
   const baseUrl = getPublicBaseUrl(req);
-  const replacements = new Map<string, string>();
-  if (clickTrackingEnabled) {
-    const urlsForTracking = mergeClickTrackUrls(plainTextBody, sanitizedHtmlInput);
-    for (const url of urlsForTracking) {
-      const token = randomUUID().replace(/-/g, "");
-      await prisma.emailTrackingLink.create({
-        data: {
-          outbound_message_id: outbound.id,
-          token,
-          original_url: url,
-        },
-      });
-      replacements.set(url, `${baseUrl}/api/email/track/click/${token}`);
+
+  const payload: SendEmailPayload = {
+    accountEmail: asStr(req.body?.accountEmail),
+    from: asStr(req.body?.from),
+    to: asStr(req.body?.to),
+    cc: asStr(req.body?.cc),
+    bcc: asStr(req.body?.bcc),
+    subject: asStr(req.body?.subject),
+    body: asStr(req.body?.body),
+    bodyHtml: asStr(req.body?.bodyHtml),
+    threadId: asStr(req.body?.threadId),
+    inReplyTo: asStr(req.body?.inReplyTo),
+    references: asStr(req.body?.references),
+    providerAccountId: asStr(req.body?.providerAccountId),
+    draftKey: asStr(req.body?.draftKey),
+    attachments: req.body?.attachments,
+    requestReceipt: Boolean(req.body?.requestReceipt),
+  };
+
+  // Confidential mode: stash the real body server-side under a token and replace the
+  // outgoing body with a notice + link to the viewer page (/c/[token]). Runs before the
+  // scheduled branch so a scheduled confidential message carries the invite too.
+  const confidential = req.body?.confidential;
+  if (confidential && typeof confidential === "object" && !Array.isArray(confidential)) {
+    const conf = confidential as Record<string, unknown>;
+    const passcode = asStr(conf.passcode).trim();
+    const expiresAt = resolveExpiry(asStr(conf.expiry) as ConfidentialExpiry, new Date());
+    const realHtml = payload.bodyHtml && payload.bodyHtml.trim()
+      ? payload.bodyHtml
+      : `<div style="white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;">${escapeHtmlBasic(asStr(payload.body))}</div>`;
+    if (!realHtml.trim()) {
+      res.status(400).json({ message: "Email body is required." });
+      return;
     }
-  }
-
-  const textBody = plainTextBody;
-  let htmlBody = sanitizedHtmlInput
-    ? rewriteTrackedLinksInHtml(sanitizedHtmlInput, replacements)
-    : linkifyTextWithTrackedHrefs(plainTextBody, replacements);
-  if (openTrackingEnabled && openToken) {
-    const trackingPixel = `<img src="${baseUrl}/api/email/track/open/${openToken}.gif" width="1" height="1" alt="" aria-hidden="true" style="width:1px;height:1px;opacity:0;position:absolute;left:-9999px;top:auto;border:0;overflow:hidden;" />`;
-    htmlBody = `${trackingPixel}${htmlBody}`;
-  }
-
-  const rawMime = buildRawMime({
-    to: toRecipients.join(", "),
-    cc: ccRecipients.length > 0 ? ccRecipients.join(", ") : "",
-    bcc: bccRecipients.length > 0 ? bccRecipients.join(", ") : "",
-    subject,
-    textBody,
-    htmlBody,
-    attachments: attachmentParts,
-    inReplyTo,
-    references,
-  });
-  const raw = toBase64Url(rawMime);
-
-  const sendPayload: Record<string, string> = { raw };
-  if (threadId) sendPayload.threadId = threadId;
-
-  let sentMessageId: string | null = null;
-  let sentThreadId: string | null = threadId || null;
-  let provider: "gmail" | "smtp" = "gmail";
-
-  const smtpAttachments = attachmentParts.map((att) => ({
-    filename: att.filename,
-    content: Buffer.from(att.base64, "base64"),
-    contentType: att.contentType,
-  }));
-
-  if (providerAccount) {
-    provider = "smtp";
-    const transporter = nodemailer.createTransport({
-      host: providerAccount.smtp_host,
-      port: providerAccount.smtp_port,
-      secure: providerAccount.smtp_secure,
-      auth: {
-        user: providerAccount.smtp_username,
-        pass: decrypt(providerAccount.smtp_password_enc),
-      },
+    const created = await createConfidentialMessage({
+      userId,
+      subject: payload.subject,
+      bodyHtml: realHtml,
+      bodyText: payload.body,
+      passcode: passcode || undefined,
+      expiresAt,
+      restrictForward: conf.restrictForward !== false,
+      restrictCopy: conf.restrictCopy !== false,
+      restrictPrint: conf.restrictPrint !== false,
     });
-    try {
-      const info = await transporter.sendMail({
-        from: `${accountEmail}`,
-        to: toRecipients.join(", "),
-        cc: ccRecipients.length > 0 ? ccRecipients.join(", ") : undefined,
-        bcc: bccRecipients.length > 0 ? bccRecipients.join(", ") : undefined,
-        subject,
-        text: textBody,
-        html: htmlBody,
-        attachments: smtpAttachments.length > 0 ? smtpAttachments : undefined,
-        inReplyTo: inReplyTo || undefined,
-        references: references || undefined,
-      });
-      sentMessageId = typeof info.messageId === "string" ? info.messageId : null;
-    } catch (error) {
-      res.status(502).json({ message: error instanceof Error ? error.message : "SMTP send failed." });
+    payload.bodyHtml = buildConfidentialInviteHtml({ baseUrl, token: created.token, hasPasscode: Boolean(passcode), expiresAt });
+    payload.body = buildConfidentialInviteText({ baseUrl, token: created.token });
+  }
+
+  // Scheduled send: persist the payload for the cron dispatcher instead of sending
+  // now (see lib/gmail/scheduledSend.ts). The message goes out server-side at the
+  // chosen time even if the user closes the tab.
+  const scheduledRaw = req.body?.scheduledAt;
+  if (scheduledRaw != null && scheduledRaw !== "") {
+    const accountEmail = normalizeEmail(payload.accountEmail);
+    if (!accountEmail) {
+      res.status(400).json({ message: "accountEmail is required." });
       return;
     }
-  } else if (tokenResult.ok) {
-    const sendWithToken = async (accessToken: string) =>
-      fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(sendPayload),
-      });
-
-    let response = await sendWithToken(tokenResult.accessToken);
-    if (response.status === 401) {
-      const refreshResult = await getValidGmailAccessToken(userId, accountEmail, { forceRefresh: true });
-      if (!refreshResult.ok) {
-        res.status(401).json({ message: refreshResult.message });
-        return;
-      }
-      tokenResult = refreshResult;
-      response = await sendWithToken(refreshResult.accessToken);
-    }
-
-    if (!response.ok) {
-      const text = await response.text();
-      res.status(502).json({ message: `Gmail send failed: ${text}` });
+    if (!payload.to.trim()) {
+      res.status(400).json({ message: "Recipient email is required." });
       return;
     }
-
-    const payload = await response.json();
-    sentMessageId = typeof payload?.id === "string" ? payload.id : null;
-    sentThreadId = typeof payload?.threadId === "string" ? payload.threadId : threadId || null;
-  } else {
-    res.status(400).json({ message: "No valid send provider configured." });
+    if (!asStr(payload.body).trim() && !asStr(payload.bodyHtml).trim()) {
+      res.status(400).json({ message: "Email body is required." });
+      return;
+    }
+    const parsed = parseScheduledAt(scheduledRaw, new Date());
+    if (!parsed.ok) {
+      res.status(400).json({ message: parsed.message });
+      return;
+    }
+    const queued = await enqueueScheduledSend(userId, accountEmail, payload, parsed.date);
+    if (payload.draftKey) {
+      await prisma.emailComposeDraft.deleteMany({ where: { user_id: userId, draft_key: payload.draftKey } });
+    }
+    res.status(200).json({ ok: true, scheduled: true, id: queued.id, scheduledAt: queued.scheduledAt });
     return;
   }
-  await prisma.emailOutboundMessage.update({
-    where: { id: outbound.id },
-    data: {
-      gmail_message_id: sentMessageId,
-      thread_id: sentThreadId,
-      body_text: textBody,
-      body_html: htmlBody,
-    },
-  });
 
-  if (draftKey) {
-    await prisma.emailComposeDraft.deleteMany({
-      where: { user_id: userId, draft_key: draftKey },
-    });
+  const result = await sendEmailCore(userId, payload, baseUrl);
+  if (!result.ok) {
+    res.status(result.status).json({ message: result.message });
+    return;
   }
-
-  res.status(200).json({
-    ok: true,
-    messageId: sentMessageId,
-    tracked: trackingEnabled,
-    provider,
-  });
+  res.status(200).json({ ok: true, messageId: result.messageId, tracked: result.tracked, provider: result.provider });
 }, { methods: ["POST"] });

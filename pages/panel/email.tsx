@@ -22,7 +22,7 @@ const EmailPanelStandalonePage: React.FC<Props> = ({ initialSelectedAccounts }) 
       </Head>
       <div className="fixed inset-0 overflow-hidden">
         <main className="h-screen overflow-hidden">
-          <EmailingPlatformSection standalone initialSelectedAccounts={initialSelectedAccounts} />
+          <EmailingPlatformSection initialSelectedAccounts={initialSelectedAccounts} />
         </main>
       </div>
     </>

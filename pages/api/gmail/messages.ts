@@ -41,6 +41,7 @@ type MessageRow = {
   messageIdHeader: string;
   references: string;
   unread: boolean;
+  starred?: boolean;
   tracked: boolean;
   trackingOpenCount?: number;
   trackingClickCount?: number;
@@ -136,15 +137,21 @@ function firstRecipient(text: string) {
   return first || cleaned;
 }
 
-async function fetchGmailList(accessToken: string, mailbox: Mailbox, maxResults: number, search?: string) {
+async function fetchGmailList(accessToken: string, mailbox: Mailbox, maxResults: number, search?: string, labelId?: string) {
   const params = new URLSearchParams({ maxResults: String(maxResults) });
-  const mailboxQuery = buildMailboxQuery(mailbox);
   const searchTerm = (search || "").trim();
-  if (typeof mailboxQuery === "string") {
-    params.set("labelIds", mailboxQuery);
+  if (labelId) {
+    // Viewing a custom label overrides the mailbox filter.
+    params.set("labelIds", labelId);
     if (searchTerm) params.set("q", searchTerm);
   } else {
-    params.set("q", searchTerm ? `${mailboxQuery.q} ${searchTerm}` : mailboxQuery.q);
+    const mailboxQuery = buildMailboxQuery(mailbox);
+    if (typeof mailboxQuery === "string") {
+      params.set("labelIds", mailboxQuery);
+      if (searchTerm) params.set("q", searchTerm);
+    } else {
+      params.set("q", searchTerm ? `${mailboxQuery.q} ${searchTerm}` : mailboxQuery.q);
+    }
   }
   const response = await fetchWithRetry(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params.toString()}`, {
     headers: {
@@ -219,6 +226,7 @@ export default withAuth(async (req, res, session) => {
   const maxResults = Math.min(page * pageSize, 500);
   const accountsParam = asQueryStr(req.query.accounts);
   const searchQuery = (asQueryStr(req.query.q) || "").trim();
+  const labelIdFilter = (asQueryStr(req.query.labelId) || "").trim();
   const selectedEmails = (accountsParam || "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
@@ -251,7 +259,7 @@ export default withAuth(async (req, res, session) => {
         }
 
         const loadAccountMessages = async (accessToken: string) => {
-          const list = await fetchGmailList(accessToken, mailbox, maxResults, searchQuery);
+          const list = await fetchGmailList(accessToken, mailbox, maxResults, searchQuery, labelIdFilter);
           accountHasMore.push(Boolean(list.nextPageToken));
           const ids = (list.messages || []).map((m) => m.id).filter(Boolean);
           if (ids.length === 0) return [] as MessageRow[];
@@ -272,6 +280,7 @@ export default withAuth(async (req, res, session) => {
             const references = extractHeader(headers, "References") || "";
             const timestamp = Number(msg.internalDate || 0) || Date.parse(date) || 0;
             const unread = Array.isArray(msg.labelIds) ? msg.labelIds.includes("UNREAD") : false;
+            const starred = Array.isArray(msg.labelIds) ? msg.labelIds.includes("STARRED") : false;
             return {
               id: msg.id,
               threadId: msg.threadId,
@@ -289,6 +298,7 @@ export default withAuth(async (req, res, session) => {
               messageIdHeader,
               references,
               unread,
+              starred,
               tracked: false,
             } as MessageRow;
           });

@@ -10,6 +10,8 @@ import {
   FiCheckSquare,
   FiCheck,
   FiChevronDown,
+  FiClock,
+  FiLock,
   FiChevronsRight,
   FiCornerUpLeft,
   FiDownload,
@@ -30,6 +32,10 @@ import {
   FiSearch,
   FiSend,
   FiSettings,
+  FiStar,
+  FiShield,
+  FiZap,
+  FiTag,
   FiUpload,
   FiUserPlus,
   FiTrash2,
@@ -41,7 +47,7 @@ import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import ComposeRichEditor, { printComposeContent, type ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
-import { APP_BACKGROUND, GLASS_CHROME, GLASS_SURFACE, SHADOW_SOFT, SHADOW_SM, BRAND_GRADIENT, BRAND_LOGO } from "@/components/email/emailTheme";
+import { GLASS_CHROME, GLASS_SURFACE, SHADOW_SM, BRAND_GRADIENT, BRAND_LOGO } from "@/components/email/emailTheme";
 import {
   PAGE_SIZE,
   CONTACTS_PAGE_SIZE,
@@ -71,6 +77,12 @@ import type {
 // Site brand font (matches vierradev.com); replaces the panel's former Inter.
 const panelFont = Geist({ subsets: ["latin"] });
 
+/** Format a Date as a `<input type="datetime-local">` value in the viewer's local timezone. */
+function toDatetimeLocalValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 // Lazy-load the Analytics view (recharts is heavy) so it stays out of the initial panel bundle.
 const EmailAnalyticsView = dynamic(() => import("@/components/email/EmailAnalyticsView"), {
   ssr: false,
@@ -80,9 +92,18 @@ const EmailAnalyticsView = dynamic(() => import("@/components/email/EmailAnalyti
     </div>
   ),
 });
+
+// Lazy-load the Campaigns view (incorporated from the campaigns branch) so its bundle
+// only loads when the Campaigns module is opened.
+const CampaignsView = dynamic(() => import("@/components/PanelPages/CampaignsSection"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center">
+      <div className="w-10 h-10 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] motion-safe:animate-spin" />
+    </div>
+  ),
+});
 type EmailingPlatformSectionProps = {
-  standalone?: boolean;
-  launchStandaloneOnContinue?: boolean;
   initialSelectedAccounts?: string[];
 };
 
@@ -97,7 +118,7 @@ const MailboxLoader: React.FC<{ label?: string }> = ({ label = "Loading messages
 
 const MailboxEmpty: React.FC = () => (
   <div className="h-full min-h-[320px] flex items-center justify-center px-6">
-    <div className="text-center rounded-2xl border border-white/70 bg-white/60 backdrop-blur-md px-9 py-11 shadow-[0_10px_40px_-12px_rgba(46,16,80,0.18)]">
+    <div className="text-center rounded-2xl border border-[#ECEAF1] bg-white px-9 py-11 shadow-[0_10px_40px_-12px_rgba(46,16,80,0.10)]">
       <div className="w-12 h-12 mx-auto rounded-full bg-[#701CC0]/10 flex items-center justify-center">
         <FiInbox className="w-6 h-6 text-[#701CC0]" />
       </div>
@@ -108,8 +129,6 @@ const MailboxEmpty: React.FC = () => (
 );
 
 const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
-  standalone = false,
-  launchStandaloneOnContinue = false,
   initialSelectedAccounts = [],
 }) => {
   const initialAccountsRef = useRef(initialSelectedAccounts);
@@ -149,6 +168,24 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [moveMenuOpen, setMoveMenuOpen] = useState<null | "list" | "message">(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [labels, setLabels] = useState<Array<{ id: string; name: string }>>([]);
+  const [activeLabelId, setActiveLabelId] = useState("");
+  const [activeLabelName, setActiveLabelName] = useState("");
+  const [labelMenuOpen, setLabelMenuOpen] = useState(false);
+  // Scheduled-send queue (our own queue, shown in the "Scheduled" module — not Gmail's in:scheduled).
+  type ScheduledQueueItem = {
+    id: string;
+    accountEmail: string;
+    scheduledAt: string;
+    status: string;
+    lastError: string | null;
+    to: string;
+    subject: string;
+  };
+  const [scheduledItems, setScheduledItems] = useState<ScheduledQueueItem[]>([]);
+  const [scheduledLoading, setScheduledLoading] = useState(false);
+  const [scheduledError, setScheduledError] = useState("");
+  const [cancelingScheduledId, setCancelingScheduledId] = useState("");
 
   const [isComposeOpen, setIsComposeOpen] = useState(false);
   const [composeTo, setComposeTo] = useState("");
@@ -173,10 +210,30 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const composeAttachInputRef = useRef<HTMLInputElement | null>(null);
   const [composeFormattingToolbarOpen, setComposeFormattingToolbarOpen] = useState(false);
   const [composeAccountEmail, setComposeAccountEmail] = useState("");
+  const [composeFrom, setComposeFrom] = useState("");
+  const [composeAliases, setComposeAliases] = useState<Array<{ email: string; displayName: string; isPrimary: boolean }>>([]);
   const [composeThreadId, setComposeThreadId] = useState("");
   const [composeInReplyTo, setComposeInReplyTo] = useState("");
   const [composeReferences, setComposeReferences] = useState("");
   const [sendingCompose, setSendingCompose] = useState(false);
+  const [undoCountdown, setUndoCountdown] = useState<number | null>(null);
+  /** Scheduled send: ISO-ish `datetime-local` value; empty = send now. */
+  const [scheduleAt, setScheduleAt] = useState("");
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  /** Confidential mode: send an access-controlled link instead of the raw body. */
+  const [confidentialOn, setConfidentialOn] = useState(false);
+  const [confidentialExpiry, setConfidentialExpiry] = useState<"1d" | "1w" | "1m" | "never">("1w");
+  const [confidentialPasscode, setConfidentialPasscode] = useState("");
+  const [confidentialOpen, setConfidentialOpen] = useState(false);
+  /** Request a read receipt (Disposition-Notification-To) on send. */
+  const [requestReceipt, setRequestReceipt] = useState(false);
+  const undoSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [artemisDrafting, setArtemisDrafting] = useState(false);
+  const [artemisSummary, setArtemisSummary] = useState("");
+  const [artemisSummaryLoading, setArtemisSummaryLoading] = useState(false);
+  const [artemisReplyLoading, setArtemisReplyLoading] = useState(false);
+  const [artemisRewriteOpen, setArtemisRewriteOpen] = useState(false);
   const [composeError, setComposeError] = useState("");
   const [composeSuccess, setComposeSuccess] = useState("");
   const [sentToastMessage, setSentToastMessage] = useState<string | null>(null);
@@ -308,7 +365,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       },
     ];
   }, [selectedMessage, selectedMessageDetail]);
-  const canContinue = connectedAccounts.length > 0 && selectedAccounts.length > 0;
   const canLoadMessages =
     activeModule === "inbox" ||
     activeModule === "sent" ||
@@ -319,7 +375,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     activeModule === "allmail" ||
     activeModule === "starred" ||
     activeModule === "important" ||
-    activeModule === "scheduled";
+    Boolean(activeLabelId);
   const activeAccountForContacts = selectedAccounts[0] || "";
 
   const filteredMessages = useMemo(() => {
@@ -332,6 +388,78 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         .includes(q)
     );
   }, [messages, searchTerm]);
+
+  // Conversation grouping: collapse messages sharing a threadId into one row
+  // (latest message represents the thread) with a message count. Compose drafts
+  // and thread-less messages pass through individually.
+  const conversationRows = useMemo(() => {
+    const byThread = new Map<string, MessageRow & { threadCount: number }>();
+    const rows: Array<MessageRow & { threadCount: number }> = [];
+    for (const message of filteredMessages) {
+      const threadId = message.threadId;
+      if (!threadId || message.isComposeDraft) {
+        rows.push({ ...message, threadCount: 1 });
+        continue;
+      }
+      const existing = byThread.get(threadId);
+      if (existing) {
+        existing.threadCount += 1;
+      } else {
+        const row = { ...message, threadCount: 1 };
+        byThread.set(threadId, row);
+        rows.push(row);
+      }
+    }
+    return rows;
+  }, [filteredMessages]);
+
+  // Lightweight pre-send deliverability lint — proactive warnings shown in the composer.
+  // Deliverability guardrail (#2): check the sending domain's SPF/DMARC when compose opens.
+  const [composeDeliverability, setComposeDeliverability] = useState<{ spfOk: boolean; dmarcOk: boolean } | null>(null);
+  useEffect(() => {
+    if (!isComposeOpen || !composeAccountEmail) {
+      setComposeDeliverability(null);
+      return;
+    }
+    const domain = composeAccountEmail.split("@")[1];
+    if (!domain) return;
+    let cancelled = false;
+    fetch(`/api/gmail/deliverability?domain=${encodeURIComponent(domain)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d) setComposeDeliverability({ spfOk: Boolean(d?.spf?.found), dmarcOk: Boolean(d?.dmarc?.found) });
+      })
+      .catch(() => {
+        /* non-blocking */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isComposeOpen, composeAccountEmail]);
+
+  const composeLintWarnings = useMemo(() => {
+    const warnings: string[] = [];
+    const subject = composeSubject || "";
+    const body = (composeBody || "").toLowerCase();
+    const letters = subject.replace(/[^a-zA-Z]/g, "");
+    const caps = subject.replace(/[^A-Z]/g, "");
+    if (letters.length >= 6 && caps.length / letters.length > 0.7) {
+      warnings.push("Subject is mostly capitals — can trip spam filters.");
+    }
+    if ((subject.match(/!/g) || []).length >= 2 || /\$\$\$|100% free|act now|risk-free/i.test(subject)) {
+      warnings.push("Subject uses spammy punctuation or phrasing.");
+    }
+    const triggers = ["click here", "buy now", "act now", "limited time", "winner", "100% free", "no obligation", "risk-free", "guaranteed"];
+    const hits = triggers.filter((t) => body.includes(t));
+    if (hits.length) {
+      warnings.push(`Spam-trigger phrase${hits.length > 1 ? "s" : ""}: "${hits.slice(0, 3).join('", "')}".`);
+    }
+    if (composeDeliverability && (!composeDeliverability.spfOk || !composeDeliverability.dmarcOk)) {
+      const gaps = [!composeDeliverability.spfOk && "SPF", !composeDeliverability.dmarcOk && "DMARC"].filter(Boolean).join(" & ");
+      warnings.push(`Sending domain is missing ${gaps} — this can hurt inbox placement (see Settings → Deliverability).`);
+    }
+    return warnings;
+  }, [composeSubject, composeBody, composeDeliverability]);
 
   const rowKey = useCallback((message: MessageRow) => `${message.accountEmail}::${message.id}`, []);
 
@@ -426,15 +554,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [closeEditContactModal, isEditContactModalOpen]);
-
-  const openStandaloneViewer = (accounts: string[]) => {
-    const query = new URLSearchParams();
-    if (accounts.length > 0) {
-      query.set("accounts", accounts.join(","));
-    }
-    const url = `/panel/email${query.toString() ? `?${query.toString()}` : ""}`;
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
 
   const loadContactTags = useCallback(async () => {
     try {
@@ -817,10 +936,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     }
   };
 
-  const toggleAccount = (email: string) => {
-    setSelectedAccounts((prev) => (prev.includes(email) ? prev.filter((entry) => entry !== email) : [...prev, email]));
-  };
-
   const formatDate = (timestamp: number, rawDate?: string) => {
     if (timestamp > 0) {
       const date = new Date(timestamp);
@@ -837,6 +952,24 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     }
     return rawDate || "";
   };
+
+  const toggleStar = useCallback(async (message: MessageRow) => {
+    const next = !message.starred;
+    const match = (m: MessageRow) => m.id === message.id && m.accountEmail === message.accountEmail;
+    setMessages((prev) => prev.map((m) => (match(m) ? { ...m, starred: next } : m)));
+    try {
+      await fetch("/api/gmail/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: next ? "star" : "unstar",
+          items: [{ accountEmail: message.accountEmail, messageId: message.id }],
+        }),
+      });
+    } catch {
+      setMessages((prev) => prev.map((m) => (match(m) ? { ...m, starred: !next } : m)));
+    }
+  }, []);
 
   const parseMailboxAddress = (value: string) => {
     const trimmed = (value || "").trim();
@@ -985,6 +1118,32 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       )
       .replace(/\n/g, "<br>");
 
+  const isTrackerPixel = (img: HTMLImageElement, srcValue: string) => {
+    const src = (srcValue || "").trim();
+    const w = (img.getAttribute("width") || "").trim();
+    const h = (img.getAttribute("height") || "").trim();
+    const tiny = (w === "0" || w === "1") && (h === "0" || h === "1");
+    const style = (img.getAttribute("style") || "").toLowerCase();
+    const hidden = /(width\s*:\s*[01]px)|(height\s*:\s*[01]px)|display\s*:\s*none|visibility\s*:\s*hidden/.test(style);
+    const trackerish =
+      /(\/(track|open|beacon|pixel|o)\/)|(wf\/open)|(list-manage|sendgrid\.net|mailgun|sparkpostmail|hubspot|hs-sites|mixpanel|awstrack|amazonses|sendinblue|getresponse|constantcontact)/i.test(src);
+    return tiny || hidden || (trackerish && /\.gif(\?|$)/i.test(src));
+  };
+
+  const countTrackers = (rawHtml: string) => {
+    if (!rawHtml || typeof window === "undefined") return 0;
+    try {
+      const doc = new window.DOMParser().parseFromString(rawHtml, "text/html");
+      let count = 0;
+      doc.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
+        if (isTrackerPixel(img, img.getAttribute("src") || "")) count += 1;
+      });
+      return count;
+    } catch {
+      return 0;
+    }
+  };
+
   const sanitizeHtml = (rawHtml: string) => {
     if (!rawHtml) return "";
     if (typeof window === "undefined") return rawHtml;
@@ -1010,7 +1169,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
     };
     parsed.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
-      if (isInternalOpenTrackingPixel(img.getAttribute("src") || "")) {
+      const src = img.getAttribute("src") || "";
+      // Strip our own open-pixel AND third-party tracking pixels so opens aren't leaked back to the sender.
+      if (isInternalOpenTrackingPixel(src) || isTrackerPixel(img, src)) {
         img.remove();
         return;
       }
@@ -1047,18 +1208,27 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
       setGmailAccounts(normalized);
       const connected = normalized.filter((a) => a.connected).map((a) => a.email);
+
+      // Accounts default to enabled; only accounts explicitly disabled in settings are excluded.
+      const disabled = new Set<string>();
+      try {
+        const prefRes = await fetch("/api/gmail/account-preferences");
+        if (prefRes.ok) {
+          const prefData = await prefRes.json();
+          for (const pref of Array.isArray(prefData?.preferences) ? prefData.preferences : []) {
+            if (pref?.enabled === false && typeof pref?.accountEmail === "string") disabled.add(pref.accountEmail.toLowerCase());
+          }
+        }
+      } catch {
+        /* default to all enabled */
+      }
+      const enabledConnected = connected.filter((email) => !disabled.has(email.toLowerCase()));
       const preselected = initialAccountsRef.current.filter((email) => connected.includes(email));
 
-      if (preselected.length > 0) {
-        setSelectedAccounts(preselected);
-        setStep("client");
-      } else if (connected.length === 1) {
-        setSelectedAccounts(connected);
-        setStep(standalone ? "client" : "gate");
-      } else {
-        setSelectedAccounts([]);
-        setStep("gate");
-      }
+      // The full-page client opens with the chosen accounts (URL param) or all enabled;
+      // the "gate" is only shown as a "no accounts connected" state.
+      setSelectedAccounts(preselected.length > 0 ? preselected : enabledConnected);
+      setStep(connected.length === 0 ? "gate" : "client");
     } catch {
       setGmailAccounts([]);
       setSelectedAccounts([]);
@@ -1066,7 +1236,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     } finally {
       setGmailLoading(false);
     }
-  }, [standalone]);
+  }, []);
 
   useEffect(() => {
     loadGmailConnections();
@@ -1180,10 +1350,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     const mailbox = activeModule as "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive" | "allmail" | "starred" | "important" | "scheduled";
     const query = new URLSearchParams({
       mailbox,
-      accounts: selectedAccounts.join(","),
+      accounts: activeLabelId ? selectedAccounts[0] || "" : selectedAccounts.join(","),
       limit: String(PAGE_SIZE),
       page: String(currentPage),
     });
+    if (activeLabelId) query.set("labelId", activeLabelId);
     if (debouncedSearch) query.set("q", debouncedSearch);
 
     setMessagesLoading(true);
@@ -1219,11 +1390,50 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       if (requestId !== loadMessagesRequestRef.current) return;
       setMessagesLoading(false);
     }
-  }, [activeModule, canLoadMessages, currentPage, debouncedSearch, selectedAccounts, step]);
+  }, [activeModule, activeLabelId, canLoadMessages, currentPage, debouncedSearch, selectedAccounts, step]);
 
   useEffect(() => {
     loadMessages();
   }, [loadMessages]);
+
+  // Scheduled-send queue: our own PENDING/SENDING/FAILED rows (compose "Schedule send").
+  const loadScheduled = useCallback(async () => {
+    if (step !== "client") return;
+    setScheduledLoading(true);
+    setScheduledError("");
+    try {
+      const response = await fetch("/api/gmail/scheduled", { headers: { "Cache-Control": "no-cache" } });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.message || "Failed to load scheduled sends.");
+      setScheduledItems(Array.isArray(payload?.items) ? payload.items : []);
+    } catch (error) {
+      setScheduledError(error instanceof Error ? error.message : "Failed to load scheduled sends.");
+      setScheduledItems([]);
+    } finally {
+      setScheduledLoading(false);
+    }
+  }, [step]);
+
+  useEffect(() => {
+    if (step === "client" && activeModule === "scheduled") {
+      loadScheduled();
+    }
+  }, [activeModule, loadScheduled, step]);
+
+  const cancelScheduled = async (id: string) => {
+    setCancelingScheduledId(id);
+    try {
+      const response = await fetch(`/api/gmail/scheduled?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.message || "Could not cancel this scheduled send.");
+      setScheduledItems((prev) => prev.filter((item) => item.id !== id));
+      showSentToast("Scheduled send canceled");
+    } catch (error) {
+      setScheduledError(error instanceof Error ? error.message : "Could not cancel this scheduled send.");
+    } finally {
+      setCancelingScheduledId("");
+    }
+  };
 
   // Debounce the search box, then let loadMessages re-query the server (Gmail `q`).
   useEffect(() => {
@@ -1236,7 +1446,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   }, [debouncedSearch]);
 
   useEffect(() => {
-    loadUnreadBadges();
+    // Defer the unread-badge fetch (6 mailbox scans) so it doesn't compete with the
+    // active mailbox load for Gmail rate limit/bandwidth — the visible inbox paints first.
+    const t = setTimeout(() => {
+      loadUnreadBadges();
+    }, 800);
+    return () => clearTimeout(t);
   }, [loadUnreadBadges]);
 
   useEffect(() => {
@@ -1592,7 +1807,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   };
 
   const toggleSelectAll = () => {
-    const visibleRowKeys = filteredMessages.map((message) => rowKey(message));
+    const visibleRowKeys = conversationRows.map((message) => rowKey(message));
     if (visibleRowKeys.length === 0) return;
     const allSelected = visibleRowKeys.every((key) => selectedRows.includes(key));
     if (allSelected) {
@@ -1758,6 +1973,48 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     },
     [actionLoading, activeModule, loadMailboxCounts, loadUnreadBadges, rowKey, selectedMessageRows, selectedRows]
   );
+
+  const [snoozeMenuOpen, setSnoozeMenuOpen] = useState(false);
+
+  // Snooze the selected messages until a preset time; the inbound cron re-surfaces them.
+  const snoozeSelected = async (preset: "later" | "tomorrow" | "nextweek") => {
+    const rows = selectedMessageRows.filter((message) => !message.isComposeDraft && message.id);
+    if (rows.length === 0 || actionLoading) return;
+    const until = new Date();
+    if (preset === "later") {
+      until.setHours(until.getHours() + 3);
+    } else if (preset === "tomorrow") {
+      until.setDate(until.getDate() + 1);
+      until.setHours(8, 0, 0, 0);
+    } else {
+      until.setDate(until.getDate() + 7);
+      until.setHours(8, 0, 0, 0);
+    }
+    const byAccount = new Map<string, Array<{ messageId: string; threadId?: string }>>();
+    for (const message of rows) {
+      const list = byAccount.get(message.accountEmail) || [];
+      list.push({ messageId: message.id, threadId: message.threadId });
+      byAccount.set(message.accountEmail, list);
+    }
+    setSnoozeMenuOpen(false);
+    setActionLoading(true);
+    try {
+      for (const [accountEmail, items] of byAccount) {
+        await fetch("/api/gmail/snooze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accountEmail, items, snoozeUntil: until.toISOString() }),
+        });
+      }
+      setSelectedRows([]);
+      showSentToast("Snoozed");
+      await Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Failed to snooze.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const handleMoveToChange = async (value: string) => {
     if (!value) return;
@@ -1954,6 +2211,12 @@ ${sourceText}`;
     setComposeAttachments([]);
     setComposeTemplateMenuOpen(false);
     setComposeFormattingToolbarOpen(false);
+    setScheduleAt("");
+    setScheduleOpen(false);
+    setConfidentialOn(false);
+    setConfidentialPasscode("");
+    setConfidentialOpen(false);
+    setRequestReceipt(false);
     setComposeAccountEmail(defaultAccount);
     setComposeThreadId("");
     setComposeInReplyTo("");
@@ -1965,16 +2228,229 @@ ${sourceText}`;
     setIsComposeOpen(true);
   };
 
-  const handleSendCompose = async () => {
-    const strippedHtml = composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim();
-    const hasBody = Boolean(composeBody.trim() || strippedHtml);
-    if (!composeTo.trim() || !hasBody || !composeAccountEmail || sendingCompose) return;
-    const ccErr = validateRecipientCsv("Cc", composeCc);
-    const bccErr = validateRecipientCsv("Bcc", composeBcc);
-    if (ccErr || bccErr) {
-      setComposeError(ccErr || bccErr || "");
+  const loadLabels = useCallback(async () => {
+    const primary = selectedAccounts[0];
+    if (step !== "client" || !primary) {
+      setLabels([]);
       return;
     }
+    try {
+      const response = await fetch(`/api/gmail/labels?accountEmail=${encodeURIComponent(primary)}`);
+      const payload = await response.json().catch(() => ({}));
+      setLabels(Array.isArray(payload?.labels) ? payload.labels : []);
+    } catch {
+      setLabels([]);
+    }
+  }, [selectedAccounts, step]);
+
+  useEffect(() => {
+    loadLabels();
+  }, [loadLabels]);
+
+  // Load verified send-as aliases for the composing account (for the From selector).
+  useEffect(() => {
+    if (!isComposeOpen || !composeAccountEmail) return;
+    let cancelled = false;
+    setComposeFrom(composeAccountEmail);
+    fetch(`/api/gmail/send-as?accountEmail=${encodeURIComponent(composeAccountEmail)}`)
+      .then((response) => response.json())
+      .then((payload) => {
+        if (!cancelled) setComposeAliases(Array.isArray(payload?.aliases) ? payload.aliases : []);
+      })
+      .catch(() => {
+        if (!cancelled) setComposeAliases([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isComposeOpen, composeAccountEmail]);
+
+  const openLabel = (label: { id: string; name: string }) => {
+    setActiveLabelId(label.id);
+    setActiveLabelName(label.name);
+    setViewMode("list");
+    setSearchTerm("");
+    setSelectedRows([]);
+    setCurrentPage(1);
+  };
+
+  const applyLabelToMessage = async (labelId: string) => {
+    setLabelMenuOpen(false);
+    if (!selectedMessage) return;
+    try {
+      const response = await fetch("/api/gmail/apply-label", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountEmail: selectedMessage.accountEmail, messageId: selectedMessage.id, labelId }),
+      });
+      if (response.ok) {
+        const label = labels.find((entry) => entry.id === labelId);
+        showSentToast(`Labeled${label ? ` "${label.name}"` : ""}`);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const createLabel = async () => {
+    const primary = selectedAccounts[0];
+    if (!primary) return;
+    const name = window.prompt("New label name");
+    if (!name || !name.trim()) return;
+    try {
+      const response = await fetch("/api/gmail/labels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountEmail: primary, name: name.trim() }),
+      });
+      if (response.ok) await loadLabels();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const deleteLabel = async (label: { id: string; name: string }) => {
+    const primary = selectedAccounts[0];
+    if (!primary) return;
+    if (!window.confirm(`Delete label "${label.name}"? Messages keep their content.`)) return;
+    try {
+      await fetch("/api/gmail/labels", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountEmail: primary, id: label.id }),
+      });
+      if (activeLabelId === label.id) {
+        setActiveLabelId("");
+        setActiveLabelName("");
+      }
+      await loadLabels();
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const getArtemisTone = () => {
+    try {
+      const raw = window.localStorage.getItem("artemis-prefs");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.tone) return String(parsed.tone);
+      }
+    } catch {
+      /* ignore */
+    }
+    return "professional and friendly";
+  };
+
+  const handleArtemisDraft = async () => {
+    if (artemisDrafting) return;
+    const intent = window.prompt("What should this email say? Artemis will draft it.");
+    if (!intent || !intent.trim()) return;
+    setArtemisDrafting(true);
+    setComposeError("");
+    try {
+      const response = await fetch("/api/ai/compose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intent: intent.trim(), tone: getArtemisTone() }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.message || "Artemis couldn't draft that.");
+      const text = String(payload?.text || "").trim();
+      if (text) {
+        setComposeBody(text);
+        const esc = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        setComposeBodyHtml(`<p>${esc(text).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br />")}</p>`);
+      }
+    } catch (error) {
+      setComposeError(error instanceof Error ? error.message : "Artemis error.");
+    } finally {
+      setArtemisDrafting(false);
+    }
+  };
+
+  const buildThreadContext = () =>
+    threadMessages
+      .map((message) => {
+        const who = parseMailboxAddress(message.fromRaw || "").name || message.fromRaw || "Unknown";
+        const body = (message.bodyText || message.snippet || "").trim();
+        return `From: ${who}\n${body}`;
+      })
+      .join("\n\n---\n\n")
+      .slice(0, 12000);
+
+  const handleArtemisSummarize = async () => {
+    if (artemisSummaryLoading) return;
+    const thread = buildThreadContext();
+    if (!thread) return;
+    setArtemisSummaryLoading(true);
+    setArtemisSummary("");
+    try {
+      const response = await fetch("/api/ai/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ thread }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.message || "Couldn't summarize.");
+      setArtemisSummary(String(payload?.text || "").trim());
+    } catch (error) {
+      setArtemisSummary(`⚠ ${error instanceof Error ? error.message : "Error"}`);
+    } finally {
+      setArtemisSummaryLoading(false);
+    }
+  };
+
+  const handleArtemisReplyDraft = async () => {
+    if (!selectedMessage || artemisReplyLoading) return;
+    const thread = buildThreadContext();
+    setArtemisReplyLoading(true);
+    try {
+      const response = await fetch("/api/ai/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ thread, tone: getArtemisTone() }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.message || "Couldn't draft reply.");
+      const text = String(payload?.text || "").trim();
+      openReplyCompose();
+      if (text) setInlineComposeIntroText(text);
+    } catch (error) {
+      setArtemisSummary(`⚠ ${error instanceof Error ? error.message : "Error"}`);
+    } finally {
+      setArtemisReplyLoading(false);
+    }
+  };
+
+  const handleArtemisRewrite = async (mode: string) => {
+    setArtemisRewriteOpen(false);
+    const current = (composeBody || "").trim();
+    if (!current || artemisDrafting) return;
+    setArtemisDrafting(true);
+    setComposeError("");
+    try {
+      const response = await fetch("/api/ai/rewrite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: current, mode }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.message || "Artemis couldn't rewrite that.");
+      const text = String(payload?.text || "").trim();
+      if (text) {
+        setComposeBody(text);
+        const esc = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        setComposeBodyHtml(`<p>${esc(text).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br />")}</p>`);
+      }
+    } catch (error) {
+      setComposeError(error instanceof Error ? error.message : "Artemis error.");
+    } finally {
+      setArtemisDrafting(false);
+    }
+  };
+
+  const performSendCompose = async () => {
     setSendingCompose(true);
     setComposeError("");
     setComposeSuccess("");
@@ -1984,6 +2460,7 @@ ${sourceText}`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           accountEmail: composeAccountEmail,
+          from: composeFrom && composeFrom !== composeAccountEmail ? composeFrom : undefined,
           to: composeTo.trim(),
           cc: composeCc.trim(),
           bcc: composeBcc.trim(),
@@ -1993,6 +2470,11 @@ ${sourceText}`;
           threadId: composeThreadId || undefined,
           inReplyTo: composeInReplyTo || undefined,
           references: composeReferences || undefined,
+          scheduledAt: scheduleAt ? new Date(scheduleAt).toISOString() : undefined,
+          confidential: confidentialOn
+            ? { expiry: confidentialExpiry, passcode: confidentialPasscode.trim() || undefined }
+            : undefined,
+          requestReceipt: requestReceipt || undefined,
           draftKey: effectiveComposeDraftStorageKey || undefined,
           providerAccountId:
             providerAccounts.find((entry) => entry.accountEmail === composeAccountEmail.toLowerCase())?.id || undefined,
@@ -2022,7 +2504,22 @@ ${sourceText}`;
       setComposeBodyHtml("");
       setComposeAttachments([]);
       setIsComposeOpen(false);
-      showSentToast("Message Sent");
+      if (payload?.scheduled) {
+        const when = payload?.scheduledAt ? new Date(payload.scheduledAt) : null;
+        showSentToast(
+          when
+            ? `Send scheduled for ${when.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}`
+            : "Send scheduled"
+        );
+      } else {
+        showSentToast("Message Sent");
+      }
+      setScheduleAt("");
+      setScheduleOpen(false);
+      setConfidentialOn(false);
+      setConfidentialPasscode("");
+      setConfidentialOpen(false);
+      setRequestReceipt(false);
       if (activeModule === "sent" || activeModule === "drafts") {
         await Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
       } else {
@@ -2034,6 +2531,67 @@ ${sourceText}`;
       setSendingCompose(false);
     }
   };
+
+  const cancelUndoSend = () => {
+    if (undoSendTimeoutRef.current) {
+      clearTimeout(undoSendTimeoutRef.current);
+      undoSendTimeoutRef.current = null;
+    }
+    if (undoCountdownRef.current) {
+      clearInterval(undoCountdownRef.current);
+      undoCountdownRef.current = null;
+    }
+    setUndoCountdown(null);
+  };
+
+  // Undo-send: hold the message for a short window with an Undo affordance, then actually send.
+  const handleSendCompose = () => {
+    const strippedHtml = composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim();
+    const hasBody = Boolean(composeBody.trim() || strippedHtml);
+    if (!composeTo.trim() || !hasBody || !composeAccountEmail || sendingCompose || undoCountdown !== null) return;
+    const ccErr = validateRecipientCsv("Cc", composeCc);
+    const bccErr = validateRecipientCsv("Bcc", composeBcc);
+    if (ccErr || bccErr) {
+      setComposeError(ccErr || bccErr || "");
+      return;
+    }
+    // Scheduling replaces the undo-send window — queue it server-side directly.
+    if (scheduleAt) {
+      setComposeError("");
+      void performSendCompose();
+      return;
+    }
+    let delay = 5;
+    try {
+      const raw = window.localStorage.getItem("email-undo-delay");
+      if (raw != null) {
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed)) delay = Math.max(0, Math.min(30, parsed));
+      }
+    } catch {
+      /* ignore */
+    }
+    if (delay === 0) {
+      void performSendCompose();
+      return;
+    }
+    setComposeError("");
+    setUndoCountdown(delay);
+    undoSendTimeoutRef.current = setTimeout(() => {
+      cancelUndoSend();
+      void performSendCompose();
+    }, delay * 1000);
+    undoCountdownRef.current = setInterval(() => {
+      setUndoCountdown((prev) => (prev && prev > 1 ? prev - 1 : prev));
+    }, 1000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (undoSendTimeoutRef.current) clearTimeout(undoSendTimeoutRef.current);
+      if (undoCountdownRef.current) clearInterval(undoCountdownRef.current);
+    };
+  }, []);
 
   const composeHasMeaningfulBody = useMemo(() => {
     const stripped = composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim();
@@ -2126,7 +2684,9 @@ ${sourceText}`;
   };
 
   const messagesCountLabel = `${filteredMessages.length} Messages`;
-  const activeModuleLabel = MODULES.find((item) => item.key === activeModule)?.label || "Mailbox";
+  const activeModuleLabel = activeLabelId
+    ? activeLabelName
+    : MODULES.find((item) => item.key === activeModule)?.label || "Mailbox";
   const pageLabel = `Page ${currentPage}`;
   const composeFromOptions = Array.from(
     new Set([
@@ -2167,95 +2727,77 @@ ${sourceText}`;
   }, [activeModule]);
 
   return (
-    <div style={{ backgroundImage: APP_BACKGROUND }} className={`w-full h-full text-[#1E1B2E] flex flex-col overflow-x-hidden ${panelFont.className}`}>
+    <div className={`email-space-bg relative w-full h-full text-[#1E1B2E] flex flex-col overflow-hidden ${panelFont.className}`}>
+      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+        <div className="email-stars" aria-hidden />
+        <div className="email-stars email-stars--2" aria-hidden />
+        <div className="email-vignette" aria-hidden />
+      </div>
+      <style jsx global>{`
+        .email-space-bg { background: #18042a; }
+        .email-stars {
+          position: absolute;
+          inset: -10%;
+          z-index: 0;
+          pointer-events: none;
+          background-image:
+            radial-gradient(1.5px 1.5px at 25px 35px, rgba(255,255,255,0.9), transparent),
+            radial-gradient(1.5px 1.5px at 120px 80px, rgba(255,255,255,0.7), transparent),
+            radial-gradient(1px 1px at 70px 160px, rgba(255,255,255,0.8), transparent),
+            radial-gradient(1px 1px at 180px 50px, rgba(255,255,255,0.6), transparent),
+            radial-gradient(1.5px 1.5px at 200px 140px, rgba(255,255,255,0.85), transparent),
+            radial-gradient(1px 1px at 40px 110px, rgba(255,255,255,0.5), transparent);
+          background-repeat: repeat;
+          background-size: 220px 220px;
+          opacity: 0.8;
+          animation: email-stars-drift 40s linear infinite;
+        }
+        .email-stars--2 {
+          background-size: 440px 440px;
+          opacity: 0.5;
+          animation: email-stars-drift-2 70s linear infinite;
+        }
+        @keyframes email-stars-drift { to { background-position: 220px 220px; } }
+        @keyframes email-stars-drift-2 { to { background-position: 440px 440px; } }
+        .email-vignette {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          pointer-events: none;
+          background: radial-gradient(120% 120% at 50% 25%, transparent 52%, rgba(8,1,18,0.6) 100%);
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .email-stars, .email-stars--2 { animation: none; }
+        }
+      `}</style>
       {step === "gate" ? (
-        <div className={`${standalone ? "h-full flex items-center justify-center px-6" : "flex-1 flex items-center justify-center px-6 py-10 overflow-y-auto"}`}>
-          <div className={`w-full max-w-xl rounded-3xl ${GLASS_SURFACE} ${SHADOW_SOFT} p-8`}>
-            <Image src={BRAND_LOGO.wordmarkDark} alt="Vierra" width={140} height={36} className="h-8 w-auto mb-6" priority />
-            <h1 className="text-2xl font-semibold tracking-tight text-[#1E1B2E]">Email</h1>
-            <p className="mt-2 text-sm text-[#6B7280]">Choose which connected Google accounts to use in this inbox.</p>
-
-            <div className="mt-5 flex items-center">
-              <div className="flex items-center gap-2">
-                <span className="p-1.5 rounded-lg bg-[#701CC0]/10">
-                  <FaGoogle className="w-3.5 h-3.5 text-[#EA4335]" />
-                </span>
-                <h3 className="text-sm font-semibold text-[#111827]">Google Accounts</h3>
-              </div>
-            </div>
-
+        <div className="relative z-10 h-full flex items-center justify-center px-6 py-12">
+          <div className="w-full max-w-md text-center">
+            <Image
+              src={BRAND_LOGO.wordmarkLight}
+              alt="Vierra"
+              width={260}
+              height={66}
+              className="mx-auto mb-8 h-16 w-auto"
+              priority
+            />
             {gmailLoading ? (
-              <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-5 text-sm text-[#6B7280]">Checking connected accounts...</div>
-            ) : connectedAccounts.length === 0 ? (
-              <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-5 text-sm text-[#374151]">
-                <p className="text-[#6B7280]">
-                  No connected Google accounts yet. Connect Gmail from your account settings, then return here.
-                </p>
-              </div>
-            ) : connectedAccounts.length === 1 ? (
-              <div className="mt-4 rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-5 text-sm text-[#374151]">
-                <div className="text-[#111827] font-medium">{connectedAccounts[0].email}</div>
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedAccounts([connectedAccounts[0].email]);
-                      if (launchStandaloneOnContinue && !standalone) {
-                        openStandaloneViewer([connectedAccounts[0].email]);
-                        return;
-                      }
-                      setStep("client");
-                    }}
-                    className="inline-flex items-center gap-2 rounded-lg bg-[#701CC0] text-white px-3 py-2 text-sm font-medium hover:bg-[#5f17a5]"
-                  >
-                    Continue
-                    <FiChevronsRight className="w-4 h-4" />
-                  </button>
-                </div>
+              <div className="flex justify-center py-4">
+                <div className="h-9 w-9 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] motion-safe:animate-spin" />
               </div>
             ) : (
-              <div className="mt-4 space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {connectedAccounts.map((account) => (
-                    <label key={account.email} className="rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-3 flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedAccounts.includes(account.email)}
-                        onChange={() => toggleAccount(account.email)}
-                        className="h-4 w-4"
-                      />
-                      <span className="text-sm text-[#111827] truncate">{account.email}</span>
-                    </label>
-                  ))}
-                </div>
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    disabled={!canContinue}
-                    onClick={() => {
-                      if (launchStandaloneOnContinue && !standalone) {
-                        openStandaloneViewer(selectedAccounts);
-                        return;
-                      }
-                      setStep("client");
-                    }}
-                    className="inline-flex items-center gap-2 rounded-lg bg-[#701CC0] text-white px-4 py-2 text-sm font-medium hover:bg-[#5f17a5] disabled:opacity-50"
-                  >
-                    Continue
-                    <FiChevronsRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+              <>
+                <h1 className="text-xl font-semibold tracking-tight text-white">No Google accounts connected</h1>
+                <p className="mt-2 text-sm text-white/70">Connect Gmail from your account settings, then come back here.</p>
+              </>
             )}
           </div>
         </div>
       ) : (
-        <div className={standalone ? "flex-1 w-full overflow-hidden px-4 md:px-6 py-4" : "flex-1 flex justify-center px-6 pt-2 overflow-y-auto"}>
-          <div className={standalone ? "w-full max-w-[1700px] mx-auto h-full overflow-hidden" : "w-full max-w-6xl h-full pb-8"}>
-            {!standalone ? <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Email Panel</h1> : null}
-
-            {standalone ? (
-              <div className="grid grid-cols-[248px_minmax(720px,1fr)] gap-5 h-[calc(100vh-36px)] min-h-[620px] overflow-hidden">
+        <div className="relative z-10 flex-1 w-full overflow-hidden px-4 md:px-6 py-4">
+          <div className="w-full max-w-[1700px] mx-auto h-full overflow-hidden">
+            {(
+              <div className="grid grid-cols-[248px_minmax(720px,1fr)] gap-5 min-h-[620px] overflow-hidden h-[calc(100vh-36px)]">
                 <div className={`rounded-2xl ${GLASS_CHROME} ${SHADOW_SM} p-3 h-full overflow-hidden flex flex-col`}>
                   <div className="flex items-center justify-center pt-3 pb-7">
                     <Image src={BRAND_LOGO.wordmarkDark} alt="Vierra" width={168} height={42} className="h-10 w-auto" priority />
@@ -2282,14 +2824,15 @@ ${sourceText}`;
                         type="button"
                         onClick={() => {
                           setActiveModule(item.key);
+                          setActiveLabelId("");
                           setViewMode("list");
                           setSearchTerm("");
                           setSelectedRows([]);
                         }}
                         className={`w-full rounded-xl px-3 py-2 text-[13px] text-left flex items-center justify-between gap-2 transition border ${
-                          activeModule === item.key
+                          activeModule === item.key && !activeLabelId
                             ? "bg-[#701CC0]/10 text-[#4C1D95] font-semibold border-[#701CC0]/20"
-                            : "text-[#4A465C] hover:bg-white/60 border-transparent"
+                            : "text-[#4A465C] hover:bg-[#F3EEFB] border-transparent"
                         }`}
                       >
                         <span className="inline-flex items-center gap-2 min-w-0">
@@ -2303,11 +2846,52 @@ ${sourceText}`;
                         );
                       })()
                     ))}
+                    {labels.length > 0 ? (
+                      <>
+                        <div className="mt-2 flex items-center justify-between px-3 pb-1">
+                          <span className="text-[10.5px] font-semibold uppercase tracking-wide text-[#847FA0]">Labels</span>
+                          <button type="button" onClick={createLabel} title="New label" aria-label="New label" className="text-[#847FA0] hover:text-[#701CC0]">
+                            <FiPlus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {labels.map((label) => (
+                          <div
+                            key={label.id}
+                            onClick={() => openLabel(label)}
+                            className={`group/label w-full cursor-pointer rounded-xl px-3 py-2 text-[13px] flex items-center gap-2.5 transition border ${
+                              activeLabelId === label.id
+                                ? "bg-[#701CC0]/10 text-[#4C1D95] font-semibold border-[#701CC0]/20"
+                                : "text-[#4A465C] hover:bg-[#F3EEFB] border-transparent"
+                            }`}
+                          >
+                            <FiTag className="w-4 h-4 shrink-0" style={{ color: activeLabelId === label.id ? "#701CC0" : "#847FA0" }} />
+                            <span className="flex-1 truncate">{label.name}</span>
+                            <button
+                              type="button"
+                              onClick={(event) => { event.stopPropagation(); void deleteLabel(label); }}
+                              title="Delete label"
+                              aria-label={`Delete label ${label.name}`}
+                              className="text-[#B9B3CC] opacity-0 transition-opacity hover:text-[#DC2626] group-hover/label:opacity-100"
+                            >
+                              <FiX className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={createLabel}
+                        className="mt-2 flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] text-[#847FA0] transition hover:bg-[#F3EEFB]"
+                      >
+                        <FiPlus className="h-4 w-4" /> New label
+                      </button>
+                    )}
                   </div>
                   <div className="mt-2 pt-2 border-t border-white/60">
                     <Link
                       href="/panel/email/settings"
-                      className="w-full rounded-xl px-3 py-2 text-[13px] flex items-center gap-2 transition text-[#4A465C] hover:bg-white/60"
+                      className="w-full rounded-xl px-3 py-2 text-[13px] flex items-center gap-2 transition text-[#4A465C] hover:bg-[#F3EEFB]"
                     >
                       <FiSettings className="w-4 h-4 text-[#847FA0]" />
                       <span>Settings</span>
@@ -2316,19 +2900,106 @@ ${sourceText}`;
                 </div>
 
                 <div className={`rounded-2xl ${GLASS_SURFACE} ${SHADOW_SM} h-full overflow-hidden flex flex-col`}>
-                  {activeModule === "analytics" ? (
+                  {activeModule === "campaigns" ? (
+                    <div className="h-full overflow-y-auto">
+                      <CampaignsView />
+                    </div>
+                  ) : activeModule === "scheduled" ? (
+                    <div className="flex h-full flex-col">
+                      <div className="flex items-center justify-between gap-3 border-b border-white/30 px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <FiClock className="h-4 w-4 text-[#701CC0]" aria-hidden />
+                          <span className="text-xs font-medium text-[#6B7280]">
+                            Scheduled · {scheduledItems.length} {scheduledItems.length === 1 ? "message" : "messages"}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={loadScheduled}
+                          disabled={scheduledLoading}
+                          className="rounded-lg border border-[#E5E7EB] bg-white p-2 text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                          aria-label="Refresh scheduled"
+                          title="Refresh"
+                        >
+                          <FiRefreshCw className={`h-4 w-4 ${scheduledLoading ? "motion-safe:animate-spin" : ""}`} />
+                        </button>
+                      </div>
+                      <div className="modal-scroll-area flex-1 overflow-y-auto">
+                        {scheduledError ? (
+                          <div className="m-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                            {scheduledError}
+                          </div>
+                        ) : null}
+                        {scheduledLoading && scheduledItems.length === 0 ? (
+                          <div className="flex h-40 items-center justify-center">
+                            <div className="h-8 w-8 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] motion-safe:animate-spin" />
+                          </div>
+                        ) : scheduledItems.length === 0 ? (
+                          <div className="flex h-48 flex-col items-center justify-center gap-2 text-center text-[#6B7280]">
+                            <FiClock className="h-8 w-8 text-[#C4B5DA]" aria-hidden />
+                            <p className="text-sm font-medium text-[#4A465C]">No scheduled sends</p>
+                            <p className="text-xs">Use “Schedule” in the compose window to send a message later.</p>
+                          </div>
+                        ) : (
+                          <ul className="divide-y divide-[#EEF0F4]">
+                            {scheduledItems.map((item) => {
+                              const when = new Date(item.scheduledAt);
+                              const badge =
+                                item.status === "FAILED"
+                                  ? "bg-red-50 text-red-700"
+                                  : item.status === "SENDING"
+                                    ? "bg-blue-50 text-blue-700"
+                                    : "bg-[#F5EFFF] text-[#701CC0]";
+                              return (
+                                <li key={item.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${badge}`}>
+                                        {item.status}
+                                      </span>
+                                      <span className="truncate text-sm font-medium text-[#1E1B2E]">
+                                        {item.subject}
+                                      </span>
+                                    </div>
+                                    <p className="mt-1 truncate text-xs text-[#6B7280]">
+                                      To {item.to || "—"} · from {item.accountEmail}
+                                    </p>
+                                    <p className="mt-0.5 text-xs text-[#847FA0]">
+                                      {when.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+                                    </p>
+                                    {item.status === "FAILED" && item.lastError ? (
+                                      <p className="mt-1 text-xs text-red-600">{item.lastError}</p>
+                                    ) : null}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => cancelScheduled(item.id)}
+                                    disabled={cancelingScheduledId === item.id || item.status === "SENDING"}
+                                    className="shrink-0 rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs font-medium text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                    title={item.status === "SENDING" ? "Already sending" : "Cancel"}
+                                  >
+                                    {cancelingScheduledId === item.id ? "Canceling…" : "Cancel"}
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                  ) : activeModule === "analytics" ? (
                     <EmailAnalyticsView accounts={selectedAccounts} />
                   ) : viewMode === "list" ? (
                     <>
                       {activeModule !== "contacts" ? (
                         <>
-                          <div className="px-4 py-3 border-b border-[#E5E7EB]/70 bg-white/40 flex items-center justify-between gap-3">
+                          <div className="px-4 py-3 border-b border-white/30 flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2 flex-wrap">
                               <input
                                 type="checkbox"
                                 checked={
                                   filteredMessages.length > 0 &&
-                                  filteredMessages.every((message) => selectedRows.includes(rowKey(message)))
+                                  conversationRows.every((message) => selectedRows.includes(rowKey(message)))
                                 }
                                 onChange={toggleSelectAll}
                                 className="h-4 w-4"
@@ -2376,6 +3047,38 @@ ${sourceText}`;
                                       >
                                         <FiArchive className="w-4 h-4" />
                                       </button>
+                                      <div className="relative">
+                                        <button
+                                          type="button"
+                                          onClick={() => setSnoozeMenuOpen((open) => !open)}
+                                          disabled={actionLoading}
+                                          className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                          title="Snooze"
+                                          aria-label="Snooze"
+                                        >
+                                          <FiClock className="w-4 h-4" />
+                                        </button>
+                                        {snoozeMenuOpen ? (
+                                          <div className="absolute z-[130] mt-1 w-44 overflow-hidden rounded-lg border border-[#EAE5F4] bg-white py-1 shadow-lg">
+                                            {(
+                                              [
+                                                ["later", "Later today"],
+                                                ["tomorrow", "Tomorrow"],
+                                                ["nextweek", "Next week"],
+                                              ] as const
+                                            ).map(([preset, label]) => (
+                                              <button
+                                                key={preset}
+                                                type="button"
+                                                onClick={() => snoozeSelected(preset)}
+                                                className="block w-full px-3 py-2 text-left text-sm text-[#1E1B2E] hover:bg-[#F5EFFF]"
+                                              >
+                                                {label}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        ) : null}
+                                      </div>
                                     </>
                                   ) : null}
                                   <button
@@ -2484,7 +3187,7 @@ ${sourceText}`;
                               onChange={handleImportCsv}
                               className="hidden"
                             />
-                            <div className="px-4 py-3 border-b border-[#E5E7EB] bg-[#FBFCFF] overflow-visible relative z-20">
+                            <div className="px-4 py-3 border-b border-white/30 overflow-visible relative z-20">
                               <div className="mx-auto inline-flex items-center justify-center gap-2 whitespace-nowrap min-w-max">
                                 <button
                                   type="button"
@@ -2568,7 +3271,7 @@ ${sourceText}`;
                                   {contactFilterOpen ? (
                                     <div className="absolute right-0 z-[160] mt-2 w-72 rounded-xl border border-[#E5E7EB] bg-white py-4 shadow-xl">
                                       <div className="px-5">
-                                        <h3 className="mb-4 text-sm font-semibold text-[#111827]">{"Sort & Filter"}</h3>
+                                        <h3 className="mb-4 text-sm font-semibold text-[#1E1B2E]">{"Sort & Filter"}</h3>
 
                                         <div className="mb-5">
                                           <label className="mb-2 block text-xs font-medium text-[#6B7280]">Tag</label>
@@ -2578,7 +3281,7 @@ ${sourceText}`;
                                               onChange={(e) => {
                                                 setContactTagFilter(e.target.value);
                                               }}
-                                              className="w-full appearance-none rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 pr-10 text-sm text-[#111827] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                                              className="w-full appearance-none rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 pr-10 text-sm text-[#1E1B2E] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
                                             >
                                               <option value="">All tags</option>
                                               {contactsTags.map((tag) => (
@@ -2603,7 +3306,7 @@ ${sourceText}`;
                                               onChange={(e) => {
                                                 setContactSourceFilter((e.target.value || "") as "" | "MANUAL" | "GMAIL" | "CSV");
                                               }}
-                                              className="w-full appearance-none rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 pr-10 text-sm text-[#111827] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                                              className="w-full appearance-none rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 pr-10 text-sm text-[#1E1B2E] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
                                             >
                                               <option value="">All sources</option>
                                               <option value="MANUAL">Manual</option>
@@ -2645,7 +3348,7 @@ ${sourceText}`;
                                 <MailboxLoader label="Loading Contacts..." />
                               ) : contacts.length === 0 ? (
                                 <div className="h-full min-h-[320px] flex items-center justify-center px-6">
-                                  <div className="text-center rounded-2xl border border-[#E7E9F2] bg-[#FBFCFF] px-8 py-10">
+                                  <div className="text-center rounded-2xl border border-[#E7E9F2] bg-white/50 backdrop-blur-md px-8 py-10">
                                     <FiUsers className="w-8 h-8 mx-auto text-[#701CC0] animate-pulse" />
                                     <p className="mt-3 text-sm font-semibold text-[#2A2D3B]">No Contacts Found</p>
                                     <p className="text-xs text-[#7C829A] mt-1">Add a contact, import CSV, or sync from Gmail to get started.</p>
@@ -2676,7 +3379,7 @@ ${sourceText}`;
                                           return (
                                             <tr key={contact.id} className="hover:bg-[#F8F3FF] transition-colors">
                                               <td className="px-4 py-3">
-                                                <div className="font-medium text-[#111827]">{displayName}</div>
+                                                <div className="font-medium text-[#1E1B2E]">{displayName}</div>
                                                 <div className="mt-0.5 text-[11px] text-[#8A90A6] uppercase tracking-wide">{contact.source}</div>
                                               </td>
                                               <td className="px-4 py-3 text-[#374151]">{contact.email}</td>
@@ -2795,11 +3498,11 @@ ${sourceText}`;
                           </div>
                         ) : messagesLoading ? (
                           <MailboxLoader label={`Loading ${activeModuleLabel}...`} />
-                        ) : filteredMessages.length === 0 ? (
+                        ) : conversationRows.length === 0 ? (
                           <MailboxEmpty />
                         ) : (
                           <div className="divide-y divide-[#EEE6F7]/70">
-                            {filteredMessages.map((message) => {
+                            {conversationRows.map((message) => {
                               const key = rowKey(message);
                               const senderOrTo = activeModule === "sent" ? message.to || "-" : message.from || "-";
                               const senderOrToTrimmed = senderOrTo.trim();
@@ -2844,6 +3547,17 @@ ${sourceText}`;
                                       isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
                                     }`}
                                   />
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={(e) => { e.stopPropagation(); void toggleStar(message); }}
+                                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); void toggleStar(message); } }}
+                                    aria-label={message.starred ? "Unstar" : "Star"}
+                                    title={message.starred ? "Starred" : "Star"}
+                                    className={`shrink-0 cursor-pointer transition-opacity ${message.starred ? "text-[#F5A623] opacity-100" : "text-[#B9B3CC] opacity-0 group-hover:opacity-100 focus:opacity-100"}`}
+                                  >
+                                    <FiStar className={`w-4 h-4 ${message.starred ? "fill-[#F5A623]" : ""}`} aria-hidden />
+                                  </span>
                                   {message.tracked ? (
                                     <span
                                       className="inline-flex items-center shrink-0"
@@ -2854,7 +3568,7 @@ ${sourceText}`;
                                     </span>
                                   ) : null}
                                   <span
-                                    className={`w-52 shrink-0 truncate text-sm text-[#111827] ${
+                                    className={`w-52 shrink-0 truncate text-sm text-[#1E1B2E] ${
                                       message.unread ? "font-bold" : "font-normal"
                                     }`}
                                   >
@@ -2867,7 +3581,15 @@ ${sourceText}`;
                                       senderOrTo
                                     )}
                                   </span>
-                                  <span className="min-w-0 truncate text-sm text-[#111827]">
+                                  {message.threadCount && message.threadCount > 1 ? (
+                                    <span
+                                      className="shrink-0 text-[11px] font-semibold text-[#701CC0] tabular-nums"
+                                      title={`${message.threadCount} messages in this conversation`}
+                                    >
+                                      {message.threadCount}
+                                    </span>
+                                  ) : null}
+                                  <span className="min-w-0 truncate text-sm text-[#1E1B2E]">
                                     <span className={message.unread ? "font-bold" : "font-medium"}>
                                       {message.subject || "(No Subject)"}
                                     </span>
@@ -2894,7 +3616,7 @@ ${sourceText}`;
                     </>
                   ) : (
                     <div className="h-full flex flex-col">
-                      <div className="px-5 py-3 border-b border-[#E5E7EB]/70 bg-white/40 flex items-center justify-between">
+                      <div className="px-5 py-3 border-b border-white/30 flex items-center justify-between">
                         <button
                           type="button"
                           onClick={() => setViewMode("list")}
@@ -2946,6 +3668,35 @@ ${sourceText}`;
                           >
                             <FiMail className="w-4 h-4" />
                           </button>
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setLabelMenuOpen((open) => !open)}
+                              className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                              title="Label"
+                              aria-label="Label"
+                            >
+                              <FiTag className="w-4 h-4" />
+                            </button>
+                            {labelMenuOpen ? (
+                              <div className="absolute right-0 top-[calc(100%+6px)] z-20 max-h-64 min-w-[180px] overflow-y-auto rounded-lg border border-[#E5E7EB] bg-white shadow-lg py-1">
+                                {labels.length === 0 ? (
+                                  <div className="px-3 py-2 text-sm text-[#847FA0]">No labels yet.</div>
+                                ) : (
+                                  labels.map((label) => (
+                                    <button
+                                      key={`apply-${label.id}`}
+                                      type="button"
+                                      onClick={() => applyLabelToMessage(label.id)}
+                                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-[#374151] hover:bg-[#F3F4F6]"
+                                    >
+                                      <FiTag className="h-3.5 w-3.5 text-[#847FA0]" /> {label.name}
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
                           <div ref={moveMessageMenuRef} className="relative">
                             <button
                               type="button"
@@ -3027,6 +3778,19 @@ ${sourceText}`;
                               <p>From: {formatIdentity(selectedMessageDetail?.fromRaw || selectedMessage.fromRaw || selectedMessage.from || "-")}</p>
                               <p>To: {formatIdentity(selectedMessageDetail?.toRaw || selectedMessage.toRaw || selectedMessage.to || "-")}</p>
                               <p>{formatDetailedDate(selectedMessageDetail?.timestamp || selectedMessage.timestamp, selectedMessageDetail?.date || selectedMessage.date)}</p>
+                              {(() => {
+                                const trackers = countTrackers(selectedMessageDetail?.bodyHtml || "");
+                                return trackers > 0 ? (
+                                  <p>
+                                    <span
+                                      className="inline-flex items-center gap-1.5 rounded-md bg-[#F5EFFF] px-2 py-0.5 text-[11px] font-semibold text-[#701CC0]"
+                                      title="Remote tracking pixels were blocked, so the sender can't tell you opened this."
+                                    >
+                                      <FiShield className="w-3 h-3" aria-hidden /> {trackers} tracker{trackers === 1 ? "" : "s"} blocked
+                                    </span>
+                                  </p>
+                                ) : null;
+                              })()}
                             </div>
                           </div>
                           <div className="mt-5 border-t border-[#EFEFEF] pt-5">
@@ -3051,6 +3815,43 @@ ${sourceText}`;
                                   </div>
                                 ))}
 
+                                {!inlineComposeMode ? (
+                                  <div className="mt-4 rounded-2xl border border-[#701CC0]/20 bg-gradient-to-br from-[#701CC0]/[0.07] to-[#C42B9F]/[0.05] p-4">
+                                    <div className="mb-2 flex items-center gap-2">
+                                      <span
+                                        className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-white"
+                                        style={{ backgroundImage: BRAND_GRADIENT }}
+                                      >
+                                        <FiZap className="h-3.5 w-3.5" aria-hidden />
+                                      </span>
+                                      <b className="text-[13px] text-[#1E1B2E]">Artemis</b>
+                                      <button
+                                        type="button"
+                                        onClick={handleArtemisSummarize}
+                                        disabled={artemisSummaryLoading}
+                                        className="ml-auto text-[12px] font-semibold text-[#701CC0] hover:underline disabled:opacity-50"
+                                      >
+                                        {artemisSummaryLoading ? "Summarizing…" : "Summarize thread"}
+                                      </button>
+                                    </div>
+                                    {artemisSummary ? (
+                                      <div className="mb-3 whitespace-pre-wrap rounded-xl border border-white/70 bg-white/70 p-3 text-[12.5px] leading-relaxed text-[#4A465C]">
+                                        {artemisSummary}
+                                      </div>
+                                    ) : null}
+                                    <button
+                                      type="button"
+                                      onClick={handleArtemisReplyDraft}
+                                      disabled={artemisReplyLoading}
+                                      className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-[13px] font-semibold text-white transition disabled:opacity-50"
+                                      style={{ backgroundImage: BRAND_GRADIENT }}
+                                    >
+                                      <FiZap className="h-4 w-4" aria-hidden />
+                                      {artemisReplyLoading ? "Drafting reply…" : "Draft reply with Artemis"}
+                                    </button>
+                                  </div>
+                                ) : null}
+
                                 {inlineComposeMode ? (
                                   <div ref={inlineComposeRef} className="pt-3">
                                     <div className="rounded-2xl border border-[#E8EAEF] bg-gradient-to-b from-[#FAFBFF] to-white p-4 shadow-[0_4px_24px_-8px_rgba(15,23,42,0.08)] ring-1 ring-black/[0.03]">
@@ -3060,7 +3861,7 @@ ${sourceText}`;
                                             <FiCornerUpLeft className="h-4 w-4" />
                                           </div>
                                           <div className="min-w-0">
-                                            <p className="text-[15px] font-semibold text-[#111827] leading-tight">
+                                            <p className="text-[15px] font-semibold text-[#1E1B2E] leading-tight">
                                               {inlineComposeMode === "forward"
                                                 ? "Forward"
                                                 : inlineComposeMode === "replyAll"
@@ -3082,7 +3883,7 @@ ${sourceText}`;
                                           <input
                                             value={inlineComposeTo}
                                             onChange={(event) => setInlineComposeTo(event.target.value)}
-                                            className="w-full rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-2.5 text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
+                                            className="w-full rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-2.5 text-sm text-[#1E1B2E] outline-none transition placeholder:text-[#9CA3AF] focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
                                             placeholder="name@email.com"
                                           />
                                         </div>
@@ -3093,7 +3894,7 @@ ${sourceText}`;
                                           <input
                                             value={inlineComposeSubject}
                                             onChange={(event) => setInlineComposeSubject(event.target.value)}
-                                            className="w-full rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-2.5 text-sm text-[#111827] outline-none transition focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
+                                            className="w-full rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-2.5 text-sm text-[#1E1B2E] outline-none transition focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
                                           />
                                         </div>
                                         <div>
@@ -3104,7 +3905,7 @@ ${sourceText}`;
                                             value={inlineComposeIntroText}
                                             onChange={(event) => setInlineComposeIntroText(event.target.value)}
                                             rows={5}
-                                            className="w-full min-h-[120px] resize-y rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-3 text-sm text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
+                                            className="w-full min-h-[120px] resize-y rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-3 text-sm text-[#1E1B2E] outline-none transition placeholder:text-[#9CA3AF] focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
                                             placeholder="Write your message…"
                                           />
                                         </div>
@@ -3166,38 +3967,6 @@ ${sourceText}`;
                   )}
                 </div>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-5">
-                <div className="rounded-xl border border-[#E5E7EB] bg-white p-3 shadow-sm h-fit">
-                  <div className="space-y-1">
-                    {MODULES.map((item) => (
-                      (() => {
-                        const count = moduleCount(item.key);
-                        return (
-                      <button
-                        key={item.key}
-                        type="button"
-                        onClick={() => setActiveModule(item.key)}
-                        className={`w-full rounded-lg px-3 py-2.5 text-sm text-left flex items-center gap-2 transition ${
-                          activeModule === item.key ? "bg-[#701CC0] text-white" : "text-[#374151] hover:bg-[#F3F4F6]"
-                        }`}
-                      >
-                        {item.icon}
-                        <span className="truncate">
-                          {item.label}
-                          {count > 0 ? <span className="ml-1 text-[#6B7280]">({count})</span> : null}
-                        </span>
-                      </button>
-                        );
-                      })()
-                    ))}
-                  </div>
-                </div>
-                <div className="rounded-xl border border-[#E5E7EB] bg-white p-5 shadow-sm min-h-[420px]">
-                  <h3 className="text-lg font-semibold text-[#111827]">Email Panel</h3>
-                  <p className="mt-2 text-sm text-[#6B7280]">Use the full email page to access all mailbox tools.</p>
-                </div>
-              </div>
             )}
           </div>
         </div>
@@ -3217,7 +3986,7 @@ ${sourceText}`;
                 <div className="w-10 h-10 rounded-full bg-[#701CC0]/10 text-[#701CC0] inline-flex items-center justify-center">
                   <FiUserPlus className="w-5 h-5" />
                 </div>
-                <h3 className="text-xl font-semibold text-[#111827]">Add Contact</h3>
+                <h3 className="text-xl font-semibold text-[#1E1B2E]">Add Contact</h3>
               </div>
               <button
                 type="button"
@@ -3367,7 +4136,7 @@ ${sourceText}`;
               <div className="w-12 h-12 rounded-full bg-[#701CC0]/10 flex items-center justify-center">
                 <FiEdit3 className="w-6 h-6 text-[#701CC0]" />
               </div>
-              <h3 className="text-xl font-semibold text-[#111827]">Edit Contact</h3>
+              <h3 className="text-xl font-semibold text-[#1E1B2E]">Edit Contact</h3>
             </div>
 
             {editContactError ? (
@@ -3517,17 +4286,17 @@ ${sourceText}`;
         >
           <div
             onClick={(event) => event.stopPropagation()}
-            className={`flex flex-col overflow-hidden bg-white shadow-[0_8px_10px_1px_rgba(0,0,0,0.14),0_3px_14px_2px_rgba(0,0,0,0.12)] border border-[#EAE5F4] ${
+            className={`flex flex-col overflow-hidden bg-white shadow-[0_24px_60px_-18px_rgba(46,16,80,0.5)] border border-white/70 ring-1 ring-black/5 ${
               composeExpanded
-                ? "h-[75vh] w-[75vw] max-h-[75vh] max-w-[75vw] rounded-lg"
-                : "fixed bottom-6 right-6 z-[120] w-[min(100vw-1.5rem,572px)] max-h-[min(92vh,760px)] rounded-t-xl"
+                ? "h-[75vh] w-[75vw] max-h-[75vh] max-w-[75vw] rounded-2xl"
+                : "fixed bottom-6 right-6 z-[120] w-[min(100vw-1.5rem,572px)] max-h-[min(92vh,760px)] rounded-2xl"
             }`}
             role="dialog"
             aria-label={composeThreadId ? "Reply composer" : "New message composer"}
           >
-            <div className="flex shrink-0 cursor-default items-center justify-between gap-2 border-b border-[#5f17a5]/40 bg-[#701CC0] px-3 py-2.5">
+            <div style={{ backgroundImage: BRAND_GRADIENT }} className="flex shrink-0 cursor-default items-center justify-between gap-2 px-4 py-3">
               <p className="min-w-0 flex-1 truncate pr-2 text-sm font-semibold text-white">
-                {composeThreadId ? "Reply" : "New Message"}
+                {composeThreadId ? "Reply" : "New message"}
               </p>
               <div className="flex shrink-0 items-center">
                 <button
@@ -3563,8 +4332,16 @@ ${sourceText}`;
                     <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">From</span>
                     <div className="relative min-w-0">
                       <select
-                        value={composeAccountEmail}
-                        onChange={(event) => setComposeAccountEmail(event.target.value)}
+                        value={composeFrom || composeAccountEmail}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          if (composeFromOptions.includes(value)) {
+                            setComposeAccountEmail(value);
+                            setComposeFrom(value);
+                          } else {
+                            setComposeFrom(value);
+                          }
+                        }}
                         className="min-w-0 w-full cursor-pointer appearance-none border-0 bg-transparent py-1.5 pl-0 pr-7 text-sm text-[#1E1B2E] outline-none focus:ring-0"
                       >
                         {composeFromOptions.map((email) => (
@@ -3572,6 +4349,13 @@ ${sourceText}`;
                             {email}
                           </option>
                         ))}
+                        {composeAliases
+                          .filter((alias) => !composeFromOptions.includes(alias.email) && alias.email !== composeAccountEmail)
+                          .map((alias) => (
+                            <option key={alias.email} value={alias.email}>
+                              {alias.displayName ? `${alias.displayName} <${alias.email}>` : alias.email} (alias)
+                            </option>
+                          ))}
                       </select>
                       <FiChevronDown
                         className="pointer-events-none absolute right-0 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5f6368]"
@@ -3708,6 +4492,27 @@ ${sourceText}`;
                 {composeError ? (
                   <div className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-800">{composeError}</div>
                 ) : null}
+                {undoCountdown !== null ? (
+                  <div className="mb-2 flex items-center justify-between rounded-lg bg-[#1E1B2E] px-3 py-2 text-xs font-medium text-white">
+                    <span>Sending in {undoCountdown}s…</span>
+                    <button type="button" onClick={cancelUndoSend} className="font-semibold underline underline-offset-2">
+                      Undo
+                    </button>
+                  </div>
+                ) : null}
+                {composeLintWarnings.length > 0 ? (
+                  <div className="mb-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-800">
+                    <FiAlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                    <div>
+                      <span className="font-semibold">Deliverability check:</span>
+                      <ul className="mt-0.5 list-disc pl-4">
+                        {composeLintWarnings.map((warning) => (
+                          <li key={warning}>{warning}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                ) : null}
                 {composeSuccess ? (
                   <div className="mb-2 rounded border border-green-200 bg-green-50 px-2 py-1.5 text-xs text-green-800">
                     {composeSuccess}
@@ -3720,14 +4525,200 @@ ${sourceText}`;
                       onClick={handleSendCompose}
                       disabled={
                         sendingCompose ||
+                        undoCountdown !== null ||
                         !composeTo.trim() ||
                         !composeHasMeaningfulBody ||
                         !composeAccountEmail
                       }
                       className="inline-flex min-h-9 shrink-0 items-center rounded bg-[#701CC0] px-4 text-sm font-medium text-white hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
                     >
-                      {sendingCompose ? "Sending…" : "Send"}
+                      {sendingCompose ? "Sending…" : scheduleAt ? "Schedule send" : "Send"}
                     </button>
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setScheduleOpen((open) => !open)}
+                        title="Schedule send"
+                        aria-label="Schedule send"
+                        aria-pressed={scheduleOpen || Boolean(scheduleAt)}
+                        className={`inline-flex min-h-9 items-center gap-1.5 rounded border px-2.5 text-sm font-medium transition ${
+                          scheduleAt
+                            ? "border-[#701CC0] bg-[#F5EFFF] text-[#701CC0]"
+                            : "border-[#DEC9F6] text-[#701CC0] hover:bg-[#F5EFFF]"
+                        }`}
+                      >
+                        <FiClock className="h-4 w-4" aria-hidden />
+                        {scheduleAt
+                          ? new Date(scheduleAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+                          : "Schedule"}
+                      </button>
+                      {scheduleOpen ? (
+                        <div className="absolute bottom-full left-0 z-[130] mb-1 w-72 rounded-lg border border-[#EAE5F4] bg-white p-3 shadow-lg">
+                          <label htmlFor="compose-schedule-at" className="mb-1.5 block text-xs font-semibold text-[#1E1B2E]">
+                            Send at
+                          </label>
+                          <input
+                            id="compose-schedule-at"
+                            type="datetime-local"
+                            value={scheduleAt}
+                            min={toDatetimeLocalValue(new Date(Date.now() + 60_000))}
+                            onChange={(event) => setScheduleAt(event.target.value)}
+                            className="w-full rounded border border-[#E5E7EB] px-2.5 py-1.5 text-sm text-[#1E1B2E] focus:border-[#701CC0] focus:outline-none focus:ring-1 focus:ring-[#701CC0]"
+                          />
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            {scheduleAt ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setScheduleAt("");
+                                  setScheduleOpen(false);
+                                }}
+                                className="text-xs font-medium text-[#6B7280] hover:text-[#1E1B2E]"
+                              >
+                                Clear
+                              </button>
+                            ) : (
+                              <span />
+                            )}
+                            <button
+                              type="button"
+                              disabled={!scheduleAt}
+                              onClick={() => {
+                                setScheduleOpen(false);
+                                handleSendCompose();
+                              }}
+                              className="inline-flex items-center gap-1 rounded bg-[#701CC0] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#5F17A5] disabled:opacity-40"
+                            >
+                              <FiClock className="h-3.5 w-3.5" aria-hidden /> Schedule send
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setConfidentialOpen((open) => !open)}
+                        title="Confidential mode"
+                        aria-label="Confidential mode"
+                        aria-pressed={confidentialOn}
+                        className={`inline-flex min-h-9 items-center gap-1.5 rounded border px-2.5 text-sm font-medium transition ${
+                          confidentialOn
+                            ? "border-[#701CC0] bg-[#F5EFFF] text-[#701CC0]"
+                            : "border-[#DEC9F6] text-[#701CC0] hover:bg-[#F5EFFF]"
+                        }`}
+                      >
+                        <FiLock className="h-4 w-4" aria-hidden />
+                        Confidential
+                      </button>
+                      {confidentialOpen ? (
+                        <div className="absolute bottom-full left-0 z-[130] mb-1 w-72 rounded-lg border border-[#EAE5F4] bg-white p-3 shadow-lg">
+                          <label className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-semibold text-[#1E1B2E]">Confidential mode</span>
+                            <input
+                              type="checkbox"
+                              checked={confidentialOn}
+                              onChange={(event) => setConfidentialOn(event.target.checked)}
+                              className="h-4 w-4"
+                            />
+                          </label>
+                          <p className="mt-1 text-[11px] leading-relaxed text-[#6B7280]">
+                            Sends a secure link instead of the body. Recipients can’t forward, copy, or print, and access can expire or be revoked.
+                          </p>
+                          {confidentialOn ? (
+                            <div className="mt-3 space-y-2">
+                              <div>
+                                <label htmlFor="conf-expiry" className="mb-1 block text-[11px] font-medium text-[#6B7280]">
+                                  Expires
+                                </label>
+                                <select
+                                  id="conf-expiry"
+                                  value={confidentialExpiry}
+                                  onChange={(event) => setConfidentialExpiry(event.target.value as typeof confidentialExpiry)}
+                                  className="w-full rounded border border-[#E5E7EB] px-2 py-1.5 text-sm text-[#1E1B2E] focus:border-[#701CC0] focus:outline-none focus:ring-1 focus:ring-[#701CC0]"
+                                >
+                                  <option value="1d">1 day</option>
+                                  <option value="1w">1 week</option>
+                                  <option value="1m">1 month</option>
+                                  <option value="never">No expiry</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label htmlFor="conf-passcode" className="mb-1 block text-[11px] font-medium text-[#6B7280]">
+                                  Passcode (optional — share separately)
+                                </label>
+                                <input
+                                  id="conf-passcode"
+                                  type="text"
+                                  value={confidentialPasscode}
+                                  onChange={(event) => setConfidentialPasscode(event.target.value)}
+                                  placeholder="e.g. 4821"
+                                  className="w-full rounded border border-[#E5E7EB] px-2.5 py-1.5 text-sm text-[#1E1B2E] focus:border-[#701CC0] focus:outline-none focus:ring-1 focus:ring-[#701CC0]"
+                                />
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setRequestReceipt((on) => !on)}
+                      title="Request read receipt"
+                      aria-label="Request read receipt"
+                      aria-pressed={requestReceipt}
+                      className={`inline-flex min-h-9 items-center gap-1.5 rounded border px-2.5 text-sm font-medium transition ${
+                        requestReceipt
+                          ? "border-[#701CC0] bg-[#F5EFFF] text-[#701CC0]"
+                          : "border-[#DEC9F6] text-[#701CC0] hover:bg-[#F5EFFF]"
+                      }`}
+                    >
+                      <FiCheckSquare className="h-4 w-4" aria-hidden />
+                      Receipt
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleArtemisDraft}
+                      disabled={artemisDrafting}
+                      title="Draft with Artemis AI"
+                      aria-label="Draft with Artemis AI"
+                      className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded px-3 text-sm font-semibold text-white transition disabled:opacity-50"
+                      style={{ backgroundImage: BRAND_GRADIENT }}
+                    >
+                      <FiZap className="h-4 w-4" aria-hidden />
+                      {artemisDrafting ? "Drafting…" : "Artemis"}
+                    </button>
+                    <div className="relative shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setArtemisRewriteOpen((open) => !open)}
+                        disabled={artemisDrafting || !composeBody.trim()}
+                        title="Rewrite with Artemis"
+                        className="inline-flex min-h-9 items-center gap-1 rounded border border-[#DEC9F6] px-2.5 text-sm font-medium text-[#701CC0] hover:bg-[#F5EFFF] disabled:opacity-40"
+                      >
+                        <FiZap className="h-3.5 w-3.5" aria-hidden /> Rewrite
+                      </button>
+                      {artemisRewriteOpen ? (
+                        <div className="absolute bottom-full left-0 z-[130] mb-1 w-44 overflow-hidden rounded-lg border border-[#EAE5F4] bg-white py-1 shadow-lg">
+                          {([
+                            ["shorten", "Make shorter"],
+                            ["expand", "Expand"],
+                            ["formal", "More formal"],
+                            ["casual", "More casual"],
+                            ["grammar", "Fix grammar"],
+                          ] as const).map(([mode, label]) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              onClick={() => handleArtemisRewrite(mode)}
+                              className="block w-full px-3 py-2 text-left text-sm text-[#1E1B2E] hover:bg-[#F5EFFF]"
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
                     <span className="inline-block h-6 w-px shrink-0 self-center bg-[#EAE5F4]" aria-hidden />
                     <div className="relative flex min-w-0 flex-wrap items-center gap-0.5">
                       <button
@@ -3922,7 +4913,7 @@ ${sourceText}`;
                 <FiAlertCircle className="w-6 h-6 text-amber-600" />
               </div>
               <div>
-                <h3 className="text-xl font-semibold text-[#111827]">CSV Import Validation</h3>
+                <h3 className="text-xl font-semibold text-[#1E1B2E]">CSV Import Validation</h3>
                 <p className="text-sm text-[#6B7280]">
                   Imported {contactsImportIssuesModal.imported} valid contact
                   {contactsImportIssuesModal.imported === 1 ? "" : "s"} and skipped {contactsImportIssuesModal.skipped} invalid line
@@ -3989,7 +4980,7 @@ ${sourceText}`;
         message={
           <>
             Are you sure you want to delete{" "}
-            <span className="font-semibold text-[#111827]">{contactToDelete?.email || "this contact"}</span>?
+            <span className="font-semibold text-[#1E1B2E]">{contactToDelete?.email || "this contact"}</span>?
             This action cannot be undone.
           </>
         }
