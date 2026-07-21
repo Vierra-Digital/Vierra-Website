@@ -70,6 +70,24 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
     }
   };
 
+  const patchEnrollOnSignal = async (enrollOnSignal: boolean) => {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enrollOnSignal }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to update campaign");
+      setCampaign(data.campaign);
+    } catch (e: any) {
+      alert(e?.message || "Failed to update campaign.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const runSendQueueTick = async () => {
     setBusy(true);
     setSyncMessage("");
@@ -156,6 +174,22 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
               </button>
             </div>
           </div>
+
+          <label className="mb-4 flex items-center gap-2 text-sm text-[#374151]">
+            <input
+              type="checkbox"
+              checked={!!campaign.enrollOnSignal}
+              disabled={busy}
+              onChange={(e) => patchEnrollOnSignal(e.target.checked)}
+              className="h-4 w-4 rounded border-[#D1D5DB] text-[#701CC0] focus:ring-[#701CC0]"
+            />
+            <span>
+              Auto-enroll signal-interested contacts here
+              <span className="ml-1 text-xs text-[#9CA3AF]">
+                — when someone clicks a tracked link, add them to this sequence
+              </span>
+            </span>
+          </label>
 
           {syncMessage && <p className="text-xs text-[#6B7280] mb-4">{syncMessage}</p>}
 

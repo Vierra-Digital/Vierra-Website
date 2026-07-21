@@ -16,6 +16,7 @@ export type Campaign = {
   sendDelaySeconds: number;
   sendJitterSeconds: number;
   dailySendLimit: number;
+  enrollOnSignal?: boolean;
   scheduledStartAt: string | null;
   startedAt: string | null;
   completedAt: string | null;

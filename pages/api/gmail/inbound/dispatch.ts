@@ -36,8 +36,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const now = new Date();
     const summary = await processInboundForAllAccounts(resolveBaseUrl(req), now);
     const snooze = await resurfaceDueSnoozes(now);
-    const signals = await processSignals(now).catch(() => ({ signals: 0 }));
-    res.status(200).json({ ok: true, ...summary, resurfaced: snooze.resurfaced, signals: signals.signals });
+    const signals = await processSignals(now).catch(() => ({ signals: 0, enrolled: 0 }));
+    res.status(200).json({ ok: true, ...summary, resurfaced: snooze.resurfaced, signals: signals.signals, enrolled: signals.enrolled });
   } catch (error) {
     res.status(500).json({ ok: false, message: error instanceof Error ? error.message : "Inbound poll failed." });
   }

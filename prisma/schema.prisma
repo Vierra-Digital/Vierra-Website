@@ -539,6 +539,23 @@ model LinkedInSendCommand {
   @@index([user_id, status], map: "idx_linkedin_send_commands")
 }
 
+// Shared-inbox delegation: an admin grants a user read (implied) + optional send access to
+// another mailbox (any connected account — Gmail or domain SMTP). Enforcement resolves a
+// user's accessible mailboxes = owned + granted. See lib/email/mailboxAccess.ts.
+model MailboxGrant {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id      String   @db.Uuid
+  grantee_user_id String   @db.Uuid
+  account_email   String
+  can_send        Boolean  @default(true)
+  granted_by      String?  @db.Uuid
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("mailbox_grants")
+  @@unique([grantee_user_id, account_email], map: "uq_mailbox_grants")
+  @@index([company_id], map: "idx_mailbox_grants_company")
+}
+
 // ---------------------------------------------------------------------------
 // Campaigns (automatic email sending). These models mirror the tables that ALREADY
 // EXIST in the live DB (created out-of-band with the old campaigns work). See
@@ -558,6 +575,7 @@ model Campaign {
   send_delay_seconds      Int                  @default(60)
   send_jitter_seconds     Int                  @default(30)
   daily_send_limit        Int                  @default(50)
+  enroll_on_signal        Boolean              @default(false)
   scheduled_start_at      DateTime?            @db.Timestamptz(6)
   started_at              DateTime?            @db.Timestamptz(6)
   completed_at            DateTime?            @db.Timestamptz(6)

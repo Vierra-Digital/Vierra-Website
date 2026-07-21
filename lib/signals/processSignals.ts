@@ -12,9 +12,10 @@ import { notifyDiscord, discordConfigured } from "@/lib/notify/discord";
  */
 const ENGAGED = new Set(["interested", "replied", "booked", "won"]);
 
-export async function processSignals(now: Date): Promise<{ signals: number }> {
+export async function processSignals(now: Date): Promise<{ signals: number; enrolled: number }> {
   const windowStart = new Date(now.getTime() - 6 * 60 * 1000);
   let signals = 0;
+  let enrolled = 0;
 
   const clicks = await prisma.emailTrackingEvent.findMany({
     where: { event_type: "CLICK", occurred_at: { gte: windowStart } },
@@ -39,7 +40,16 @@ export async function processSignals(now: Date): Promise<{ signals: number }> {
     const contact = await prisma.campaignContact.findFirst({
       where: { contact_email: email },
       orderBy: { enrolled_at: "desc" },
-      select: { id: true, lead_status: true },
+      select: {
+        id: true,
+        lead_status: true,
+        campaign_id: true,
+        contact_id: true,
+        contact_first_name: true,
+        contact_last_name: true,
+        contact_business: true,
+        campaigns: { select: { company_id: true } },
+      },
     });
     if (!contact || ENGAGED.has(contact.lead_status)) continue;
 
@@ -62,7 +72,43 @@ export async function processSignals(now: Date): Promise<{ signals: number }> {
       );
     }
     signals += 1;
+
+    // Signal-triggered enrollment: if this contact's company has a campaign flagged
+    // enroll_on_signal, enroll them into it (once) so a nurture sequence starts. The
+    // send-queue tick picks up the new queued contact. Idempotent per (campaign, email).
+    const companyId = contact.campaigns?.company_id;
+    if (companyId) {
+      const target = await prisma.campaign.findFirst({
+        where: { company_id: companyId, enroll_on_signal: true, status: "active" },
+        select: { id: true },
+      });
+      if (target && target.id !== contact.campaign_id) {
+        const already = await prisma.campaignContact.findFirst({
+          where: { campaign_id: target.id, contact_email: email },
+          select: { id: true },
+        });
+        if (!already) {
+          await prisma.campaignContact.create({
+            data: {
+              campaign_id: target.id,
+              contact_email: email,
+              contact_id: contact.contact_id,
+              contact_first_name: contact.contact_first_name,
+              contact_last_name: contact.contact_last_name,
+              contact_business: contact.contact_business,
+              lead_status: "interested",
+              queue_status: "queued",
+              next_send_at: now,
+            },
+          });
+          enrolled += 1;
+          if (discordConfigured()) {
+            await notifyDiscord(`➕ Auto-enrolled ${email} into the signal nurture sequence.`);
+          }
+        }
+      }
+    }
   }
 
-  return { signals };
+  return { signals, enrolled };
 }

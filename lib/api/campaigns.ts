@@ -29,6 +29,7 @@ type CampaignRow = {
   send_delay_seconds: number;
   send_jitter_seconds: number;
   daily_send_limit: number;
+  enroll_on_signal?: boolean;
   scheduled_start_at: Date | null;
   started_at: Date | null;
   completed_at: Date | null;
@@ -53,6 +54,7 @@ export function serializeCampaign(row: CampaignRow) {
     sendDelaySeconds: row.send_delay_seconds,
     sendJitterSeconds: row.send_jitter_seconds,
     dailySendLimit: row.daily_send_limit,
+    enrollOnSignal: row.enroll_on_signal ?? false,
     scheduledStartAt: row.scheduled_start_at,
     startedAt: row.started_at,
     completedAt: row.completed_at,
