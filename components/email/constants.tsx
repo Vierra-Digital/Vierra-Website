@@ -1,6 +1,6 @@
 /** Shared constants for the email panel (extracted from EmailingPlatformSection). */
 import React from "react";
-import { FiInbox, FiMail, FiSend, FiUsers, FiArchive, FiTrash2, FiKey, FiCheckSquare, FiBarChart2, FiStar, FiFlag, FiClock, FiLayers, FiLinkedin } from "react-icons/fi";
+import { FiInbox, FiMail, FiSend, FiUsers, FiArchive, FiTrash2, FiKey, FiCheckSquare, FiBarChart2, FiStar, FiFlag, FiClock, FiLayers } from "react-icons/fi";
 import type { ModuleKey, MailboxCounts } from "@/components/email/types";
 
 export const PAGE_SIZE = 50;
@@ -44,7 +44,6 @@ export const MODULES: Array<{ key: ModuleKey; label: string; icon: React.ReactNo
   { key: "contacts", label: "Contacts", icon: <FiUsers className="w-4 h-4" /> },
   { key: "cryptography", label: "Cartography", icon: <FiKey className="w-4 h-4" /> },
   { key: "campaigns", label: "Campaigns", icon: <FiCheckSquare className="w-4 h-4" /> },
-  { key: "linkedin", label: "LinkedIn", icon: <FiLinkedin className="w-4 h-4" /> },
   { key: "archive", label: "Archive", icon: <FiArchive className="w-4 h-4" /> },
   { key: "spam", label: "Spam", icon: <FiMail className="w-4 h-4" /> },
   { key: "trash", label: "Trash", icon: <FiTrash2 className="w-4 h-4" /> },

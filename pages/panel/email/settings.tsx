@@ -20,6 +20,7 @@ import {
   FiServer,
   FiSlash,
   FiTag,
+  FiUsers,
   FiZap,
 } from "react-icons/fi";
 import { requireSession } from "@/lib/auth";
@@ -215,6 +216,14 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [liHasToken, setLiHasToken] = useState(false);
   const [liToken, setLiToken] = useState("");
   const [liBusy, setLiBusy] = useState(false);
+  // Shared-inbox delegation (admin only): grant a teammate access to a mailbox.
+  const isAdmin = (userRole || "").toLowerCase() === "admin";
+  type CompanyUser = { id: string; name: string | null; email: string };
+  type MailboxGrant = { id: string; granteeUserId: string; accountEmail: string; canSend: boolean };
+  const [companyUsers, setCompanyUsers] = useState<CompanyUser[]>([]);
+  const [mailboxGrants, setMailboxGrants] = useState<MailboxGrant[]>([]);
+  const [newGrant, setNewGrant] = useState({ granteeUserId: "", accountEmail: "", canSend: true });
+  const [grantBusy, setGrantBusy] = useState(false);
   type FilterRow = {
     id: string;
     name: string;
@@ -638,6 +647,60 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     } finally {
       setLiBusy(false);
     }
+  };
+
+  // ---- Shared-inbox delegation (admin only) ----
+  const loadMailboxGrants = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const [usersRes, grantsRes] = await Promise.all([
+        fetch("/api/admin/users"),
+        fetch("/api/email/mailbox-grants"),
+      ]);
+      const usersData = await usersRes.json().catch(() => []);
+      const grantsData = await grantsRes.json().catch(() => ({}));
+      if (usersRes.ok && Array.isArray(usersData)) {
+        setCompanyUsers(
+          usersData
+            .map((u: any) => ({ id: String(u?.id || ""), name: u?.name ?? null, email: String(u?.email || "") }))
+            .filter((u: CompanyUser) => u.id && u.email)
+        );
+      }
+      if (grantsRes.ok && Array.isArray(grantsData?.grants)) setMailboxGrants(grantsData.grants);
+    } catch {
+      /* ignore */
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    loadMailboxGrants();
+  }, [loadMailboxGrants]);
+
+  const createGrant = async () => {
+    if (grantBusy || !newGrant.granteeUserId || !newGrant.accountEmail) return;
+    setGrantBusy(true);
+    try {
+      const r = await fetch("/api/email/mailbox-grants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newGrant),
+      });
+      if (r.ok) {
+        setNewGrant({ granteeUserId: "", accountEmail: "", canSend: true });
+        await loadMailboxGrants();
+      }
+    } finally {
+      setGrantBusy(false);
+    }
+  };
+
+  const revokeGrant = async (id: string) => {
+    await fetch("/api/email/mailbox-grants", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    }).catch(() => null);
+    setMailboxGrants((prev) => prev.filter((g) => g.id !== id));
   };
 
   const createBookingLink = async () => {
@@ -1232,6 +1295,98 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   ) : null}
                 </div>
               </SettingsSection>
+
+              {isAdmin ? (
+                <SettingsSection
+                  title="Shared inboxes"
+                  description="Grant a teammate access to another mailbox — read, and optionally send-as. Admin only."
+                  icon={FiUsers}
+                >
+                  <div className="space-y-3">
+                    {mailboxGrants.length === 0 ? (
+                      <p className="text-sm text-[#6B7280]">No shared-inbox grants yet.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {mailboxGrants.map((g) => {
+                          const u = companyUsers.find((x) => x.id === g.granteeUserId);
+                          return (
+                            <li key={g.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#ECEAF1] bg-white p-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium text-[#1E1B2E]">{u ? u.name || u.email : g.granteeUserId}</p>
+                                <p className="mt-0.5 truncate text-xs text-[#6B7280]">
+                                  {g.accountEmail} · {g.canSend ? "read + send" : "read only"}
+                                </p>
+                              </div>
+                              <button type="button" onClick={() => revokeGrant(g.id)} className={btnDangerOutline}>
+                                Revoke
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+
+                    <div className="rounded-xl border border-dashed border-[#D6C7EC] p-3">
+                      <p className="mb-2 text-xs font-semibold text-[#4A465C]">New grant</p>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <select
+                          className={fieldClass}
+                          value={newGrant.granteeUserId}
+                          onChange={(e) => setNewGrant({ ...newGrant, granteeUserId: e.target.value })}
+                        >
+                          <option value="">Select teammate…</option>
+                          {companyUsers.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.name || u.email}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className={fieldClass}
+                          value={newGrant.accountEmail}
+                          onChange={(e) => setNewGrant({ ...newGrant, accountEmail: e.target.value })}
+                        >
+                          <option value="">Select mailbox…</option>
+                          {Array.from(
+                            new Set(
+                              [
+                                ...connectedAccounts.map((a) => a.email),
+                                ...providerAccounts.map((a) => a.accountEmail),
+                              ].filter(Boolean)
+                            )
+                          ).map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-4">
+                        <label className="flex items-center gap-1.5 text-xs text-[#4A465C]">
+                          <input
+                            type="checkbox"
+                            checked={newGrant.canSend}
+                            onChange={(e) => setNewGrant({ ...newGrant, canSend: e.target.checked })}
+                          />{" "}
+                          Allow send-as
+                        </label>
+                        <button
+                          type="button"
+                          onClick={createGrant}
+                          disabled={grantBusy || !newGrant.granteeUserId || !newGrant.accountEmail}
+                          className={`${btnPrimary} ml-auto`}
+                        >
+                          {grantBusy ? "Granting…" : "Grant access"}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-[#9A93AE]">
+                      Enforcement is rolling out — granted mailboxes will appear in the grantee’s account switcher and be
+                      sendable-as once wired into the mailbox endpoints.
+                    </p>
+                  </div>
+                </SettingsSection>
+              ) : null}
 
               <SettingsSection
                 title="Email tracking"

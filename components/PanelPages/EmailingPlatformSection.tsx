@@ -106,15 +106,6 @@ const CampaignsView = dynamic(() => import("@/components/PanelPages/CampaignsSec
     </div>
   ),
 });
-// Lazy-load the LinkedIn unified inbox (synced by the Sales Nav extension).
-const LinkedInView = dynamic(() => import("@/components/PanelPages/LinkedInInboxSection"), {
-  ssr: false,
-  loading: () => (
-    <div className="h-full flex items-center justify-center">
-      <div className="w-10 h-10 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] motion-safe:animate-spin" />
-    </div>
-  ),
-});
 type EmailingPlatformSectionProps = {
   initialSelectedAccounts?: string[];
   /** Gmail thread id to auto-open (the whole conversation) once the inbox loads — deep link, e.g. from a Discord alert. */
@@ -2959,8 +2950,6 @@ ${sourceText}`;
                     <div className="h-full overflow-y-auto">
                       <CampaignsView />
                     </div>
-                  ) : activeModule === "linkedin" ? (
-                    <LinkedInView />
                   ) : activeModule === "scheduled" ? (
                     <div className="flex h-full flex-col">
                       <div className="flex items-center justify-between gap-3 border-b border-white/30 px-4 py-3">
