@@ -30,6 +30,16 @@ export type SeoSnapshot = {
 
 export type NewsItem = { title: string; link: string; date: string | null };
 
+// Firmographics we can pull KEYLESSLY from the page's schema.org / JSON-LD.
+// (Verified funding amounts + website traffic need a paid provider like Harmonic
+// or SimilarWeb — not available without a key.)
+export type OrgProfile = {
+  industry: string | null;
+  employees: string | null;
+  founded: string | null;
+  location: string | null;
+};
+
 export type CompanyContext = {
   domain: string;
   url: string;
@@ -41,6 +51,7 @@ export type CompanyContext = {
   tech: string[];
   seo: SeoSnapshot;
   news: NewsItem[];
+  profile: OrgProfile;
   fetchedAt: string;
 };
 
@@ -220,6 +231,52 @@ export function extractSeo(html: string, url: string): SeoSnapshot {
   };
 }
 
+/** Keyless firmographics from schema.org / JSON-LD Organization blocks on the page. */
+export function extractOrgProfile(html: string): OrgProfile {
+  const out: OrgProfile = { industry: null, employees: null, founded: null, location: null };
+  const blocks = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
+  const nodes: Record<string, unknown>[] = [];
+  const collect = (d: unknown) => {
+    if (!d) return;
+    if (Array.isArray(d)) d.forEach(collect);
+    else if (typeof d === "object") {
+      const o = d as Record<string, unknown>;
+      nodes.push(o);
+      if (o["@graph"]) collect(o["@graph"]);
+    }
+  };
+  for (const b of blocks.slice(0, 8)) {
+    const jsonText = b.replace(/<script[^>]*>/i, "").replace(/<\/script>/i, "").trim();
+    try {
+      collect(JSON.parse(jsonText));
+    } catch {
+      /* malformed JSON-LD — skip */
+    }
+  }
+  for (const n of nodes) {
+    const type = n["@type"];
+    const types = Array.isArray(type) ? type : [type];
+    const isOrg = types.some((t) => typeof t === "string" && /Organization|Corporation|LocalBusiness|Company/i.test(t));
+    if (!isOrg) continue;
+    if (!out.employees && n.numberOfEmployees != null) {
+      const ne = n.numberOfEmployees as { value?: unknown; minValue?: unknown } | number | string;
+      const v = typeof ne === "object" ? ne.value ?? ne.minValue : ne;
+      if (v != null && String(v).trim()) out.employees = String(v).trim();
+    }
+    if (!out.founded && n.foundingDate) out.founded = String(n.foundingDate).slice(0, 4);
+    if (!out.industry && (n.industry || n.naics)) out.industry = String(n.industry || n.naics).slice(0, 80);
+    if (!out.location && n.address) {
+      const a = n.address as Record<string, unknown> | string;
+      if (typeof a === "string") out.location = a.slice(0, 120);
+      else if (a && typeof a === "object") {
+        const loc = [a.addressLocality, a.addressRegion, a.addressCountry].filter(Boolean).join(", ");
+        if (loc) out.location = loc.slice(0, 120);
+      }
+    }
+  }
+  return out;
+}
+
 /**
  * Keyless recent-news / funding signal via Google News' public RSS search.
  * Surfaces headlines (which often include funding/hiring/launch news). These are
@@ -361,6 +418,7 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
   }
 
   const seo = extractSeo(html, url);
+  const profile = extractOrgProfile(html);
   const news = await fetchNews(name || domain);
 
   return {
@@ -374,6 +432,7 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
     tech: detectTech(html, headers),
     seo,
     news,
+    profile,
     fetchedAt: new Date().toISOString(),
   };
 }
