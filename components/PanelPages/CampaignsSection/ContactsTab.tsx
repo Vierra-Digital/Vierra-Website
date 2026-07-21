@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { FiX } from "react-icons/fi";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Modal from "@/components/ui/Modal";
+import ContactTimelineModal from "@/components/email/ContactTimelineModal";
 import { LEAD_STATUS_LABELS, LEAD_STATUS_ORDER } from "../CampaignsSection";
 
 type CampaignContact = {
@@ -34,6 +35,7 @@ const ContactsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<CampaignContact | null>(null);
+  const [timelineEmail, setTimelineEmail] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -116,6 +118,16 @@ const ContactsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
                   <td className="px-4 py-4 text-sm">
                     <div className="font-medium text-[#111827]">{[c.contactFirstName, c.contactLastName].filter(Boolean).join(" ") || c.contactEmail}</div>
                     <div className="text-xs text-[#6B7280]">{c.contactEmail}</div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTimelineEmail(c.contactEmail);
+                      }}
+                      className="mt-1 text-[11px] font-medium text-[#701CC0] hover:underline"
+                    >
+                      View timeline
+                    </button>
                   </td>
                   <td className="px-4 py-4 text-sm text-[#111827]">{c.contactBusiness || "—"}</td>
                   <td className="px-4 py-4 text-sm">
@@ -142,6 +154,8 @@ const ContactsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
           }}
         />
       )}
+
+      {timelineEmail && <ContactTimelineModal email={timelineEmail} onClose={() => setTimelineEmail(null)} />}
     </div>
   );
 };

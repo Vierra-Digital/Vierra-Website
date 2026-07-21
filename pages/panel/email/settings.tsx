@@ -15,6 +15,7 @@ import {
   FiEye,
   FiFileText,
   FiFilter,
+  FiLinkedin,
   FiMail,
   FiServer,
   FiSlash,
@@ -22,6 +23,16 @@ import {
   FiZap,
 } from "react-icons/fi";
 import { requireSession } from "@/lib/auth";
+import { renderTemplate } from "@/lib/email/templateRender";
+
+/** Sample recipient used to preview token + spintax rendering in the settings UI. */
+const TEMPLATE_PREVIEW_VARS = {
+  firstName: "Alex",
+  lastName: "Rivera",
+  fullName: "Alex Rivera",
+  company: "Acme Co",
+  email: "alex@acme.co",
+};
 
 const pageFont = Geist({ subsets: ["latin"] });
 
@@ -68,7 +79,7 @@ function SettingsSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className={`rounded-2xl ${GLASS_SURFACE} p-6 shadow-[0_2px_12px_-4px_rgba(46,16,80,0.14)] ${pageFont.className}`}>
+    <section className={`rounded-xl ${GLASS_SURFACE} p-6 shadow-[0_2px_12px_-4px_rgba(46,16,80,0.14)] ${pageFont.className}`}>
       <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -200,6 +211,10 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [savedContactVisibility, setSavedContactVisibility] = useState<ContactVisibility | null>(null);
   const [testingProviderId, setTestingProviderId] = useState("");
   const [artemisPrefs, setArtemisPrefs] = useState({ autonomy: "suggest", tone: "professional and friendly" });
+  // LinkedIn extension pairing token (per-user; shown in plaintext only at generation).
+  const [liHasToken, setLiHasToken] = useState(false);
+  const [liToken, setLiToken] = useState("");
+  const [liBusy, setLiBusy] = useState(false);
   type FilterRow = {
     id: string;
     name: string;
@@ -227,7 +242,52 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [deliverability, setDeliverability] = useState<Record<string, DeliverabilityResult>>({});
   type BookingLinkRow = { id: string; slug: string; title: string; account_email: string; duration_minutes: number; active: boolean };
   const [bookingLinks, setBookingLinks] = useState<BookingLinkRow[]>([]);
-  const [newBooking, setNewBooking] = useState({ title: "", accountEmail: "", durationMinutes: "30" });
+  type BookingRow = {
+    id: string;
+    inviteeName: string;
+    inviteeEmail: string;
+    startAt: string;
+    endAt: string;
+    status: string;
+    title: string;
+    accountEmail: string;
+  };
+  const [bookings, setBookings] = useState<BookingRow[]>([]);
+  const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null);
+  const detectedTimeZone = useMemo(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    } catch {
+      return "UTC";
+    }
+  }, []);
+  const timeZoneOptions = useMemo(() => {
+    const common = [
+      "UTC",
+      "America/New_York",
+      "America/Chicago",
+      "America/Denver",
+      "America/Los_Angeles",
+      "Europe/London",
+      "Europe/Paris",
+      "Europe/Berlin",
+      "Europe/Madrid",
+      "Asia/Kolkata",
+      "Asia/Singapore",
+      "Asia/Tokyo",
+      "Australia/Sydney",
+    ];
+    return Array.from(new Set([detectedTimeZone, ...common]));
+  }, [detectedTimeZone]);
+  const [newBooking, setNewBooking] = useState({
+    title: "",
+    accountEmail: "",
+    durationMinutes: "30",
+    timezone: detectedTimeZone,
+    startHour: "9",
+    endHour: "17",
+    days: [1, 2, 3, 4, 5] as number[],
+  });
   const [savingBooking, setSavingBooking] = useState(false);
   const [newProvider, setNewProvider] = useState({
     accountEmail: "",
@@ -523,6 +583,63 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     loadBookingLinks();
   }, [loadBookingLinks]);
 
+  const loadBookings = useCallback(async () => {
+    try {
+      const r = await fetch("/api/booking/bookings");
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) setBookings(Array.isArray(d?.bookings) ? d.bookings : []);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    loadBookings();
+  }, [loadBookings]);
+
+  const loadLinkedInToken = useCallback(async () => {
+    try {
+      const r = await fetch("/api/linkedin/extension-token");
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) setLiHasToken(Boolean(d?.hasToken));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    loadLinkedInToken();
+  }, [loadLinkedInToken]);
+
+  const generateLinkedInToken = async () => {
+    if (liBusy) return;
+    setLiBusy(true);
+    try {
+      const r = await fetch("/api/linkedin/extension-token", { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && typeof d?.token === "string") {
+        setLiToken(d.token);
+        setLiHasToken(true);
+      }
+    } finally {
+      setLiBusy(false);
+    }
+  };
+
+  const revokeLinkedInToken = async () => {
+    if (liBusy || !window.confirm("Revoke the current token? The paired extension will stop syncing until you paste a new one.")) return;
+    setLiBusy(true);
+    try {
+      const r = await fetch("/api/linkedin/extension-token", { method: "DELETE" });
+      if (r.ok) {
+        setLiHasToken(false);
+        setLiToken("");
+      }
+    } finally {
+      setLiBusy(false);
+    }
+  };
+
   const createBookingLink = async () => {
     if (savingBooking || !newBooking.title.trim() || !newBooking.accountEmail) return;
     setSavingBooking(true);
@@ -534,10 +651,24 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
           title: newBooking.title.trim(),
           accountEmail: newBooking.accountEmail,
           durationMinutes: Number(newBooking.durationMinutes) || 30,
+          timezone: newBooking.timezone || "UTC",
+          availability: {
+            days: newBooking.days.length ? newBooking.days : [1, 2, 3, 4, 5],
+            startMinutes: (Number(newBooking.startHour) || 9) * 60,
+            endMinutes: (Number(newBooking.endHour) || 17) * 60,
+          },
         }),
       });
       if (r.ok) {
-        setNewBooking({ title: "", accountEmail: "", durationMinutes: "30" });
+        setNewBooking({
+          title: "",
+          accountEmail: "",
+          durationMinutes: "30",
+          timezone: detectedTimeZone,
+          startHour: "9",
+          endHour: "17",
+          days: [1, 2, 3, 4, 5],
+        });
         await loadBookingLinks();
       }
     } finally {
@@ -723,33 +854,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       <Head>
         <title>Vierra | Email Settings</title>
       </Head>
-      <div className={`email-space-bg relative min-h-screen overflow-hidden ${pageFont.className}`}>
-        <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-          <div className="email-stars" aria-hidden />
-          <div className="email-stars email-stars--2" aria-hidden />
-          <div className="email-vignette" aria-hidden />
-        </div>
-        <style jsx global>{`
-          .email-space-bg { background: #18042a; }
-          .email-stars {
-            position: absolute; inset: -10%; z-index: 0; pointer-events: none;
-            background-image:
-              radial-gradient(1.5px 1.5px at 25px 35px, rgba(255,255,255,0.9), transparent),
-              radial-gradient(1.5px 1.5px at 120px 80px, rgba(255,255,255,0.7), transparent),
-              radial-gradient(1px 1px at 70px 160px, rgba(255,255,255,0.8), transparent),
-              radial-gradient(1px 1px at 180px 50px, rgba(255,255,255,0.6), transparent),
-              radial-gradient(1.5px 1.5px at 200px 140px, rgba(255,255,255,0.85), transparent),
-              radial-gradient(1px 1px at 40px 110px, rgba(255,255,255,0.5), transparent);
-            background-repeat: repeat; background-size: 220px 220px; opacity: 0.8;
-            animation: email-stars-drift 40s linear infinite;
-          }
-          .email-stars--2 { background-size: 440px 440px; opacity: 0.5; animation: email-stars-drift-2 70s linear infinite; }
-          @keyframes email-stars-drift { to { background-position: 220px 220px; } }
-          @keyframes email-stars-drift-2 { to { background-position: 440px 440px; } }
-          .email-vignette { position: absolute; inset: 0; z-index: 0; pointer-events: none; background: radial-gradient(120% 120% at 50% 25%, transparent 52%, rgba(8,1,18,0.6) 100%); }
-          @media (prefers-reduced-motion: reduce) { .email-stars, .email-stars--2 { animation: none; } }
-        `}</style>
-        <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-white/40 bg-white/60 backdrop-blur-xl px-5">
+      <div className={`relative min-h-screen bg-[#F3F4F6] ${pageFont.className}`}>
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-5">
           <div className="flex items-center gap-4">
             <Link href="/panel" className="inline-flex items-center gap-2" aria-label="Admin panel">
               <Image
@@ -771,18 +877,18 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
           </Link>
         </header>
 
-        <main className="relative z-10 mx-auto max-w-4xl px-5 py-8 lg:px-8 lg:py-10">
+        <main className="mx-auto max-w-4xl px-5 py-8 lg:px-8 lg:py-10">
           <div className="mb-8">
             <div className="mb-2 flex items-center gap-2">
-              <div className="rounded-lg bg-white/15 p-1.5">
-                <FiMail className="h-5 w-5 text-white" />
+              <div className="rounded-lg bg-[#701CC0]/10 p-1.5">
+                <FiMail className="h-5 w-5 text-[#701CC0]" />
               </div>
-              <h1 className="text-2xl font-semibold tracking-tight text-white lg:text-3xl">Email settings</h1>
+              <h1 className="text-2xl font-semibold tracking-tight text-[#1E1B2E] lg:text-3xl">Email settings</h1>
             </div>
-            <p className="text-sm leading-relaxed text-white/70">
+            <p className="text-sm leading-relaxed text-[#6B7280]">
               {roleLabel ? (
                 <>
-                  <span className="font-medium text-white/90">{roleLabel} account.</span>{" "}
+                  <span className="font-medium text-[#374151]">{roleLabel} account.</span>{" "}
                 </>
               ) : null}
               These preferences apply to your user account (not to individual mailbox logins). When a Gmail account is connected,
@@ -951,10 +1057,179 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                         {savingBooking ? "Creating…" : "Create link"}
                       </button>
                     </div>
+
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <label className="text-[11px] font-medium text-[#6B7280]">
+                        Timezone
+                        <select
+                          className={`${fieldClass} mt-1`}
+                          value={newBooking.timezone}
+                          onChange={(e) => setNewBooking({ ...newBooking, timezone: e.target.value })}
+                        >
+                          {timeZoneOptions.map((tz) => (
+                            <option key={tz} value={tz}>
+                              {tz}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="text-[11px] font-medium text-[#6B7280]">
+                        Start hour
+                        <select
+                          className={`${fieldClass} mt-1`}
+                          value={newBooking.startHour}
+                          onChange={(e) => setNewBooking({ ...newBooking, startHour: e.target.value })}
+                        >
+                          {Array.from({ length: 24 }, (_, h) => (
+                            <option key={h} value={String(h)}>
+                              {String(h).padStart(2, "0")}:00
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="text-[11px] font-medium text-[#6B7280]">
+                        End hour
+                        <select
+                          className={`${fieldClass} mt-1`}
+                          value={newBooking.endHour}
+                          onChange={(e) => setNewBooking({ ...newBooking, endHour: e.target.value })}
+                        >
+                          {Array.from({ length: 24 }, (_, h) => h + 1).map((h) => (
+                            <option key={h} value={String(h)}>
+                              {String(h).padStart(2, "0")}:00
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+
+                    <div className="mt-3">
+                      <p className="mb-1 text-[11px] font-medium text-[#6B7280]">Available days</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { i: 1, l: "Mon" },
+                          { i: 2, l: "Tue" },
+                          { i: 3, l: "Wed" },
+                          { i: 4, l: "Thu" },
+                          { i: 5, l: "Fri" },
+                          { i: 6, l: "Sat" },
+                          { i: 0, l: "Sun" },
+                        ].map(({ i, l }) => {
+                          const on = newBooking.days.includes(i);
+                          return (
+                            <button
+                              key={i}
+                              type="button"
+                              onClick={() =>
+                                setNewBooking((prev) => ({
+                                  ...prev,
+                                  days: on ? prev.days.filter((d) => d !== i) : [...prev.days, i],
+                                }))
+                              }
+                              className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                                on ? "bg-[#701CC0] text-white" : "border border-[#E5E7EB] bg-white text-[#6B7280] hover:bg-[#F9FAFB]"
+                              }`}
+                            >
+                              {l}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
                     <p className="mt-2 text-[11px] text-[#9A93AE]">
-                      Availability defaults to weekdays, 14:00–22:00 UTC (≈ 9–5 US Eastern). Invitees see times in their own timezone.
+                      Availability is in your selected timezone (DST-aware). Invitees always see the times in their own timezone.
                     </p>
                   </div>
+
+                  <div>
+                    <p className="mb-2 text-xs font-semibold text-[#4A465C]">Upcoming &amp; recent meetings</p>
+                    {bookings.length === 0 ? (
+                      <p className="text-sm text-[#6B7280]">No meetings booked yet.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {bookings.slice(0, 20).map((b) => {
+                          const start = new Date(b.startAt);
+                          const upcoming = start.getTime() >= Date.now();
+                          return (
+                            <li key={b.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#ECEAF1] bg-white p-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium text-[#1E1B2E]">
+                                  {b.inviteeName} <span className="text-xs font-normal text-[#9A93AE]">· {b.title}</span>
+                                </p>
+                                <p className="mt-0.5 truncate text-xs text-[#6B7280]">
+                                  {b.inviteeEmail} · {b.accountEmail}
+                                </p>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <p className="text-xs font-medium text-[#1E1B2E]">
+                                  {start.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+                                </p>
+                                <span
+                                  className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                    b.status !== "confirmed"
+                                      ? "bg-red-50 text-red-600"
+                                      : upcoming
+                                        ? "bg-green-50 text-green-700"
+                                        : "bg-[#F1F0F5] text-[#847FA0]"
+                                  }`}
+                                >
+                                  {b.status !== "confirmed" ? b.status : upcoming ? "Upcoming" : "Past"}
+                                </span>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              </SettingsSection>
+
+              <SettingsSection
+                title="LinkedIn extension"
+                description="Pair the Vierra Sales Navigator extension to bring your LinkedIn conversations into the unified inbox. The token is personal — your LinkedIn threads stay scoped to your account."
+                icon={FiLinkedin}
+              >
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button type="button" onClick={generateLinkedInToken} disabled={liBusy} className={btnPrimary}>
+                      {liBusy ? "Working…" : liHasToken ? "Regenerate token" : "Generate token"}
+                    </button>
+                    {liHasToken ? (
+                      <button type="button" onClick={revokeLinkedInToken} disabled={liBusy} className={btnDangerOutline}>
+                        Revoke
+                      </button>
+                    ) : null}
+                    <span className="text-xs text-[#6B7280]">
+                      {liHasToken ? "A token is active for your account." : "No token yet."}
+                    </span>
+                  </div>
+
+                  {liToken ? (
+                    <div className="rounded-xl border border-[#701CC0]/30 bg-[#F5EFFF] p-3">
+                      <p className="mb-1 text-xs font-semibold text-[#4C1D95]">
+                        Copy this token now — it won’t be shown again.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <code className="min-w-0 flex-1 truncate rounded-lg bg-white px-3 py-2 font-mono text-xs text-[#1E1B2E]">
+                          {liToken}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (typeof window !== "undefined" && navigator.clipboard) navigator.clipboard.writeText(liToken);
+                          }}
+                          className={btnSecondary}
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <p className="mt-2 text-[11px] text-[#6B7280]">
+                        Paste it into the Vierra extension’s settings on linkedin.com. Regenerating replaces the old token.
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               </SettingsSection>
 
@@ -1206,21 +1481,57 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   </button>
                 }
               >
+                <div className="mb-3 rounded-lg bg-[#F5EFFF] px-3 py-2 text-xs leading-relaxed text-[#4C1D95]">
+                  Personalize with <code className="rounded bg-white/70 px-1">{"{{firstName|there}}"}</code> tokens
+                  (the part after <code className="rounded bg-white/70 px-1">|</code> is the fallback) and{" "}
+                  <code className="rounded bg-white/70 px-1">{"{Hi|Hey|Hello}"}</code> spintax (one variant is picked
+                  per recipient, consistently). Available tokens: firstName, lastName, fullName, company, email.
+                </div>
                 <div className="space-y-2">
-                  {templates.map((row) => (
-                    <div
-                      key={row.id}
-                      className="flex items-center justify-between rounded-xl border border-[#E5E7EB] bg-white/50 px-4 py-3"
-                    >
-                      <div>
-                        <p className="text-sm font-medium text-[#1E1B2E]">{row.name}</p>
-                        {row.isDefault ? <p className="text-xs font-medium text-[#701CC0]">Default</p> : null}
+                  {templates.map((row) => {
+                    const showPreview = previewTemplateId === row.id;
+                    const rendered = row.bodyText
+                      ? renderTemplate(row.bodyText, TEMPLATE_PREVIEW_VARS, `${row.id}-preview`)
+                      : "";
+                    return (
+                      <div key={row.id} className="rounded-xl border border-[#E5E7EB] bg-white/50 px-4 py-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-[#1E1B2E]">{row.name}</p>
+                            {row.isDefault ? <p className="text-xs font-medium text-[#701CC0]">Default</p> : null}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {row.bodyText ? (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewTemplateId(showPreview ? null : row.id)}
+                                className="text-sm font-medium text-[#374151] hover:text-[#701CC0]"
+                              >
+                                {showPreview ? "Hide preview" : "Preview"}
+                              </button>
+                            ) : null}
+                            <button type="button" onClick={() => deleteTemplate(row.id)} className="text-sm font-medium text-red-600 hover:underline">
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                        {showPreview ? (
+                          <div className="mt-3 border-t border-[#ECEAF1] pt-3">
+                            {row.subject ? (
+                              <p className="mb-1 text-xs text-[#6B7280]">
+                                <span className="font-semibold">Subject:</span>{" "}
+                                {renderTemplate(row.subject, TEMPLATE_PREVIEW_VARS, `${row.id}-subject`)}
+                              </p>
+                            ) : null}
+                            <pre className="whitespace-pre-wrap break-words rounded-lg bg-[#FAFAFC] p-3 text-xs text-[#1E1B2E]">
+                              {rendered}
+                            </pre>
+                            <p className="mt-1 text-[11px] text-[#9A93AE]">Preview for a sample recipient (Alex Rivera · Acme Co).</p>
+                          </div>
+                        ) : null}
                       </div>
-                      <button type="button" onClick={() => deleteTemplate(row.id)} className="text-sm font-medium text-red-600 hover:underline">
-                        Remove
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </SettingsSection>
 

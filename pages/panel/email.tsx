@@ -11,9 +11,10 @@ const EmailingPlatformSection = dynamic(
 
 type Props = {
   initialSelectedAccounts: string[];
+  initialOpenThreadId: string;
 };
 
-const EmailPanelStandalonePage: React.FC<Props> = ({ initialSelectedAccounts }) => {
+const EmailPanelStandalonePage: React.FC<Props> = ({ initialSelectedAccounts, initialOpenThreadId }) => {
   return (
     <>
       <Head>
@@ -22,7 +23,10 @@ const EmailPanelStandalonePage: React.FC<Props> = ({ initialSelectedAccounts }) 
       </Head>
       <div className="fixed inset-0 overflow-hidden">
         <main className="h-screen overflow-hidden">
-          <EmailingPlatformSection initialSelectedAccounts={initialSelectedAccounts} />
+          <EmailingPlatformSection
+            initialSelectedAccounts={initialSelectedAccounts}
+            initialOpenThreadId={initialOpenThreadId}
+          />
         </main>
       </div>
     </>
@@ -32,7 +36,10 @@ const EmailPanelStandalonePage: React.FC<Props> = ({ initialSelectedAccounts }) 
 export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const session = await requireSession(ctx.req, ctx.res);
   if (!session) {
-    return { redirect: { destination: "/login", permanent: false } };
+    // Preserve the deep link (accounts + thread) so login can bounce back here.
+    return {
+      redirect: { destination: `/login?returnTo=${encodeURIComponent(ctx.resolvedUrl)}`, permanent: false },
+    };
   }
 
   const role = (session.user as any).role;
@@ -46,9 +53,13 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean);
 
+  const threadParam = Array.isArray(ctx.query.thread) ? ctx.query.thread[0] : ctx.query.thread;
+  const initialOpenThreadId = (threadParam || "").trim();
+
   return {
     props: {
       initialSelectedAccounts,
+      initialOpenThreadId,
     },
   };
 };

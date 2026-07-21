@@ -118,6 +118,8 @@ export type ComposeRichEditorHandle = {
   focus: () => void;
   promptInsertLink: () => void;
   promptInsertImage: () => void;
+  /** Insert a hyperlink with explicit URL + visible text at the cursor. */
+  insertLink: (url: string, text: string) => void;
 };
 
 type Props = {
@@ -270,6 +272,15 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
       focus: () => editor?.chain().focus().run(),
       promptInsertLink: () => editor && setLink(editor),
       promptInsertImage: () => editor && insertImage(editor),
+      insertLink: (url: string, text: string) => {
+        if (!editor || !url) return;
+        const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        editor
+          .chain()
+          .focus()
+          .insertContent(`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(text || url)}</a>&nbsp;`)
+          .run();
+      },
     }),
     [editor]
   );

@@ -74,14 +74,20 @@ const LoginPage = () => {
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const showEmailError = email.length > 0 && !emailValid;
 
+  // Post-login destination override (e.g. a deep link from a Discord alert). Only internal
+  // paths are honored — reject protocol-relative (`//host`) or backslash tricks to avoid an
+  // open redirect. The target page still enforces its own role guard.
+  const returnToRaw = typeof router.query.returnTo === "string" ? router.query.returnTo : "";
+  const safeReturnTo = returnToRaw.startsWith("/") && !/^\/[/\\]/.test(returnToRaw) ? returnToRaw : "";
+
   useEffect(() => {
     if (status === "loading") return;
     if (!session) return;
 
     const kind = (session.user as any)?.kind;
     const target = kind === "client" ? "/client" : kind === "unaffiliated" ? "/onboarding/start" : "/panel";
-    router.replace(target);
-  }, [session, status, router]);
+    router.replace(safeReturnTo || target);
+  }, [session, status, router, safeReturnTo]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -100,11 +106,11 @@ const LoginPage = () => {
         const meResponse = await fetch("/api/auth/me");
         const me = meResponse.ok ? await meResponse.json() : null;
         if (me?.kind === "client") {
-          router.replace("/client");
+          router.replace(safeReturnTo || "/client");
         } else if (me?.kind === "unaffiliated") {
-          router.replace("/onboarding/start");
+          router.replace(safeReturnTo || "/onboarding/start");
         } else {
-          router.replace("/panel");
+          router.replace(safeReturnTo || "/panel");
         }
       } else {
         setError(resolveCredentialErrorMessage(signInError.message));

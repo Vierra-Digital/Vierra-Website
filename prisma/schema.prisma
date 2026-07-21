@@ -128,6 +128,7 @@ model Client {
   users_clients_user_idTousers     User?         @relation("clients_user_idTousers", fields: [user_id], references: [id], onUpdate: NoAction)
   onboarding_sessions              OnboardingSession[]
   stored_files                     StoredFile[]
+  client_outreach_tracker          ClientOutreachTracker[]
 
   @@map("clients")
   @@index([assigned_to], map: "idx_clients_assigned_to")
@@ -148,6 +149,7 @@ model Company {
   invitations             Invitation[]
   login_attempts          LoginAttempt[]
   marketing_tracker       MarketingTracker[]
+  client_outreach_tracker ClientOutreachTracker[]
   onboarding_sessions     OnboardingSession[]
   project_boards          ProjectBoard[]
   project_tasks           ProjectTask[]
@@ -486,6 +488,55 @@ model Booking {
 
   @@map("bookings")
   @@index([booking_link_id], map: "idx_bookings_link_id")
+}
+
+// LinkedIn unified inbox — synced by the Sales Nav extension (per user: staff see their own
+// LinkedIn, clients theirs). See docs/LINKEDIN_UNIFIED_INBOX_PLAN.md.
+model LinkedInThread {
+  id                   String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id              String            @db.Uuid
+  li_thread_id         String
+  participant_name     String?
+  participant_headline String?
+  participant_url      String?
+  last_message_at      DateTime?         @db.Timestamptz(6)
+  unread               Boolean           @default(false)
+  created_at           DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at           DateTime          @default(now()) @db.Timestamptz(6)
+  linkedin_messages    LinkedInMessage[]
+
+  @@map("linkedin_threads")
+  @@unique([user_id, li_thread_id], map: "uq_linkedin_threads")
+  @@index([user_id], map: "idx_linkedin_threads_user_id")
+}
+
+model LinkedInMessage {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  thread_id        String         @db.Uuid
+  li_message_id    String
+  direction        String // "in" | "out"
+  body             String
+  sent_at          DateTime?      @db.Timestamptz(6)
+  created_at       DateTime       @default(now()) @db.Timestamptz(6)
+  linkedin_threads LinkedInThread @relation(fields: [thread_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("linkedin_messages")
+  @@unique([thread_id, li_message_id], map: "uq_linkedin_messages")
+  @@index([thread_id], map: "idx_linkedin_messages_thread_id")
+}
+
+model LinkedInSendCommand {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      String   @db.Uuid
+  li_thread_id String
+  body         String
+  status       String   @default("PENDING") // PENDING | SENT | FAILED
+  error        String?
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("linkedin_send_commands")
+  @@index([user_id, status], map: "idx_linkedin_send_commands")
 }
 
 // ---------------------------------------------------------------------------
@@ -878,6 +929,31 @@ model MarketingTracker {
   @@index([user_id], map: "idx_marketing_tracker_user_id")
 }
 
+model ClientOutreachTracker {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id     String   @db.Uuid
+  client_id      String   @db.Uuid
+  user_id        String   @db.Uuid
+  year           Int
+  month          Int
+  outreach       String   @default("linkedin")
+  sent           Int      @default(0)
+  replied        Int      @default(0)
+  meetings_set   Int      @default(0)
+  clients_closed Int      @default(0)
+  revenue_cents  Int      @default(0)
+  created_at     DateTime @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime @default(now()) @db.Timestamptz(6)
+  companies      Company  @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  clients        Client   @relation(fields: [client_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users          User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("client_outreach_tracker")
+  @@unique([client_id, year, month, outreach], map: "uq_client_outreach_tracker")
+  @@index([company_id], map: "idx_client_outreach_tracker_company_id")
+  @@index([client_id], map: "idx_client_outreach_tracker_client_id")
+}
+
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model OnboardingPlatformToken {
   id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -1061,6 +1137,7 @@ model User {
   id                                                            String                              @id @db.Uuid
   email                                                         String                              @unique
   name                                                          String?
+  extension_token                                               String?                             @unique
   created_at                                                    DateTime                            @default(now()) @db.Timestamptz(6)
   updated_at                                                    DateTime                            @default(now()) @db.Timestamptz(6)
   clients_clients_assigned_toTousers                            Client[]                           @relation("clients_assigned_toTousers")
@@ -1081,6 +1158,7 @@ model User {
   invitations                                                   Invitation[]
   login_attempts                                                LoginAttempt[]
   marketing_tracker                                             MarketingTracker[]
+  client_outreach_tracker                                       ClientOutreachTracker[]
   platform_tokens                                               PlatformToken[]
   project_tasks                                                 ProjectTask[]
   signed_documents                                              SignedDocument[]
