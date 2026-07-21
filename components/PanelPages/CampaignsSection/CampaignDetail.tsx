@@ -1,8 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { FiArrowLeft, FiRefreshCw } from "react-icons/fi";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import type { Campaign } from "../CampaignsSection";
-import { LEAD_STATUS_LABELS, LEAD_STATUS_ORDER } from "../CampaignsSection";
 import ContactsTab from "./ContactsTab";
 import AnalyticsTab from "./AnalyticsTab";
 
@@ -33,7 +32,7 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
   const [busy, setBusy] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const [campaignRes, stepsRes] = await Promise.all([
@@ -47,11 +46,11 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
     } finally {
       setLoading(false);
     }
-  };
+  }, [campaignId]);
 
   useEffect(() => {
     load();
-  }, [campaignId]);
+  }, [load]);
 
   const transition = async (status: string) => {
     setBusy(true);

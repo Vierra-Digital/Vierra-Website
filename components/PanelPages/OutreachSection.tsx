@@ -40,6 +40,26 @@ type YearlySummary = {
     meetingsToClientsPct: number;
 }
 
+type ClientStat = {
+    clientId: string;
+    clientName: string;
+    outreach: string;
+    sent: number;
+    replied: number;
+    replyRate: number;
+    meetingsSet: number;
+    clientsClosed: number;
+    revenue: number;
+    attemptsToMeetingsPct: number;
+    meetingsToClientsPct: number;
+}
+
+type ClientManualFields = {
+    meetingsSet: number;
+    clientsClosed: number;
+    revenue: number;
+}
+
 const months = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
@@ -92,6 +112,15 @@ const OutreachSection = () => {
         Other: { attempts: 0, meetings: 0, clients: 0, revenue: 0 }
     });
 
+    // ---- Per-client analytics (System 2) --------------------------------
+    const [scope, setScope] = useState<"company" | "client" | "overview">("company")
+    const [clients, setClients] = useState<{ id: string; name: string }[]>([])
+    const [selectedClientId, setSelectedClientId] = useState<string>("")
+    const [clientData, setClientData] = useState<ClientStat[]>([])
+    const [clientEdits, setClientEdits] = useState<ClientManualFields>({ meetingsSet: 0, clientsClosed: 0, revenue: 0 })
+    const [clientDirty, setClientDirty] = useState(false)
+    const clientSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
     const calculatePercentage = useCallback((numerator: number, denominator: number) => {
         if (!denominator) return 0
         return Math.round((numerator / denominator) * 100 * 100) / 100
@@ -107,6 +136,15 @@ const OutreachSection = () => {
             }
         }));
         setHasUnsavedChanges(true)
+    }
+
+    function handleClientStatChange(field: keyof ClientManualFields, value: string) {
+        if (!isEditable) return
+        const num = field === "revenue"
+            ? Number(value.replace(/,/g, '')) || 0
+            : parseInt(value.replace(/,/g, '')) || 0
+        setClientEdits(prev => ({ ...prev, [field]: num }))
+        setClientDirty(true)
     }
 
     function getInputValue(val: number) {
@@ -288,13 +326,88 @@ const OutreachSection = () => {
         }
     }, [selectedYear, calculatePercentage]);
     
-    useEffect(() => {
-        if (viewMode === "monthly") {
-            fetchMonthlyData();
-        } else {
-            fetchYearlySummary();
+    const fetchClientData = useCallback(async () => {
+        setIsLoading(true)
+        try {
+            const response = await fetch(`/api/marketing/client-tracker?year=${selectedYear}&month=${selectedMonth}`)
+            if (!response.ok) throw new Error("Failed to fetch client stats")
+            const data = await response.json()
+            setClients(Array.isArray(data.clients) ? data.clients : [])
+            setClientData(Array.isArray(data.trackerData) ? data.trackerData : [])
+            setClientDirty(false)
+        } catch {
+        } finally {
+            setIsLoading(false)
         }
-    }, [selectedYear, selectedMonth, viewMode, fetchMonthlyData, fetchYearlySummary]);
+    }, [selectedYear, selectedMonth])
+
+    const persistClientData = useCallback(async () => {
+        if (!session?.user || !isEditable || !selectedClientId) return
+        setIsUpdating(true)
+        try {
+            const response = await fetch("/api/marketing/client-tracker", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    clientId: selectedClientId,
+                    year: selectedYear,
+                    month: selectedMonth,
+                    outreach: "linkedin",
+                    meetingsSet: clientEdits.meetingsSet,
+                    clientsClosed: clientEdits.clientsClosed,
+                    revenue: clientEdits.revenue,
+                }),
+            })
+            if (!response.ok) throw new Error("Failed to update client data")
+            setClientDirty(false)
+        } catch (error) {
+            console.error("Error updating client data:", error)
+        } finally {
+            setIsUpdating(false)
+        }
+    }, [session?.user, isEditable, selectedClientId, selectedYear, selectedMonth, clientEdits])
+
+    useEffect(() => {
+        if (scope === "company") {
+            if (viewMode === "monthly") {
+                fetchMonthlyData();
+            } else {
+                fetchYearlySummary();
+            }
+        } else {
+            fetchClientData();
+        }
+    }, [scope, selectedYear, selectedMonth, viewMode, fetchMonthlyData, fetchYearlySummary, fetchClientData]);
+
+    // Default the client selector to the first client once the list loads.
+    useEffect(() => {
+        if (scope === "client" && clients.length && !clients.some((c) => c.id === selectedClientId)) {
+            setSelectedClientId(clients[0].id)
+        }
+    }, [scope, clients, selectedClientId])
+
+    // Load the selected client's manual funnel fields into the editable state.
+    useEffect(() => {
+        const row = clientData.find((c) => c.clientId === selectedClientId)
+        setClientEdits({
+            meetingsSet: row?.meetingsSet ?? 0,
+            clientsClosed: row?.clientsClosed ?? 0,
+            revenue: row?.revenue ?? 0,
+        })
+        setClientDirty(false)
+    }, [selectedClientId, clientData])
+
+    // Debounced auto-save of the manual per-client fields.
+    useEffect(() => {
+        if (!clientDirty || scope !== "client" || !isEditable || isLoading) return
+        if (clientSaveTimerRef.current) clearTimeout(clientSaveTimerRef.current)
+        clientSaveTimerRef.current = setTimeout(() => {
+            persistClientData()
+        }, 400)
+        return () => {
+            if (clientSaveTimerRef.current) clearTimeout(clientSaveTimerRef.current)
+        }
+    }, [clientDirty, scope, isEditable, isLoading, persistClientData, clientEdits])
 
     useEffect(() => {
         if (!hasUnsavedChanges || viewMode !== "monthly" || !isEditable || isLoading) return
@@ -407,7 +520,41 @@ const OutreachSection = () => {
                             <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Marketing Tracker</h1>
                         </div>
                         <div className="flex items-center gap-3">
-                            
+
+                            <div className="inline-flex items-center gap-1 rounded-lg border border-[#E5E7EB] bg-[#F3F1F8] p-1">
+                                <button
+                                    onClick={() => setScope("company")}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                        scope === "company"
+                                            ? "bg-white text-[#5B21B6] shadow-sm"
+                                            : "text-[#6B7280] hover:text-[#374151]"
+                                    }`}
+                                >
+                                    Company
+                                </button>
+                                <button
+                                    onClick={() => setScope("client")}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                        scope === "client"
+                                            ? "bg-white text-[#5B21B6] shadow-sm"
+                                            : "text-[#6B7280] hover:text-[#374151]"
+                                    }`}
+                                >
+                                    By Client
+                                </button>
+                                <button
+                                    onClick={() => setScope("overview")}
+                                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                        scope === "overview"
+                                            ? "bg-white text-[#5B21B6] shadow-sm"
+                                            : "text-[#6B7280] hover:text-[#374151]"
+                                    }`}
+                                >
+                                    All Clients
+                                </button>
+                            </div>
+
+                            {scope === "company" && (
                             <div className="inline-flex items-center gap-1 rounded-lg border border-[#E5E7EB] bg-[#F3F1F8] p-1">
                                 <button
                                     onClick={() => setViewMode("monthly")}
@@ -430,8 +577,9 @@ const OutreachSection = () => {
                                     Yearly
                                 </button>
                             </div>
+                            )}
 
-                            {viewMode === "monthly" ? (
+                            {(scope !== "company" || viewMode === "monthly") ? (
                                 <>
                                     
                                     <div className="flex items-center gap-2 bg-gradient-to-r from-[#5B1A96] to-[#701CC0] rounded-lg border border-[#4C1580] shadow-md">
@@ -483,6 +631,226 @@ const OutreachSection = () => {
                     {isLoading ? (
                         <div className="flex items-center justify-center py-12">
                             <LoadingSpinner label="Loading Marketing Data..." />
+                        </div>
+                    ) : scope === "overview" ? (
+                        <div className="pb-32">
+                            {clientData.length === 0 ? (
+                                <div className="text-center py-12 text-gray-500">No client outreach logged for {months[selectedMonth - 1]} {selectedYear} yet.</div>
+                            ) : (() => {
+                                const totals = clientData.reduce(
+                                    (acc, c) => {
+                                        acc.sent += c.sent
+                                        acc.replied += c.replied
+                                        acc.meetings += c.meetingsSet
+                                        acc.closed += c.clientsClosed
+                                        acc.revenue += c.revenue
+                                        return acc
+                                    },
+                                    { sent: 0, replied: 0, meetings: 0, closed: 0, revenue: 0 }
+                                )
+                                const funnel = [
+                                    { label: "Attempts", value: totals.sent, color: "#701CC0" },
+                                    { label: "Replies", value: totals.replied, color: "#8F42FF" },
+                                    { label: "Meetings", value: totals.meetings, color: "#A855F7" },
+                                    { label: "Clients Closed", value: totals.closed, color: "#C084FC" },
+                                ]
+                                const maxVal = Math.max(totals.sent, 1)
+                                const leaderboard = [...clientData].sort((a, b) => b.replyRate - a.replyRate || b.sent - a.sent)
+                                return (
+                                    <>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                                            <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] p-6">
+                                                <p className="text-xs text-[#6B7280]">Total Attempts</p>
+                                                <p className="text-2xl font-bold text-[#111827]">{formatNumber(totals.sent)}</p>
+                                            </div>
+                                            <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] p-6">
+                                                <p className="text-xs text-[#6B7280]">Total Replies</p>
+                                                <p className="text-2xl font-bold text-[#111827]">{formatNumber(totals.replied)} <span className="text-sm text-[#701CC0]">({calculatePercentage(totals.replied, totals.sent)}%)</span></p>
+                                            </div>
+                                            <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] p-6">
+                                                <p className="text-xs text-[#6B7280]">Meetings Set</p>
+                                                <p className="text-2xl font-bold text-[#111827]">{formatNumber(totals.meetings)}</p>
+                                            </div>
+                                            <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] p-6">
+                                                <p className="text-xs text-[#6B7280]">Total Revenue</p>
+                                                <p className="text-2xl font-bold text-[#111827]">{formatCurrency(totals.revenue)}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-white rounded-xl shadow-sm border border-[#E8EBF4] p-6 mb-6">
+                                            <h3 className="text-lg font-semibold text-[#111827] mb-4">Conversion Funnel — All Clients</h3>
+                                            <div className="space-y-3">
+                                                {funnel.map((stage, i) => (
+                                                    <div key={stage.label}>
+                                                        <div className="flex justify-between items-center mb-1">
+                                                            <span className="text-sm text-[#6B7280]">{stage.label}</span>
+                                                            <span className="text-sm font-semibold text-[#111827]">
+                                                                {formatNumber(stage.value)}
+                                                                {i > 0 && <span className="text-xs text-[#9CA3AF]"> ({calculatePercentage(stage.value, funnel[i - 1].value)}% of prev)</span>}
+                                                            </span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-100 rounded-full h-3">
+                                                            <div className="h-3 rounded-full transition-all" style={{ width: `${Math.max((stage.value / maxVal) * 100, 2)}%`, background: stage.color }}></div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-white rounded-xl shadow-sm border border-[#E8EBF4] overflow-hidden">
+                                            <div className="px-5 py-3 border-b border-[#EEF1F7] bg-[#FBFCFF]">
+                                                <h3 className="font-semibold text-[#111827]">Client Leaderboard</h3>
+                                            </div>
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-sm">
+                                                    <thead>
+                                                        <tr className="text-left text-[#6B7280] border-b border-[#EEF1F7]">
+                                                            <th className="px-5 py-2 font-medium">Client</th>
+                                                            <th className="px-3 py-2 font-medium text-right">Attempts</th>
+                                                            <th className="px-3 py-2 font-medium text-right">Replies</th>
+                                                            <th className="px-3 py-2 font-medium text-right">Reply Rate</th>
+                                                            <th className="px-3 py-2 font-medium text-right">Meetings</th>
+                                                            <th className="px-3 py-2 font-medium text-right">Closed</th>
+                                                            <th className="px-5 py-2 font-medium text-right">Revenue</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {leaderboard.map((c) => (
+                                                            <tr key={c.clientId} className="border-b border-[#F3F4F6] hover:bg-[#FBFCFF]">
+                                                                <td className="px-5 py-2 font-medium text-[#111827]">{c.clientName}</td>
+                                                                <td className="px-3 py-2 text-right text-[#374151]">{formatNumber(c.sent)}</td>
+                                                                <td className="px-3 py-2 text-right text-[#374151]">{formatNumber(c.replied)}</td>
+                                                                <td className="px-3 py-2 text-right font-semibold text-[#701CC0]">{c.replyRate}%</td>
+                                                                <td className="px-3 py-2 text-right text-[#374151]">{formatNumber(c.meetingsSet)}</td>
+                                                                <td className="px-3 py-2 text-right text-[#374151]">{formatNumber(c.clientsClosed)}</td>
+                                                                <td className="px-5 py-2 text-right text-[#374151]">{formatCurrency(c.revenue)}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </>
+                                )
+                            })()}
+                        </div>
+                    ) : scope === "client" ? (
+                        <div className="pb-32">
+                            {clients.length === 0 ? (
+                                <div className="text-center py-12 text-gray-500">No clients yet. Add clients to track per-client outreach.</div>
+                            ) : (
+                                <>
+                                    <div className="mb-6 flex items-center gap-3">
+                                        <label className="text-sm font-medium text-[#6B7280]">Client</label>
+                                        <select
+                                            value={selectedClientId}
+                                            onChange={(e) => setSelectedClientId(e.target.value)}
+                                            className="text-sm font-semibold text-[#111827] rounded-md border border-[#D7DDED] px-3 py-2 bg-white focus:border-[#701CC0] focus:ring-1 focus:ring-[#701CC0] focus:outline-none"
+                                        >
+                                            {clients.map((c) => (
+                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {(() => {
+                                        const sel = clientData.find((c) => c.clientId === selectedClientId)
+                                        const sent = sel?.sent ?? 0
+                                        const replied = sel?.replied ?? 0
+                                        const replyRate = calculatePercentage(replied, sent)
+                                        const manualFields: { key: keyof ClientManualFields; label: string }[] = [
+                                            { key: "meetingsSet", label: "Meetings" },
+                                            { key: "clientsClosed", label: "Clients Closed" },
+                                            { key: "revenue", label: "Revenue" },
+                                        ]
+                                        return (
+                                            <>
+                                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                                                    <div className="bg-white rounded-xl shadow-sm border border-[#E8EBF4] overflow-hidden">
+                                                        <div className="px-4 py-3 border-b border-[#EEF1F7] bg-[#FBFCFF]">
+                                                            <h3 className="font-semibold text-[#111827] flex items-center gap-2">
+                                                                <span className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-[#EEF2FF]">
+                                                                    <Image src="/assets/Socials/LinkedIn.png" alt="LinkedIn" width={16} height={16} className="w-4 h-4" />
+                                                                </span>
+                                                                LinkedIn Outreach
+                                                            </h3>
+                                                        </div>
+                                                        <div className="p-5 space-y-4">
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-sm text-[#6B7280] flex items-center gap-2"><FiTarget className="w-4 h-4 text-[#6B7280]" /> Attempts</span>
+                                                                <span className="text-sm font-semibold text-[#111827]">{formatNumber(sent)}</span>
+                                                            </div>
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-sm text-[#6B7280]">Replies</span>
+                                                                <span className="text-sm font-semibold text-[#111827]">{formatNumber(replied)}</span>
+                                                            </div>
+                                                            <div className="pt-3 border-t border-gray-200 flex justify-between items-center">
+                                                                <span className="text-xs text-[#6B7280]">Reply Rate</span>
+                                                                <span className="text-sm font-semibold text-[#701CC0]">{replyRate}%</span>
+                                                            </div>
+                                                            <p className="text-[11px] text-[#9CA3AF]">Auto-synced from the extension.</p>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="bg-white rounded-xl shadow-sm border border-[#E8EBF4] overflow-hidden lg:col-span-2">
+                                                        <div className="px-4 py-3 border-b border-[#EEF1F7] bg-[#FBFCFF]">
+                                                            <h3 className="font-semibold text-[#111827]">Funnel (Manual Entry)</h3>
+                                                        </div>
+                                                        <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                            {manualFields.map((f) => (
+                                                                <div key={f.key}>
+                                                                    <label className="text-sm text-[#6B7280] block mb-1">{f.label}</label>
+                                                                    <input
+                                                                        type="text"
+                                                                        className={`text-sm font-semibold text-[#111827] w-full rounded-md border px-2 py-1 bg-white ${isEditable ? "border-[#D7DDED] focus:border-[#701CC0] focus:ring-1 focus:ring-[#701CC0]" : "border-[#E5E7EB]"} focus:outline-none ${!isEditable ? 'cursor-not-allowed opacity-60' : ''}`}
+                                                                        value={getInputValue(clientEdits[f.key])}
+                                                                        onChange={(e) => handleClientStatChange(f.key, e.target.value)}
+                                                                        placeholder="0"
+                                                                        disabled={!isEditable || isUpdating}
+                                                                        readOnly={!isEditable}
+                                                                    />
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        <div className="px-5 pb-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="text-xs text-[#6B7280]">Attempts To Meetings</span>
+                                                                <span className="text-sm font-semibold text-[#701CC0]">{calculatePercentage(clientEdits.meetingsSet, sent)}%</span>
+                                                            </div>
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="text-xs text-[#6B7280]">Meetings To Clients</span>
+                                                                <span className="text-sm font-semibold text-[#701CC0]">{calculatePercentage(clientEdits.clientsClosed, clientEdits.meetingsSet)}%</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: 20 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    transition={{ duration: 0.3, delay: 0.2 }}
+                                                    className="bg-gradient-to-br from-[#701CC0] to-[#5f17a5] rounded-xl shadow-lg p-8 text-white"
+                                                >
+                                                    <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                                                        <FiTrendingUp className="w-5 h-5" />
+                                                        {(clients.find((c) => c.id === selectedClientId)?.name) || "Client"} - {months[selectedMonth - 1]} {selectedYear}
+                                                    </h3>
+                                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                                                        <div><p className="text-white/80 text-sm mb-1">Attempts</p><p className="text-3xl font-bold">{formatNumber(sent)}</p></div>
+                                                        <div><p className="text-white/80 text-sm mb-1">Reply Rate</p><p className="text-3xl font-bold">{replyRate}%</p></div>
+                                                        <div><p className="text-white/80 text-sm mb-1">Meetings</p><p className="text-3xl font-bold">{formatNumber(clientEdits.meetingsSet)}</p></div>
+                                                        <div><p className="text-white/80 text-sm mb-1">Revenue</p><p className="text-3xl font-bold">{formatCurrency(clientEdits.revenue)}</p></div>
+                                                    </div>
+                                                </motion.div>
+
+                                                {!isEditable && (
+                                                    <p className="text-center text-xs text-[#9CA3AF] mt-4">Past months are read-only.</p>
+                                                )}
+                                            </>
+                                        )
+                                    })()}
+                                </>
+                            )}
                         </div>
                     ) : viewMode === "yearly" ? (
                         <div className="pb-32">

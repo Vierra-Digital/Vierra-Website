@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { processInboundForAllAccounts } from "@/lib/gmail/inbound";
 import { resurfaceDueSnoozes } from "@/lib/gmail/snooze";
+import { processSignals } from "@/lib/signals/processSignals";
 
 /**
  * Cron endpoint that polls all connected Gmail accounts for new mail and runs the
@@ -35,7 +36,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const now = new Date();
     const summary = await processInboundForAllAccounts(resolveBaseUrl(req), now);
     const snooze = await resurfaceDueSnoozes(now);
-    res.status(200).json({ ok: true, ...summary, resurfaced: snooze.resurfaced });
+    const signals = await processSignals(now).catch(() => ({ signals: 0 }));
+    res.status(200).json({ ok: true, ...summary, resurfaced: snooze.resurfaced, signals: signals.signals });
   } catch (error) {
     res.status(500).json({ ok: false, message: error instanceof Error ? error.message : "Inbound poll failed." });
   }

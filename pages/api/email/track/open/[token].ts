@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { asToken, hashIp, isLikelySelfPreview, trackingClientIp } from "@/lib/api/emailTracking";
+import { asToken, hashIp, isLikelySelfPreview, isPrefetchOpen, trackingClientIp } from "@/lib/api/emailTracking";
 
 function normalizeOpenToken(value: string) {
   return value.trim().replace(/\.gif$/i, "");
@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (token) {
     const outbound = await prisma.emailOutboundMessage.findFirst({
       where: { open_token: token, tracking_enabled: true },
-      select: { id: true },
+      select: { id: true, created_at: true },
     });
     if (outbound) {
       const userAgent = String(req.headers["user-agent"] || "").slice(0, 512) || null;
@@ -26,11 +26,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return;
       }
 
+      // Machine pre-fetches (Apple MPP, scanners, sub-10s auto-loads) are logged as
+      // OPEN_PREFETCH so they never inflate real open counts (stats count only "OPEN").
+      const msSinceSend = Date.now() - outbound.created_at.getTime();
+      const eventType = isPrefetchOpen(userAgent, msSinceSend) ? "OPEN_PREFETCH" : "OPEN";
       const ipHash = hashIp(trackingClientIp(req));
       const recentDuplicate = await prisma.emailTrackingEvent.findFirst({
         where: {
           outbound_message_id: outbound.id,
-          event_type: "OPEN",
+          event_type: eventType,
           ip_hash: ipHash,
           user_agent: userAgent,
           occurred_at: {
@@ -43,7 +47,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         await prisma.emailTrackingEvent.create({
           data: {
             outbound_message_id: outbound.id,
-            event_type: "OPEN",
+            event_type: eventType,
             recipient_email: typeof req.query.email === "string" ? req.query.email : null,
             ip_hash: ipHash,
             user_agent: userAgent,

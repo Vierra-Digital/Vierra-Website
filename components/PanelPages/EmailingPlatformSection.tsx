@@ -15,7 +15,9 @@ import {
   FiChevronsRight,
   FiCornerUpLeft,
   FiDownload,
+  FiCalendar,
   FiEdit3,
+  FiFeather,
   FiFilter,
   FiFileText,
   FiImage,
@@ -47,6 +49,7 @@ import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import ComposeRichEditor, { printComposeContent, type ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
+import SignPdfModal from "@/components/email/SignPdfModal";
 import { GLASS_CHROME, GLASS_SURFACE, SHADOW_SM, BRAND_GRADIENT, BRAND_LOGO } from "@/components/email/emailTheme";
 import {
   PAGE_SIZE,
@@ -103,8 +106,19 @@ const CampaignsView = dynamic(() => import("@/components/PanelPages/CampaignsSec
     </div>
   ),
 });
+// Lazy-load the LinkedIn unified inbox (synced by the Sales Nav extension).
+const LinkedInView = dynamic(() => import("@/components/PanelPages/LinkedInInboxSection"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center">
+      <div className="w-10 h-10 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] motion-safe:animate-spin" />
+    </div>
+  ),
+});
 type EmailingPlatformSectionProps = {
   initialSelectedAccounts?: string[];
+  /** Gmail thread id to auto-open (the whole conversation) once the inbox loads — deep link, e.g. from a Discord alert. */
+  initialOpenThreadId?: string;
 };
 
 const MailboxLoader: React.FC<{ label?: string }> = ({ label = "Loading messages..." }) => (
@@ -130,8 +144,10 @@ const MailboxEmpty: React.FC = () => (
 
 const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   initialSelectedAccounts = [],
+  initialOpenThreadId = "",
 }) => {
   const initialAccountsRef = useRef(initialSelectedAccounts);
+  const deepLinkAppliedRef = useRef(false);
   const [step, setStep] = useState<"gate" | "client">(initialSelectedAccounts.length > 0 ? "client" : "gate");
   const [activeModule, setActiveModule] = useState<ModuleKey>("inbox");
   const [gmailAccounts, setGmailAccounts] = useState<GmailAccountConnection[]>([]);
@@ -199,6 +215,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [composeAttachments, setComposeAttachments] = useState<
     Array<{ id: string; filename: string; contentType: string; contentBase64: string }>
   >([]);
+  const [signModalOpen, setSignModalOpen] = useState(false);
+  const [composeBookingLinks, setComposeBookingLinks] = useState<Array<{ id: string; slug: string; title: string }>>([]);
+  const [bookingMenuOpen, setBookingMenuOpen] = useState(false);
   const [composeTemplates, setComposeTemplates] = useState<
     Array<{ id: string; name: string; subject: string | null; bodyHtml: string | null; bodyText: string | null }>
   >([]);
@@ -1509,6 +1528,21 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     loadContacts();
   }, [loadContacts]);
 
+  // Deep link (e.g. from a Discord reply alert): once the inbox has loaded, auto-open the
+  // linked conversation and switch to the reader. Matches by threadId and opens whichever
+  // message in that thread is loaded — the reader then renders the full chain (threadMessages
+  // from message-detail). Runs once when a row from the target thread appears.
+  useEffect(() => {
+    if (deepLinkAppliedRef.current || !initialOpenThreadId) return;
+    const row = messages.find((m) => m.threadId === initialOpenThreadId);
+    if (row) {
+      deepLinkAppliedRef.current = true;
+      setSelectedMessageId(row.id);
+      setViewMode("message");
+      setDetailError("");
+    }
+  }, [messages, initialOpenThreadId]);
+
   useEffect(() => {
     if (!selectedMessage || viewMode !== "message") return;
     const loadDetail = async () => {
@@ -2622,6 +2656,28 @@ ${sourceText}`;
     setComposeAttachments((prev) => [...prev, ...additions]);
   }, []);
 
+  const toggleBookingMenu = useCallback(async () => {
+    setBookingMenuOpen((prev) => !prev);
+    try {
+      const r = await fetch("/api/booking/links");
+      const d = await r.json().catch(() => ({}));
+      const rows = Array.isArray(d?.links) ? d.links : [];
+      setComposeBookingLinks(
+        rows
+          .filter((l: { active?: boolean }) => l.active !== false)
+          .map((l: { id: string; slug: string; title: string }) => ({ id: l.id, slug: l.slug, title: l.title }))
+      );
+    } catch {
+      /* keep whatever we had */
+    }
+  }, []);
+
+  const insertBookingLink = useCallback((slug: string, title: string) => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    composeEditorRef.current?.insertLink(`${origin}/book/${slug}`, title || "Book a time");
+    setBookingMenuOpen(false);
+  }, []);
+
   const handleSaveComposeTemplate = async () => {
     const name = saveTemplateName.trim();
     if (!name || !composeAccountEmail || saveTemplateSaving) return;
@@ -2750,12 +2806,12 @@ ${sourceText}`;
           background-repeat: repeat;
           background-size: 220px 220px;
           opacity: 0.8;
-          animation: email-stars-drift 40s linear infinite;
+          animation: email-stars-drift 20s linear infinite;
         }
         .email-stars--2 {
           background-size: 440px 440px;
           opacity: 0.5;
-          animation: email-stars-drift-2 70s linear infinite;
+          animation: email-stars-drift-2 34s linear infinite;
         }
         @keyframes email-stars-drift { to { background-position: 220px 220px; } }
         @keyframes email-stars-drift-2 { to { background-position: 440px 440px; } }
@@ -2797,8 +2853,8 @@ ${sourceText}`;
         <div className="relative z-10 flex-1 w-full overflow-hidden px-4 md:px-6 py-4">
           <div className="w-full max-w-[1700px] mx-auto h-full overflow-hidden">
             {(
-              <div className="grid grid-cols-[248px_minmax(720px,1fr)] gap-5 min-h-[620px] overflow-hidden h-[calc(100vh-36px)]">
-                <div className={`rounded-2xl ${GLASS_CHROME} ${SHADOW_SM} p-3 h-full overflow-hidden flex flex-col`}>
+              <div className="grid grid-cols-[248px_minmax(720px,1fr)] gap-5 h-full overflow-hidden">
+                <div className={`rounded-xl ${GLASS_CHROME} ${SHADOW_SM} p-3 h-full overflow-hidden flex flex-col`}>
                   <div className="flex items-center justify-center pt-3 pb-7">
                     <Image src={BRAND_LOGO.wordmarkDark} alt="Vierra" width={168} height={42} className="h-10 w-auto" priority />
                   </div>
@@ -2807,8 +2863,7 @@ ${sourceText}`;
                     onClick={() => {
                       void openNewCompose();
                     }}
-                    style={{ backgroundImage: BRAND_GRADIENT }}
-                    className="w-full mb-3 rounded-xl text-white px-3 py-2.5 text-sm font-semibold hover:brightness-105 inline-flex items-center justify-center gap-2 shadow-[0_10px_22px_-8px_rgba(112,28,192,0.55)] transition"
+                    className="w-full mb-3 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#701CC0] via-[#8F42FF] to-[#701CC0] animate-gradient px-3 py-2.5 text-sm font-semibold text-white shadow-[0_6px_20px_-6px_rgba(112,28,192,0.6)] transition-all duration-200 hover:shadow-[0_8px_26px_-6px_rgba(112,28,192,0.7)]"
                   >
                     <FiEdit3 className="w-4 h-4" />
                     Compose
@@ -2899,11 +2954,13 @@ ${sourceText}`;
                   </div>
                 </div>
 
-                <div className={`rounded-2xl ${GLASS_SURFACE} ${SHADOW_SM} h-full overflow-hidden flex flex-col`}>
+                <div className={`rounded-xl ${GLASS_SURFACE} ${SHADOW_SM} h-full overflow-hidden flex flex-col`}>
                   {activeModule === "campaigns" ? (
                     <div className="h-full overflow-y-auto">
                       <CampaignsView />
                     </div>
+                  ) : activeModule === "linkedin" ? (
+                    <LinkedInView />
                   ) : activeModule === "scheduled" ? (
                     <div className="flex h-full flex-col">
                       <div className="flex items-center justify-between gap-3 border-b border-white/30 px-4 py-3">
@@ -4746,6 +4803,47 @@ ${sourceText}`;
                       </button>
                       <button
                         type="button"
+                        onClick={() => setSignModalOpen(true)}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        title="Request signature"
+                        aria-label="Request signature"
+                      >
+                        <FiFeather className="h-[18px] w-[18px]" aria-hidden />
+                      </button>
+                      <div className="relative shrink-0">
+                        <button
+                          type="button"
+                          onClick={toggleBookingMenu}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                          title="Insert booking link"
+                          aria-label="Insert booking link"
+                          aria-expanded={bookingMenuOpen}
+                        >
+                          <FiCalendar className="h-[18px] w-[18px]" aria-hidden />
+                        </button>
+                        {bookingMenuOpen ? (
+                          <div className="absolute bottom-full left-0 z-20 mb-1 w-64 rounded-lg border border-[#E5E7EB] bg-white py-1 shadow-lg">
+                            {composeBookingLinks.length === 0 ? (
+                              <p className="px-3 py-2 text-xs text-[#847FA0]">
+                                No active booking links. Create one in Settings → Meeting booking.
+                              </p>
+                            ) : (
+                              composeBookingLinks.map((l) => (
+                                <button
+                                  key={l.id}
+                                  type="button"
+                                  onClick={() => insertBookingLink(l.slug, l.title)}
+                                  className="block w-full truncate px-3 py-2 text-left text-sm text-[#374151] hover:bg-[#F5EFFF] hover:text-[#701CC0]"
+                                >
+                                  {l.title}
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
                         onClick={() => composeEditorRef.current?.promptInsertLink()}
                         className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
                         title="Insert link"
@@ -4826,6 +4924,18 @@ ${sourceText}`;
           </div>
         </div>
       ) : null}
+
+      <SignPdfModal
+        open={signModalOpen}
+        onClose={() => setSignModalOpen(false)}
+        defaultSignerEmail={composeTo.split(",")[0]?.trim() || ""}
+        pdfCandidates={composeAttachments
+          .filter((a) => a.contentType === "application/pdf" || a.filename.toLowerCase().endsWith(".pdf"))
+          .map((a) => ({ id: a.id, filename: a.filename, contentBase64: a.contentBase64 }))}
+        onLinkReady={(url: string, filename: string) =>
+          composeEditorRef.current?.insertLink(url, `Sign “${filename}”`)
+        }
+      />
 
       {saveTemplateModalOpen ? (
         <div

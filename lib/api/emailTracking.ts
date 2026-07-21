@@ -56,3 +56,20 @@ export function isLikelySelfPreview(req: NextApiRequest): boolean {
     return false;
   }
 }
+
+/**
+ * Classify a pixel hit as a machine pre-fetch vs a genuine human open — the difference
+ * between MailTrack-level accuracy and noisy false opens. Pre-fetches:
+ *  - Known security-gateway / bot user-agents (Proofpoint, Mimecast, etc.).
+ *  - Hits within ~10s of send: Apple Mail Privacy Protection and inbound scanners load
+ *    every pixel on delivery, which no human can beat.
+ * Gmail's image proxy (GoogleImageProxy) fetches on actual open, so it is NOT treated as
+ * a pre-fetch — those stay real opens.
+ */
+export function isPrefetchOpen(userAgent: string | null, msSinceSend: number): boolean {
+  const ua = (userAgent || "").toLowerCase();
+  if (/proofpoint|mimecast|barracuda|forcepoint|symantec|fireeye|cloudmark|messagelabs|trendmicro/.test(ua)) return true;
+  if (/\bbot\b|crawler|spider|scanner|monitor|headlesschrome|preview/.test(ua)) return true;
+  if (msSinceSend >= 0 && msSinceSend < 10_000) return true;
+  return false;
+}

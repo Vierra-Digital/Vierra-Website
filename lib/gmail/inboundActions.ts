@@ -279,8 +279,15 @@ export async function maybeNotifyDiscord(msg: InboundMessage): Promise<void> {
   if (!discordConfigured()) return;
   // Only reply threads (In-Reply-To present) from humans — not cold inbound / automated mail.
   if (!msg.inReplyTo || isAutomatedSender(msg)) return;
+  const base = (process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "").replace(/\/$/, "");
+  // Deep link into the panel: opens this mailbox and the full conversation so you can respond
+  // right there. If logged out, login bounces back here via ?returnTo.
+  const link =
+    base && msg.threadId
+      ? `\n🔗 Reply in Vierra: ${base}/panel/email?accounts=${encodeURIComponent(msg.accountEmail)}&thread=${encodeURIComponent(msg.threadId)}`
+      : "";
   await notifyDiscord(
     `📬 **Reply** from ${msg.from || msg.fromEmail} → ${msg.accountEmail}\n` +
-      `**${msg.subject || "(no subject)"}**\n${msg.snippet.slice(0, 240)}`
+      `**${msg.subject || "(no subject)"}**\n${msg.snippet.slice(0, 240)}${link}`
   );
 }

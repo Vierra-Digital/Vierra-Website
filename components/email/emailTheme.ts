@@ -23,18 +23,10 @@ export const BRAND_LOGO = {
 /** Brand hero gradient (from the V logo: purple → magenta). Use for primary CTAs. */
 export const BRAND_GRADIENT = "linear-gradient(120deg,#7A17C5 0%,#A620AE 52%,#C42B9F 100%)";
 
-/** App canvas — light, cool near-white with soft drifting colour blobs so the frosted
- *  chrome has something to refract (animated via `.email-anim-bg`). Kept light for legibility. */
-export const APP_BACKGROUND =
-  "radial-gradient(1000px 620px at 12% 0%, #C4A0EC 0%, rgba(196,160,236,0) 55%)," +
-  "radial-gradient(940px 580px at 100% 8%, #AE81E2 0%, rgba(174,129,226,0) 52%)," +
-  "radial-gradient(860px 640px at 65% 120%, #CDB2F1 0%, rgba(205,178,241,0) 55%)," +
-  "linear-gradient(180deg,#ECE0F8 0%,#DDC9F1 100%)";
-
 /** Unified frosted-glass surface — the sidebar, content pane, and their headers all use
  *  this same recipe so the three areas read as one cohesive glass system. */
 const GLASS_BASE =
-  "bg-white/70 backdrop-blur-xl backdrop-saturate-150 border border-white/60 ring-1 ring-inset ring-white/40";
+  "bg-[#F9FAFBE6] backdrop-blur-xl backdrop-saturate-150";
 
 /** Chrome surface (side rail). */
 export const GLASS_CHROME = GLASS_BASE;

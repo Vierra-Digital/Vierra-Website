@@ -35,6 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     rangeStart,
     rangeEnd,
     nowMs: now.getTime(),
+    timeZone: link.timezone || "UTC",
   });
 
   res.status(200).json({
