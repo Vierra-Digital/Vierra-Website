@@ -77,6 +77,21 @@ export default withAuth(async (req, res, session) => {
       return;
     }
 
+    // Designating this campaign as the signal auto-enrollment target is allowed in any
+    // status (you'd typically flag a live nurture sequence).
+    if (req.body?.enrollOnSignal !== undefined) {
+      const updated = await prisma.campaign.update({
+        where: { id },
+        data: { enroll_on_signal: Boolean(req.body.enrollOnSignal) },
+        include: {
+          email_provider_accounts: { select: { account_email: true } },
+          _count: { select: { campaign_steps: true, campaign_contacts: true } },
+        },
+      });
+      res.status(200).json({ campaign: serializeCampaign(updated) });
+      return;
+    }
+
     if (existing.status !== "draft") {
       res.status(400).json({ message: "Send settings can only be edited while the campaign is a draft." });
       return;
