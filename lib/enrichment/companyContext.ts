@@ -28,7 +28,9 @@ export type SeoSnapshot = {
   https: boolean;
 };
 
-export type NewsItem = { title: string; link: string; date: string | null };
+// A notable executive/founder, with a link to their LinkedIn profile (direct
+// when Wikidata has the handle, else a name search).
+export type KeyPerson = { name: string; role: string; url: string };
 
 // Firmographics we can pull KEYLESSLY from the page's schema.org / JSON-LD.
 // (Verified funding amounts + website traffic need a paid provider like Harmonic
@@ -40,6 +42,7 @@ export type OrgProfile = {
   location: string | null;
   revenue: string | null;
   ceo: string | null;
+  people: KeyPerson[]; // key executives/founders with LinkedIn links
   source: string | null; // where the firmographics came from (e.g. "Wikidata", "schema.org")
 };
 
@@ -53,7 +56,6 @@ export type CompanyContext = {
   emails: string[];
   tech: string[];
   seo: SeoSnapshot;
-  news: NewsItem[];
   profile: OrgProfile;
   fetchedAt: string;
 };
@@ -236,7 +238,7 @@ export function extractSeo(html: string, url: string): SeoSnapshot {
 
 /** Keyless firmographics from schema.org / JSON-LD Organization blocks on the page. */
 export function extractOrgProfile(html: string): OrgProfile {
-  const out: OrgProfile = { industry: null, employees: null, founded: null, location: null, revenue: null, ceo: null, source: null };
+  const out: OrgProfile = { industry: null, employees: null, founded: null, location: null, revenue: null, ceo: null, people: [], source: null };
   const blocks = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
   const nodes: Record<string, unknown>[] = [];
   const collect = (d: unknown) => {
@@ -331,8 +333,8 @@ export async function fetchWikidata(name: string, domain: string): Promise<Parti
   const val = (r: any, k: string) => (r[k] && r[k].value ? String(r[k].value) : null);
   // Prefer the row whose official website matches the domain; else the first with data.
   const matched =
-    rows.find((r) => val(r, "website") && val(r, "website")!.toLowerCase().includes(root)) ||
-    rows.find((r) => val(r, "employees") || val(r, "industryLabel") || val(r, "revenue")) ||
+    (root && rows.find((r) => val(r, "website") && val(r, "website")!.toLowerCase().includes(root))) ||
+    rows.find((r) => val(r, "employees") || val(r, "industryLabel") || val(r, "revenue") || val(r, "ceoLabel")) ||
     rows[0];
   if (!matched) return null;
 
@@ -342,7 +344,39 @@ export async function fetchWikidata(name: string, domain: string): Promise<Parti
   const industry = val(matched, "industryLabel");
   const hq = val(matched, "hqLabel");
   const ceo = val(matched, "ceoLabel");
-  if (!employees && !inception && !revenue && !industry && !hq && !ceo) return null;
+
+  // 3) Key executives: CEO (P169), founder (P112), chairperson (P488). Link each
+  // to their LinkedIn profile via P6634 when Wikidata has it, else a name search.
+  const people: KeyPerson[] = [];
+  const itemUri = val(matched, "item");
+  const qid = itemUri ? itemUri.split("/").pop() : null;
+  if (qid && /^Q\d+$/.test(qid)) {
+    const pq =
+      `SELECT ?role ?personLabel ?linkedin WHERE {` +
+      ` { wd:${qid} wdt:P169 ?person. BIND("CEO" AS ?role) }` +
+      ` UNION { wd:${qid} wdt:P112 ?person. BIND("Founder" AS ?role) }` +
+      ` UNION { wd:${qid} wdt:P488 ?person. BIND("Chair" AS ?role) }` +
+      ` OPTIONAL { ?person wdt:P6634 ?linkedin. }` +
+      ` SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } LIMIT 12`;
+    const pdata = await getJson(`https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(pq)}`);
+    const prows: any[] = pdata?.results?.bindings || [];
+    const seen = new Set<string>();
+    for (const r of prows) {
+      const nlabel = val(r, "personLabel");
+      if (!nlabel || /^Q\d+$/.test(nlabel) || seen.has(nlabel)) continue;
+      seen.add(nlabel);
+      const li = val(r, "linkedin");
+      people.push({
+        name: nlabel,
+        role: val(r, "role") || "",
+        url: li
+          ? `https://www.linkedin.com/in/${li}`
+          : `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(nlabel)}`,
+      });
+    }
+  }
+
+  if (!employees && !inception && !revenue && !industry && !hq && !ceo && !people.length) return null;
 
   return {
     industry: industry,
@@ -351,41 +385,9 @@ export async function fetchWikidata(name: string, domain: string): Promise<Parti
     location: hq,
     revenue: revenue ? "$" + Number(revenue).toLocaleString() : null,
     ceo: ceo,
+    people,
     source: "Wikidata",
   };
-}
-
-/**
- * Keyless recent-news / funding signal via Google News' public RSS search.
- * Surfaces headlines (which often include funding/hiring/launch news). These are
- * HEADLINES, not verified funding amounts — no data-provider key involved.
- */
-export async function fetchNews(query: string): Promise<NewsItem[]> {
-  const q = (query || "").trim();
-  if (!q) return [];
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 6000);
-  try {
-    const res = await fetch(
-      `https://news.google.com/rss/search?q=${encodeURIComponent('"' + q + '"')}&hl=en-US&gl=US&ceid=US:en`,
-      { signal: controller.signal, headers: { "User-Agent": UA } }
-    );
-    clearTimeout(timer);
-    if (!res.ok) return [];
-    const xml = (await res.text()).slice(0, 200_000);
-    const items: NewsItem[] = [];
-    const blocks = xml.match(/<item>[\s\S]*?<\/item>/gi) || [];
-    for (const b of blocks.slice(0, 5)) {
-      const t = b.match(/<title>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/title>/i);
-      const l = b.match(/<link>(?:<!\[CDATA\[)?([\s\S]*?)(?:\]\]>)?<\/link>/i);
-      const d = b.match(/<pubDate>([\s\S]*?)<\/pubDate>/i);
-      if (t && t[1]) items.push({ title: decodeEntities(t[1].trim()), link: l ? l[1].trim() : "", date: d ? d[1].trim() : null });
-    }
-    return items;
-  } catch {
-    clearTimeout(timer);
-    return [];
-  }
 }
 
 /**
@@ -498,7 +500,7 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
   const seo = extractSeo(html, url);
   const profile = extractOrgProfile(html);
   // Fill gaps from Wikidata (free, no key) — great for notable companies.
-  const [wd, news] = await Promise.all([fetchWikidata(name || "", domain), fetchNews(name || domain)]);
+  const wd = await fetchWikidata(name || "", domain);
   if (wd) {
     profile.industry = profile.industry || wd.industry || null;
     profile.employees = profile.employees || wd.employees || null;
@@ -506,6 +508,7 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
     profile.location = profile.location || wd.location || null;
     profile.revenue = profile.revenue || wd.revenue || null;
     profile.ceo = profile.ceo || wd.ceo || null;
+    if (wd.people && wd.people.length) profile.people = wd.people;
     if (!profile.source && (wd.industry || wd.employees || wd.founded || wd.location || wd.revenue || wd.ceo)) profile.source = "Wikidata";
     else if (profile.source && wd.source && (wd.industry || wd.employees)) profile.source = "schema.org + Wikidata";
   }
@@ -520,7 +523,6 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
     emails: extractEmails(html, domain),
     tech: detectTech(html, headers),
     seo,
-    news,
     profile,
     fetchedAt: new Date().toISOString(),
   };
