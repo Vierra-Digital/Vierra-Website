@@ -38,6 +38,9 @@ export type OrgProfile = {
   employees: string | null;
   founded: string | null;
   location: string | null;
+  revenue: string | null;
+  ceo: string | null;
+  source: string | null; // where the firmographics came from (e.g. "Wikidata", "schema.org")
 };
 
 export type CompanyContext = {
@@ -233,7 +236,7 @@ export function extractSeo(html: string, url: string): SeoSnapshot {
 
 /** Keyless firmographics from schema.org / JSON-LD Organization blocks on the page. */
 export function extractOrgProfile(html: string): OrgProfile {
-  const out: OrgProfile = { industry: null, employees: null, founded: null, location: null };
+  const out: OrgProfile = { industry: null, employees: null, founded: null, location: null, revenue: null, ceo: null, source: null };
   const blocks = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
   const nodes: Record<string, unknown>[] = [];
   const collect = (d: unknown) => {
@@ -274,7 +277,82 @@ export function extractOrgProfile(html: string): OrgProfile {
       }
     }
   }
+  if (out.industry || out.employees || out.founded || out.location || out.revenue) out.source = "schema.org";
   return out;
+}
+
+/**
+ * Keyless firmographics from WIKIDATA (free, no API key): employees, founding
+ * year, industry, HQ, and revenue — for notable companies. Matches by company
+ * name, then prefers the entity whose official website matches the domain.
+ */
+export async function fetchWikidata(name: string, domain: string): Promise<Partial<OrgProfile> | null> {
+  const query = (name || domain.split(".")[0] || "").trim();
+  if (!query) return null;
+
+  const getJson = async (url: string): Promise<any | null> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 7000);
+    try {
+      const res = await fetch(url, { signal: controller.signal, headers: { "User-Agent": UA, Accept: "application/json" } });
+      clearTimeout(timer);
+      return res.ok ? await res.json() : null;
+    } catch {
+      clearTimeout(timer);
+      return null;
+    }
+  };
+
+  // 1) Find candidate entities by name.
+  const search = await getJson(
+    `https://www.wikidata.org/w/api.php?action=wbsearchentities&search=${encodeURIComponent(query)}&language=en&type=item&format=json&limit=5`
+  );
+  const ids: string[] = Array.isArray(search?.search) ? search.search.map((s: any) => s.id).filter(Boolean).slice(0, 5) : [];
+  if (!ids.length) return null;
+
+  // 2) Pull firmographics for those candidates in one SPARQL call (labels resolved).
+  const values = ids.map((id) => `wd:${id}`).join(" ");
+  const sparql =
+    `SELECT ?item ?website ?employees ?inception ?industryLabel ?hqLabel ?revenue ?ceoLabel WHERE {` +
+    ` VALUES ?item { ${values} }` +
+    ` OPTIONAL { ?item wdt:P856 ?website }` +
+    ` OPTIONAL { ?item wdt:P1128 ?employees }` +
+    ` OPTIONAL { ?item wdt:P571 ?inception }` +
+    ` OPTIONAL { ?item wdt:P452 ?industry }` +
+    ` OPTIONAL { ?item wdt:P159 ?hq }` +
+    ` OPTIONAL { ?item wdt:P2139 ?revenue }` +
+    ` OPTIONAL { ?item wdt:P169 ?ceo }` +
+    ` SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } }`;
+  const data = await getJson(`https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(sparql)}`);
+  const rows: any[] = data?.results?.bindings || [];
+  if (!rows.length) return null;
+
+  const root = domain.split(".").slice(-2).join(".");
+  const val = (r: any, k: string) => (r[k] && r[k].value ? String(r[k].value) : null);
+  // Prefer the row whose official website matches the domain; else the first with data.
+  const matched =
+    rows.find((r) => val(r, "website") && val(r, "website")!.toLowerCase().includes(root)) ||
+    rows.find((r) => val(r, "employees") || val(r, "industryLabel") || val(r, "revenue")) ||
+    rows[0];
+  if (!matched) return null;
+
+  const employees = val(matched, "employees");
+  const inception = val(matched, "inception");
+  const revenue = val(matched, "revenue");
+  const industry = val(matched, "industryLabel");
+  const hq = val(matched, "hqLabel");
+  const ceo = val(matched, "ceoLabel");
+  if (!employees && !inception && !revenue && !industry && !hq && !ceo) return null;
+
+  return {
+    industry: industry,
+    employees: employees ? Number(employees).toLocaleString() : null,
+    founded: inception ? inception.slice(0, 4) : null,
+    location: hq,
+    revenue: revenue ? "$" + Number(revenue).toLocaleString() : null,
+    ceo: ceo,
+    source: "Wikidata",
+  };
 }
 
 /**
@@ -419,7 +497,18 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
 
   const seo = extractSeo(html, url);
   const profile = extractOrgProfile(html);
-  const news = await fetchNews(name || domain);
+  // Fill gaps from Wikidata (free, no key) — great for notable companies.
+  const [wd, news] = await Promise.all([fetchWikidata(name || "", domain), fetchNews(name || domain)]);
+  if (wd) {
+    profile.industry = profile.industry || wd.industry || null;
+    profile.employees = profile.employees || wd.employees || null;
+    profile.founded = profile.founded || wd.founded || null;
+    profile.location = profile.location || wd.location || null;
+    profile.revenue = profile.revenue || wd.revenue || null;
+    profile.ceo = profile.ceo || wd.ceo || null;
+    if (!profile.source && (wd.industry || wd.employees || wd.founded || wd.location || wd.revenue || wd.ceo)) profile.source = "Wikidata";
+    else if (profile.source && wd.source && (wd.industry || wd.employees)) profile.source = "schema.org + Wikidata";
+  }
 
   return {
     domain,
