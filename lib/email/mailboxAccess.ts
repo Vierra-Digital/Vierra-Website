@@ -7,30 +7,53 @@ import { prisma } from "@/lib/prisma";
  * missing (P2021) so nothing breaks pre-migration.
  */
 
-/** Lowercased account emails this user has been granted access to. */
-export async function grantedAccountEmails(userId: string): Promise<string[]> {
+/**
+ * Every Gmail mailbox a user can access = owned (their own connections) + granted (shared with
+ * them by an admin), each tagged with the `ownerUserId` whose token/data to use. For owned
+ * accounts ownerUserId === userId, so endpoints that swap in this list behave identically for
+ * owners. Fail-safe: on any error, returns just the owned accounts.
+ */
+export async function getAccessibleGmailAccounts(
+  userId: string
+): Promise<Array<{ email: string; ownerUserId: string }>> {
+  const out: Array<{ email: string; ownerUserId: string }> = [];
+  const seen = new Set<string>();
   try {
-    const rows = await prisma.mailboxGrant.findMany({
+    const owned = await prisma.platformToken.findMany({
+      where: { user_id: userId, platform: { startsWith: "gmail:" } },
+      select: { platform: true },
+    });
+    for (const r of owned) {
+      const email = r.platform.replace(/^gmail:/, "").toLowerCase();
+      if (email && !seen.has(email)) {
+        seen.add(email);
+        out.push({ email, ownerUserId: userId });
+      }
+    }
+  } catch {
+    return out;
+  }
+  try {
+    const grants = await prisma.mailboxGrant.findMany({
       where: { grantee_user_id: userId },
       select: { account_email: true },
     });
-    return rows.map((r) => r.account_email.toLowerCase());
+    for (const g of grants) {
+      const email = g.account_email.toLowerCase();
+      if (seen.has(email)) continue;
+      const owner = await prisma.platformToken.findFirst({
+        where: { platform: `gmail:${email}` },
+        select: { user_id: true },
+      });
+      if (owner) {
+        seen.add(email);
+        out.push({ email, ownerUserId: owner.user_id });
+      }
+    }
   } catch {
-    return [];
+    /* grants table unavailable — owned accounts already returned */
   }
-}
-
-/** True if the user was granted this mailbox with send permission. */
-export async function canSendAsGranted(userId: string, accountEmail: string): Promise<boolean> {
-  try {
-    const g = await prisma.mailboxGrant.findFirst({
-      where: { grantee_user_id: userId, account_email: accountEmail.toLowerCase(), can_send: true },
-      select: { id: true },
-    });
-    return Boolean(g);
-  } catch {
-    return false;
-  }
+  return out;
 }
 
 /**

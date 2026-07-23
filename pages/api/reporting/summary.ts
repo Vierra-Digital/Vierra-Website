@@ -14,7 +14,7 @@ export default withAuth(
     try {
       const [campaigns, activeCampaigns, totalContacts, byStatus, bookings, upcomingBookings] = await Promise.all([
         prisma.campaign.count({ where: { company_id: companyId } }),
-        prisma.campaign.count({ where: { company_id: companyId, status: { in: ["active", "running"] } } }),
+        prisma.campaign.count({ where: { company_id: companyId, status: "active" } }),
         prisma.campaignContact.count({ where: { campaigns: { company_id: companyId } } }),
         prisma.campaignContact.groupBy({
           by: ["lead_status"],

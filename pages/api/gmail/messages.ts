@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
+import { getAccessibleGmailAccounts } from "@/lib/email/mailboxAccess";
 import { asQueryStr } from "@/lib/api/parsing";
 
 type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive" | "allmail" | "starred" | "important" | "scheduled";
@@ -232,16 +233,12 @@ export default withAuth(async (req, res, session) => {
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
 
-  const rows = await prisma.platformToken.findMany({
-    where: { user_id: userId, platform: { startsWith: "gmail:" } },
-    select: { platform: true },
-  });
-
-  const accountRows = rows
-    .map((row) => ({
-      email: row.platform.replace(/^gmail:/, "").toLowerCase(),
-    }))
-    .filter((row) => (selectedEmails.length ? selectedEmails.includes(row.email) : true));
+  // Accessible = owned + admin-granted (shared inboxes). Each carries the ownerUserId whose
+  // token/data to use; for owned accounts ownerUserId === userId (identical to before).
+  const accessibleAccounts = await getAccessibleGmailAccounts(userId);
+  const accountRows = accessibleAccounts.filter((row) =>
+    selectedEmails.length ? selectedEmails.includes(row.email) : true
+  );
 
   if (accountRows.length === 0) {
     res.status(200).json({ messages: [], accountErrors: [] });
@@ -253,7 +250,7 @@ export default withAuth(async (req, res, session) => {
   const messagesByAccount = await Promise.all(
     accountRows.map(async (account) => {
       try {
-        const tokenResult = await getValidGmailAccessToken(userId, account.email);
+        const tokenResult = await getValidGmailAccessToken(account.ownerUserId, account.email);
         if (!tokenResult.ok) {
           throw new Error(tokenResult.message);
         }
@@ -308,7 +305,7 @@ export default withAuth(async (req, res, session) => {
           return await loadAccountMessages(tokenResult.accessToken);
         } catch (error) {
           if (!isAuthFailure(error)) throw error;
-          const refreshResult = await getValidGmailAccessToken(userId, account.email, { forceRefresh: true });
+          const refreshResult = await getValidGmailAccessToken(account.ownerUserId, account.email, { forceRefresh: true });
           if (!refreshResult.ok) {
             throw new Error(refreshResult.message);
           }

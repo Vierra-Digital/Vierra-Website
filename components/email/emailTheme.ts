@@ -41,25 +41,5 @@ export const GLASS_MODAL =
 /** Modal scrim. */
 export const GLASS_SCRIM = "bg-[#1E1B2E]/25 backdrop-blur-sm";
 
-/** Primary brand button (solid). */
-export const BTN_PRIMARY =
-  "bg-[#701CC0] hover:bg-[#5F17A5] text-white font-semibold rounded-xl shadow-[0_10px_22px_-8px_rgba(112,28,192,0.55)] transition";
-
 /** Soft elevation used across cards/panels. */
-export const SHADOW_SOFT = "shadow-[0_10px_40px_-12px_rgba(46,16,80,0.18)]";
 export const SHADOW_SM = "shadow-[0_2px_12px_-4px_rgba(46,16,80,0.14)]";
-
-/** Brand color tokens (hex) for inline styles / SVG. */
-export const BRAND = {
-  purple: "#701CC0",
-  purple600: "#5F17A5",
-  purple700: "#4C1D95",
-  magenta: "#C42B9F",
-  tint050: "#F5EFFF",
-  tint100: "#ECE0FF",
-  tint200: "#DEC9F6",
-  ink: "#1E1B2E",
-  ink2: "#4A465C",
-  muted: "#847FA0",
-  hair: "#EAE5F4",
-} as const;

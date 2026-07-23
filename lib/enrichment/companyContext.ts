@@ -46,6 +46,23 @@ export type OrgProfile = {
   source: string | null; // where the firmographics came from (e.g. "Wikidata", "schema.org")
 };
 
+// Global popularity rank from the Tranco research list (free, no key). Lower rank
+// = more popular. `history` is oldest->newest daily ranks for a small trend chart.
+export type Popularity = {
+  rank: number;
+  previousRank: number | null; // ~30 days ago, for a trend delta
+  history: { date: string; rank: number }[];
+};
+
+// Domain registration age — works for ANY domain (incl. tiny/new ones the
+// popularity lists don't cover), via free keyless RDAP.
+export type DomainAge = { registered: string; ageYears: number };
+
+// Domain authority (0-10) + global rank from Open PageRank — covers ~800M domains
+// incl. small sites (based on the Common Crawl link graph). Free, but needs an API
+// key (OPENPAGERANK_API_KEY). Dormant/omitted when no key is configured.
+export type Authority = { score: number; rank: number | null };
+
 export type CompanyContext = {
   domain: string;
   url: string;
@@ -57,6 +74,9 @@ export type CompanyContext = {
   tech: string[];
   seo: SeoSnapshot;
   profile: OrgProfile;
+  popularity: Popularity | null;
+  authority: Authority | null;
+  domainAge: DomainAge | null;
   fetchedAt: string;
 };
 
@@ -78,7 +98,12 @@ export function normalizeDomain(input: string): { domain: string; url: string } 
     return null;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") return null;
-  const host = u.hostname.replace(/^www\./, "");
+  // Strip app/portal-style subdomains so app.slack.com -> slack.com (the marketing
+  // site, which is faster to fetch and where firmographics/traffic actually live).
+  let host = u.hostname;
+  const appSub =
+    /^(www|app|apps|my|portal|dashboard|login|signin|secure|mail|email|go|get|try|admin|account|accounts|help|support|docs?|blog|careers|jobs|status|api|m|web)\./;
+  while (appSub.test(host) && host.split(".").length > 2) host = host.replace(appSub, "");
   // SSRF guard: reject local / private / metadata hosts.
   if (
     !host.includes(".") ||
@@ -391,6 +416,118 @@ export async function fetchWikidata(name: string, domain: string): Promise<Parti
 }
 
 /**
+ * Global popularity rank from the Tranco list (free, no key, research-grade).
+ * Works server-side (no bot-blocking, unlike SimilarWeb). Returns the latest rank
+ * + a ~30-day history for a trend, or null when the domain isn't in the top ~1M.
+ */
+export async function fetchTranco(domain: string): Promise<Popularity | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const res = await fetch(`https://tranco-list.eu/api/ranks/domain/${encodeURIComponent(domain)}`, {
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { ranks?: Array<{ date: string; rank: number }> };
+    const ranks = Array.isArray(data.ranks) ? data.ranks.filter((r) => r && typeof r.rank === "number") : [];
+    if (!ranks.length) return null;
+    // The API returns newest-first; make history oldest->newest, capped at 30 points.
+    const history = ranks.slice(0, 30).reverse().map((r) => ({ date: r.date, rank: r.rank }));
+    const rank = history[history.length - 1].rank;
+    const previousRank = history.length > 1 ? history[0].rank : null;
+    return { rank, previousRank, history };
+  } catch {
+    clearTimeout(timer);
+    return null;
+  }
+}
+
+/**
+ * Domain authority (0-10) + global rank via Open PageRank. This is the ONE source
+ * that covers essentially ALL websites (incl. small ones) — based on the Common
+ * Crawl link graph. Free, but requires a key in OPENPAGERANK_API_KEY; returns null
+ * (feature dormant) when no key is set, or for brand-new sites with no links.
+ */
+export async function fetchAuthority(domain: string): Promise<Authority | null> {
+  const key = (process.env.OPENPAGERANK_API_KEY || "").trim();
+  if (!key) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const res = await fetch(`https://openpagerank.com/api/v1.0/getPageRank?domains%5B0%5D=${encodeURIComponent(domain)}`, {
+      signal: controller.signal,
+      headers: { "API-OPR": key, Accept: "application/json" },
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const j = (await res.json()) as {
+      response?: Array<{ status_code: number; page_rank_decimal?: number; rank?: string | number | null }>;
+    };
+    const row = j.response && j.response[0];
+    if (!row || row.status_code !== 200) return null;
+    const score = typeof row.page_rank_decimal === "number" ? row.page_rank_decimal : null;
+    if (score == null || score <= 0) return null; // no meaningful authority yet
+    const rankNum = row.rank != null && String(row.rank).trim() && Number(row.rank) > 0 ? Number(row.rank) : null;
+    return { score, rank: rankNum };
+  } catch {
+    clearTimeout(timer);
+    return null;
+  }
+}
+
+// IANA RDAP bootstrap (tld -> registry RDAP base), cached in-module. Hitting the
+// registry directly is fast (~0.2-0.5s); the rdap.org redirector is not (30s+).
+let rdapBootstrap: Record<string, string> | null = null;
+async function getRdapBase(tld: string): Promise<string | null> {
+  if (!rdapBootstrap) {
+    try {
+      const res = await fetch("https://data.iana.org/rdap/dns.json", { headers: { Accept: "application/json" } });
+      if (!res.ok) return null;
+      const j = (await res.json()) as { services: [string[], string[]][] };
+      const map: Record<string, string> = {};
+      for (const [tlds, urls] of j.services) {
+        const base = (urls[0] || "").replace(/\/$/, "");
+        for (const t of tlds) map[t] = base;
+      }
+      rdapBootstrap = map;
+    } catch {
+      return null;
+    }
+  }
+  return rdapBootstrap[tld] || null;
+}
+
+/**
+ * Domain registration age via keyless RDAP — works for ANY domain, including
+ * tiny/new sites the popularity lists don't cover. A useful "how established is
+ * this company" signal for small prospects.
+ */
+export async function fetchDomainAge(domain: string): Promise<DomainAge | null> {
+  const tld = domain.split(".").pop();
+  if (!tld) return null;
+  const base = await getRdapBase(tld);
+  const url = base ? `${base}/domain/${encodeURIComponent(domain)}` : `https://rdap.org/domain/${encodeURIComponent(domain)}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch(url, { signal: controller.signal, redirect: "follow", headers: { Accept: "application/json" } });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const j = (await res.json()) as { events?: Array<{ eventAction: string; eventDate: string }> };
+    const reg = (j.events || []).find((e) => e.eventAction === "registration");
+    if (!reg || !reg.eventDate) return null;
+    const ms = Date.now() - new Date(reg.eventDate).getTime();
+    if (!(ms >= 0)) return null;
+    return { registered: reg.eventDate.slice(0, 10), ageYears: Math.round((ms / (365.25 * 864e5)) * 10) / 10 };
+  } catch {
+    clearTimeout(timer);
+    return null;
+  }
+}
+
+/**
  * Best-effort, keyless company-name → domain resolver via Clearbit's free public
  * autocomplete endpoint. Returns the top match's domain, or null (e.g. for small
  * companies it doesn't know). No API key required.
@@ -499,8 +636,15 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
 
   const seo = extractSeo(html, url);
   const profile = extractOrgProfile(html);
-  // Fill gaps from Wikidata (free, no key) — great for notable companies.
-  const wd = await fetchWikidata(name || "", domain);
+  // Firmographics (Wikidata) + popularity rank (Tranco) + domain age (RDAP) +
+  // domain authority (Open PageRank). All free; authority needs a key but is the
+  // only signal covering ALL websites incl. small ones.
+  const [wd, popularity, domainAge, authority] = await Promise.all([
+    fetchWikidata(name || "", domain),
+    fetchTranco(domain),
+    fetchDomainAge(domain),
+    fetchAuthority(domain),
+  ]);
   if (wd) {
     profile.industry = profile.industry || wd.industry || null;
     profile.employees = profile.employees || wd.employees || null;
@@ -524,6 +668,9 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
     tech: detectTech(html, headers),
     seo,
     profile,
+    popularity,
+    authority,
+    domainAge,
     fetchedAt: new Date().toISOString(),
   };
 }

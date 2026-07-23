@@ -1,11 +1,29 @@
 import { prisma } from "@/lib/prisma";
+import type { EmailProviderAccount } from "@prisma/client";
 import { withAuth } from "@/lib/api/withAuth";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { asStr, asPort } from "@/lib/api/parsing";
 
-function serializeAccount<T extends { smtp_password_enc: string }>(row: T) {
-  const { smtp_password_enc, ...rest } = row;
-  return { ...rest, hasPassword: Boolean(smtp_password_enc) };
+// The panel + settings page consume camelCase; map snake→camel here (and never leak the
+// encrypted password — only whether one is set).
+function serializeAccount(row: EmailProviderAccount) {
+  return {
+    id: row.id,
+    accountEmail: row.account_email,
+    providerLabel: row.provider_label ?? null,
+    smtpHost: row.smtp_host,
+    smtpPort: row.smtp_port,
+    smtpSecure: row.smtp_secure,
+    smtpUsername: row.smtp_username,
+    imapHost: row.imap_host ?? null,
+    imapPort: row.imap_port ?? null,
+    imapSecure: row.imap_secure ?? null,
+    popHost: row.pop_host ?? null,
+    popPort: row.pop_port ?? null,
+    popSecure: row.pop_secure ?? null,
+    isDefaultSender: row.is_default_sender,
+    hasPassword: Boolean(row.smtp_password_enc),
+  };
 }
 
 export default withAuth(async (req, res, session) => {

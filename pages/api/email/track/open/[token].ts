@@ -11,7 +11,10 @@ const DUPLICATE_OPEN_WINDOW_MS = 2_000;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const token = normalizeOpenToken(asToken(req.query.token));
-  if (token) {
+  // Tracking is best-effort: a DB error must never fail the 1×1 pixel, so the whole
+  // lookup/record path is wrapped and always falls through to the gif below.
+  try {
+   if (token) {
     const outbound = await prisma.emailOutboundMessage.findFirst({
       where: { open_token: token, tracking_enabled: true },
       select: { id: true, created_at: true },
@@ -55,6 +58,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
     }
+   }
+  } catch {
+    /* swallow — always return the pixel */
   }
 
   res.setHeader("Content-Type", "image/gif");

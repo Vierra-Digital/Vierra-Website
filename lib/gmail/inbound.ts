@@ -23,6 +23,8 @@ import {
 
 /** Cap messages processed per account per tick so one busy inbox can't stall the loop. */
 const MAX_MESSAGES_PER_ACCOUNT = 25;
+/** Cap history pages drained per tick so a huge backlog can't stall the loop either. */
+const MAX_HISTORY_PAGES = 10;
 
 export type InboundSummary = { accounts: number; processed: number; errors: number };
 
@@ -39,8 +41,12 @@ function headerMap(headers: Array<{ name?: string; value?: string }> | undefined
   return map;
 }
 
+type HistoryRecord = {
+  id?: string;
+  messagesAdded?: Array<{ message?: { id?: string; threadId?: string; labelIds?: string[] } }>;
+};
 type HistoryResponse = {
-  history?: Array<{ messagesAdded?: Array<{ message?: { id?: string; threadId?: string; labelIds?: string[] } }> }>;
+  history?: HistoryRecord[];
   historyId?: string;
   nextPageToken?: string;
 };
@@ -108,61 +114,99 @@ async function processAccount(
     return { processed: 0, error: !profile.ok };
   }
 
-  // List history since the stored cursor.
-  const { ok, data } = await gmailGet(
-    accessToken,
-    `/history?startHistoryId=${encodeURIComponent(state.history_id)}&historyTypes=messageAdded`
-  );
-  if (!ok) {
-    // 404 => historyId too old/expired; reset baseline so we recover next tick.
-    const profile = await gmailGet(accessToken, "/profile");
-    const historyId = profile.ok ? String((profile.data as { historyId?: string })?.historyId || "") : state.history_id;
-    await prisma.gmailInboxSyncState.update({
-      where: { user_id_account_email: { user_id: userId, account_email: accountEmail } },
-      data: { history_id: historyId, last_sync_at: now, last_status: "reset", updated_at: now },
-    });
-    return { processed: 0, error: true };
-  }
+  // List history since the stored cursor, draining pagination (bounded) so page-2+ mail is
+  // never lost. Each history record carries its own id; below we advance the cursor only past
+  // records we FULLY processed, so hitting the cap or a transient fetch error can't skip mail.
+  const records: HistoryRecord[] = [];
+  let newestHistoryId = state.history_id;
+  let pageToken: string | undefined;
+  let pages = 0;
+  do {
+    const path =
+      `/history?startHistoryId=${encodeURIComponent(state.history_id)}&historyTypes=messageAdded` +
+      (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "");
+    const { ok, status, data } = await gmailGet(accessToken, path);
+    if (!ok) {
+      // Only a 404 means the historyId is too old/expired — reset the baseline so we recover
+      // next tick. Transient errors (429/5xx/network) must NOT move the cursor, or we'd skip
+      // every message that arrived since the last successful tick.
+      if (status === 404) {
+        const profile = await gmailGet(accessToken, "/profile");
+        const historyId = profile.ok ? String((profile.data as { historyId?: string })?.historyId || "") : state.history_id;
+        await prisma.gmailInboxSyncState.update({
+          where: { user_id_account_email: { user_id: userId, account_email: accountEmail } },
+          data: { history_id: historyId, last_sync_at: now, last_status: "reset", updated_at: now },
+        });
+      }
+      return { processed: 0, error: true };
+    }
+    const page = data as HistoryResponse;
+    if (page.historyId) newestHistoryId = page.historyId;
+    for (const rec of page.history || []) records.push(rec);
+    pageToken = page.nextPageToken;
+    pages += 1;
+  } while (pageToken && pages < MAX_HISTORY_PAGES);
+  const drainedAllPages = !pageToken;
 
-  const history = data as HistoryResponse;
-  const newestHistoryId = history.historyId || state.history_id;
-
-  // Collect unique newly-added message ids that are inbound (skip SENT/DRAFT).
-  const ids: string[] = [];
+  const ctx: InboundContext = { accessToken, baseUrl, now };
   const seen = new Set<string>();
-  for (const h of history.history || []) {
-    for (const added of h.messagesAdded || []) {
+  let processed = 0;
+  let cursor = state.history_id;
+  let advancedFully = true;
+
+  for (const rec of records) {
+    // Inbound message ids newly added in this history record (skip SENT/DRAFT, dedupe).
+    const recIds: string[] = [];
+    for (const added of rec.messagesAdded || []) {
       const m = added.message;
       if (!m?.id) continue;
       const labels = m.labelIds || [];
       if (labels.includes("SENT") || labels.includes("DRAFT")) continue;
       if (seen.has(m.id)) continue;
       seen.add(m.id);
-      ids.push(m.id);
-      if (ids.length >= MAX_MESSAGES_PER_ACCOUNT) break;
+      recIds.push(m.id);
     }
-    if (ids.length >= MAX_MESSAGES_PER_ACCOUNT) break;
+    // Respect the per-tick cap at a RECORD boundary — never split a record, or its earlier
+    // messages would be reprocessed next tick. Always process at least one record so a single
+    // record larger than the cap still makes forward progress.
+    if (processed > 0 && processed + recIds.length > MAX_MESSAGES_PER_ACCOUNT) {
+      advancedFully = false;
+      break;
+    }
+    let recFullyProcessed = true;
+    for (const id of recIds) {
+      const message = await fetchInboundMessage(accessToken, userId, accountEmail, id);
+      if (!message) {
+        // Transient per-message fetch failure: stop before advancing past this record so the
+        // message is retried next tick rather than silently dropped.
+        recFullyProcessed = false;
+        break;
+      }
+      // Each hook is best-effort and must not throw; guard anyway.
+      for (const hook of [applyFilters, maybeSendVacationReply, maybeAutoDraft, maybeHandleMdn, maybeReplyIntelligence, maybeNotifyDiscord]) {
+        try {
+          await hook(message, ctx);
+        } catch {
+          /* one hook failing must not block the others or the loop */
+        }
+      }
+      processed += 1;
+    }
+    if (!recFullyProcessed) {
+      advancedFully = false;
+      break;
+    }
+    if (rec.id) cursor = rec.id;
   }
 
-  const ctx: InboundContext = { accessToken, baseUrl, now };
-  let processed = 0;
-  for (const id of ids) {
-    const message = await fetchInboundMessage(accessToken, userId, accountEmail, id);
-    if (!message) continue;
-    // Each hook is best-effort and must not throw; guard anyway.
-    for (const hook of [applyFilters, maybeSendVacationReply, maybeAutoDraft, maybeHandleMdn, maybeReplyIntelligence, maybeNotifyDiscord]) {
-      try {
-        await hook(message, ctx);
-      } catch {
-        /* one hook failing must not block the others or the loop */
-      }
-    }
-    processed += 1;
-  }
+  // Jump to the mailbox's newest historyId only when we drained every page AND processed every
+  // record; otherwise keep the cursor at the last fully-processed record so the remainder is
+  // picked up next tick (at worst re-listing one boundary record — idempotent-enough hooks).
+  const nextHistoryId = advancedFully && drainedAllPages ? newestHistoryId : cursor;
 
   await prisma.gmailInboxSyncState.update({
     where: { user_id_account_email: { user_id: userId, account_email: accountEmail } },
-    data: { history_id: newestHistoryId, last_sync_at: now, last_status: "ok", updated_at: now },
+    data: { history_id: nextHistoryId, last_sync_at: now, last_status: "ok", updated_at: now },
   });
 
   return { processed, error: false };
