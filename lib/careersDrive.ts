@@ -184,21 +184,109 @@ async function uploadOne(
   return { id: res.data.id || "", name: res.data.name || file.filename };
 }
 
+const DRIVE_UPLOAD_ENDPOINT =
+  "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true";
+
+/** Mint a short-lived OAuth access token for the careers Drive account. */
+async function getDriveAccessToken(): Promise<string> {
+  const { clientId, clientSecret } = resolveGoogleWebClientCredentials();
+  const refreshToken = getRefreshToken();
+  if (!clientId || !clientSecret || !refreshToken) {
+    throw new Error(
+      "Careers Drive auth is not configured (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, CAREERS_DRIVE_REFRESH_TOKEN)"
+    );
+  }
+  const oauth2 = new google.auth.OAuth2(clientId, clientSecret);
+  oauth2.setCredentials({ refresh_token: refreshToken, scope: DRIVE_SCOPE });
+  const { token } = await oauth2.getAccessToken();
+  if (!token) throw new Error("Could not obtain a Drive access token");
+  return token;
+}
+
 /**
- * Upload a candidate's application files into the role's Drive folder.
- * Returns the created Drive file metadata. Throws if Drive is unconfigured or
- * the role has no destination folder.
+ * Open a Google Drive resumable upload and return its session URI. The browser
+ * (via our chunk proxy) then streams the file's bytes to this URI in pieces, so
+ * an attachment never has to pass through the API function in one request —
+ * which is what sidesteps the platform's ~6 MB function payload limit. The
+ * session URI carries its own authorization, so it is safe to hand to the
+ * proxy without also exposing the access token. Sessions expire after ~1 week
+ * if unused.
  */
-export async function uploadApplicationToDrive(params: {
+async function createResumableSession(
+  accessToken: string,
+  folderId: string,
+  file: { name: string; mimeType: string; sizeBytes: number; description?: string }
+): Promise<string> {
+  const res = await fetch(DRIVE_UPLOAD_ENDPOINT, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json; charset=UTF-8",
+      "X-Upload-Content-Type": file.mimeType || "application/octet-stream",
+      "X-Upload-Content-Length": String(file.sizeBytes),
+    },
+    body: JSON.stringify({ name: file.name, parents: [folderId], description: file.description }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Drive resumable init failed (${res.status}): ${detail}`);
+  }
+  const uploadUrl = res.headers.get("location");
+  if (!uploadUrl) throw new Error("Drive resumable init returned no upload URL");
+  return uploadUrl;
+}
+
+export interface ApplicationUploadTarget {
+  /** Client-side field key ("resume" | "coverLetter") echoed back with the URL. */
+  field: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
+export interface ApplicationUploadSession {
+  field: string;
+  uploadUrl: string;
+}
+
+/**
+ * Prepare a candidate's application in the role's Drive folder: write the small
+ * application-details text file directly (no need to stream it), then open a
+ * resumable upload session for each attachment and return their session URIs
+ * for the client to stream into. Throws if Drive is unconfigured or the role
+ * has no destination folder.
+ */
+export async function prepareApplicationUpload(params: {
   roleSlug: string;
-  files: UploadFileInput[];
+  targets: ApplicationUploadTarget[];
+  detailsFilename: string;
+  detailsText: string;
   description?: string;
-}): Promise<UploadResult[]> {
+}): Promise<ApplicationUploadSession[]> {
   const drive = getDrive();
   const folderId = await resolveRoleFolderId(drive, params.roleSlug);
-  const results: UploadResult[] = [];
-  for (const file of params.files) {
-    results.push(await uploadOne(drive, folderId, file, params.description));
+
+  await uploadOne(
+    drive,
+    folderId,
+    {
+      filename: params.detailsFilename,
+      mimeType: "text/plain",
+      buffer: Buffer.from(params.detailsText, "utf-8"),
+    },
+    params.description
+  );
+
+  const accessToken = await getDriveAccessToken();
+  const sessions: ApplicationUploadSession[] = [];
+  for (const target of params.targets) {
+    const uploadUrl = await createResumableSession(accessToken, folderId, {
+      name: target.name,
+      mimeType: target.mimeType,
+      sizeBytes: target.sizeBytes,
+      description: params.description,
+    });
+    sessions.push({ field: target.field, uploadUrl });
   }
-  return results;
+  return sessions;
 }
