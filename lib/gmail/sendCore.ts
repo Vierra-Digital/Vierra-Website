@@ -1,9 +1,10 @@
 import { randomUUID } from "crypto";
-import nodemailer from "nodemailer";
-import sanitizeHtml from "sanitize-html";
+import type { EmailProviderAccount } from "@prisma/client";
+import { sanitizeRichEmailHtml } from "@/lib/email/sanitize";
 import { prisma } from "@/lib/prisma";
-import { decrypt } from "@/lib/crypto";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
+import { toBase64Url } from "@/lib/gmail/gmailApi";
+import { createSmtpTransport } from "@/lib/email/smtp";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { asStr } from "@/lib/api/parsing";
 
@@ -35,14 +36,6 @@ function splitRecipients(value: string) {
 function ensureReplyPrefix(subject: string) {
   if (/^re:/i.test(subject.trim())) return subject.trim();
   return `Re: ${subject.trim() || "(No Subject)"}`;
-}
-
-function toBase64Url(value: string) {
-  return Buffer.from(value, "utf8")
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
 }
 
 function escapeHtml(value: string) {
@@ -117,39 +110,6 @@ function mergeClickTrackUrls(plain: string, html: string) {
   return Array.from(new Set([...uniqueUrls(plain), ...uniqueUrlsFromHtmlHref(html)]));
 }
 
-function sanitizeEmailHtml(html: string) {
-  return sanitizeHtml(html, {
-    allowedTags: [
-      ...sanitizeHtml.defaults.allowedTags,
-      "img",
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-      "span",
-      "div",
-      "font",
-    ],
-    allowedAttributes: {
-      ...sanitizeHtml.defaults.allowedAttributes,
-      a: ["href", "name", "target", "rel", "style", "class"],
-      img: ["src", "alt", "width", "height", "style", "class"],
-      p: ["style", "class"],
-      span: ["style", "class"],
-      div: ["style", "class"],
-      font: ["color", "face", "size"],
-      td: ["colspan", "rowspan", "style", "class"],
-      th: ["colspan", "rowspan", "style", "class"],
-      "*": ["style", "class"],
-    },
-    allowedSchemes: ["http", "https", "mailto", "data"],
-    allowedSchemesByTag: {
-      img: ["http", "https", "data"],
-    },
-  });
-}
 
 const ATTACHMENTS_MAX_BYTES = 24 * 1024 * 1024;
 
@@ -272,6 +232,81 @@ export type SendEmailResult =
   | { ok: true; messageId: string | null; threadId: string | null; tracked: boolean; provider: "gmail" | "smtp"; outboundId: string }
   | { ok: false; status: number; message: string };
 
+type SendFailure = { ok: false; status: number; message: string };
+
+/** Send one message over a domain SMTP account (nodemailer). Behavior extracted verbatim from sendEmailCore. */
+async function sendViaSmtp(
+  account: EmailProviderAccount,
+  msg: {
+    from: string;
+    to: string;
+    cc?: string;
+    bcc?: string;
+    subject: string;
+    text: string;
+    html: string;
+    attachments: Array<{ filename: string; content: Buffer; contentType: string }>;
+    inReplyTo?: string;
+    references?: string;
+    notifyTo?: string;
+  }
+): Promise<{ ok: true; messageId: string | null } | SendFailure> {
+  const transporter = createSmtpTransport(account);
+  try {
+    const info = await transporter.sendMail({
+      from: msg.from,
+      to: msg.to,
+      cc: msg.cc || undefined,
+      bcc: msg.bcc || undefined,
+      subject: msg.subject,
+      text: msg.text,
+      html: msg.html,
+      attachments: msg.attachments.length > 0 ? msg.attachments : undefined,
+      inReplyTo: msg.inReplyTo || undefined,
+      references: msg.references || undefined,
+      headers: msg.notifyTo
+        ? { "Disposition-Notification-To": msg.notifyTo, "Return-Receipt-To": msg.notifyTo }
+        : undefined,
+    });
+    return { ok: true, messageId: typeof info.messageId === "string" ? info.messageId : null };
+  } catch (error) {
+    return { ok: false, status: 502, message: error instanceof Error ? error.message : "SMTP send failed." };
+  }
+}
+
+/** Send via the Gmail REST API, retrying once on a 401 with a force-refreshed token. Extracted verbatim. */
+async function sendViaGmail(
+  userId: string,
+  accountEmail: string,
+  sendPayload: Record<string, string>,
+  accessToken: string,
+  fallbackThreadId: string
+): Promise<{ ok: true; messageId: string | null; threadId: string | null } | SendFailure> {
+  const sendWithToken = (token: string) =>
+    fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(sendPayload),
+    });
+
+  let response = await sendWithToken(accessToken);
+  if (response.status === 401) {
+    const refreshResult = await getValidGmailAccessToken(userId, accountEmail, { forceRefresh: true });
+    if (!refreshResult.ok) return { ok: false, status: 401, message: refreshResult.message };
+    response = await sendWithToken(refreshResult.accessToken);
+  }
+  if (!response.ok) {
+    const text = await response.text();
+    return { ok: false, status: 502, message: `Gmail send failed: ${text}` };
+  }
+  const responsePayload = await response.json();
+  return {
+    ok: true,
+    messageId: typeof responsePayload?.id === "string" ? responsePayload.id : null,
+    threadId: typeof responsePayload?.threadId === "string" ? responsePayload.threadId : fallbackThreadId || null,
+  };
+}
+
 /**
  * Send one email for a user. `baseUrl` is the public origin used to build tracking
  * pixel/click URLs (the caller resolves it from the request or from env for the cron).
@@ -317,7 +352,7 @@ export async function sendEmailCore(userId: string, payload: SendEmailPayload, b
         where: { user_id: userId, account_email: accountEmail },
       });
 
-  let tokenResult = await getValidGmailAccessToken(userId, accountEmail);
+  const tokenResult = await getValidGmailAccessToken(userId, accountEmail);
   if (!tokenResult.ok && !providerAccount) {
     const status = tokenResult.reason === "account_not_found" ? 404 : 401;
     return { ok: false, status, message: tokenResult.message };
@@ -344,7 +379,7 @@ export async function sendEmailCore(userId: string, payload: SendEmailPayload, b
   const openTrackingEnabled = trackingEnabled && Boolean(setting?.open_tracking_enabled ?? true);
   const clickTrackingEnabled = trackingEnabled && Boolean(setting?.click_tracking_enabled ?? true);
 
-  const sanitizedHtmlInput = bodyHtmlInput ? sanitizeEmailHtml(bodyHtmlInput) : "";
+  const sanitizedHtmlInput = bodyHtmlInput ? sanitizeRichEmailHtml(bodyHtmlInput) : "";
   const plainTextBody =
     body.trim() ||
     (sanitizedHtmlInput
@@ -427,62 +462,26 @@ export async function sendEmailCore(userId: string, payload: SendEmailPayload, b
 
   if (providerAccount) {
     provider = "smtp";
-    const transporter = nodemailer.createTransport({
-      host: providerAccount.smtp_host,
-      port: providerAccount.smtp_port,
-      secure: providerAccount.smtp_secure,
-      auth: {
-        user: providerAccount.smtp_username,
-        pass: decrypt(providerAccount.smtp_password_enc),
-      },
+    const sent = await sendViaSmtp(providerAccount, {
+      from: fromAlias || accountEmail,
+      to: toRecipients.join(", "),
+      cc: ccRecipients.length > 0 ? ccRecipients.join(", ") : undefined,
+      bcc: bccRecipients.length > 0 ? bccRecipients.join(", ") : undefined,
+      subject,
+      text: textBody,
+      html: htmlBody,
+      attachments: smtpAttachments,
+      inReplyTo,
+      references,
+      notifyTo: notifyTo || undefined,
     });
-    try {
-      const info = await transporter.sendMail({
-        from: fromAlias || accountEmail,
-        to: toRecipients.join(", "),
-        cc: ccRecipients.length > 0 ? ccRecipients.join(", ") : undefined,
-        bcc: bccRecipients.length > 0 ? bccRecipients.join(", ") : undefined,
-        subject,
-        text: textBody,
-        html: htmlBody,
-        attachments: smtpAttachments.length > 0 ? smtpAttachments : undefined,
-        inReplyTo: inReplyTo || undefined,
-        references: references || undefined,
-        headers: notifyTo ? { "Disposition-Notification-To": notifyTo, "Return-Receipt-To": notifyTo } : undefined,
-      });
-      sentMessageId = typeof info.messageId === "string" ? info.messageId : null;
-    } catch (error) {
-      return { ok: false, status: 502, message: error instanceof Error ? error.message : "SMTP send failed." };
-    }
+    if (!sent.ok) return sent;
+    sentMessageId = sent.messageId;
   } else if (tokenResult.ok) {
-    const sendWithToken = async (accessToken: string) =>
-      fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(sendPayload),
-      });
-
-    let response = await sendWithToken(tokenResult.accessToken);
-    if (response.status === 401) {
-      const refreshResult = await getValidGmailAccessToken(userId, accountEmail, { forceRefresh: true });
-      if (!refreshResult.ok) {
-        return { ok: false, status: 401, message: refreshResult.message };
-      }
-      tokenResult = refreshResult;
-      response = await sendWithToken(refreshResult.accessToken);
-    }
-
-    if (!response.ok) {
-      const text = await response.text();
-      return { ok: false, status: 502, message: `Gmail send failed: ${text}` };
-    }
-
-    const responsePayload = await response.json();
-    sentMessageId = typeof responsePayload?.id === "string" ? responsePayload.id : null;
-    sentThreadId = typeof responsePayload?.threadId === "string" ? responsePayload.threadId : threadId || null;
+    const sent = await sendViaGmail(userId, accountEmail, sendPayload, tokenResult.accessToken, threadId);
+    if (!sent.ok) return sent;
+    sentMessageId = sent.messageId;
+    sentThreadId = sent.threadId;
   } else {
     return { ok: false, status: 400, message: "No valid send provider configured." };
   }

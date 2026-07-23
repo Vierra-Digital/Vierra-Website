@@ -1,5 +1,6 @@
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
+import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 
 import { asQueryStr } from "@/lib/api/parsing";
 
@@ -97,8 +98,16 @@ export default withAuth(async (req, res, session) => {
     return;
   }
 
+  // Shared-inbox access: read via the mailbox owner's token (owner === requester for own accounts).
+  const access = await resolveMailboxOwner(userId, accountEmail);
+  if (!access) {
+    res.status(403).json({ message: "You don't have access to this mailbox." });
+    return;
+  }
+  const effectiveUserId = access.ownerUserId;
+
   const getToken = async (forceRefresh = false) => {
-    const tokenResult = await getValidGmailAccessToken(userId, accountEmail, forceRefresh ? { forceRefresh: true } : undefined);
+    const tokenResult = await getValidGmailAccessToken(effectiveUserId, accountEmail, forceRefresh ? { forceRefresh: true } : undefined);
     if (!tokenResult.ok) return null;
     return tokenResult.accessToken;
   };

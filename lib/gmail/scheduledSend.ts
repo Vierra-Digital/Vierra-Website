@@ -14,6 +14,8 @@ export const MAX_SCHEDULE_DAYS = 60;
 const MAX_ATTEMPTS = 3;
 /** Safety cap on how many due messages one dispatch tick processes. */
 const DISPATCH_BATCH = 25;
+/** A row claimed as SENDING but not resolved within this window is treated as a crashed worker. */
+const STALE_SENDING_MS = 10 * 60 * 1000;
 
 export type ScheduleParseResult =
   | { ok: true; date: Date }
@@ -67,6 +69,19 @@ export type DispatchSummary = { processed: number; sent: number; failed: number 
  * don't double-send. `now` is injected for testability.
  */
 export async function dispatchDueScheduledSends(baseUrl: string, now: Date): Promise<DispatchSummary> {
+  // Reclaim rows orphaned in SENDING (worker crashed/OOM'd/redeployed after claiming but
+  // before resolving): return them to PENDING for retry, or FAIL them once attempts are spent.
+  // Without this a stuck row would never be retried (the query below only selects PENDING).
+  const staleBefore = new Date(now.getTime() - STALE_SENDING_MS);
+  await prisma.emailScheduledSend.updateMany({
+    where: { status: "SENDING", updated_at: { lt: staleBefore }, attempts: { lt: MAX_ATTEMPTS } },
+    data: { status: "PENDING", updated_at: now },
+  });
+  await prisma.emailScheduledSend.updateMany({
+    where: { status: "SENDING", updated_at: { lt: staleBefore }, attempts: { gte: MAX_ATTEMPTS } },
+    data: { status: "FAILED", last_error: "Timed out while sending.", updated_at: now },
+  });
+
   const due = await prisma.emailScheduledSend.findMany({
     where: { status: "PENDING", scheduled_at: { lte: now } },
     orderBy: { scheduled_at: "asc" },

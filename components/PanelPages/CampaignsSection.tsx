@@ -175,7 +175,7 @@ const CampaignsSection: React.FC = () => {
   );
 };
 
-type EmailAccount = { id: string; account_email: string };
+type EmailAccount = { id: string; accountEmail: string };
 type EmailTemplate = { id: string; name: string; subject: string | null };
 type ContactTag = { id: string; name: string; color: string };
 type CampaignStep = {
@@ -194,7 +194,7 @@ const MOCK_TEMPLATES: EmailTemplate[] = [{ id: "mock-template", name: "Sample Te
 
 // Always-available test option, kept visually separate from real mailboxes. Picking one skips
 // the real draft-creation POST below (there's no matching row for the API to validate against).
-const MOCK_ACCOUNTS: EmailAccount[] = [{ id: "mock-account", account_email: "Test mailbox (mock — not connected, nothing is sent)" }];
+const MOCK_ACCOUNTS: EmailAccount[] = [{ id: "mock-account", accountEmail: "Test mailbox (mock — not connected, nothing is sent)" }];
 const isMockAccountId = (id: string) => MOCK_ACCOUNTS.some((a) => a.id === id);
 
 const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = ({ onClose, onDone }) => {
@@ -375,13 +375,13 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
               {accounts.length > 0 && (
                 <optgroup label="Connected mailboxes">
                   {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>{a.account_email}</option>
+                    <option key={a.id} value={a.id}>{a.accountEmail}</option>
                   ))}
                 </optgroup>
               )}
               <optgroup label="Testing only">
                 {MOCK_ACCOUNTS.map((a) => (
-                  <option key={a.id} value={a.id}>{a.account_email}</option>
+                  <option key={a.id} value={a.id}>{a.accountEmail}</option>
                 ))}
               </optgroup>
             </select>

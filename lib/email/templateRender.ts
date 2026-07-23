@@ -8,6 +8,9 @@
  * Tokens resolve first, then spintax — so tokens inside a spintax option
  * ({Hi {{firstName}}|Hey {{firstName}}}) resolve correctly, and {{a|b}} isn't
  * mistaken for spintax.
+ *
+ * Spintax requires no whitespace padding around the delimiter ({Hi|Hey}, {Hi there|Hello}) so
+ * incidental prose/markup with a padded pipe ("Sizes: {small | large}") is left untouched.
  */
 
 export type TemplateVars = Record<string, string | null | undefined>;
@@ -29,8 +32,11 @@ function resolveTokens(text: string, vars: TemplateVars): string {
 function resolveSpintax(text: string, seed: string): string {
   let counter = 0;
   // Non-nested {a|b|c}. Runs after tokens so double-brace tokens are already gone.
-  return text.replace(/\{([^{}]*\|[^{}]*)\}/g, (_m, group: string) => {
+  return text.replace(/\{([^{}]*\|[^{}]*)\}/g, (match, group: string) => {
     const options = group.split("|");
+    // Real spintax has no whitespace around its delimiters. If any option is padded, this is
+    // incidental content (e.g. "{small | large}"), not spintax — leave it exactly as written.
+    if (options.some((o) => o !== o.trim())) return match;
     const idx = hashString(`${seed}:${counter}`) % options.length;
     counter += 1;
     return options[idx];
@@ -41,9 +47,4 @@ export function renderTemplate(text: string, vars: TemplateVars, seed?: string):
   if (!text) return "";
   const withTokens = resolveTokens(text, vars);
   return resolveSpintax(withTokens, seed || String(vars.email || "seed"));
-}
-
-/** True if the text contains any spintax group (for editor previews / validation). */
-export function hasSpintax(text: string): boolean {
-  return /\{[^{}]*\|[^{}]*\}/.test(text);
 }

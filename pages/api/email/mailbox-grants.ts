@@ -44,6 +44,38 @@ export default withAuth(
         res.status(400).json({ message: "granteeUserId and accountEmail are required." });
         return;
       }
+
+      // Both sides must belong to the caller's company: the grantee must be a member, and the
+      // mailbox must be owned by a member — don't let an admin grant arbitrary users/mailboxes.
+      const member = await prisma.companyMembership.findFirst({
+        where: { company_id: companyId, user_id: granteeUserId },
+        select: { id: true },
+      });
+      if (!member) {
+        res.status(400).json({ message: "Grantee must be a member of your company." });
+        return;
+      }
+      const ownerToken = await prisma.platformToken.findFirst({
+        where: { platform: `gmail:${accountEmail}` },
+        select: { user_id: true },
+      });
+      const ownerSmtp = ownerToken
+        ? null
+        : await prisma.emailProviderAccount.findFirst({ where: { account_email: accountEmail }, select: { user_id: true } });
+      const ownerUserId = ownerToken?.user_id || ownerSmtp?.user_id;
+      if (!ownerUserId) {
+        res.status(400).json({ message: "That mailbox isn't connected to any account." });
+        return;
+      }
+      const ownerMember = await prisma.companyMembership.findFirst({
+        where: { company_id: companyId, user_id: ownerUserId },
+        select: { id: true },
+      });
+      if (!ownerMember) {
+        res.status(403).json({ message: "That mailbox isn't owned within your company." });
+        return;
+      }
+
       const grant = await prisma.mailboxGrant.upsert({
         where: { grantee_user_id_account_email: { grantee_user_id: granteeUserId, account_email: accountEmail } },
         update: { can_send: canSend, company_id: companyId, granted_by: session.user.id },

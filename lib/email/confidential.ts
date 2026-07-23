@@ -1,35 +1,10 @@
 import { createHash, randomUUID } from "crypto";
-import sanitizeHtml from "sanitize-html";
 import { prisma } from "@/lib/prisma";
+import { sanitizeRichEmailHtml } from "@/lib/email/sanitize";
 
 /** Sanitize confidential body HTML for safe rendering in the public viewer page. */
 export function sanitizeConfidentialHtml(html: string): string {
-  return sanitizeHtml(html, {
-    allowedTags: [
-      ...sanitizeHtml.defaults.allowedTags,
-      "img",
-      "h1",
-      "h2",
-      "h3",
-      "h4",
-      "h5",
-      "h6",
-      "span",
-      "div",
-      "font",
-    ],
-    allowedAttributes: {
-      ...sanitizeHtml.defaults.allowedAttributes,
-      a: ["href", "name", "target", "rel", "style", "class"],
-      img: ["src", "alt", "width", "height", "style", "class"],
-      "*": ["style", "class"],
-      td: ["colspan", "rowspan", "style", "class"],
-      th: ["colspan", "rowspan", "style", "class"],
-      font: ["color", "face", "size"],
-    },
-    allowedSchemes: ["http", "https", "mailto", "data"],
-    allowedSchemesByTag: { img: ["http", "https", "data"] },
-  });
+  return sanitizeRichEmailHtml(html);
 }
 
 /**

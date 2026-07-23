@@ -1,7 +1,6 @@
-import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
-import { decrypt } from "@/lib/crypto";
+import { createSmtpTransport } from "@/lib/email/smtp";
 import { asStr } from "@/lib/api/parsing";
 
 export default withAuth(async (req, res, session) => {
@@ -20,15 +19,7 @@ export default withAuth(async (req, res, session) => {
     return;
   }
 
-  const transporter = nodemailer.createTransport({
-    host: account.smtp_host,
-    port: account.smtp_port,
-    secure: account.smtp_secure,
-    auth: {
-      user: account.smtp_username,
-      pass: decrypt(account.smtp_password_enc),
-    },
-  });
+  const transporter = createSmtpTransport(account);
 
   try {
     await transporter.verify();

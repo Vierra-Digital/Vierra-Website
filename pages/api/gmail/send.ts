@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr } from "@/lib/api/parsing";
 import { sendEmailCore, normalizeEmail, type SendEmailPayload } from "@/lib/gmail/sendCore";
+import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { parseScheduledAt, enqueueScheduledSend } from "@/lib/gmail/scheduledSend";
 import {
   createConfidentialMessage,
@@ -66,6 +67,20 @@ export default withAuth(async (req, res, session) => {
     requestReceipt: Boolean(req.body?.requestReceipt),
   };
 
+  // Shared-inbox delegation: send as the mailbox owner when the sender was granted access
+  // (owner === requester for their own accounts, so this is a no-op for them). Fail-closed:
+  // no ownership + no send grant → 403.
+  const sendAccount = normalizeEmail(payload.accountEmail);
+  let effectiveUserId = userId;
+  if (sendAccount) {
+    const access = await resolveMailboxOwner(userId, sendAccount);
+    if (!access || !access.canSend) {
+      res.status(403).json({ message: "You don't have permission to send from this mailbox." });
+      return;
+    }
+    effectiveUserId = access.ownerUserId;
+  }
+
   // Confidential mode: stash the real body server-side under a token and replace the
   // outgoing body with a notice + link to the viewer page (/c/[token]). Runs before the
   // scheduled branch so a scheduled confidential message carries the invite too.
@@ -119,7 +134,7 @@ export default withAuth(async (req, res, session) => {
       res.status(400).json({ message: parsed.message });
       return;
     }
-    const queued = await enqueueScheduledSend(userId, accountEmail, payload, parsed.date);
+    const queued = await enqueueScheduledSend(effectiveUserId, accountEmail, payload, parsed.date);
     if (payload.draftKey) {
       await prisma.emailComposeDraft.deleteMany({ where: { user_id: userId, draft_key: payload.draftKey } });
     }
@@ -127,7 +142,7 @@ export default withAuth(async (req, res, session) => {
     return;
   }
 
-  const result = await sendEmailCore(userId, payload, baseUrl);
+  const result = await sendEmailCore(effectiveUserId, payload, baseUrl);
   if (!result.ok) {
     res.status(result.status).json({ message: result.message });
     return;

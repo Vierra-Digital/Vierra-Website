@@ -6,7 +6,16 @@ import { requireSession } from "@/lib/auth";
 
 const EmailingPlatformSection = dynamic(
   () => import("@/components/PanelPages/EmailingPlatformSection"),
-  { ssr: false }
+  {
+    ssr: false,
+    // The panel is a large client-only bundle; show an instant branded loader over the dark
+    // canvas instead of a blank screen while it downloads + hydrates.
+    loading: () => (
+      <div className="flex h-screen w-full items-center justify-center bg-[#18042a]">
+        <div className="h-10 w-10 rounded-full border-4 border-white/20 border-t-white/80 motion-safe:animate-spin" />
+      </div>
+    ),
+  }
 );
 
 type Props = {

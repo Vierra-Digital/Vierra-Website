@@ -25,6 +25,7 @@ export async function processSignals(now: Date): Promise<{ signals: number; enro
       email_outbound_messages: {
         select: {
           subject: true,
+          account_id: true,
           email_outbound_recipients: { where: { recipient_type: "TO" }, select: { email: true }, take: 1 },
         },
       },
@@ -37,8 +38,14 @@ export async function processSignals(now: Date): Promise<{ signals: number; enro
     if (!email || seen.has(email)) continue;
     seen.add(email);
 
+    // Scope to the account that sent the clicked email so a prospect shared across tenants'
+    // campaigns only advances the right tenant's contact.
+    const messageAccountId = c.email_outbound_messages?.account_id;
     const contact = await prisma.campaignContact.findFirst({
-      where: { contact_email: email },
+      where: {
+        contact_email: email,
+        ...(messageAccountId ? { campaigns: { account_id: messageAccountId } } : {}),
+      },
       orderBy: { enrolled_at: "desc" },
       select: {
         id: true,

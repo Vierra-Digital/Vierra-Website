@@ -221,10 +221,15 @@ export async function maybeHandleMdn(msg: InboundMessage, ctx: InboundContext): 
 export async function maybeReplyIntelligence(msg: InboundMessage): Promise<void> {
   if (isAutomatedSender(msg)) return;
 
+  // Scope to campaigns sent FROM the mailbox that received this reply — replies come back to
+  // the sending address, so this is the same account. Without it, a prospect email shared
+  // across two tenants' campaigns would flip whichever contact sorts first (wrong tenant).
+  const accountId = await resolveAccountId(msg.userId, msg.accountEmail);
   const contact = await prisma.campaignContact.findFirst({
     where: {
       contact_email: msg.fromEmail,
       queue_status: { notIn: ["paused", "completed", "unsubscribed", "bounced"] },
+      ...(accountId ? { campaigns: { account_id: accountId } } : {}),
     },
     orderBy: { enrolled_at: "desc" },
   });
