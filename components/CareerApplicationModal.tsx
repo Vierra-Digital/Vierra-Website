@@ -49,6 +49,36 @@ const EMPTY_FORM: FormState = {
 const STEP_TITLES = ["Basic information", "Resume & cover letter", "Additional notes"];
 const TOTAL_STEPS = STEP_TITLES.length;
 
+// Files are streamed to Drive in pieces via /api/careers/apply-chunk. 3 MB keeps
+// each request well under the serverless function's ~6 MB payload limit, so there
+// is no practical ceiling on total attachment size. Must be a multiple of 256 KB
+// for Google Drive resumable uploads (every chunk but the last).
+const CHUNK_SIZE = 3 * 1024 * 1024;
+
+/** Stream one file to its Drive resumable session, a chunk at a time. */
+async function uploadFileInChunks(file: File, uploadUrl: string) {
+  const total = file.size;
+  let offset = 0;
+  while (offset < total) {
+    const end = Math.min(offset + CHUNK_SIZE, total);
+    const buffer = await file.slice(offset, end).arrayBuffer();
+    const res = await fetch("/api/careers/apply-chunk", {
+      method: "PUT",
+      headers: {
+        "x-upload-url": uploadUrl,
+        "content-range": `bytes ${offset}-${end - 1}/${total}`,
+        "x-file-content-type": file.type || "application/octet-stream",
+      },
+      body: buffer,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.message || "Upload failed. Please try again.");
+    }
+    offset = end;
+  }
+}
+
 export function CareerApplicationModal({
   isOpen,
   onClose,
@@ -120,23 +150,44 @@ export function CareerApplicationModal({
     setSubmitError(null);
 
     try {
-      const body = new FormData();
-      body.append("roleSlug", roleSlug);
-      body.append("fullName", formData.fullName.trim());
-      body.append("email", formData.email.trim());
-      body.append("phoneNumber", formData.phoneNumber.trim());
-      body.append("currentLocation", formData.currentLocation.trim());
-      body.append("needRelocate", formData.needRelocate);
-      body.append("usCitizen", formData.usCitizen);
-      body.append("additionalNotes", formData.additionalNotes.trim());
-      body.append("website", website); // honeypot — always empty for real users
-      body.append("resume", resume);
-      body.append("coverLetter", coverLetter);
-
-      const res = await fetch("/api/careers/apply", { method: "POST", body });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
+      // 1. Validate + open a Drive resumable upload session per attachment.
+      const startRes = await fetch("/api/careers/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roleSlug,
+          fullName: formData.fullName.trim(),
+          email: formData.email.trim(),
+          phoneNumber: formData.phoneNumber.trim(),
+          currentLocation: formData.currentLocation.trim(),
+          needRelocate: formData.needRelocate,
+          usCitizen: formData.usCitizen,
+          additionalNotes: formData.additionalNotes.trim(),
+          website, // honeypot — always empty for real users
+          files: [
+            { field: "resume", name: resume.name, mimeType: resume.type, size: resume.size },
+            { field: "coverLetter", name: coverLetter.name, mimeType: coverLetter.type, size: coverLetter.size },
+          ],
+        }),
+      });
+      if (!startRes.ok) {
+        const data = await startRes.json().catch(() => null);
         throw new Error(data?.message || "Something went wrong. Please try again.");
+      }
+      const startData = (await startRes.json().catch(() => null)) as
+        | { sessions?: { field: string; uploadUrl: string }[] }
+        | null;
+
+      // 2. Stream each file directly to its session, chunked to stay under the
+      //    function payload limit. No sessions => honeypot path; nothing to upload.
+      const sessions = startData?.sessions ?? [];
+      if (sessions.length) {
+        const filesByField: Record<string, File> = { resume, coverLetter };
+        for (const { field, uploadUrl } of sessions) {
+          const file = filesByField[field];
+          if (!file) continue;
+          await uploadFileInChunks(file, uploadUrl);
+        }
       }
 
       setSubmitted(true);
