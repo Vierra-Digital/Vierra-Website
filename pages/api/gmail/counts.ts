@@ -115,6 +115,9 @@ export default withAuth(async (req, res, session) => {
   const accountErrors: Array<{ accountEmail: string; message: string }> = [];
   const aggregated = { inbox: 0, sent: 0, drafts: 0, spam: 0, trash: 0, archive: 0 };
 
+  // Independent of the Gmail label fetches — start it now so it runs in parallel with them.
+  const composeDraftPromise = prisma.emailComposeDraft.count({ where: composeDraftWhere });
+
   await Promise.all(
     accountRows.map(async (account) => {
       try {
@@ -148,8 +151,7 @@ export default withAuth(async (req, res, session) => {
     })
   );
 
-  const composeDraftCount = await prisma.emailComposeDraft.count({ where: composeDraftWhere });
-  aggregated.drafts += composeDraftCount;
+  aggregated.drafts += await composeDraftPromise;
 
   res.status(200).json({
     counts: aggregated,
