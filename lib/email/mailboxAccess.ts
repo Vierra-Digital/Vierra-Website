@@ -38,17 +38,26 @@ export async function getAccessibleGmailAccounts(
       where: { grantee_user_id: userId },
       select: { account_email: true },
     });
-    for (const g of grants) {
-      const email = g.account_email.toLowerCase();
-      if (seen.has(email)) continue;
-      const owner = await prisma.platformToken.findFirst({
-        where: { platform: `gmail:${email}` },
+    const grantEmails = [...new Set(grants.map((g) => g.account_email.toLowerCase()))].filter((e) => e && !seen.has(e));
+    if (grantEmails.length > 0) {
+      // Resolve every granted mailbox's owner in ONE query (was a findFirst per grant). Ordered
+      // by created_at asc so the earliest connection wins per email (kept via the first-seen map).
+      const owners = await prisma.platformToken.findMany({
+        where: { platform: { in: grantEmails.map((e) => `gmail:${e}`) } },
         orderBy: { created_at: "asc" },
-        select: { user_id: true },
+        select: { user_id: true, platform: true },
       });
-      if (owner) {
-        seen.add(email);
-        out.push({ email, ownerUserId: owner.user_id });
+      const ownerByEmail = new Map<string, string>();
+      for (const o of owners) {
+        const email = o.platform.replace(/^gmail:/, "").toLowerCase();
+        if (!ownerByEmail.has(email)) ownerByEmail.set(email, o.user_id);
+      }
+      for (const email of grantEmails) {
+        const ownerUserId = ownerByEmail.get(email);
+        if (ownerUserId) {
+          seen.add(email);
+          out.push({ email, ownerUserId });
+        }
       }
     }
   } catch {

@@ -41,13 +41,7 @@ async function callGmailAction(accessToken: string, action: ActionType, messageI
       headers: { Authorization: `Bearer ${accessToken}` },
     });
   }
-  if (action === "trash") {
-    return fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/trash`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-  }
-  if (action === "moveToTrash") {
+  if (action === "trash" || action === "moveToTrash") {
     return fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/trash`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -63,15 +57,12 @@ async function callGmailAction(accessToken: string, action: ActionType, messageI
   const body: { addLabelIds: string[]; removeLabelIds: string[] } = { addLabelIds: [], removeLabelIds: [] };
   if (action === "archive") {
     body.removeLabelIds = ["INBOX"];
-  } else if (action === "moveToInbox") {
+  } else if (action === "moveToInbox" || action === "unspam") {
     body.addLabelIds = ["INBOX"];
     body.removeLabelIds = ["SPAM"];
   } else if (action === "moveToSpam" || action === "spam") {
     body.addLabelIds = ["SPAM"];
     body.removeLabelIds = ["INBOX"];
-  } else if (action === "unspam") {
-    body.addLabelIds = ["INBOX"];
-    body.removeLabelIds = ["SPAM"];
   } else if (action === "markRead") {
     body.removeLabelIds = ["UNREAD"];
   } else if (action === "markUnread") {

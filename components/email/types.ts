@@ -99,14 +99,7 @@ export type MailboxCounts = {
   trash: number;
 };
 
-export type ModuleUnreadBadgeCounts = {
-  inbox: number;
-  sent: number;
-  drafts: number;
-  archive: number;
-  spam: number;
-  trash: number;
-};
+export type ModuleUnreadBadgeCounts = MailboxCounts;
 
 export type ContactTag = {
   id: string;

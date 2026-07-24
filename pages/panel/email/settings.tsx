@@ -24,6 +24,17 @@ import {
 } from "react-icons/fi";
 import { requireSession } from "@/lib/auth";
 import { renderTemplate } from "@/lib/email/templateRender";
+import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
+import PromptModal, { type PromptField } from "@/components/ui/PromptModal";
+import { MODULES } from "@/components/email/constants";
+
+type PromptConfig = {
+  title: string;
+  description?: string;
+  fields: PromptField[];
+  confirmLabel?: string;
+  onSubmit: (values: Record<string, string>) => Promise<void> | void;
+} | null;
 
 /** Sample recipient used to preview token + spintax rendering in the settings UI. */
 const TEMPLATE_PREVIEW_VARS = {
@@ -176,7 +187,7 @@ type Settings = {
 };
 
 const defaultSettings: Settings = {
-  trackingEnabled: false,
+  trackingEnabled: true,
   openTrackingEnabled: true,
   clickTrackingEnabled: true,
   vacationResponderEnabled: false,
@@ -258,6 +269,12 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   };
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null);
+  const [promptConfig, setPromptConfig] = useState<PromptConfig>(null);
+  const [promptBusy, setPromptBusy] = useState(false);
+  const [tagToDelete, setTagToDelete] = useState<ContactTag | null>(null);
+  const [deletingTag, setDeletingTag] = useState(false);
+  const [navHidden, setNavHidden] = useState<string[]>([]);
+  const [navSaving, setNavSaving] = useState(false);
   const detectedTimeZone = useMemo(() => {
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -791,15 +808,21 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   };
 
-  const createSignature = async () => {
-    const name = window.prompt("Signature name");
-    if (!name || !primaryAccountEmail) return;
-    await fetch("/api/gmail/signatures", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountEmail: primaryAccountEmail, name, signatureText: "" }),
+  const createSignature = () => {
+    if (!primaryAccountEmail) return;
+    setPromptConfig({
+      title: "New signature",
+      fields: [{ name: "name", label: "Signature name", required: true, maxLength: 120 }],
+      confirmLabel: "Create signature",
+      onSubmit: async ({ name }) => {
+        await fetch("/api/gmail/signatures", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accountEmail: primaryAccountEmail, name, signatureText: "" }),
+        });
+        await loadAccountData(primaryAccountEmail);
+      },
     });
-    await loadAccountData(primaryAccountEmail);
   };
 
   const deleteSignature = async (id: string) => {
@@ -811,15 +834,21 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     await loadAccountData(primaryAccountEmail);
   };
 
-  const createTemplate = async () => {
-    const name = window.prompt("Template name");
-    if (!name || !primaryAccountEmail) return;
-    await fetch("/api/gmail/templates", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountEmail: primaryAccountEmail, name, subject: "", bodyText: "" }),
+  const createTemplate = () => {
+    if (!primaryAccountEmail) return;
+    setPromptConfig({
+      title: "New template",
+      fields: [{ name: "name", label: "Template name", required: true, maxLength: 120 }],
+      confirmLabel: "Create template",
+      onSubmit: async ({ name }) => {
+        await fetch("/api/gmail/templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accountEmail: primaryAccountEmail, name, subject: "", bodyText: "" }),
+        });
+        await loadAccountData(primaryAccountEmail);
+      },
     });
-    await loadAccountData(primaryAccountEmail);
   };
 
   const deleteTemplate = async (id: string) => {
@@ -831,38 +860,89 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     await loadAccountData(primaryAccountEmail);
   };
 
-  const createTag = async () => {
-    const name = window.prompt("Tag name");
-    if (!name) return;
-    const color = window.prompt("Tag color hex", "#701CC0") || "#701CC0";
-    await fetch("/api/contacts/tags", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, color }),
+  const createTag = () => {
+    setPromptConfig({
+      title: "New tag",
+      fields: [
+        { name: "name", label: "Tag name", required: true, maxLength: 60 },
+        { name: "color", label: "Color", type: "color", defaultValue: "#701CC0" },
+      ],
+      confirmLabel: "Create tag",
+      onSubmit: async ({ name, color }) => {
+        await fetch("/api/contacts/tags", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, color: color || "#701CC0" }),
+        });
+        await loadAccountData(primaryAccountEmail);
+      },
     });
-    await loadAccountData(primaryAccountEmail);
   };
 
-  const editTag = async (tag: ContactTag) => {
-    const name = window.prompt("Tag name", tag.name) || tag.name;
-    const color = window.prompt("Tag color hex", tag.color || "#701CC0") || tag.color || "#701CC0";
-    await fetch("/api/contacts/tags", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: tag.id, name, color }),
+  const editTag = (tag: ContactTag) => {
+    setPromptConfig({
+      title: "Edit tag",
+      fields: [
+        { name: "name", label: "Tag name", required: true, defaultValue: tag.name, maxLength: 60 },
+        { name: "color", label: "Color", type: "color", defaultValue: tag.color || "#701CC0" },
+      ],
+      confirmLabel: "Save tag",
+      onSubmit: async ({ name, color }) => {
+        await fetch("/api/contacts/tags", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: tag.id, name: name || tag.name, color: color || tag.color || "#701CC0" }),
+        });
+        await loadAccountData(primaryAccountEmail);
+      },
     });
-    await loadAccountData(primaryAccountEmail);
   };
 
-  const deleteTag = async (tag: ContactTag) => {
-    const ok = window.confirm(`Delete tag "${tag.name}"?`);
-    if (!ok) return;
-    await fetch("/api/contacts/tags", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: tag.id }),
-    });
-    await loadAccountData(primaryAccountEmail);
+  const deleteTag = (tag: ContactTag) => setTagToDelete(tag);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/gmail/nav-layout")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d && Array.isArray(d.hiddenModules)) setNavHidden(d.hiddenModules);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const toggleModuleVisible = async (key: string, visible: boolean) => {
+    if (key === "inbox") return; // Inbox is always shown.
+    const next = visible ? navHidden.filter((k) => k !== key) : [...new Set([...navHidden, key])];
+    setNavHidden(next);
+    setNavSaving(true);
+    try {
+      await fetch("/api/gmail/nav-layout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hiddenModules: next }),
+      });
+    } finally {
+      setNavSaving(false);
+    }
+  };
+
+  const confirmDeleteTag = async () => {
+    if (!tagToDelete || deletingTag) return;
+    setDeletingTag(true);
+    try {
+      await fetch("/api/contacts/tags", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: tagToDelete.id }),
+      });
+      await loadAccountData(primaryAccountEmail);
+    } finally {
+      setDeletingTag(false);
+      setTagToDelete(null);
+    }
   };
 
   return (
@@ -871,25 +951,24 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         <title>Vierra | Email Settings</title>
       </Head>
       <div className={`relative min-h-screen bg-[#F3F4F6] ${pageFont.className}`}>
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-5">
-          <div className="flex items-center gap-4">
-            <Link href="/panel" className="inline-flex items-center gap-2" aria-label="Admin panel">
-              <Image
-                src="/assets/vierra-logo-black-3.png"
-                alt="Vierra"
-                width={110}
-                height={32}
-                className="h-auto w-[110px]"
-                priority
-              />
-            </Link>
-          </div>
+        <header className="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-5">
           <Link
             href={backToEmailHref}
-            className="inline-flex items-center gap-2 text-sm font-medium text-[#374151] transition-colors hover:text-[#701CC0]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-[#374151] transition-colors hover:border-[#701CC0]/40 hover:text-[#701CC0]"
           >
             <FiArrowLeft className="h-4 w-4 shrink-0" />
-            Back
+            Back to inbox
+          </Link>
+          <span className="hidden h-6 w-px bg-gray-200 sm:block" />
+          <Link href="/panel" className="hidden items-center sm:inline-flex" aria-label="Admin panel">
+            <Image
+              src="/assets/vierra-logo-black-3.png"
+              alt="Vierra"
+              width={110}
+              height={32}
+              className="h-auto w-[110px]"
+              priority
+            />
           </Link>
         </header>
 
@@ -923,6 +1002,27 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
             </div>
           ) : (
             <div className="space-y-6">
+              <SettingsSection
+                title="Inbox layout"
+                description="Choose which items show in the email panel's left sidebar. Inbox is always shown. Syncs across your devices."
+                icon={FiEye}
+                right={navSaving ? <span className="text-xs text-[#9CA3AF]">Saving…</span> : null}
+              >
+                <ul className="divide-y divide-gray-100">
+                  {MODULES.map((m) => {
+                    const visible = m.key === "inbox" || !navHidden.includes(m.key);
+                    return (
+                      <li key={m.key} className="flex items-center justify-between py-2.5">
+                        <span className="flex items-center gap-2.5 text-sm text-[#1E1B2E]">
+                          <span className="text-[#847FA0]">{m.icon}</span>
+                          {m.label}
+                        </span>
+                        <Toggle checked={visible} onChange={(v) => toggleModuleVisible(m.key, v)} disabled={m.key === "inbox"} />
+                      </li>
+                    );
+                  })}
+                </ul>
+              </SettingsSection>
               <SettingsSection
                 title="Accounts"
                 description="Choose which connected Google accounts appear in the email panel."
@@ -1811,6 +1911,41 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
           )}
         </main>
       </div>
+      <PromptModal
+        open={Boolean(promptConfig)}
+        title={promptConfig?.title || ""}
+        description={promptConfig?.description}
+        fields={promptConfig?.fields || []}
+        confirmLabel={promptConfig?.confirmLabel}
+        busy={promptBusy}
+        onCancel={() => {
+          if (!promptBusy) setPromptConfig(null);
+        }}
+        onSubmit={async (values) => {
+          if (!promptConfig) return;
+          setPromptBusy(true);
+          try {
+            await promptConfig.onSubmit(values);
+            setPromptConfig(null);
+          } finally {
+            setPromptBusy(false);
+          }
+        }}
+      />
+      <ConfirmActionModal
+        isOpen={Boolean(tagToDelete)}
+        title="Delete tag"
+        message={
+          <>
+            Delete tag <span className="font-semibold text-[#1E1B2E]">{tagToDelete?.name || "this tag"}</span>? Contacts keep their other tags.
+          </>
+        }
+        confirmLabel={deletingTag ? "Deleting…" : "Delete tag"}
+        onCancel={() => {
+          if (!deletingTag) setTagToDelete(null);
+        }}
+        onConfirm={() => void confirmDeleteTag()}
+      />
     </>
   );
 };

@@ -78,9 +78,9 @@ export async function maybeSendVacationReply(msg: InboundMessage, ctx: InboundCo
   if (!sender || sender === msg.accountEmail.toLowerCase()) return;
   if (isAutomatedSender(msg)) return;
 
-  const accountId = await resolveAccountId(msg.userId, msg.accountEmail);
-  if (!accountId) return;
-  const setting = await prisma.emailAccountSetting.findUnique({ where: { account_id: accountId } });
+  const setting = await prisma.emailAccountSetting.findUnique({
+    where: { user_id_account_email: { user_id: msg.userId, account_email: msg.accountEmail } },
+  });
   if (!setting || !setting.vacation_responder_enabled) return;
 
   const now = ctx.now;

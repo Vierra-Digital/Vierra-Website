@@ -254,7 +254,9 @@ model Contact {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model EmailAccountSetting {
   id                             String                         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  account_id                     String                         @db.Uuid
+  account_id                     String?                        @db.Uuid
+  user_id                        String?                        @db.Uuid
+  account_email                  String?
   tracking_enabled               Boolean                        @default(false)
   open_tracking_enabled          Boolean                        @default(true)
   click_tracking_enabled         Boolean                        @default(true)
@@ -267,11 +269,11 @@ model EmailAccountSetting {
   vacation_reply_frequency_hours Int                            @default(24)
   created_at                     DateTime                       @default(now()) @db.Timestamptz(6)
   updated_at                     DateTime                       @default(now()) @db.Timestamptz(6)
-  email_provider_accounts        EmailProviderAccount        @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  email_provider_accounts        EmailProviderAccount?       @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   email_vacation_response_logs   EmailVacationResponseLog[]
 
   @@map("email_account_settings")
-  @@unique([account_id], map: "uq_email_account_settings_account_id")
+  @@unique([user_id, account_email], map: "uq_email_account_settings_user_email")
   @@index([account_id], map: "idx_email_account_settings_account_id")
 }
 
@@ -450,6 +452,15 @@ model EmailAccountPreference {
 
   @@map("email_account_preferences")
   @@unique([user_id, account_email], map: "uq_email_account_preferences")
+}
+
+// Per-user email panel nav layout — which left-nav modules the user has hidden.
+model EmailNavPreference {
+  user_id        String   @id @db.Uuid
+  hidden_modules String[]
+  updated_at     DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("email_nav_preferences")
 }
 
 // Meeting booker — custom scheduling links backed by Google Calendar free/busy.
@@ -658,7 +669,8 @@ model AssignmentEvent {
 model EmailOutboundMessage {
   id                        String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id                   String                      @db.Uuid
-  account_id                String                      @db.Uuid
+  account_id                String?                     @db.Uuid
+  account_email             String?
   gmail_message_id          String?
   thread_id                 String?
   subject                   String?
@@ -670,7 +682,7 @@ model EmailOutboundMessage {
   campaign_id               String?                     @db.Uuid
   campaign_contact_id       String?                     @db.Uuid
   step_id                   String?                     @db.Uuid
-  email_provider_accounts   EmailProviderAccount     @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  email_provider_accounts   EmailProviderAccount?    @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users                     User                @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   email_outbound_recipients EmailOutboundRecipient[]
   email_tracking_events     EmailTrackingEvent[]

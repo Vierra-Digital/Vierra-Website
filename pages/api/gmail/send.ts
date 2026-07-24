@@ -2,7 +2,7 @@ import type { NextApiRequest } from "next";
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr } from "@/lib/api/parsing";
-import { sendEmailCore, normalizeEmail, type SendEmailPayload } from "@/lib/gmail/sendCore";
+import { sendEmailCore, normalizeEmail, escapeHtml, type SendEmailPayload } from "@/lib/gmail/sendCore";
 import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { parseScheduledAt, enqueueScheduledSend } from "@/lib/gmail/scheduledSend";
 import {
@@ -12,15 +12,6 @@ import {
   buildConfidentialInviteText,
   type ConfidentialExpiry,
 } from "@/lib/email/confidential";
-
-function escapeHtmlBasic(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 function getPublicBaseUrl(req: NextApiRequest) {
   const normalizeExplicitBaseUrl = (value: string) => {
@@ -91,7 +82,7 @@ export default withAuth(async (req, res, session) => {
     const expiresAt = resolveExpiry(asStr(conf.expiry) as ConfidentialExpiry, new Date());
     const realHtml = payload.bodyHtml && payload.bodyHtml.trim()
       ? payload.bodyHtml
-      : `<div style="white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;">${escapeHtmlBasic(asStr(payload.body))}</div>`;
+      : `<div style="white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;">${escapeHtml(asStr(payload.body))}</div>`;
     if (!realHtml.trim()) {
       res.status(400).json({ message: "Email body is required." });
       return;

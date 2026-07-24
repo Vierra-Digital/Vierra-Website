@@ -63,6 +63,28 @@ export type DomainAge = { registered: string; ageYears: number };
 // key (OPENPAGERANK_API_KEY). Dormant/omitted when no key is configured.
 export type Authority = { score: number; rank: number | null };
 
+// Open-roles snapshot from a company's public ATS board (Greenhouse/Lever/Ashby/
+// Workable/Recruitee/SmartRecruiters). Free + keyless. A strong buying-intent
+// signal: what they're hiring for = what they're investing in.
+export type Hiring = {
+  ats: string; // which ATS the data came from
+  count: number; // total open roles
+  url: string | null; // public careers/board URL
+  departments: { name: string; count: number }[]; // top hiring areas
+  sample: { title: string; location: string }[]; // a few recent roles
+};
+
+// ROUGH monthly-visits estimate from a keyless third-party calculator
+// (SiteWorthTraffic, derived from legacy Alexa-style rank models). No key needed,
+// but low accuracy — always labelled "Est." in the UI. There is no free source
+// for *measured* visit counts.
+export type Visits = { monthly: number; daily: number | null; source: string };
+
+// Recent SEC filings — buying-intent events for US PUBLIC companies (keyless, needs
+// a User-Agent header). 8-K item 5.02 = leadership change, 2.01 = M&A, etc.
+export type Filing = { form: string; date: string; label: string; url: string; intent: boolean };
+export type Financials = { cik: string; ticker: string | null; filings: Filing[] };
+
 export type CompanyContext = {
   domain: string;
   url: string;
@@ -77,6 +99,9 @@ export type CompanyContext = {
   popularity: Popularity | null;
   authority: Authority | null;
   domainAge: DomainAge | null;
+  hiring: Hiring | null;
+  visits: Visits | null;
+  financials: Financials | null;
   fetchedAt: string;
 };
 
@@ -370,8 +395,9 @@ export async function fetchWikidata(name: string, domain: string): Promise<Parti
   const hq = val(matched, "hqLabel");
   const ceo = val(matched, "ceoLabel");
 
-  // 3) Key executives: CEO (P169), founder (P112), chairperson (P488). Link each
-  // to their LinkedIn profile via P6634 when Wikidata has it, else a name search.
+  // 3) Key people: CEO (P169), founder (P112), chairperson (P488), board members
+  // (P3320), and directors/managers (P1037) — a broader leadership set than just
+  // the CEO. Link each to LinkedIn via P6634 when present, else a name search.
   const people: KeyPerson[] = [];
   const itemUri = val(matched, "item");
   const qid = itemUri ? itemUri.split("/").pop() : null;
@@ -381,8 +407,10 @@ export async function fetchWikidata(name: string, domain: string): Promise<Parti
       ` { wd:${qid} wdt:P169 ?person. BIND("CEO" AS ?role) }` +
       ` UNION { wd:${qid} wdt:P112 ?person. BIND("Founder" AS ?role) }` +
       ` UNION { wd:${qid} wdt:P488 ?person. BIND("Chair" AS ?role) }` +
+      ` UNION { wd:${qid} wdt:P1037 ?person. BIND("Director" AS ?role) }` +
+      ` UNION { wd:${qid} wdt:P3320 ?person. BIND("Board member" AS ?role) }` +
       ` OPTIONAL { ?person wdt:P6634 ?linkedin. }` +
-      ` SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } LIMIT 12`;
+      ` SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } LIMIT 20`;
     const pdata = await getJson(`https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(pq)}`);
     const prows: any[] = pdata?.results?.bindings || [];
     const seen = new Set<string>();
@@ -413,6 +441,222 @@ export async function fetchWikidata(name: string, domain: string): Promise<Parti
     people,
     source: "Wikidata",
   };
+}
+
+// Detect a company's ATS + board slug from already-fetched HTML (careers links are
+// usually referenced somewhere on the site). Returns {ats, slug} or null.
+function detectAts(html: string): { ats: string; slug: string } | null {
+  const patterns: [string, RegExp][] = [
+    ["greenhouse", /(?:boards|job-boards)\.greenhouse\.io\/(?:embed\/job_board\?for=)?([a-z0-9_-]+)/i],
+    ["greenhouse", /boards\.greenhouse\.io\/embed\/job_board\?for=([a-z0-9_-]+)/i],
+    ["lever", /jobs\.lever\.co\/([a-z0-9_-]+)/i],
+    ["ashby", /jobs\.ashbyhq\.com\/([a-z0-9_-]+)/i],
+    ["workable", /(?:apply\.workable\.com\/|https?:\/\/)([a-z0-9_-]+)\.workable\.com/i],
+    ["workable", /apply\.workable\.com\/([a-z0-9_-]+)/i],
+    ["recruitee", /([a-z0-9_-]+)\.recruitee\.com/i],
+    ["smartrecruiters", /careers\.smartrecruiters\.com\/([a-zA-Z0-9_-]+)/i],
+  ];
+  for (const [ats, re] of patterns) {
+    const m = html.match(re);
+    if (m && m[1] && !["www", "apply", "jobs", "boards", "careers"].includes(m[1].toLowerCase())) {
+      return { ats, slug: m[1] };
+    }
+  }
+  return null;
+}
+
+// Query a specific ATS board (keyless JSON) and normalize to a Hiring snapshot.
+async function fetchAtsJobs(ats: string, slug: string): Promise<Hiring | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  const get = async (url: string) => {
+    const r = await fetch(url, { signal: controller.signal, headers: { Accept: "application/json", "User-Agent": UA } });
+    return r.ok ? await r.json() : null;
+  };
+  try {
+    let rows: Array<{ title: string; dept: string; loc: string }> = [];
+    let url: string | null = null;
+    if (ats === "greenhouse") {
+      // /departments gives dept names + counts + jobs in one call (the /jobs
+      // endpoint omits departments unless you fetch heavy content=true).
+      const d = await get(`https://boards-api.greenhouse.io/v1/boards/${slug}/departments`);
+      const depts = (d?.departments || []).filter((x: any) => x.jobs && x.jobs.length);
+      rows = depts.flatMap((dep: any) =>
+        dep.jobs.map((j: any) => ({ title: j.title || "", dept: dep.name || "", loc: j.location?.name || "" }))
+      );
+      url = `https://boards.greenhouse.io/${slug}`;
+    } else if (ats === "lever") {
+      const d = await get(`https://api.lever.co/v0/postings/${slug}?mode=json`);
+      rows = (Array.isArray(d) ? d : []).map((j: any) => ({ title: j.text || "", dept: j.categories?.department || j.categories?.team || "", loc: j.categories?.location || "" }));
+      url = `https://jobs.lever.co/${slug}`;
+    } else if (ats === "ashby") {
+      const d = await get(`https://api.ashbyhq.com/posting-api/job-board/${slug}`);
+      rows = (d?.jobs || []).map((j: any) => ({ title: j.title || "", dept: j.department || j.team || "", loc: j.location || "" }));
+      url = `https://jobs.ashbyhq.com/${slug}`;
+    } else if (ats === "workable") {
+      const d = await get(`https://apply.workable.com/api/v1/widget/accounts/${slug}?details=true`);
+      rows = (d?.jobs || []).map((j: any) => ({ title: j.title || "", dept: j.department || "", loc: j.city || j.country || "" }));
+      url = `https://apply.workable.com/${slug}`;
+    } else if (ats === "recruitee") {
+      const d = await get(`https://${slug}.recruitee.com/api/offers/`);
+      rows = (d?.offers || []).map((j: any) => ({ title: j.title || j.position || "", dept: j.department || "", loc: j.city || j.country || "" }));
+      url = `https://${slug}.recruitee.com`;
+    } else if (ats === "smartrecruiters") {
+      const d = await get(`https://api.smartrecruiters.com/v1/companies/${slug}/postings?limit=100`);
+      rows = (d?.content || []).map((j: any) => ({ title: j.name || "", dept: j.department?.label || "", loc: j.location?.city || j.location?.country || "" }));
+      url = `https://careers.smartrecruiters.com/${slug}`;
+    }
+    clearTimeout(timer);
+    rows = rows.filter((r) => r.title);
+    if (!rows.length) return null;
+    const deptCounts: Record<string, number> = {};
+    for (const r of rows) if (r.dept) deptCounts[r.dept] = (deptCounts[r.dept] || 0) + 1;
+    const departments = Object.entries(deptCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([name, count]) => ({ name, count }));
+    return {
+      ats,
+      count: rows.length,
+      url,
+      departments,
+      sample: rows.slice(0, 5).map((r) => ({ title: r.title, location: r.loc })),
+    };
+  } catch {
+    clearTimeout(timer);
+    return null;
+  }
+}
+
+// Hiring signal: detect the ATS from the site HTML; if not found, probe the top
+// three ATSes with a normalized slug guess. All keyless.
+export async function fetchHiring(domain: string, html: string): Promise<Hiring | null> {
+  const detected = detectAts(html);
+  if (detected) {
+    const h = await fetchAtsJobs(detected.ats, detected.slug);
+    if (h) return h;
+  }
+  const guess = domain.split(".")[0].replace(/[^a-z0-9]/gi, "").toLowerCase();
+  if (!guess) return null;
+  const probes = await Promise.all([
+    fetchAtsJobs("greenhouse", guess),
+    fetchAtsJobs("lever", guess),
+    fetchAtsJobs("ashby", guess),
+  ]);
+  return probes.find(Boolean) || null;
+}
+
+/**
+ * ROUGH monthly-visits estimate via SiteWorthTraffic (keyless HTML). These are
+ * legacy-Alexa-derived approximations, NOT measured traffic — surfaced only
+ * because no free source for real visit counts exists. Always shown as "Est.".
+ */
+export async function fetchVisits(domain: string): Promise<Visits | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const res = await fetch(`https://www.siteworthtraffic.com/report/${encodeURIComponent(domain)}`, {
+      signal: controller.signal,
+      headers: { "User-Agent": UA, Accept: "text/html" },
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const html = (await res.text()).slice(0, 150_000);
+    const visitorsIn = (section: string): number | null => {
+      const chunk = html.split(new RegExp(`${section} ESTIMATIONS`, "i"))[1] || "";
+      const m = chunk.match(/Unique Visitors<\/td>\s*<td>([0-9,]+)/i);
+      return m ? Number(m[1].replace(/,/g, "")) : null;
+    };
+    const monthly = visitorsIn("MONTHLY");
+    if (!monthly || monthly <= 0) return null;
+    return { monthly, daily: visitorsIn("DAILY"), source: "SiteWorthTraffic" };
+  } catch {
+    clearTimeout(timer);
+    return null;
+  }
+}
+
+// SEC ticker->CIK map (public companies only), cached in-module.
+let secTickers: { title: string; cik: string; ticker: string }[] | null = null;
+async function getSecTickers(): Promise<typeof secTickers> {
+  if (secTickers) return secTickers;
+  try {
+    const r = await fetch("https://www.sec.gov/files/company_tickers.json", {
+      headers: { "User-Agent": UA, Accept: "application/json" },
+    });
+    if (!r.ok) return null;
+    const j = (await r.json()) as Record<string, { cik_str: number; ticker: string; title: string }>;
+    secTickers = Object.values(j).map((v) => ({ title: String(v.title || ""), cik: String(v.cik_str), ticker: String(v.ticker || "") }));
+    return secTickers;
+  } catch {
+    return null;
+  }
+}
+function normCompany(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[.,]/g, "")
+    .replace(/\b(inc|corp|corporation|company|co|ltd|limited|llc|plc|holdings|group|the)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Recent SEC filings for US PUBLIC companies (keyless; UA header required). Surfaces
+ * buying-intent events: 8-K item 5.02 (leadership change), 2.01 (M&A), etc. Matches
+ * by company name; returns null for private/non-US/no-match to avoid wrong data.
+ */
+export async function fetchFilings(name: string): Promise<Financials | null> {
+  const q = normCompany(name || "");
+  if (!q || q.length < 3) return null;
+  const list = await getSecTickers();
+  if (!list) return null;
+  const hit = list.find((t) => normCompany(t.title) === q) || list.find((t) => normCompany(t.title).startsWith(q + " "));
+  if (!hit) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const padded = hit.cik.padStart(10, "0");
+    const r = await fetch(`https://data.sec.gov/submissions/CIK${padded}.json`, { headers: { "User-Agent": UA, Accept: "application/json" } });
+    clearTimeout(timer);
+    if (!r.ok) return null;
+    const j = (await r.json()) as any;
+    const rec = j?.filings?.recent;
+    if (!rec || !Array.isArray(rec.form)) return null;
+    const ITEMS: Record<string, string> = {
+      "5.02": "Leadership change",
+      "2.01": "Completed acquisition",
+      "1.01": "Material agreement",
+      "1.05": "Cybersecurity incident",
+      "2.02": "Earnings released",
+      "5.07": "Shareholder vote",
+      "8.01": "Company event",
+    };
+    const INTENT = new Set(["5.02", "2.01", "1.01"]);
+    const filings: Filing[] = [];
+    for (let i = 0; i < rec.form.length && filings.length < 5; i++) {
+      const form = String(rec.form[i] || "");
+      if (!(form === "8-K" || form === "10-K" || form === "S-1" || form.startsWith("424"))) continue;
+      let label = form;
+      let intent = false;
+      if (form === "8-K") {
+        const items = String(rec.items[i] || "").split(",").map((s) => s.trim());
+        label = items.map((it) => ITEMS[it]).filter(Boolean)[0] || "Company event (8-K)";
+        intent = items.some((it) => INTENT.has(it));
+      } else if (form === "10-K") label = "Annual report (10-K)";
+      else if (form === "S-1") { label = "IPO registration (S-1)"; intent = true; }
+      else if (form.startsWith("424")) label = "Prospectus";
+      const acc = String(rec.accessionNumber[i] || "").replace(/-/g, "");
+      const doc = String(rec.primaryDocument[i] || "");
+      const url = acc && doc ? `https://www.sec.gov/Archives/edgar/data/${Number(hit.cik)}/${acc}/${doc}` : `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${padded}`;
+      filings.push({ form, date: String(rec.filingDate[i] || ""), label, url, intent });
+    }
+    if (!filings.length) return null;
+    return { cik: hit.cik, ticker: hit.ticker || null, filings };
+  } catch {
+    clearTimeout(timer);
+    return null;
+  }
 }
 
 /**
@@ -588,6 +832,7 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
   const trancoP = fetchTranco(domain);
   const domainAgeP = fetchDomainAge(domain);
   const authorityP = fetchAuthority(domain);
+  const visitsP = fetchVisits(domain);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -643,10 +888,17 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
 
   const seo = extractSeo(html, url);
   const profile = extractOrgProfile(html);
-  // Wikidata needs the parsed name; the other three were started above and are
-  // (mostly) already done by now.
-  const wd = await fetchWikidata(name || "", domain);
-  const [popularity, domainAge, authority] = await Promise.all([trancoP, domainAgeP, authorityP]);
+  // Wikidata + hiring both need the fetched page (name / ATS links); run together.
+  // The other three were started above and are (mostly) already done by now.
+  const [wd, hiring, financials, popularity, domainAge, authority, visits] = await Promise.all([
+    fetchWikidata(name || "", domain),
+    fetchHiring(domain, html),
+    fetchFilings(name || domain.split(".")[0]),
+    trancoP,
+    domainAgeP,
+    authorityP,
+    visitsP,
+  ]);
   if (wd) {
     profile.industry = profile.industry || wd.industry || null;
     profile.employees = profile.employees || wd.employees || null;
@@ -673,6 +925,9 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
     popularity,
     authority,
     domainAge,
+    hiring,
+    visits,
+    financials,
     fetchedAt: new Date().toISOString(),
   };
 }

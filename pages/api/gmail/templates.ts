@@ -1,14 +1,7 @@
-import type { NextApiRequest } from "next";
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
-import { asStr } from "@/lib/api/parsing";
-
-function queryAccountEmail(req: NextApiRequest) {
-  const raw = Array.isArray(req.query.accountEmail) ? req.query.accountEmail[0] : req.query.accountEmail;
-  const value = asStr(raw).toLowerCase();
-  return value || null;
-}
+import { asStr, queryAccountEmail } from "@/lib/api/parsing";
 
 function serializeTemplate(t: {
   id: string; user_id: string; account_id: string | null; name: string;
@@ -33,7 +26,7 @@ export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
 
   if (req.method === "GET") {
-    const accountEmail = queryAccountEmail(req);
+    const accountEmail = queryAccountEmail(req.query.accountEmail);
     const accountId = accountEmail ? await resolveAccountId(userId, accountEmail) : null;
     const templates = await prisma.emailTemplate.findMany({
       where: {

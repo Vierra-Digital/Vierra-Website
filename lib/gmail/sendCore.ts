@@ -3,7 +3,7 @@ import type { EmailProviderAccount } from "@prisma/client";
 import { sanitizeRichEmailHtml } from "@/lib/email/sanitize";
 import { prisma } from "@/lib/prisma";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { toBase64Url } from "@/lib/gmail/gmailApi";
+import { toBase64Url, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 import { createSmtpTransport } from "@/lib/email/smtp";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { asStr } from "@/lib/api/parsing";
@@ -19,16 +19,10 @@ export function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
 }
 
-function extractEmailAddress(input: string) {
-  const match = input.match(/<([^>]+)>/);
-  if (match?.[1]) return match[1].trim();
-  return input.trim();
-}
-
 function splitRecipients(value: string) {
   return value
     .split(",")
-    .map((entry) => extractEmailAddress(entry))
+    .map((entry) => parseAddressFromHeader(entry, { lower: false }))
     .map((entry) => entry.trim())
     .filter(Boolean);
 }
@@ -38,7 +32,7 @@ function ensureReplyPrefix(subject: string) {
   return `Re: ${subject.trim() || "(No Subject)"}`;
 }
 
-function escapeHtml(value: string) {
+export function escapeHtml(value: string) {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -244,7 +238,7 @@ export type SendEmailPayload = {
 };
 
 export type SendEmailResult =
-  | { ok: true; messageId: string | null; threadId: string | null; tracked: boolean; provider: "gmail" | "smtp"; outboundId: string }
+  | { ok: true; messageId: string | null; threadId: string | null; tracked: boolean; provider: "gmail" | "smtp"; outboundId: string | null }
   | { ok: false; status: number; message: string };
 
 type SendFailure = { ok: false; status: number; message: string };
@@ -375,18 +369,20 @@ export async function sendEmailCore(userId: string, payload: SendEmailPayload, b
 
   const accountId = providerAccount?.id ?? (await resolveAccountId(userId, accountEmail));
 
-  // Tracking config is strictly per-account: a mailbox with no settings row means tracking is
-  // OFF. (Previously this fell back to any other account's most-recently-updated settings, which
-  // could inject an open pixel / rewrite links using a config the user never enabled on THIS
-  // mailbox — a privacy and deliverability problem.)
-  const setting = accountId
-    ? await prisma.emailAccountSetting.findUnique({
-        where: { account_id: accountId },
-        select: { tracking_enabled: true, open_tracking_enabled: true, click_tracking_enabled: true },
-      })
-    : null;
+  // Tracking config is strictly per-account (no cross-account fallback — that could inject a
+  // pixel/link-rewrite the user never enabled on THIS mailbox). Default: tracking ON when the
+  // mailbox has no explicit settings row, since open/click tracking is a core outreach feature;
+  // an explicit row with tracking_enabled=false turns it off.
+  const setting = await prisma.emailAccountSetting.findUnique({
+    where: { user_id_account_email: { user_id: userId, account_email: accountEmail } },
+    select: { tracking_enabled: true, open_tracking_enabled: true, click_tracking_enabled: true },
+  });
 
-  const trackingEnabled = Boolean(setting?.tracking_enabled);
+  // Only embed tracking when baseUrl is a real absolute origin — otherwise the pixel/click URLs
+  // would be relative and dead in a delivered email (and the row would falsely read as tracked).
+  const canEmbedTracking = /^https?:\/\//i.test(baseUrl);
+  const wantTracking = setting ? Boolean(setting.tracking_enabled) : true;
+  const trackingEnabled = wantTracking && canEmbedTracking;
   const openTrackingEnabled = trackingEnabled && Boolean(setting?.open_tracking_enabled ?? true);
   const clickTrackingEnabled = trackingEnabled && Boolean(setting?.click_tracking_enabled ?? true);
 
@@ -398,38 +394,51 @@ export async function sendEmailCore(userId: string, payload: SendEmailPayload, b
       : "");
 
   const openToken = openTrackingEnabled ? randomUUID().replace(/-/g, "") : null;
-  const outbound = await prisma.emailOutboundMessage.create({
-    data: {
-      user_id: userId,
-      account_id: accountId ?? "",
-      subject,
-      body_text: plainTextBody,
-      body_html: sanitizedHtmlInput || linkifyText(plainTextBody),
-      tracking_enabled: trackingEnabled,
-      open_token: openToken,
-      email_outbound_recipients: {
-        create: [
-          ...toRecipients.map((email) => ({ email, recipient_type: "TO" })),
-          ...ccRecipients.map((email) => ({ email, recipient_type: "CC" })),
-          ...bccRecipients.map((email) => ({ email, recipient_type: "BCC" })),
-        ],
+  // Record the outbound message so opens/clicks can be attributed back to it. Best-effort: a
+  // failure here must NEVER block the actual send — we just skip tracking for this message.
+  let outbound: { id: string } | null = null;
+  try {
+    outbound = await prisma.emailOutboundMessage.create({
+      data: {
+        user_id: userId,
+        account_id: accountId,
+        account_email: accountEmail,
+        subject,
+        body_text: plainTextBody,
+        body_html: sanitizedHtmlInput || linkifyText(plainTextBody),
+        tracking_enabled: trackingEnabled,
+        open_token: openToken,
+        email_outbound_recipients: {
+          create: [
+            ...toRecipients.map((email) => ({ email, recipient_type: "TO" })),
+            ...ccRecipients.map((email) => ({ email, recipient_type: "CC" })),
+            ...bccRecipients.map((email) => ({ email, recipient_type: "BCC" })),
+          ],
+        },
       },
-    },
-  });
+      select: { id: true },
+    });
+  } catch {
+    outbound = null;
+  }
 
   const replacements = new Map<string, string>();
-  if (clickTrackingEnabled) {
+  if (outbound && clickTrackingEnabled) {
     const urlsForTracking = mergeClickTrackUrls(plainTextBody, sanitizedHtmlInput);
     for (const url of urlsForTracking) {
       const token = randomUUID().replace(/-/g, "");
-      await prisma.emailTrackingLink.create({
-        data: {
-          outbound_message_id: outbound.id,
-          token,
-          original_url: url,
-        },
-      });
-      replacements.set(url, `${baseUrl}/api/email/track/click/${token}`);
+      try {
+        await prisma.emailTrackingLink.create({
+          data: {
+            outbound_message_id: outbound.id,
+            token,
+            original_url: url,
+          },
+        });
+        replacements.set(url, `${baseUrl}/api/email/track/click/${token}`);
+      } catch {
+        /* skip this link's tracking */
+      }
     }
   }
 
@@ -437,7 +446,7 @@ export async function sendEmailCore(userId: string, payload: SendEmailPayload, b
   let htmlBody = sanitizedHtmlInput
     ? rewriteTrackedLinksInHtml(sanitizedHtmlInput, replacements)
     : linkifyTextWithTrackedHrefs(plainTextBody, replacements);
-  if (openTrackingEnabled && openToken) {
+  if (outbound && openTrackingEnabled && openToken) {
     const trackingPixel = `<img src="${baseUrl}/api/email/track/open/${openToken}.gif" width="1" height="1" alt="" aria-hidden="true" style="width:1px;height:1px;opacity:0;position:absolute;left:-9999px;top:auto;border:0;overflow:hidden;" />`;
     htmlBody = `${trackingPixel}${htmlBody}`;
   }
@@ -475,7 +484,8 @@ export async function sendEmailCore(userId: string, payload: SendEmailPayload, b
   // tracking URLs could be embedded. If the provider send fails, delete it (recipients,
   // tracking links and events cascade) so we don't leave an orphaned "sent" record with live
   // tracking endpoints for a message that never went out.
-  const discardOutbound = () => prisma.emailOutboundMessage.delete({ where: { id: outbound.id } }).catch(() => {});
+  const discardOutbound = () =>
+    outbound ? prisma.emailOutboundMessage.delete({ where: { id: outbound.id } }).catch(() => {}) : Promise.resolve();
 
   if (providerAccount) {
     provider = "smtp";
@@ -510,15 +520,19 @@ export async function sendEmailCore(userId: string, payload: SendEmailPayload, b
     return { ok: false, status: 400, message: "No valid send provider configured." };
   }
 
-  await prisma.emailOutboundMessage.update({
-    where: { id: outbound.id },
-    data: {
-      gmail_message_id: sentMessageId,
-      thread_id: sentThreadId,
-      body_text: textBody,
-      body_html: htmlBody,
-    },
-  });
+  if (outbound) {
+    await prisma.emailOutboundMessage
+      .update({
+        where: { id: outbound.id },
+        data: {
+          gmail_message_id: sentMessageId,
+          thread_id: sentThreadId,
+          body_text: textBody,
+          body_html: htmlBody,
+        },
+      })
+      .catch(() => {});
+  }
 
   if (draftKey) {
     await prisma.emailComposeDraft.deleteMany({
@@ -526,5 +540,12 @@ export async function sendEmailCore(userId: string, payload: SendEmailPayload, b
     });
   }
 
-  return { ok: true, messageId: sentMessageId, threadId: sentThreadId, tracked: trackingEnabled, provider, outboundId: outbound.id };
+  return {
+    ok: true,
+    messageId: sentMessageId,
+    threadId: sentThreadId,
+    tracked: Boolean(outbound) && trackingEnabled,
+    provider,
+    outboundId: outbound?.id ?? null,
+  };
 }

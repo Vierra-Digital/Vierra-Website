@@ -1,16 +1,10 @@
-import type { NextApiRequest } from "next";
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
-import { asStr } from "@/lib/api/parsing";
-
-function getAccountEmail(req: NextApiRequest) {
-  const raw = Array.isArray(req.query.accountEmail) ? req.query.accountEmail[0] : req.query.accountEmail;
-  return asStr(raw).toLowerCase();
-}
+import { asStr, queryAccountEmail } from "@/lib/api/parsing";
 
 function serializeSettings(s: {
-  id: string; account_id: string; tracking_enabled: boolean; open_tracking_enabled: boolean;
+  id: string; account_id: string | null; tracking_enabled: boolean; open_tracking_enabled: boolean;
   click_tracking_enabled: boolean; vacation_responder_enabled: boolean; vacation_subject: string | null;
   vacation_body_html: string | null; vacation_body_text: string | null; vacation_start_at: Date | null;
   vacation_end_at: Date | null; vacation_reply_frequency_hours: number; created_at: Date; updated_at: Date;
@@ -35,7 +29,7 @@ function serializeSettings(s: {
 
 export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
-  const accountEmail = getAccountEmail(req);
+  const accountEmail = queryAccountEmail(req.query.accountEmail);
   if (!accountEmail) {
     res.status(400).json({ message: "accountEmail is required" });
     return;
@@ -44,19 +38,19 @@ export default withAuth(async (req, res, session) => {
   const accountId = await resolveAccountId(userId, accountEmail);
 
   if (req.method === "GET") {
-    const settings = accountId
-      ? (await prisma.emailAccountSetting.findUnique({ where: { account_id: accountId } })) ||
-        (await prisma.emailAccountSetting.findFirst({
-          where: { email_provider_accounts: { user_id: userId } },
-          orderBy: { updated_at: "desc" },
-        }))
-      : null;
+    // Keyed by (user, account_email) so this works for Gmail (OAuth) accounts too, which have
+    // no provider-account row / account_id.
+    const settings = await prisma.emailAccountSetting.findUnique({
+      where: { user_id_account_email: { user_id: userId, account_email: accountEmail } },
+    });
     res.status(200).json({
       settings: settings
         ? serializeSettings(settings)
         : {
+            // Default ON to match sendEmailCore (a mailbox with no settings row is tracked by
+            // default). Keeps the toggle consistent with actual send behavior.
             accountId,
-            trackingEnabled: false,
+            trackingEnabled: true,
             openTrackingEnabled: true,
             clickTrackingEnabled: true,
             vacationResponderEnabled: false,
@@ -72,10 +66,6 @@ export default withAuth(async (req, res, session) => {
   }
 
   if (req.method === "PUT") {
-    if (!accountId) {
-      res.status(404).json({ message: "Email account not found." });
-      return;
-    }
     const vacationReplyFrequencyHoursRaw = Number(req.body?.vacationReplyFrequencyHours);
     const vacationReplyFrequencyHours =
       Number.isFinite(vacationReplyFrequencyHoursRaw) && vacationReplyFrequencyHoursRaw > 0
@@ -94,13 +84,13 @@ export default withAuth(async (req, res, session) => {
       vacation_reply_frequency_hours: vacationReplyFrequencyHours,
     };
     const updated = await prisma.emailAccountSetting.upsert({
-      where: { account_id: accountId },
-      create: { account_id: accountId, ...settingData },
+      where: { user_id_account_email: { user_id: userId, account_email: accountEmail } },
+      create: { user_id: userId, account_email: accountEmail, account_id: accountId, ...settingData },
       update: settingData,
     });
-    // Sync tracking flags to all accounts for this user
+    // Sync tracking flags across all of this user's mailbox settings.
     await prisma.emailAccountSetting.updateMany({
-      where: { email_provider_accounts: { user_id: userId } },
+      where: { user_id: userId },
       data: {
         tracking_enabled: Boolean(req.body?.trackingEnabled),
         open_tracking_enabled: Boolean(req.body?.openTrackingEnabled ?? true),
