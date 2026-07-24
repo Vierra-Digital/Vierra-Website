@@ -9,25 +9,6 @@
  * Pure module (no imports) so it can be unit-tested standalone.
  */
 
-export type SeoSnapshot = {
-  title: string | null;
-  titleLength: number;
-  metaDescription: string | null;
-  metaDescriptionLength: number;
-  h1: string | null;
-  h1Count: number;
-  hasCanonical: boolean;
-  indexable: boolean; // no <meta robots noindex>
-  hasViewport: boolean; // mobile-friendly signal
-  openGraphCount: number;
-  hasTwitterCard: boolean;
-  structuredDataTypes: string[]; // JSON-LD @type values
-  lang: string | null;
-  hasFavicon: boolean;
-  wordCount: number;
-  https: boolean;
-};
-
 // A notable executive/founder, with a link to their LinkedIn profile (direct
 // when Wikidata has the handle, else a name search).
 export type KeyPerson = { name: string; role: string; url: string };
@@ -94,7 +75,6 @@ export type CompanyContext = {
   socials: Record<string, string>;
   emails: string[];
   tech: string[];
-  seo: SeoSnapshot;
   profile: OrgProfile;
   popularity: Popularity | null;
   authority: Authority | null;
@@ -239,52 +219,6 @@ function extractEmails(html: string, domain: string): string[] {
     .slice(0, 5);
 }
 
-/** Keyless on-page SEO snapshot derived from the already-fetched HTML. */
-export function extractSeo(html: string, url: string): SeoSnapshot {
-  const title = metaContent(html, [/<title[^>]*>([^<]+)<\/title>/i]);
-  const metaDescription = metaContent(html, [
-    /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i,
-    /<meta[^>]+content=["']([^"']*)["'][^>]+name=["']description["']/i,
-  ]);
-  const h1s = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/gi) || [];
-  const firstH1 = h1s.length ? decodeEntities((h1s[0] || "").replace(/<[^>]+>/g, "").trim()).slice(0, 160) : null;
-  const robotsMeta = (metaContent(html, [/<meta[^>]+name=["']robots["'][^>]+content=["']([^"']*)["']/i]) || "").toLowerCase();
-  const langMatch = html.match(/<html[^>]+lang=["']([a-z\-]+)["']/i);
-  const ogCount = (html.match(/property=["']og:[a-z:]+["']/gi) || []).length;
-  const jsonLdTypes = new Set<string>();
-  const typeMatches = html.match(/"@type"\s*:\s*"([^"]+)"/gi) || [];
-  for (const t of typeMatches.slice(0, 20)) {
-    const m = t.match(/"@type"\s*:\s*"([^"]+)"/i);
-    if (m) jsonLdTypes.add(m[1]);
-  }
-  // Rough word count from the visible body (scripts/styles/tags stripped).
-  const text = html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const wordCount = text ? text.split(" ").length : 0;
-
-  return {
-    title,
-    titleLength: title ? title.length : 0,
-    metaDescription,
-    metaDescriptionLength: metaDescription ? metaDescription.length : 0,
-    h1: firstH1,
-    h1Count: h1s.length,
-    hasCanonical: /<link[^>]+rel=["']canonical["']/i.test(html),
-    indexable: !robotsMeta.includes("noindex"),
-    hasViewport: /<meta[^>]+name=["']viewport["']/i.test(html),
-    openGraphCount: ogCount,
-    hasTwitterCard: /name=["']twitter:card["']/i.test(html),
-    structuredDataTypes: Array.from(jsonLdTypes),
-    lang: langMatch ? langMatch[1] : null,
-    hasFavicon: /<link[^>]+rel=["'][^"']*icon[^"']*["']/i.test(html),
-    wordCount,
-    https: url.startsWith("https"),
-  };
-}
 
 /** Keyless firmographics from schema.org / JSON-LD Organization blocks on the page. */
 export function extractOrgProfile(html: string): OrgProfile {
@@ -886,7 +820,6 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
     if (m && !socials[key]) socials[key] = m[0];
   }
 
-  const seo = extractSeo(html, url);
   const profile = extractOrgProfile(html);
   // Wikidata + hiring both need the fetched page (name / ATS links); run together.
   // The other three were started above and are (mostly) already done by now.
@@ -920,7 +853,6 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
     socials,
     emails: extractEmails(html, domain),
     tech: detectTech(html, headers),
-    seo,
     profile,
     popularity,
     authority,
