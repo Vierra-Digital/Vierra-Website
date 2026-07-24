@@ -27,6 +27,7 @@ import { renderTemplate } from "@/lib/email/templateRender";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import PromptModal, { type PromptField } from "@/components/ui/PromptModal";
 import { MODULES } from "@/components/email/constants";
+import type { ContactVisibility } from "@/components/email/types";
 
 type PromptConfig = {
   title: string;
@@ -141,12 +142,6 @@ type ContactTag = {
   id: string;
   name: string;
   color: string;
-};
-
-type ContactVisibility = {
-  showPhone: boolean;
-  showBusiness: boolean;
-  showWebsite: boolean;
 };
 
 type EmailProviderAccount = {
