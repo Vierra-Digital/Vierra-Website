@@ -166,8 +166,5 @@ export function serializeLeadStatusEvent(row: LeadStatusEventRow) {
   };
 }
 
-/** Statuses where the send-queue tick keeps auto-advancing the sequence. Anything else halts it. */
-export const ACTIVE_SEND_LEAD_STATUS: LeadStatus = "no_response";
-
 /** RemoveContact categorization pushes the contact's email onto the account owner's DNC list. */
 export const REMOVE_CONTACT_STATUS: LeadStatus = "remove_contact";
