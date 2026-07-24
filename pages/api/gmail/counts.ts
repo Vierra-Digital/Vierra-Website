@@ -3,30 +3,10 @@ import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { asQueryStr } from "@/lib/api/parsing";
 
-type GmailLabel = {
-  id?: string;
-  messagesUnread?: number;
-  messagesTotal?: number;
-};
-
-type GmailLabelsResponse = {
-  labels?: GmailLabel[];
-};
-
 type GmailListEstimateResponse = {
   resultSizeEstimate?: number;
 };
 
-
-function readLabelUnreadCount(labels: GmailLabel[], id: string) {
-  const label = labels.find((entry) => (entry.id || "").toUpperCase() === id.toUpperCase());
-  return Number(label?.messagesUnread || 0);
-}
-
-function readLabelTotalMessages(labels: GmailLabel[], id: string) {
-  const label = labels.find((entry) => (entry.id || "").toUpperCase() === id.toUpperCase());
-  return Number(label?.messagesTotal || 0);
-}
 
 async function fetchEstimate(accessToken: string, query: string) {
   const params = new URLSearchParams({
@@ -72,30 +52,7 @@ async function fetchMailboxCounts(accessToken: string) {
     fetchEstimate(accessToken, "-in:inbox -in:sent -in:drafts -in:spam -in:trash is:unread"),
   ]);
 
-  // Keep a labels fallback in place for resilience if Gmail query behavior changes.
-  let labelsFallback: GmailLabel[] = [];
-  try {
-    const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/labels", {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
-    if (response.ok) {
-      const payload = (await response.json()) as GmailLabelsResponse;
-      labelsFallback = Array.isArray(payload.labels) ? payload.labels : [];
-    }
-  } catch {
-    // Best-effort fallback only.
-  }
-
-  return {
-    inbox: Number.isFinite(inbox) ? inbox : readLabelUnreadCount(labelsFallback, "INBOX"),
-    sent: Number.isFinite(sent) ? sent : readLabelUnreadCount(labelsFallback, "SENT"),
-    drafts: Number.isFinite(draftsTotal) ? draftsTotal : readLabelTotalMessages(labelsFallback, "DRAFT"),
-    spam: Number.isFinite(spam) ? spam : readLabelUnreadCount(labelsFallback, "SPAM"),
-    trash: Number.isFinite(trash) ? trash : readLabelUnreadCount(labelsFallback, "TRASH"),
-    archive,
-  };
+  return { inbox, sent, drafts: draftsTotal, spam, trash, archive };
 }
 
 function isAuthError(error: unknown) {

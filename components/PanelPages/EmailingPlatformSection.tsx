@@ -48,9 +48,11 @@ import {
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
+import PromptModal from "@/components/ui/PromptModal";
+import { scoreTrackerImage } from "@/lib/email/trackerDetection";
 import ComposeRichEditor, { printComposeContent, type ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
 import SignPdfModal from "@/components/email/SignPdfModal";
-import { GLASS_CHROME, GLASS_SURFACE, SHADOW_SM, BRAND_GRADIENT, BRAND_LOGO } from "@/components/email/emailTheme";
+import { GLASS_CHROME, GLASS_SURFACE, GLASS_MODAL, GLASS_SCRIM, SHADOW_SM, BRAND_GRADIENT, BRAND_LOGO } from "@/components/email/emailTheme";
 import {
   PAGE_SIZE,
   CONTACTS_PAGE_SIZE,
@@ -141,6 +143,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const deepLinkAppliedRef = useRef(false);
   const [step, setStep] = useState<"gate" | "client">(initialSelectedAccounts.length > 0 ? "client" : "gate");
   const [activeModule, setActiveModule] = useState<ModuleKey>("inbox");
+  const [hiddenModules, setHiddenModules] = useState<string[]>([]);
   const [gmailAccounts, setGmailAccounts] = useState<GmailAccountConnection[]>([]);
   const [gmailLoading, setGmailLoading] = useState(false);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>(initialSelectedAccounts);
@@ -214,6 +217,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   >([]);
   const [composeTemplateMenuOpen, setComposeTemplateMenuOpen] = useState(false);
   const [saveTemplateModalOpen, setSaveTemplateModalOpen] = useState(false);
+  const [newLabelModalOpen, setNewLabelModalOpen] = useState(false);
+  const [newLabelName, setNewLabelName] = useState("");
+  const [creatingLabel, setCreatingLabel] = useState(false);
+  const [labelToDelete, setLabelToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [deletingLabel, setDeletingLabel] = useState(false);
+  const [artemisPromptOpen, setArtemisPromptOpen] = useState(false);
   const [saveTemplateName, setSaveTemplateName] = useState("");
   const [saveTemplateSaving, setSaveTemplateSaving] = useState(false);
   const composeEditorRef = useRef<ComposeRichEditorHandle | null>(null);
@@ -426,6 +435,19 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // Lightweight pre-send deliverability lint — proactive warnings shown in the composer.
   // Deliverability guardrail (#2): check the sending domain's SPF/DMARC when compose opens.
   const [composeDeliverability, setComposeDeliverability] = useState<{ spfOk: boolean; dmarcOk: boolean } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/gmail/nav-layout")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d && Array.isArray(d.hiddenModules)) setHiddenModules(d.hiddenModules);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (!isComposeOpen || !composeAccountEmail) {
       setComposeDeliverability(null);
@@ -1128,29 +1150,45 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       )
       .replace(/\n/g, "<br>");
 
-  const isTrackerPixel = (img: HTMLImageElement, srcValue: string) => {
-    const src = (srcValue || "").trim();
-    const w = (img.getAttribute("width") || "").trim();
-    const h = (img.getAttribute("height") || "").trim();
-    const tiny = (w === "0" || w === "1") && (h === "0" || h === "1");
-    const style = (img.getAttribute("style") || "").toLowerCase();
-    const hidden = /(width\s*:\s*[01]px)|(height\s*:\s*[01]px)|display\s*:\s*none|visibility\s*:\s*hidden/.test(style);
-    const trackerish =
-      /(\/(track|open|beacon|pixel|o)\/)|(wf\/open)|(list-manage|sendgrid\.net|mailgun|sparkpostmail|hubspot|hs-sites|mixpanel|awstrack|amazonses|sendinblue|getresponse|constantcontact)/i.test(src);
-    return tiny || hidden || (trackerish && /\.gif(\?|$)/i.test(src));
-  };
+  const isTrackerPixel = (img: HTMLImageElement, srcValue: string) =>
+    scoreTrackerImage({
+      src: srcValue,
+      width: img.getAttribute("width"),
+      height: img.getAttribute("height"),
+      style: img.getAttribute("style"),
+      alt: img.getAttribute("alt"),
+    }).tracked;
 
-  const countTrackers = (rawHtml: string) => {
-    if (!rawHtml || typeof window === "undefined") return 0;
+  const detectTrackers = (rawHtml: string): { count: number; vendors: string[] } => {
+    if (!rawHtml || typeof window === "undefined") return { count: 0, vendors: [] };
     try {
       const doc = new window.DOMParser().parseFromString(rawHtml, "text/html");
       let count = 0;
+      const vendors = new Set<string>();
+      const record = (verdict: ReturnType<typeof scoreTrackerImage>) => {
+        if (!verdict.tracked) return;
+        count += 1;
+        if (verdict.vendor) vendors.add(verdict.vendor);
+      };
       doc.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
-        if (isTrackerPixel(img, img.getAttribute("src") || "")) count += 1;
+        record(
+          scoreTrackerImage({
+            src: img.getAttribute("src") || "",
+            width: img.getAttribute("width"),
+            height: img.getAttribute("height"),
+            style: img.getAttribute("style"),
+            alt: img.getAttribute("alt"),
+          })
+        );
       });
-      return count;
+      // Also catch CSS background-image pixels (some trackers hide the beacon in a style rule).
+      doc.querySelectorAll<HTMLElement>("[style*='url(']").forEach((el) => {
+        const match = (el.getAttribute("style") || "").match(/background(?:-image)?\s*:\s*url\((['"]?)([^'")]+)\1\)/i);
+        if (match) record(scoreTrackerImage({ src: match[2], style: el.getAttribute("style") }));
+      });
+      return { count, vendors: [...vendors] };
     } catch {
-      return 0;
+      return { count: 0, vendors: [] };
     }
   };
 
@@ -2317,40 +2355,58 @@ ${sourceText}`;
     }
   };
 
-  const createLabel = async () => {
+  const createLabel = () => {
+    if (!selectedAccounts[0]) return;
+    setNewLabelName("");
+    setNewLabelModalOpen(true);
+  };
+
+  const submitNewLabel = async () => {
     const primary = selectedAccounts[0];
-    if (!primary) return;
-    const name = window.prompt("New label name");
-    if (!name || !name.trim()) return;
+    const name = newLabelName.trim();
+    if (!primary || !name || creatingLabel) return;
+    setCreatingLabel(true);
     try {
       const response = await fetch("/api/gmail/labels", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountEmail: primary, name: name.trim() }),
+        body: JSON.stringify({ accountEmail: primary, name }),
       });
       if (response.ok) await loadLabels();
+      setNewLabelModalOpen(false);
+      setNewLabelName("");
     } catch {
       /* ignore */
+    } finally {
+      setCreatingLabel(false);
     }
   };
 
-  const deleteLabel = async (label: { id: string; name: string }) => {
+  const deleteLabel = (label: { id: string; name: string }) => {
+    if (!selectedAccounts[0]) return;
+    setLabelToDelete(label);
+  };
+
+  const confirmDeleteLabel = async () => {
     const primary = selectedAccounts[0];
-    if (!primary) return;
-    if (!window.confirm(`Delete label "${label.name}"? Messages keep their content.`)) return;
+    if (!primary || !labelToDelete || deletingLabel) return;
+    setDeletingLabel(true);
     try {
       await fetch("/api/gmail/labels", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountEmail: primary, id: label.id }),
+        body: JSON.stringify({ accountEmail: primary, id: labelToDelete.id }),
       });
-      if (activeLabelId === label.id) {
+      if (activeLabelId === labelToDelete.id) {
         setActiveLabelId("");
         setActiveLabelName("");
       }
       await loadLabels();
     } catch {
       /* ignore */
+    } finally {
+      setDeletingLabel(false);
+      setLabelToDelete(null);
     }
   };
 
@@ -2367,10 +2423,14 @@ ${sourceText}`;
     return "professional and friendly";
   };
 
-  const handleArtemisDraft = async () => {
+  const handleArtemisDraft = () => {
     if (artemisDrafting) return;
-    const intent = window.prompt("What should this email say? Artemis will draft it.");
-    if (!intent || !intent.trim()) return;
+    setArtemisPromptOpen(true);
+  };
+
+  const runArtemisDraft = async (intent: string) => {
+    if (!intent.trim() || artemisDrafting) return;
+    setArtemisPromptOpen(false);
     setArtemisDrafting(true);
     setComposeError("");
     try {
@@ -2861,7 +2921,7 @@ ${sourceText}`;
                   </button>
 
                   <div className="space-y-0.5 flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
-                    {MODULES.map((item) => (
+                    {MODULES.filter((item) => item.key === "inbox" || !hiddenModules.includes(item.key)).map((item) => (
                       (() => {
                         const count = moduleCount(item.key);
                         return (
@@ -2875,19 +2935,25 @@ ${sourceText}`;
                           setSearchTerm("");
                           setSelectedRows([]);
                         }}
-                        className={`w-full rounded-xl px-3 py-2 text-[13px] text-left flex items-center justify-between gap-2 transition border ${
+                        className={`group relative w-full rounded-lg pl-3 pr-2 py-2 text-[13px] text-left flex items-center justify-between gap-2 transition-colors ${
                           activeModule === item.key && !activeLabelId
-                            ? "bg-[#701CC0]/10 text-[#4C1D95] font-semibold border-[#701CC0]/20"
-                            : "text-[#4A465C] hover:bg-[#F3EEFB] border-transparent"
+                            ? "bg-[#F4F1FA] text-[#241245] font-semibold before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[3px] before:rounded-r-full before:bg-[#701CC0] before:content-['']"
+                            : "text-[#5B5670] font-medium hover:bg-[#F6F5F8] hover:text-[#2A2540]"
                         }`}
                       >
-                        <span className="inline-flex items-center gap-2 min-w-0">
+                        <span className="inline-flex items-center gap-2.5 min-w-0">
                           {item.icon}
-                          <span className="truncate">
-                            {item.label}
-                            {count > 0 ? <span className="ml-1">({count})</span> : null}
-                          </span>
+                          <span className="truncate">{item.label}</span>
                         </span>
+                        {count > 0 ? (
+                          <span
+                            className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${
+                              activeModule === item.key && !activeLabelId ? "bg-[#701CC0]/12 text-[#5B21B6]" : "text-[#9A94AD]"
+                            }`}
+                          >
+                            {count}
+                          </span>
+                        ) : null}
                       </button>
                         );
                       })()
@@ -2904,10 +2970,10 @@ ${sourceText}`;
                           <div
                             key={label.id}
                             onClick={() => openLabel(label)}
-                            className={`group/label w-full cursor-pointer rounded-xl px-3 py-2 text-[13px] flex items-center gap-2.5 transition border ${
+                            className={`group/label relative w-full cursor-pointer rounded-lg px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors ${
                               activeLabelId === label.id
-                                ? "bg-[#701CC0]/10 text-[#4C1D95] font-semibold border-[#701CC0]/20"
-                                : "text-[#4A465C] hover:bg-[#F3EEFB] border-transparent"
+                                ? "bg-[#F4F1FA] text-[#241245] font-semibold before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-4 before:w-[3px] before:rounded-r-full before:bg-[#701CC0] before:content-['']"
+                                : "text-[#5B5670] font-medium hover:bg-[#F6F5F8] hover:text-[#2A2540]"
                             }`}
                           >
                             <FiTag className="w-4 h-4 shrink-0" style={{ color: activeLabelId === label.id ? "#701CC0" : "#847FA0" }} />
@@ -2928,16 +2994,16 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={createLabel}
-                        className="mt-2 flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13px] text-[#847FA0] transition hover:bg-[#F3EEFB]"
+                        className="mt-2 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium text-[#847FA0] transition-colors hover:bg-[#F6F5F8] hover:text-[#2A2540]"
                       >
                         <FiPlus className="h-4 w-4" /> New label
                       </button>
                     )}
                   </div>
-                  <div className="mt-2 pt-2 border-t border-white/60">
+                  <div className="mt-2 pt-2 border-t border-[#EEECF3]">
                     <Link
                       href="/panel/email/settings"
-                      className="w-full rounded-xl px-3 py-2 text-[13px] flex items-center gap-2 transition text-[#4A465C] hover:bg-[#F3EEFB]"
+                      className="w-full rounded-lg px-3 py-2 text-[13px] font-medium flex items-center gap-2.5 transition-colors text-[#5B5670] hover:bg-[#F6F5F8] hover:text-[#2A2540]"
                     >
                       <FiSettings className="w-4 h-4 text-[#847FA0]" />
                       <span>Settings</span>
@@ -3825,17 +3891,25 @@ ${sourceText}`;
                               <p>To: {formatIdentity(selectedMessageDetail?.toRaw || selectedMessage.toRaw || selectedMessage.to || "-")}</p>
                               <p>{formatDetailedDate(selectedMessageDetail?.timestamp || selectedMessage.timestamp, selectedMessageDetail?.date || selectedMessage.date)}</p>
                               {(() => {
-                                const trackers = countTrackers(selectedMessageDetail?.bodyHtml || "");
-                                return trackers > 0 ? (
+                                const { count: trackers, vendors } = detectTrackers(selectedMessageDetail?.bodyHtml || "");
+                                if (trackers === 0) return null;
+                                const label = vendors.length
+                                  ? `${vendors.slice(0, 2).join(", ")}${vendors.length > 2 ? ` +${vendors.length - 2}` : ""} tracker blocked`
+                                  : `${trackers} tracker${trackers === 1 ? "" : "s"} blocked`;
+                                return (
                                   <p>
                                     <span
                                       className="inline-flex items-center gap-1.5 rounded-md bg-[#F5EFFF] px-2 py-0.5 text-[11px] font-semibold text-[#701CC0]"
-                                      title="Remote tracking pixels were blocked, so the sender can't tell you opened this."
+                                      title={
+                                        vendors.length
+                                          ? `Detected ${vendors.join(", ")} tracking. Remote pixels were blocked, so the sender can't tell you opened this.`
+                                          : "Remote tracking pixels were blocked, so the sender can't tell you opened this."
+                                      }
                                     >
-                                      <FiShield className="w-3 h-3" aria-hidden /> {trackers} tracker{trackers === 1 ? "" : "s"} blocked
+                                      <FiShield className="w-3 h-3" aria-hidden /> {label}
                                     </span>
                                   </p>
-                                ) : null;
+                                );
                               })()}
                             </div>
                           </div>
@@ -5089,6 +5163,78 @@ ${sourceText}`;
           setContactToDelete(null);
         }}
         onConfirm={confirmDeleteContact}
+      />
+      <ConfirmActionModal
+        isOpen={Boolean(labelToDelete)}
+        title="Delete label"
+        message={
+          <>
+            Delete label{" "}
+            <span className="font-semibold text-[#1E1B2E]">{labelToDelete?.name || "this label"}</span>? Messages keep their content.
+          </>
+        }
+        confirmLabel={deletingLabel ? "Deleting..." : "Delete label"}
+        onCancel={() => {
+          if (deletingLabel) return;
+          setLabelToDelete(null);
+        }}
+        onConfirm={() => void confirmDeleteLabel()}
+      />
+      {newLabelModalOpen ? (
+        <div
+          className={`fixed inset-0 z-[120] flex items-center justify-center p-4 ${GLASS_SCRIM}`}
+          onClick={() => {
+            if (!creatingLabel) setNewLabelModalOpen(false);
+          }}
+        >
+          <div
+            className={`w-full max-w-sm rounded-2xl ${GLASS_MODAL} p-6`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold tracking-tight text-[#1E1B2E]">New label</h3>
+            <p className="mt-1 text-sm text-[#6B7280]">Create a label to organize this mailbox.</p>
+            <input
+              autoFocus
+              value={newLabelName}
+              onChange={(event) => setNewLabelName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void submitNewLabel();
+                if (event.key === "Escape" && !creatingLabel) setNewLabelModalOpen(false);
+              }}
+              placeholder="Label name"
+              maxLength={100}
+              className="mt-4 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm text-[#1E1B2E] outline-none transition focus:border-[#701CC0] focus:ring-2 focus:ring-[#701CC0]/20"
+            />
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setNewLabelModalOpen(false)}
+                disabled={creatingLabel}
+                className="rounded-lg border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#374151] transition hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void submitNewLabel()}
+                disabled={!newLabelName.trim() || creatingLabel}
+                className="rounded-lg bg-[#701CC0] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#5f17a5] disabled:opacity-50"
+              >
+                {creatingLabel ? "Creating..." : "Create label"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <PromptModal
+        open={artemisPromptOpen}
+        title="Draft with Artemis"
+        description="Describe what this email should say. Artemis writes a first draft you can edit before sending."
+        fields={[{ name: "intent", type: "textarea", placeholder: "e.g. Follow up on our call and propose next week for a quick demo", required: true, maxLength: 2000 }]}
+        confirmLabel="Draft it"
+        busy={artemisDrafting}
+        onCancel={() => setArtemisPromptOpen(false)}
+        onSubmit={(values) => void runArtemisDraft(values.intent)}
       />
       {sentToastMessage ? (
         <div

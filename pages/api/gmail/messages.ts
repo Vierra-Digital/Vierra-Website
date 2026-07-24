@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { getAccessibleGmailAccounts } from "@/lib/email/mailboxAccess";
+import { extractHeader } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
 
 type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive" | "allmail" | "starred" | "important" | "scheduled";
@@ -90,12 +91,6 @@ function buildMailboxQuery(mailbox: Mailbox) {
   if (mailbox === "spam") return "SPAM";
   if (mailbox === "trash") return "TRASH";
   return "INBOX";
-}
-
-function extractHeader(headers: Array<{ name?: string; value?: string }> | undefined, key: string) {
-  if (!headers) return "";
-  const target = headers.find((h) => (h.name || "").toLowerCase() === key.toLowerCase());
-  return target?.value || "";
 }
 
 function normalizeMailboxIdentity(value: string) {
@@ -400,22 +395,8 @@ export default withAuth(async (req, res, session) => {
   const pageMessages = offset >= MAX_FETCH ? [] : mergedMessages.slice(offset, Math.min(offset + pageSize, MAX_FETCH));
 
   // Tracking rows for a granted (shared) mailbox belong to the OWNER, not the requester — scope
-  // by every accessible account's ownerUserId so shared-inbox stats show up. The `email::id` key
-  // below still prevents any cross-account attribution.
+  // by every accessible account's ownerUserId so shared-inbox stats show up.
   const ownerUserIds = [...new Set(accessibleAccounts.map((a) => a.ownerUserId))];
-
-  // Resolve account_id -> account_email mapping for tracked message lookup
-  const accountEmailToId = new Map<string, string>();
-  if (pageMessages.length > 0) {
-    const accountEmailsOnPage = [...new Set(pageMessages.map((m) => m.accountEmail).filter(Boolean))];
-    const providerAccounts = await prisma.emailProviderAccount.findMany({
-      where: { user_id: { in: ownerUserIds }, account_email: { in: accountEmailsOnPage } },
-      select: { id: true, account_email: true },
-    });
-    for (const pa of providerAccounts) {
-      accountEmailToId.set(pa.account_email.toLowerCase(), pa.id);
-    }
-  }
 
   const trackedRows = await prisma.emailOutboundMessage.findMany({
     where: {
@@ -425,7 +406,6 @@ export default withAuth(async (req, res, session) => {
     },
     select: {
       gmail_message_id: true,
-      account_id: true,
       email_tracking_events: {
         where: { event_type: { in: ["OPEN", "CLICK"] } },
         select: {
@@ -437,20 +417,16 @@ export default withAuth(async (req, res, session) => {
     },
   });
 
-  // Build reverse mapping: account_id -> account_email
-  const accountIdToEmail = new Map<string, string>();
-  for (const [email, id] of accountEmailToId.entries()) {
-    accountIdToEmail.set(id, email);
-  }
-
+  // Key stats by the globally-unique Gmail message id — no account_id→email mapping needed.
+  // (That mapping failed for Gmail/OAuth accounts, which have no provider-account row, so the
+  // "opened" dot never showed for them.)
   const trackedStatsByKey = new Map<
     string,
     { openCount: number; clickCount: number; firstOpenedAt: string | null; lastOpenedAt: string | null; totalOpenWindowMs: number }
   >();
   for (const row of trackedRows) {
     if (!row.gmail_message_id) continue;
-    const rowAccountEmail = accountIdToEmail.get(row.account_id) ?? "";
-    const key = `${rowAccountEmail.toLowerCase()}::${String(row.gmail_message_id)}`;
+    const key = String(row.gmail_message_id);
     let openCount = 0;
     let clickCount = 0;
     let firstOpenedAt: Date | null = null;
@@ -492,12 +468,12 @@ export default withAuth(async (req, res, session) => {
   }
   const messages = pageMessages.map((message) => ({
     ...message,
-    tracked: trackedStatsByKey.has(`${message.accountEmail.toLowerCase()}::${message.id}`),
-    trackingOpenCount: trackedStatsByKey.get(`${message.accountEmail.toLowerCase()}::${message.id}`)?.openCount || 0,
-    trackingClickCount: trackedStatsByKey.get(`${message.accountEmail.toLowerCase()}::${message.id}`)?.clickCount || 0,
-    trackingFirstOpenedAt: trackedStatsByKey.get(`${message.accountEmail.toLowerCase()}::${message.id}`)?.firstOpenedAt || null,
-    trackingLastOpenedAt: trackedStatsByKey.get(`${message.accountEmail.toLowerCase()}::${message.id}`)?.lastOpenedAt || null,
-    trackingTotalOpenWindowMs: trackedStatsByKey.get(`${message.accountEmail.toLowerCase()}::${message.id}`)?.totalOpenWindowMs || 0,
+    tracked: trackedStatsByKey.has(message.id),
+    trackingOpenCount: trackedStatsByKey.get(message.id)?.openCount || 0,
+    trackingClickCount: trackedStatsByKey.get(message.id)?.clickCount || 0,
+    trackingFirstOpenedAt: trackedStatsByKey.get(message.id)?.firstOpenedAt || null,
+    trackingLastOpenedAt: trackedStatsByKey.get(message.id)?.lastOpenedAt || null,
+    trackingTotalOpenWindowMs: trackedStatsByKey.get(message.id)?.totalOpenWindowMs || 0,
   }));
   const hasNextPage =
     offset + pageSize < MAX_FETCH && (mergedMessages.length > offset + pageSize || accountHasMore.some(Boolean));

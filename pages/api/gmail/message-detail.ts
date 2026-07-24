@@ -1,7 +1,7 @@
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
-
+import { extractHeader, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
 
 function decodeBase64Url(data: string) {
@@ -32,19 +32,6 @@ function extractBodies(payload: any): { bodyText: string; bodyHtml: string } {
     bodyText = decodeBase64Url(payload.body.data);
   }
   return { bodyText, bodyHtml };
-}
-
-function extractHeader(headers: Array<{ name?: string; value?: string }> | undefined, key: string) {
-  if (!headers) return "";
-  const target = headers.find((h) => (h.name || "").toLowerCase() === key.toLowerCase());
-  return target?.value || "";
-}
-
-function extractEmailFromHeader(value: string) {
-  const trimmed = (value || "").trim();
-  const angleMatch = trimmed.match(/<([^>]+)>/);
-  if (angleMatch?.[1]) return angleMatch[1].trim().toLowerCase();
-  return trimmed.toLowerCase();
 }
 
 function parseThreadMessage(message: any) {
@@ -148,7 +135,7 @@ export default withAuth(async (req, res, session) => {
   }
 
   let senderPhotoUrl = "";
-  const senderEmail = extractEmailFromHeader(currentMessage.fromRaw);
+  const senderEmail = parseAddressFromHeader(currentMessage.fromRaw);
   if (senderEmail && senderEmail.includes("@")) {
     const trySearchContacts = async () => {
       const peopleQuery = encodeURIComponent(senderEmail);

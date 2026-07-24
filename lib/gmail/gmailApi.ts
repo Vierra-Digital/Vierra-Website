@@ -15,6 +15,21 @@ export function toBase64Url(value: string) {
   return Buffer.from(value, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
+/** Case-insensitive lookup of a header value from a Gmail payload's headers array. */
+export function extractHeader(headers: Array<{ name?: string; value?: string }> | undefined, key: string): string {
+  if (!headers) return "";
+  const target = headers.find((h) => (h.name || "").toLowerCase() === key.toLowerCase());
+  return target?.value || "";
+}
+
+/** Extract the bare address from a `Name <addr>` header value. Lowercases unless `lower:false`. */
+export function parseAddressFromHeader(value: string, opts?: { lower?: boolean }): string {
+  const trimmed = (value || "").trim();
+  const angle = trimmed.match(/<([^>]+)>/);
+  const addr = angle?.[1] ? angle[1].trim() : trimmed;
+  return opts?.lower === false ? addr : addr.toLowerCase();
+}
+
 /** Create a Gmail draft (a plain-text reply). Returns the draft id or null. Never sends. */
 export async function createGmailDraft(
   accessToken: string,

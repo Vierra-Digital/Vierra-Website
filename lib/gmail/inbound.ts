@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { gmailGet } from "@/lib/gmail/gmailApi";
+import { gmailGet, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 import type { InboundMessage, InboundContext } from "@/lib/gmail/inboundTypes";
 import {
   applyFilters,
@@ -27,11 +27,6 @@ const MAX_MESSAGES_PER_ACCOUNT = 25;
 const MAX_HISTORY_PAGES = 10;
 
 export type InboundSummary = { accounts: number; processed: number; errors: number };
-
-function parseEmail(raw: string): string {
-  const m = raw.match(/<([^>]+)>/);
-  return (m?.[1] || raw).trim().toLowerCase();
-}
 
 function headerMap(headers: Array<{ name?: string; value?: string }> | undefined): Record<string, string> {
   const map: Record<string, string> = {};
@@ -77,7 +72,7 @@ async function fetchInboundMessage(
     userId,
     accountEmail,
     from,
-    fromEmail: parseEmail(from),
+    fromEmail: parseAddressFromHeader(from),
     to: headers["to"] || "",
     subject: headers["subject"] || "",
     snippet: msg.snippet || "",

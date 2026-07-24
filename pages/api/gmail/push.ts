@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { processInboundForAllAccounts } from "@/lib/gmail/inbound";
 import { safeCompare } from "@/lib/crypto";
+import { resolveCronBaseUrl } from "@/lib/api/url";
 
 /**
  * Google Pub/Sub push endpoint for Gmail notifications. When Gmail watch (see /api/gmail/watch)
@@ -13,13 +14,6 @@ import { safeCompare } from "@/lib/crypto";
  *   https://vierradev.com/api/gmail/push?token=<GMAIL_PUSH_TOKEN or CRON_SECRET>
  * We ack fast (2xx) so Pub/Sub doesn't redeliver; processing is quick due to the cursor.
  */
-function resolveBaseUrl(req: NextApiRequest) {
-  const explicit = process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "";
-  if (explicit) return explicit.replace(/\/$/, "");
-  const proto = String(req.headers["x-forwarded-proto"] || "https");
-  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "localhost:3000");
-  return `${proto}://${host}`.replace(/\/$/, "");
-}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
@@ -50,7 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    await processInboundForAllAccounts(resolveBaseUrl(req), new Date());
+    await processInboundForAllAccounts(resolveCronBaseUrl(req), new Date());
   } catch (e) {
     console.error("gmail push processing error:", e);
   }

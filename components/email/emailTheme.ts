@@ -23,23 +23,20 @@ export const BRAND_LOGO = {
 /** Brand hero gradient (from the V logo: purple → magenta). Use for primary CTAs. */
 export const BRAND_GRADIENT = "linear-gradient(120deg,#7A17C5 0%,#A620AE 52%,#C42B9F 100%)";
 
-/** Unified frosted-glass surface — the sidebar, content pane, and their headers all use
- *  this same recipe so the three areas read as one cohesive glass system. */
-const GLASS_BASE =
-  "bg-[#F9FAFBE6] backdrop-blur-xl backdrop-saturate-150";
+/** Clean, solid surfaces (no frosted glass) — modern, high-contrast and easy to read. A
+ *  hairline border gives crisp definition against the light page background. */
+/** Chrome surface (side rail) — a hair off-white so it reads as chrome vs. the content. */
+export const GLASS_CHROME = "bg-[#FAFAFB] border border-[#EBEAF0]";
 
-/** Chrome surface (side rail). */
-export const GLASS_CHROME = GLASS_BASE;
+/** Content surface (list, reader, cards) — pure white. */
+export const GLASS_SURFACE = "bg-white border border-[#EBEAF0]";
 
-/** Content surface (list, reader, cards). Same recipe as the chrome — kept synced. */
-export const GLASS_SURFACE = GLASS_BASE;
-
-/** Modal/dialog surface — mostly-opaque frosted white. */
+/** Modal/dialog surface — solid white, clearly elevated so dialogs read as "on top". */
 export const GLASS_MODAL =
-  "bg-white/90 backdrop-blur-2xl border border-white/70 shadow-[0_24px_60px_-20px_rgba(30,27,46,0.28)]";
+  "bg-white border border-[#EBEAF0] shadow-[0_28px_70px_-24px_rgba(20,16,40,0.45)]";
 
-/** Modal scrim. */
-export const GLASS_SCRIM = "bg-[#1E1B2E]/25 backdrop-blur-sm";
+/** Modal scrim — a clear dim so the dialog stands apart from the panel behind it. */
+export const GLASS_SCRIM = "bg-[#14101E]/55";
 
 /** Soft elevation used across cards/panels. */
 export const SHADOW_SM = "shadow-[0_2px_12px_-4px_rgba(46,16,80,0.14)]";

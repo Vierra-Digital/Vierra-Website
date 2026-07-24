@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useImperativeHandle, useMemo, forwardRef } from "react";
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useState, forwardRef } from "react";
+import PromptModal from "@/components/ui/PromptModal";
+import { COMPOSE_NEUTRAL_SCROLLBAR } from "@/components/email/constants";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -139,8 +141,6 @@ const FONT_OPTIONS = [
   { label: "Mono", value: "ui-monospace, monospace" },
 ];
 
-const COMPOSE_EDITOR_SCROLL =
-  "[scrollbar-width:thin] [scrollbar-color:rgb(203_213_225)_rgb(241_245_249)] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb:hover]:bg-slate-400";
 
 function ToolbarButton({
   active,
@@ -171,13 +171,15 @@ function ToolbarButton({
   );
 }
 
-function setLink(editor: Editor) {
-  const previous = editor.getAttributes("link").href as string | undefined;
-  const url = window.prompt("Link URL", previous || "https://");
-  if (url === null) return;
-  const trimmed = url.trim();
+function applyLinkToEditor(editor: Editor, rawUrl: string) {
+  const trimmed = rawUrl.trim();
   if (trimmed === "") {
     editor.chain().focus().extendMarkRange("link").unsetLink().run();
+    return;
+  }
+  // Reject unsafe schemes (javascript:, data:, file:, …). A scheme-less value like "example.com"
+  // passes through — the Link extension + send-time sanitizer handle it. Defense in depth.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) && !/^(https?|mailto):/i.test(trimmed)) {
     return;
   }
   editor.chain().focus().extendMarkRange("link").setLink({ href: trimmed }).run();
@@ -266,11 +268,21 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
     editor.commands.setContent(next, { emitUpdate: false });
   }, [editor, valueHtml]);
 
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkInitial, setLinkInitial] = useState("https://");
+
+  const openLinkModal = useCallback(() => {
+    if (!editor) return;
+    const previous = (editor.getAttributes("link").href as string | undefined) || "https://";
+    setLinkInitial(previous);
+    setLinkModalOpen(true);
+  }, [editor]);
+
   useImperativeHandle(
     ref,
     () => ({
       focus: () => editor?.chain().focus().run(),
-      promptInsertLink: () => editor && setLink(editor),
+      promptInsertLink: () => openLinkModal(),
       promptInsertImage: () => editor && insertImage(editor),
       insertLink: (url: string, text: string) => {
         if (!editor || !url) return;
@@ -282,7 +294,7 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
           .run();
       },
     }),
-    [editor]
+    [editor, openLinkModal]
   );
 
   const chain = useCallback(() => editor?.chain().focus(), [editor]);
@@ -296,8 +308,9 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
   }
 
   return (
+    <>
     <div className={`flex min-h-0 flex-col overflow-hidden rounded-md border border-[#EAE5F4] bg-white ${className}`}>
-      <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto ${COMPOSE_EDITOR_SCROLL} ${minHeightClass}`}>
+      <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto ${COMPOSE_NEUTRAL_SCROLLBAR} ${minHeightClass}`}>
         <EditorContent editor={editor} className="min-h-0 flex-1 px-3 py-2 [&_.ProseMirror]:min-h-[inherit] [&_.ProseMirror]:outline-none" />
       </div>
       {showToolbar ? (
@@ -414,7 +427,7 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
 
           <span className="mx-0.5 inline-block h-5 w-px shrink-0 bg-[#DEC9F6]" aria-hidden />
 
-          <ToolbarButton title="Link" active={editor.isActive("link")} onClick={() => setLink(editor)}>
+          <ToolbarButton title="Link" active={editor.isActive("link")} onClick={() => openLinkModal()}>
             <FiLink2 className="h-4 w-4" aria-hidden />
           </ToolbarButton>
           <ToolbarButton title="Insert image" onClick={() => insertImage(editor)}>
@@ -448,6 +461,19 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
         </div>
       ) : null}
     </div>
+      <PromptModal
+        open={linkModalOpen}
+        title="Insert link"
+        description="Add a link to the selected text. Leave the field empty to remove an existing link."
+        fields={[{ name: "url", type: "text", placeholder: "https://example.com", defaultValue: linkInitial }]}
+        confirmLabel="Apply link"
+        onCancel={() => setLinkModalOpen(false)}
+        onSubmit={(values) => {
+          if (editor) applyLinkToEditor(editor, values.url);
+          setLinkModalOpen(false);
+        }}
+      />
+    </>
   );
 });
 

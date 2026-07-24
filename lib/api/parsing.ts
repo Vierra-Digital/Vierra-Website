@@ -25,3 +25,8 @@ export function asPort(value: unknown, fallback: number): number {
   if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
   return Math.floor(numeric);
 }
+
+/** A query-param `accountEmail`, trimmed + lowercased; "" if absent. */
+export function queryAccountEmail(value: string | string[] | undefined): string {
+  return asQueryStr(value).toLowerCase();
+}
