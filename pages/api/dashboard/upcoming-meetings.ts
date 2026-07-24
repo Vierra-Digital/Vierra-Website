@@ -2,10 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/api/withAuth"
 import { handleApiError } from "@/lib/api/guards"
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens"
-import {
-  getCalendarVisibilityPreferences,
-  isCalendarVisibilityTableMissing,
-} from "@/lib/googleCalendar/visibility"
+import { getCalendarVisibilityPreferences } from "@/lib/googleCalendar/visibility"
 
 type GoogleCalendarListResponse = {
   items?: Array<{
@@ -124,10 +121,7 @@ export default withAuth(async (req, res, session) => {
       return
     }
     const nowIso = new Date().toISOString()
-    const visibilityRows = await getCalendarVisibilityPreferences(userId).catch((error) => {
-      if (isCalendarVisibilityTableMissing(error)) return []
-      throw error
-    })
+    const visibilityRows = await getCalendarVisibilityPreferences(userId)
     const visibilityMap = new Map(visibilityRows.map((row) => [`${row.accountEmail}::${row.calendarId}`, row.isEnabled]))
     let needsReconnect = false
     let issueCode: "none" | "permission" | "api_disabled" | "google_error" | "no_calendars" = "none"

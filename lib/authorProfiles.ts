@@ -22,11 +22,6 @@ export type AuthorProfile = {
   image?: string
 }
 
-/** Employer label for an author, defaulting to Vierra Digital. */
-export function authorCompany(name: string): string {
-  return AUTHOR_PROFILES[name]?.company ?? "Vierra Digital"
-}
-
 const AUTHOR_PROFILES: Record<string, AuthorProfile> = {
   "Alex Shick": {
     sameAs: ["https://www.linkedin.com/in/alexshick/"],
