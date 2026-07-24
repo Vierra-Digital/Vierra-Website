@@ -355,7 +355,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     );
   }, [primaryAccountEmail, settings, contactVisibility, savedSettings, savedContactVisibility]);
 
-  const loadAccounts = useCallback(async () => {
+  const loadAccounts = useCallback(async (): Promise<string> => {
     const response = await fetch("/api/gmail/status");
     const payload = await response.json().catch(() => ({}));
     const rows = Array.isArray(payload?.accounts) ? payload.accounts : [];
@@ -367,14 +367,11 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       .filter((row: GmailAccount) => row.email);
     setAccounts(normalized);
     const connected = normalized.filter((row: GmailAccount) => row.connected);
-    if (connected.length === 0) {
-      setLoading(false);
-    }
+    return connected[0]?.email || "";
   }, []);
 
   const loadAccountData = async (accountEmail: string) => {
     if (!accountEmail) return;
-    setLoading(true);
     try {
       const [settingsRes, signaturesRes, templatesRes, tagsRes, visibilityRes, providersRes, blockedRes] = await Promise.all([
         fetch(`/api/gmail/settings?accountEmail=${encodeURIComponent(accountEmail)}`),
@@ -419,8 +416,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       setSavedContactVisibility(nextVisibility);
       setProviderAccounts(Array.isArray(providersPayload?.accounts) ? providersPayload.accounts : []);
       setBlockedSenders(Array.isArray(blockedPayload?.blocked) ? blockedPayload.blocked : []);
-    } finally {
-      setLoading(false);
+    } catch {
+      /* leave prior state on error */
     }
   };
 
@@ -505,32 +502,26 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   };
 
-  useEffect(() => {
-    loadAccounts();
-  }, [loadAccounts]);
-
-  useEffect(() => {
-    // Server-persisted prefs are the source of truth (the auto-draft cron reads them);
-    // fall back to the local cache used by the composer's assisted drafting.
-    (async () => {
-      try {
-        const response = await fetch("/api/ai/preferences");
-        if (response.ok) {
-          const data = await response.json();
-          setArtemisPrefs({ autonomy: data.autonomy || "suggest", tone: data.tone || "professional and friendly" });
-          window.localStorage.setItem("artemis-prefs", JSON.stringify({ autonomy: data.autonomy, tone: data.tone }));
-          return;
-        }
-      } catch {
-        /* fall through to local cache */
+  // Server-persisted prefs are the source of truth (the auto-draft cron reads them); fall back
+  // to the local cache used by the composer's assisted drafting.
+  const loadAiPrefs = useCallback(async () => {
+    try {
+      const response = await fetch("/api/ai/preferences");
+      if (response.ok) {
+        const data = await response.json();
+        setArtemisPrefs({ autonomy: data.autonomy || "suggest", tone: data.tone || "professional and friendly" });
+        window.localStorage.setItem("artemis-prefs", JSON.stringify({ autonomy: data.autonomy, tone: data.tone }));
+        return;
       }
-      try {
-        const raw = window.localStorage.getItem("artemis-prefs");
-        if (raw) setArtemisPrefs((prev) => ({ ...prev, ...JSON.parse(raw) }));
-      } catch {
-        /* ignore */
-      }
-    })();
+    } catch {
+      /* fall through to local cache */
+    }
+    try {
+      const raw = window.localStorage.getItem("artemis-prefs");
+      if (raw) setArtemisPrefs((prev) => ({ ...prev, ...JSON.parse(raw) }));
+    } catch {
+      /* ignore */
+    }
   }, []);
 
   const updateArtemis = (patch: Partial<{ autonomy: string; tone: string }>) => {
@@ -551,12 +542,6 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     });
   };
 
-  useEffect(() => {
-    if (primaryAccountEmail) {
-      loadAccountData(primaryAccountEmail);
-    }
-  }, [primaryAccountEmail]);
-
   const loadFilters = useCallback(async () => {
     try {
       const response = await fetch("/api/gmail/filters");
@@ -566,10 +551,6 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       /* ignore */
     }
   }, []);
-
-  useEffect(() => {
-    loadFilters();
-  }, [loadFilters]);
 
   const loadAccountPrefs = useCallback(async () => {
     try {
@@ -586,10 +567,6 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   }, []);
 
-  useEffect(() => {
-    loadAccountPrefs();
-  }, [loadAccountPrefs]);
-
   const loadBookingLinks = useCallback(async () => {
     try {
       const r = await fetch("/api/booking/links");
@@ -600,10 +577,6 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   }, []);
 
-  useEffect(() => {
-    loadBookingLinks();
-  }, [loadBookingLinks]);
-
   const loadBookings = useCallback(async () => {
     try {
       const r = await fetch("/api/booking/bookings");
@@ -613,10 +586,6 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       /* ignore */
     }
   }, []);
-
-  useEffect(() => {
-    loadBookings();
-  }, [loadBookings]);
 
 
   // ---- Shared-inbox delegation (admin only) ----
@@ -641,10 +610,6 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       /* ignore */
     }
   }, [isAdmin]);
-
-  useEffect(() => {
-    loadMailboxGrants();
-  }, [loadMailboxGrants]);
 
   const createGrant = async () => {
     if (grantBusy || !newGrant.granteeUserId || !newGrant.accountEmail) return;
@@ -900,17 +865,44 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
   const deleteTag = (tag: ContactTag) => setTagToDelete(tag);
 
+  const loadNavLayout = useCallback(async () => {
+    try {
+      const r = await fetch("/api/gmail/nav-layout");
+      if (r.ok) {
+        const d = await r.json();
+        if (Array.isArray(d?.hiddenModules)) setNavHidden(d.hiddenModules);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  // Single orchestrated initial load. Fires the account-independent fetches immediately (in
+  // parallel with the accounts lookup), awaits everything, then drops the loading gate ONCE — so
+  // the page paints a single time with all sections populated instead of each fetch resolving at
+  // a different time and popping its section in (the old "choppy" load).
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/gmail/nav-layout")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!cancelled && d && Array.isArray(d.hiddenModules)) setNavHidden(d.hiddenModules);
-      })
-      .catch(() => {});
+    (async () => {
+      const independent = Promise.allSettled([
+        loadFilters(),
+        loadAccountPrefs(),
+        loadBookingLinks(),
+        loadBookings(),
+        loadAiPrefs(),
+        loadNavLayout(),
+        loadMailboxGrants(),
+      ]);
+      const primary = await loadAccounts();
+      if (cancelled) return;
+      const accountScoped = primary ? loadAccountData(primary) : Promise.resolve();
+      await Promise.allSettled([independent, accountScoped]);
+      if (!cancelled) setLoading(false);
+    })();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggleModuleVisible = async (key: string, visible: boolean) => {
