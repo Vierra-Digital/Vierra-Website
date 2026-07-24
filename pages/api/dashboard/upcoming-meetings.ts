@@ -107,14 +107,16 @@ export default withAuth(async (req, res, session) => {
       return
     }
 
-    const validConnections: Array<{ email: string; accessToken: string }> = []
-    for (const row of tokenRows) {
-      const email = row.platform.replace(/^gmail:/, "")
-      const tokenResult = await getValidGmailAccessToken(userId, email)
-      if (tokenResult.ok) {
-        validConnections.push({ email, accessToken: tokenResult.accessToken })
-      }
-    }
+    const tokenResults = await Promise.all(
+      tokenRows.map(async (row) => {
+        const email = row.platform.replace(/^gmail:/, "")
+        const tokenResult = await getValidGmailAccessToken(userId, email)
+        return tokenResult.ok ? { email, accessToken: tokenResult.accessToken } : null
+      })
+    )
+    const validConnections = tokenResults.filter(
+      (c): c is { email: string; accessToken: string } => c !== null
+    )
 
     if (!validConnections.length) {
       res.status(200).json({ connected: false, meetings: [] })

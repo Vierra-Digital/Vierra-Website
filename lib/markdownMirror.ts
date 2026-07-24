@@ -148,6 +148,7 @@ export async function getBlogIndexMarkdown(): Promise<string> {
 
 export async function getTagMarkdown(tag: string): Promise<string | null> {
   const posts = await prisma.blogPost.findMany({
+    where: { tag: { contains: tag, mode: "insensitive" } },
     select: {
       slug: true,
       title: true,
@@ -158,6 +159,7 @@ export async function getTagMarkdown(tag: string): Promise<string | null> {
     },
     orderBy: { published_date: "desc" },
   });
+  // DB `contains` pre-filters; the JS pass below keeps exact comma-separated tag matching.
   const filtered = posts.filter(
     (p) =>
       isRealPost(p.slug, p.title) &&
