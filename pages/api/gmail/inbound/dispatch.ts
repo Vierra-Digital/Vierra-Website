@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { processInboundForAllAccounts } from "@/lib/gmail/inbound";
 import { resurfaceDueSnoozes } from "@/lib/gmail/snooze";
 import { processSignals } from "@/lib/signals/processSignals";
+import { safeCompare } from "@/lib/crypto";
 
 /**
  * Cron endpoint that polls all connected Gmail accounts for new mail and runs the
@@ -27,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const provided =
     (typeof req.headers["x-cron-secret"] === "string" ? req.headers["x-cron-secret"] : "") ||
     String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-  if (!secret || provided !== secret) {
+  if (!secret || !safeCompare(provided, secret)) {
     res.status(401).json({ message: "Unauthorized." });
     return;
   }

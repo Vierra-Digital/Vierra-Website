@@ -224,7 +224,11 @@ export default withAuth(async (req, res, session) => {
   const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
   const pageSizeRaw = Number(asQueryStr(req.query.limit));
   const pageSize = Number.isFinite(pageSizeRaw) && pageSizeRaw > 0 ? Math.min(Math.floor(pageSizeRaw), 50) : 50;
-  const maxResults = Math.min(page * pageSize, 500);
+  // We fetch (and merge/sort) at most the newest MAX_FETCH messages per account, so global
+  // recency order is only trustworthy within [0, MAX_FETCH]. Pages beyond that can't be served
+  // correctly with a merge-and-slice, so the inbox is capped there.
+  const MAX_FETCH = 500;
+  const maxResults = Math.min(page * pageSize, MAX_FETCH);
   const accountsParam = asQueryStr(req.query.accounts);
   const searchQuery = (asQueryStr(req.query.q) || "").trim();
   const labelIdFilter = (asQueryStr(req.query.labelId) || "").trim();
@@ -391,14 +395,21 @@ export default withAuth(async (req, res, session) => {
     mergedMessages = [...mappedDrafts, ...mergedMessages].sort((a, b) => b.timestamp - a.timestamp);
   }
   const offset = (page - 1) * pageSize;
-  const pageMessages = mergedMessages.slice(offset, offset + pageSize);
+  // Don't serve past the fetch window — beyond it the slice would be an incorrect cross-account
+  // subset (messages silently dropped/reordered) rather than the true global order.
+  const pageMessages = offset >= MAX_FETCH ? [] : mergedMessages.slice(offset, Math.min(offset + pageSize, MAX_FETCH));
+
+  // Tracking rows for a granted (shared) mailbox belong to the OWNER, not the requester — scope
+  // by every accessible account's ownerUserId so shared-inbox stats show up. The `email::id` key
+  // below still prevents any cross-account attribution.
+  const ownerUserIds = [...new Set(accessibleAccounts.map((a) => a.ownerUserId))];
 
   // Resolve account_id -> account_email mapping for tracked message lookup
   const accountEmailToId = new Map<string, string>();
   if (pageMessages.length > 0) {
     const accountEmailsOnPage = [...new Set(pageMessages.map((m) => m.accountEmail).filter(Boolean))];
     const providerAccounts = await prisma.emailProviderAccount.findMany({
-      where: { user_id: userId, account_email: { in: accountEmailsOnPage } },
+      where: { user_id: { in: ownerUserIds }, account_email: { in: accountEmailsOnPage } },
       select: { id: true, account_email: true },
     });
     for (const pa of providerAccounts) {
@@ -408,7 +419,7 @@ export default withAuth(async (req, res, session) => {
 
   const trackedRows = await prisma.emailOutboundMessage.findMany({
     where: {
-      user_id: userId,
+      user_id: { in: ownerUserIds },
       tracking_enabled: true,
       gmail_message_id: { in: pageMessages.map((message) => message.id) },
     },
@@ -488,7 +499,8 @@ export default withAuth(async (req, res, session) => {
     trackingLastOpenedAt: trackedStatsByKey.get(`${message.accountEmail.toLowerCase()}::${message.id}`)?.lastOpenedAt || null,
     trackingTotalOpenWindowMs: trackedStatsByKey.get(`${message.accountEmail.toLowerCase()}::${message.id}`)?.totalOpenWindowMs || 0,
   }));
-  const hasNextPage = mergedMessages.length > offset + pageSize || accountHasMore.some(Boolean);
+  const hasNextPage =
+    offset + pageSize < MAX_FETCH && (mergedMessages.length > offset + pageSize || accountHasMore.some(Boolean));
 
   res.status(200).json({
     mailbox,

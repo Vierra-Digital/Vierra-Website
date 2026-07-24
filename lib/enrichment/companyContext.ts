@@ -319,7 +319,7 @@ export async function fetchWikidata(name: string, domain: string): Promise<Parti
 
   const getJson = async (url: string): Promise<any | null> => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 7000);
+    const timer = setTimeout(() => controller.abort(), 5000); // 3 sequential calls -> keep each tight
     try {
       const res = await fetch(url, { signal: controller.signal, headers: { "User-Agent": UA, Accept: "application/json" } });
       clearTimeout(timer);
@@ -582,6 +582,13 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
   if (!norm) return null;
   const { domain, url } = norm;
 
+  // These enrichments only need the domain, not the page HTML — kick them off now
+  // so they overlap the (slower) site fetch + Wikidata below instead of adding to
+  // it. Each resolves to null on failure, so awaiting later never rejects.
+  const trancoP = fetchTranco(domain);
+  const domainAgeP = fetchDomainAge(domain);
+  const authorityP = fetchAuthority(domain);
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   let res: Response;
@@ -636,15 +643,10 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
 
   const seo = extractSeo(html, url);
   const profile = extractOrgProfile(html);
-  // Firmographics (Wikidata) + popularity rank (Tranco) + domain age (RDAP) +
-  // domain authority (Open PageRank). All free; authority needs a key but is the
-  // only signal covering ALL websites incl. small ones.
-  const [wd, popularity, domainAge, authority] = await Promise.all([
-    fetchWikidata(name || "", domain),
-    fetchTranco(domain),
-    fetchDomainAge(domain),
-    fetchAuthority(domain),
-  ]);
+  // Wikidata needs the parsed name; the other three were started above and are
+  // (mostly) already done by now.
+  const wd = await fetchWikidata(name || "", domain);
+  const [popularity, domainAge, authority] = await Promise.all([trancoP, domainAgeP, authorityP]);
   if (wd) {
     profile.industry = profile.industry || wd.industry || null;
     profile.employees = profile.employees || wd.employees || null;

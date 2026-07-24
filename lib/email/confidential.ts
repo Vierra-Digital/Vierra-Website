@@ -1,10 +1,16 @@
 import { createHash, randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { sanitizeRichEmailHtml } from "@/lib/email/sanitize";
+import { safeCompare } from "@/lib/crypto";
 
-/** Sanitize confidential body HTML for safe rendering in the public viewer page. */
+/**
+ * Sanitize confidential body HTML for the public viewer page. This HTML is rendered via
+ * dangerouslySetInnerHTML in OUR origin, so we additionally strip remote-loading styles
+ * (restrictStyles) — an inline background:url(...) would otherwise beacon the viewer's IP/open
+ * to a third party on render, bypassing our own view logging.
+ */
 export function sanitizeConfidentialHtml(html: string): string {
-  return sanitizeRichEmailHtml(html);
+  return sanitizeRichEmailHtml(html, { restrictStyles: true });
 }
 
 /**
@@ -96,7 +102,7 @@ export async function resolveConfidential(token: string, now: Date, passcode?: s
   if (row.revoked) return { status: "revoked" };
   if (row.expires_at && row.expires_at.getTime() <= now.getTime()) return { status: "expired" };
   if (row.passcode_hash) {
-    if (!passcode || hashPasscode(passcode) !== row.passcode_hash) {
+    if (!passcode || !safeCompare(hashPasscode(passcode), row.passcode_hash)) {
       return { status: "locked", id: row.id, subject: row.subject };
     }
   }

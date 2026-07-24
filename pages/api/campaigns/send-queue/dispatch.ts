@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { runCampaignSendQueueTick } from "@/lib/campaigns/sendQueueTick";
+import { safeCompare } from "@/lib/crypto";
 
 /**
  * Cron dispatch endpoint for the campaign send queue. NOT session-authenticated —
@@ -23,7 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const provided =
     (typeof req.headers["x-cron-secret"] === "string" ? req.headers["x-cron-secret"] : "") ||
     String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-  if (!secret || provided !== secret) {
+  if (!secret || !safeCompare(provided, secret)) {
     res.status(401).json({ message: "Unauthorized." });
     return;
   }
