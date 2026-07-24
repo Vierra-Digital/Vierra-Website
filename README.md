@@ -1,6 +1,6 @@
 # Vierra Website
 
-Full-stack marketing site, internal **admin/staff panel**, **client portal**, email platform (Gmail), document signing, onboarding flows, and integrations (LinkedIn, Facebook, Google Ads, Stripe). Built with **Next.js 15** (App Router + Pages Router), **PostgreSQL** via **Prisma**, **NextAuth**, deployed on **Netlify** (`vierradev.com` / production marketing domain `vierra.com`).
+Full-stack marketing site, internal **admin/staff panel**, **client portal**, a full **email & outreach platform** (Gmail + SMTP — open/click tracking, inbound tracker detection, sequenced campaigns, scheduled send, shared inboxes, meeting booker, confidential mode), **document signing**, onboarding flows, and integrations (LinkedIn, Facebook, Google Ads, Stripe). Built with **Next.js 15** (App Router + Pages Router), **PostgreSQL** via **Prisma**, **NextAuth**, deployed on **Netlify** (`vierradev.com` / production marketing domain `vierra.com`).
 
 ---
 
@@ -180,6 +180,16 @@ Copy **`.env.example`** → **`.env`**. Never commit `.env`.
 | `GOOGLE_VERIFICATION` | Google Search Console meta verification |
 | `NETLIFY` | Set on Netlify; layout skips duplicate GA scripts (edge injects tag) |
 
+### Email platform (cron, alerts, AI)
+
+| Variable | Used for |
+|----------|----------|
+| `CRON_SECRET` | Shared secret guarding the scheduled-function endpoints (inbound poll, scheduled send, campaign queue, watch renew) via the `x-cron-secret` header |
+| `NEXT_PUBLIC_SITE_URL` | Public origin for tracking pixel/click links, cron base URL, and Discord deep-links |
+| `DISCORD_WEBHOOK_URL` | Optional — reply + high-intent signal alerts |
+| `GMAIL_PUBSUB_TOPIC` | Optional — enables Gmail push (near-real-time inbound); the 5-min poller covers it when unset |
+| `ANTHROPIC_API_KEY` / `ARTEMIS_*` | Optional — Artemis AI (compose/reply/summarize/auto-draft); stays dormant until set |
+
 Full template with comments: [`.env.example`](./.env.example).
 
 ---
@@ -304,7 +314,15 @@ All live under `pages/api/`. Unless noted, routes expect an authenticated sessio
 | POST | `/api/gmail/drafts` | Save draft |
 | … | `/api/gmail/*` | Labels, threads, sync, contacts, signatures, templates, tracking, etc. |
 
-See `pages/api/gmail/` for the full set (compose, blocked senders, provider accounts, open/click tracking).
+See `pages/api/gmail/` and `pages/api/email/` for the full set. Beyond basic compose/send, the platform includes:
+
+- **Open/click tracking** (per-account toggle) plus inbound **tracker-pixel detection** that flags trackers in received mail (Mailtrack, Yesware, HubSpot, Mixmax, Streak, Outreach, and ~50 others) — see `lib/email/trackerDetection.ts`
+- **Campaigns / sequences** (`/api/campaigns/*`) — multi-step sends with per-campaign daily limits, DNC/blocked-sender skipping, retry caps, and a cron-driven send queue
+- **Scheduled send** (`/api/gmail/scheduled/*`) — persisted and dispatched server-side by cron
+- **Shared inboxes / delegation** (`/api/email/mailbox-grants`) — admins grant a teammate read/send access to a mailbox (fail-closed resolver in `lib/email/mailboxAccess.ts`)
+- **Meeting booker** (`/api/booking/*`) — scheduling links backed by Google Calendar free/busy
+- **Confidential mode** (`/c/[token]`) — the body is stored server-side behind a link with optional passcode + expiry
+- **Filters, signatures, templates, vacation responder, snooze, blocked senders**, and a per-user **inbox layout** (`/api/gmail/nav-layout`) toggling which mailboxes appear in the nav
 
 ### Google Calendar
 
@@ -418,6 +436,8 @@ npx prisma studio                                # GUI browser
 
 If `migrate dev` fails on shadow DB issues, `db:push` can sync schema in development (coordinate with team before using in production).
 
+Some schema changes are applied **out-of-band** as hand-written SQL in `prisma/manual/*.sql`, run with `npx prisma db execute --file prisma/manual/<name>.sql --schema prisma/schema.prisma`, then mirrored into `schema.prisma` and picked up by `prisma generate`. The email-platform tables (tracking, campaigns, bookings, mailbox grants, nav preferences, account settings) live here.
+
 ---
 
 ## Key integrations
@@ -452,6 +472,19 @@ If `migrate dev` fails on shadow DB issues, `db:push` can sync schema in develop
 - Publish: `.next` (Next.js Netlify plugin)
 - Set all production env vars in the Netlify UI (mirror `.env.example`)
 - `NEXTAUTH_URL` must match the deployed origin (e.g. `https://vierradev.com`)
+
+### Scheduled functions (cron)
+
+Self-registering Netlify Scheduled Functions in `netlify/functions/` (each POSTs its paired API route and is guarded by `CRON_SECRET`):
+
+| Function | Cadence | Triggers |
+|----------|---------|----------|
+| `poll-inbound` | every 5 min | inbound processing — filters, vacation reply, auto-draft, read receipts, snooze resurfacing, reply/signal Discord alerts |
+| `dispatch-scheduled-email` | every 1 min | sends due scheduled mail |
+| `dispatch-campaign-queue` | every 5 min | advances active campaign sequences |
+| `gmail-watch-renew` | daily | re-registers Gmail push (no-op unless `GMAIL_PUBSUB_TOPIC` is set) |
+
+A quick health check (idempotent): `curl -s -X POST -H "x-cron-secret: <CRON_SECRET>" https://vierradev.com/api/gmail/inbound/dispatch` → expects `{"ok":true,...}`.
 
 ### Content Security Policy
 
