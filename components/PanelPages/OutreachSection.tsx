@@ -262,24 +262,22 @@ const OutreachSection = () => {
     const fetchYearlySummary = useCallback(async () => {
         setIsLoading(true);
         try {
-            const monthlyData: StatsType[] = []
-            for (let month = 1; month <= 12; month++) {
-                const response = await fetch(`/api/marketing/tracker?year=${selectedYear}&month=${month}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    const outreachMap: Record<string, CardKey> = {
-                        walkinnetworking: "NetworkingEvents",
-                        coldmail: "ColdEmailsCartography",
-                        emailingplatform: "ColdEmailsCartography",
-                        linkedin: "LinkedIn",
-                        instagram: "Instagram",
-                        coldcall: "ColdCall",
-                        facebook: "Other",
-                        googleads: "Other",
-                        coldmessage: "Other",
-                        autoresponder: "Other",
-                        other: "Other",
-                    };
+            const outreachMap: Record<string, CardKey> = {
+                walkinnetworking: "NetworkingEvents",
+                coldmail: "ColdEmailsCartography",
+                emailingplatform: "ColdEmailsCartography",
+                linkedin: "LinkedIn",
+                instagram: "Instagram",
+                coldcall: "ColdCall",
+                facebook: "Other",
+                googleads: "Other",
+                coldmessage: "Other",
+                autoresponder: "Other",
+                other: "Other",
+            };
+            // Fetch all 12 months in parallel (results are summed, so order is irrelevant).
+            const monthlyData: StatsType[] = await Promise.all(
+                Array.from({ length: 12 }, (_, i) => i + 1).map(async (month) => {
                     const monthStats: StatsType = {
                         NetworkingEvents: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
                         ColdEmailsCartography: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
@@ -288,23 +286,27 @@ const OutreachSection = () => {
                         ColdCall: { attempts: 0, meetings: 0, clients: 0, revenue: 0 },
                         Other: { attempts: 0, meetings: 0, clients: 0, revenue: 0 }
                     };
-                    if (Array.isArray(data.trackerData)) {
-                        data.trackerData.forEach((item: any) => {
-                            const key = outreachMap[item.outreach];
-                            if (key) {
-                                monthStats[key] = {
-                                    attempts: monthStats[key].attempts + (item.attempt ?? 0),
-                                    meetings: monthStats[key].meetings + (item.meetingsSet ?? 0),
-                                    clients: monthStats[key].clients + (item.clientsClosed ?? 0),
-                                    revenue: monthStats[key].revenue + (item.revenue ?? 0),
-                                };
-                            }
-                        });
+                    const response = await fetch(`/api/marketing/tracker?year=${selectedYear}&month=${month}`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (Array.isArray(data.trackerData)) {
+                            data.trackerData.forEach((item: any) => {
+                                const key = outreachMap[item.outreach];
+                                if (key) {
+                                    monthStats[key] = {
+                                        attempts: monthStats[key].attempts + (item.attempt ?? 0),
+                                        meetings: monthStats[key].meetings + (item.meetingsSet ?? 0),
+                                        clients: monthStats[key].clients + (item.clientsClosed ?? 0),
+                                        revenue: monthStats[key].revenue + (item.revenue ?? 0),
+                                    };
+                                }
+                            });
+                        }
                     }
-                    monthlyData.push(monthStats)
-                }
-            }
-            
+                    return monthStats;
+                })
+            );
+
             const yearly = monthlyData.reduce((acc, month) => {
                 Object.values(month).forEach(channel => {
                     acc.totalAttempt += channel.attempts

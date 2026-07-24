@@ -55,12 +55,12 @@ export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
 
   const csvText = typeof req.body?.csvText === "string" ? req.body.csvText : "";
-  const accountEmail = typeof req.body?.accountEmail === "string" ? req.body.accountEmail.trim().toLowerCase() : "";
-  const accountId = await resolveAccountId(userId, accountEmail);
   if (!csvText.trim()) {
     res.status(400).json({ message: "csvText is required." });
     return;
   }
+  const accountEmail = typeof req.body?.accountEmail === "string" ? req.body.accountEmail.trim().toLowerCase() : "";
+  const accountId = await resolveAccountId(userId, accountEmail);
 
   const parsed = parseContactsCsvWithValidation(csvText);
   if (parsed.headerErrors.length > 0) {
