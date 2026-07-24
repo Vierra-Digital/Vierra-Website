@@ -37,7 +37,10 @@ type SpreadsheetColumn = { key: RawColumnKey; header: string };
 
 function asSheetValue(value: string | null | undefined) {
   const normalized = typeof value === "string" ? value.trim() : "";
-  return normalized || "N/A";
+  if (!normalized) return "N/A";
+  // Neutralize spreadsheet formula injection (=, +, -, @, tab, CR) so an imported contact field
+  // can't execute a formula / DDE when the exported workbook is opened.
+  return /^[=+\-@\t\r]/.test(normalized) ? `'${normalized}` : normalized;
 }
 
 export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsheetInput) {

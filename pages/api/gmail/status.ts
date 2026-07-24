@@ -37,7 +37,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const accounts: GmailConnection[] = await Promise.all(
       rows.map(async (row) => {
-        const email = row.platform.replace(/^gmail:/, "");
+        // Lowercase to match the normalized unique key (gmail:<lowercased email>); a mixed-case
+        // stored platform would otherwise miss the token lookup and read as disconnected.
+        const email = row.platform.replace(/^gmail:/, "").toLowerCase();
         const tokenResult = await getValidGmailAccessToken(userId, email);
         const connected = tokenResult.ok;
         return {

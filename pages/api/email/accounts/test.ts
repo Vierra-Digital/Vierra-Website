@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
-import { createSmtpTransport } from "@/lib/email/smtp";
+import { createSmtpTransport, isBlockedSmtpHost } from "@/lib/email/smtp";
 import { asStr } from "@/lib/api/parsing";
 
 export default withAuth(async (req, res, session) => {
@@ -18,16 +18,19 @@ export default withAuth(async (req, res, session) => {
     res.status(404).json({ message: "Provider account not found." });
     return;
   }
+  if (isBlockedSmtpHost(account.smtp_host)) {
+    res.status(400).json({ ok: false, message: "That SMTP host isn't allowed." });
+    return;
+  }
 
   const transporter = createSmtpTransport(account);
 
   try {
     await transporter.verify();
     res.status(200).json({ ok: true });
-  } catch (error) {
-    res.status(400).json({
-      ok: false,
-      message: error instanceof Error ? error.message : "SMTP test failed.",
-    });
+  } catch {
+    // Deliberately generic: returning the raw connect error would let a caller distinguish
+    // open/closed/non-SMTP ports on the internal network (SSRF oracle).
+    res.status(400).json({ ok: false, message: "Couldn't connect with those SMTP settings." });
   }
 }, { methods: ["POST"] });

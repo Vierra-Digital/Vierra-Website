@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { processInboundForAllAccounts } from "@/lib/gmail/inbound";
+import { safeCompare } from "@/lib/crypto";
 
 /**
  * Google Pub/Sub push endpoint for Gmail notifications. When Gmail watch (see /api/gmail/watch)
@@ -29,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const secret = process.env.GMAIL_PUSH_TOKEN || process.env.CRON_SECRET || "";
   const provided = typeof req.query.token === "string" ? req.query.token : "";
-  if (!secret || provided !== secret) {
+  if (!secret || !safeCompare(provided, secret)) {
     res.status(401).json({ message: "Unauthorized." });
     return;
   }

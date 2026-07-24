@@ -3,6 +3,7 @@ import type { EmailProviderAccount } from "@prisma/client";
 import { withAuth } from "@/lib/api/withAuth";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { asStr, asPort } from "@/lib/api/parsing";
+import { isBlockedSmtpHost } from "@/lib/email/smtp";
 
 // The panel + settings page consume camelCase; map snake→camel here (and never leak the
 // encrypted password — only whether one is set).
@@ -44,6 +45,10 @@ export default withAuth(async (req, res, session) => {
     const smtpPassword = asStr(req.body?.smtpPassword);
     if (!accountEmail || !smtpHost || !smtpUsername || !smtpPassword) {
       res.status(400).json({ message: "accountEmail, smtpHost, smtpUsername, and smtpPassword are required." });
+      return;
+    }
+    if (isBlockedSmtpHost(smtpHost)) {
+      res.status(400).json({ message: "That SMTP host isn't allowed." });
       return;
     }
 
@@ -88,6 +93,10 @@ export default withAuth(async (req, res, session) => {
     });
     if (!existing) {
       res.status(404).json({ message: "Provider account not found." });
+      return;
+    }
+    if (req.body?.smtpHost !== undefined && asStr(req.body?.smtpHost) && isBlockedSmtpHost(asStr(req.body?.smtpHost))) {
+      res.status(400).json({ message: "That SMTP host isn't allowed." });
       return;
     }
 

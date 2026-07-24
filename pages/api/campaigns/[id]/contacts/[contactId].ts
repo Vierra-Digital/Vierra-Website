@@ -116,6 +116,18 @@ export default withAuth(async (req, res, session) => {
 
     if (req.body?.assignedTo !== undefined) {
       const nextAssignee = asStr(req.body.assignedTo) || null;
+      // Only allow assigning to a member of this company (null unassigns) — otherwise a lead
+      // could be assigned to an arbitrary/outside user id.
+      if (nextAssignee) {
+        const member = await prisma.companyMembership.findFirst({
+          where: { company_id: session.companyId, user_id: nextAssignee },
+          select: { id: true },
+        });
+        if (!member) {
+          res.status(400).json({ message: "Assignee must be a member of your company." });
+          return;
+        }
+      }
       const updated = await prisma.campaignContact.update({
         where: { id: contactId },
         data: { assigned_to: nextAssignee },

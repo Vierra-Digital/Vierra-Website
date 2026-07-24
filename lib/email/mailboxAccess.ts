@@ -43,6 +43,7 @@ export async function getAccessibleGmailAccounts(
       if (seen.has(email)) continue;
       const owner = await prisma.platformToken.findFirst({
         where: { platform: `gmail:${email}` },
+        orderBy: { created_at: "asc" },
         select: { user_id: true },
       });
       if (owner) {
@@ -90,6 +91,7 @@ export async function resolveMailboxOwner(
 
     const gmailOwner = await prisma.platformToken.findFirst({
       where: { platform: `gmail:${email}` },
+      orderBy: { created_at: "asc" },
       select: { user_id: true },
     });
     if (gmailOwner) return { ownerUserId: gmailOwner.user_id, canSend: grant.can_send };

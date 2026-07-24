@@ -98,7 +98,9 @@ function uniqueUrls(value: string) {
 
 function uniqueUrlsFromHtmlHref(html: string) {
   const set = new Set<string>();
-  const re = /href\s*=\s*(["'])(https?:\/\/[^"']+)\1/gi;
+  // MUST match rewriteTrackedLinksInHtml's pattern exactly, or a URL gets a tracking token +
+  // DB row here but is never rewritten in the sent HTML (orphan token, untracked link).
+  const re = /href=(["'])(https?:\/\/[^\s"'<>]+)\1/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html))) {
     set.add(m[2]);
@@ -145,6 +147,19 @@ function chunkBase64ForMime(b64: string) {
   return clean.match(/.{1,76}/g)?.join("\r\n") || clean;
 }
 
+/** Strip CR/LF so a crafted subject/recipient can't inject extra MIME headers (header injection). */
+function headerSafe(value: string): string {
+  return value.replace(/[\r\n]+/g, " ").trim();
+}
+
+/** RFC 2047-encode a subject that carries non-ASCII bytes (after stripping CR/LF). */
+function encodeSubjectHeader(subject: string): string {
+  const clean = headerSafe(subject);
+  return /[^\x20-\x7E]/.test(clean)
+    ? `=?UTF-8?B?${Buffer.from(clean, "utf8").toString("base64")}?=`
+    : clean;
+}
+
 function buildRawMime(opts: {
   to: string;
   cc: string;
@@ -163,19 +178,19 @@ function buildRawMime(opts: {
   const altBoundary = `alt_${randomUUID().replace(/-/g, "")}`;
 
   const headers: string[] = [
-    ...(opts.from ? [`From: ${opts.from}`] : []),
-    `To: ${opts.to}`,
+    ...(opts.from ? [`From: ${headerSafe(opts.from)}`] : []),
+    `To: ${headerSafe(opts.to)}`,
     "MIME-Version: 1.0",
-    `Subject: ${opts.subject}`,
+    `Subject: ${encodeSubjectHeader(opts.subject)}`,
   ];
-  if (opts.cc) headers.push(`Cc: ${opts.cc}`);
-  if (opts.bcc) headers.push(`Bcc: ${opts.bcc}`);
-  if (opts.inReplyTo) headers.push(`In-Reply-To: ${opts.inReplyTo}`);
-  if (opts.references) headers.push(`References: ${opts.references}`);
-  else if (opts.inReplyTo) headers.push(`References: ${opts.inReplyTo}`);
+  if (opts.cc) headers.push(`Cc: ${headerSafe(opts.cc)}`);
+  if (opts.bcc) headers.push(`Bcc: ${headerSafe(opts.bcc)}`);
+  if (opts.inReplyTo) headers.push(`In-Reply-To: ${headerSafe(opts.inReplyTo)}`);
+  if (opts.references) headers.push(`References: ${headerSafe(opts.references)}`);
+  else if (opts.inReplyTo) headers.push(`References: ${headerSafe(opts.inReplyTo)}`);
   if (opts.dispositionNotificationTo) {
-    headers.push(`Disposition-Notification-To: ${opts.dispositionNotificationTo}`);
-    headers.push(`Return-Receipt-To: ${opts.dispositionNotificationTo}`);
+    headers.push(`Disposition-Notification-To: ${headerSafe(opts.dispositionNotificationTo)}`);
+    headers.push(`Return-Receipt-To: ${headerSafe(opts.dispositionNotificationTo)}`);
   }
 
   const altInner =
@@ -360,20 +375,16 @@ export async function sendEmailCore(userId: string, payload: SendEmailPayload, b
 
   const accountId = providerAccount?.id ?? (await resolveAccountId(userId, accountEmail));
 
-  const [accountSetting, fallbackSetting] = await Promise.all([
-    accountId
-      ? prisma.emailAccountSetting.findUnique({
-          where: { account_id: accountId },
-          select: { tracking_enabled: true, open_tracking_enabled: true, click_tracking_enabled: true },
-        })
-      : null,
-    prisma.emailAccountSetting.findFirst({
-      where: { email_provider_accounts: { user_id: userId } },
-      orderBy: { updated_at: "desc" },
-      select: { tracking_enabled: true, open_tracking_enabled: true, click_tracking_enabled: true },
-    }),
-  ]);
-  const setting = accountSetting || fallbackSetting;
+  // Tracking config is strictly per-account: a mailbox with no settings row means tracking is
+  // OFF. (Previously this fell back to any other account's most-recently-updated settings, which
+  // could inject an open pixel / rewrite links using a config the user never enabled on THIS
+  // mailbox — a privacy and deliverability problem.)
+  const setting = accountId
+    ? await prisma.emailAccountSetting.findUnique({
+        where: { account_id: accountId },
+        select: { tracking_enabled: true, open_tracking_enabled: true, click_tracking_enabled: true },
+      })
+    : null;
 
   const trackingEnabled = Boolean(setting?.tracking_enabled);
   const openTrackingEnabled = trackingEnabled && Boolean(setting?.open_tracking_enabled ?? true);
@@ -460,6 +471,12 @@ export async function sendEmailCore(userId: string, payload: SendEmailPayload, b
     contentType: att.contentType,
   }));
 
+  // The outbound row (+ tracking links/pixel token) had to be created before the send so the
+  // tracking URLs could be embedded. If the provider send fails, delete it (recipients,
+  // tracking links and events cascade) so we don't leave an orphaned "sent" record with live
+  // tracking endpoints for a message that never went out.
+  const discardOutbound = () => prisma.emailOutboundMessage.delete({ where: { id: outbound.id } }).catch(() => {});
+
   if (providerAccount) {
     provider = "smtp";
     const sent = await sendViaSmtp(providerAccount, {
@@ -475,14 +492,21 @@ export async function sendEmailCore(userId: string, payload: SendEmailPayload, b
       references,
       notifyTo: notifyTo || undefined,
     });
-    if (!sent.ok) return sent;
+    if (!sent.ok) {
+      await discardOutbound();
+      return sent;
+    }
     sentMessageId = sent.messageId;
   } else if (tokenResult.ok) {
     const sent = await sendViaGmail(userId, accountEmail, sendPayload, tokenResult.accessToken, threadId);
-    if (!sent.ok) return sent;
+    if (!sent.ok) {
+      await discardOutbound();
+      return sent;
+    }
     sentMessageId = sent.messageId;
     sentThreadId = sent.threadId;
   } else {
+    await discardOutbound();
     return { ok: false, status: 400, message: "No valid send provider configured." };
   }
 

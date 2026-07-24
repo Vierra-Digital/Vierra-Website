@@ -4,8 +4,8 @@ import { asStr } from "@/lib/api/parsing";
 
 export default withAuth(
   async (req, res) => {
-    const intent = asStr(req.body?.intent).trim();
-    const tone = asStr(req.body?.tone).trim() || "professional and friendly";
+    const intent = asStr(req.body?.intent).trim().slice(0, 4000);
+    const tone = (asStr(req.body?.tone).trim() || "professional and friendly").slice(0, 120);
     if (!intent) {
       res.status(400).json({ message: "Describe what the email should say." });
       return;
