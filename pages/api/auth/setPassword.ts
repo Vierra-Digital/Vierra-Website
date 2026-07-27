@@ -20,7 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const session = await requireSession(req, res);
-    if (!session) return;
+    if (!session) return res.status(401).json({ message: "Not authenticated" });
 
     const userId = (session.user as any).id;
     const { error } = await getSupabaseAdmin().auth.admin.updateUserById(userId, { password });
