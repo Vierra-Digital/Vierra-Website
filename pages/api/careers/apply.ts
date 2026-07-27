@@ -6,6 +6,7 @@ import {
   type ApplicationUploadTarget,
 } from "@/lib/careersDrive";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
+import { asStr as asString } from "@/lib/api/parsing";
 
 // Max submissions per IP per window — generous for a real applicant (who applies
 // to a handful of roles at most) but blocks a script hammering the endpoint.
@@ -24,10 +25,6 @@ interface FileMeta {
   name: string;
   mimeType: string;
   size: number;
-}
-
-function asString(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
 }
 
 /** Strip characters Drive/OS dislike, collapse whitespace. */

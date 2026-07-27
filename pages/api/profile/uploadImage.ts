@@ -13,18 +13,7 @@ export const config = {
 
 export default withAuth(
   async (req, res, session) => {
-    const userEmail = (session.user as any)?.email;
-    if (!userEmail) {
-      return res.status(400).json({ message: "User email not found in session" });
-    }
-    const existingUser = await prisma.user.findUnique({
-      where: { email: userEmail },
-      select: { id: true, name: true, email: true },
-    });
-
-    if (!existingUser) {
-      return res.status(404).json({ message: "User not found" });
-    }
+    const existingUser = session.user as { id: string; name: string | null; email: string | null };
     const { imageData, mimeType } = req.body;
     if (imageData === null && mimeType === null) {
       await prisma.userPreference.upsert({
