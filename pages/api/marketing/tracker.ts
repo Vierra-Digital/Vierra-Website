@@ -1,9 +1,6 @@
 import { withAuth } from "@/lib/api/withAuth";
 import { prisma } from "@/lib/prisma";
-
-function pct(numerator: number, denominator: number): number {
-  return denominator > 0 ? Math.round((numerator / denominator) * 100 * 100) / 100 : 0;
-}
+import { pct } from "@/lib/api/marketing";
 
 export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
