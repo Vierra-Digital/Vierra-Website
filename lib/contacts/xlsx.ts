@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import ExcelJS from "exceljs";
+import { guardSpreadsheetFormula } from "@/lib/contacts/spreadsheet";
 import {
   putFileAsset,
   deleteFileAsset,
@@ -38,9 +39,7 @@ type SpreadsheetColumn = { key: RawColumnKey; header: string };
 function asSheetValue(value: string | null | undefined) {
   const normalized = typeof value === "string" ? value.trim() : "";
   if (!normalized) return "N/A";
-  // Neutralize spreadsheet formula injection (=, +, -, @, tab, CR) so an imported contact field
-  // can't execute a formula / DDE when the exported workbook is opened.
-  return /^[=+\-@\t\r]/.test(normalized) ? `'${normalized}` : normalized;
+  return guardSpreadsheetFormula(normalized);
 }
 
 export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsheetInput) {

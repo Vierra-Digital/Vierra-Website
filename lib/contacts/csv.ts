@@ -1,3 +1,5 @@
+import { guardSpreadsheetFormula } from "@/lib/contacts/spreadsheet";
+
 export type CsvContactRow = {
   firstName: string;
   lastName: string;
@@ -161,10 +163,7 @@ export function parseContactsCsvWithValidation(text: string): ContactsCsvValidat
 }
 
 function escapeCsvCell(value: string) {
-  // Neutralize spreadsheet formula injection: a cell starting with = + - @ (or tab/CR) is
-  // interpreted as a formula by Excel/Sheets. Prefix with a single quote so it stays text.
-  const guarded = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-  const normalized = guarded.replace(/"/g, '""');
+  const normalized = guardSpreadsheetFormula(value).replace(/"/g, '""');
   return `"${normalized}"`;
 }
 
