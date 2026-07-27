@@ -31,9 +31,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       where: { id: token },
       data: {
         answers: updatedAnswers,
-        lastUpdatedAt: new Date(),
+        last_updated_at: new Date(),
         ...(completed && {
-          submittedAt: new Date(),
+          submitted_at: new Date(),
         }),
         ...(newStatus && {
           status: newStatus

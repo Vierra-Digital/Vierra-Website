@@ -1,8 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
+import { requireRole } from "@/lib/auth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
+
+  const session = await requireRole(req, res, ["admin", "staff"]);
+  if (!session) return;
 
   try {
     const now = new Date();
