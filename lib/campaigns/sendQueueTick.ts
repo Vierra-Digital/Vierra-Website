@@ -222,6 +222,11 @@ export async function runCampaignSendQueueTick(companyId: string, batchSize = DE
   for (const campaign of activeCampaigns) {
     if (result.processed >= batchSize) break;
 
+    // Respect a future scheduled start. A campaign can be activated ahead of time (or have
+    // contacts enrolled with an already-past next_send_at), but it must not send a single
+    // message until its scheduled_start_at — otherwise the very next tick fires it immediately.
+    if (campaign.scheduled_start_at && campaign.scheduled_start_at.getTime() > Date.now()) continue;
+
     const sentToday = await prisma.emailOutboundMessage.count({
       where: {
         campaign_id: campaign.id,
@@ -256,10 +261,24 @@ export async function runCampaignSendQueueTick(companyId: string, batchSize = DE
       });
       if (claim.count === 0) continue;
       result.processed += 1;
-      const outcome = await processContact(campaign, contact, steps);
-      if (outcome === "skipped") result.skipped += 1;
-      else if (outcome === "failed") result.failed += 1;
-      else if (outcome === "sent") result.sent += 1;
+      try {
+        const outcome = await processContact(campaign, contact, steps);
+        if (outcome === "skipped") result.skipped += 1;
+        else if (outcome === "failed") result.failed += 1;
+        else if (outcome === "sent") result.sent += 1;
+      } catch {
+        // processContact threw AFTER the atomic claim (queued → sending) — e.g. a DB hiccup on the
+        // post-send writes. The due query only re-selects "queued", so leaving it "sending" would
+        // strand the contact forever. The email may already have gone out, so mark failed rather
+        // than re-queue (which would risk a duplicate send).
+        result.failed += 1;
+        await prisma.campaignContact
+          .update({
+            where: { id: contact.id },
+            data: { queue_status: "failed", skip_reason: "processing_error", next_send_at: null },
+          })
+          .catch(() => {});
+      }
     }
   }
 

@@ -65,6 +65,18 @@ export async function syncCampaignAudience(campaignId: string): Promise<{ enroll
     skipDuplicates: true,
   });
 
+  // Repair contacts that enrolled before any step existed: they were inserted with
+  // next_send_at=null, which the send queue's due filter (next_send_at <= now) never matches, so
+  // they'd stay stranded even after steps are added (createMany above skips existing rows). Now
+  // that a first step exists, schedule them — scoped to not-yet-started, still-queued rows so any
+  // in-flight sequence is left untouched.
+  if (firstStep) {
+    await prisma.campaignContact.updateMany({
+      where: { campaign_id: campaignId, queue_status: "queued", current_step_id: null, next_send_at: null },
+      data: { next_send_at: nextSendAt },
+    });
+  }
+
   await prisma.campaign.update({ where: { id: campaignId }, data: { audience_synced_at: new Date() } });
   return { enrolledCount: result.count };
 }
