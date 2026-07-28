@@ -50,14 +50,14 @@ function CountUp({ value, duration = 1.6 }: { value: string; duration?: number }
   return <span ref={ref}>{display}</span>
 }
 
-export function StatsGrid() {
-  const card4Content = [
-    { number: "150M+", text: "leads generated." },
-    { number: "500k+", text: "campaigns created." },
-    { number: "175+", text: "businesses supercharged." },
-  ]
+const CARD4_CONTENT = [
+  { number: "150M+", text: "leads generated." },
+  { number: "500k+", text: "campaigns created." },
+  { number: "175+", text: "businesses supercharged." },
+]
 
-  const total = card4Content.length
+export function StatsGrid() {
+  const total = CARD4_CONTENT.length
   const [step, setStep] = useState(0)
 
   useEffect(() => {
@@ -67,7 +67,7 @@ export function StatsGrid() {
 
   const contentIndex = step % total
   const cycle = Math.floor(step / total)
-  const currentContent = card4Content[contentIndex]
+  const currentContent = CARD4_CONTENT[contentIndex]
 
   return (
     <motion.div
