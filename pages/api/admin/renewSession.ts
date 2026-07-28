@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 
 export default withAuth(
-  async (req, res) => {
+  async (req, res, session) => {
     const { token } = req.body;
 
     if (!token || typeof token !== "string") {
@@ -10,8 +10,9 @@ export default withAuth(
     }
 
     try {
-      const onboardingSession = await prisma.onboardingSession.findUnique({
-        where: { id: token },
+      // Scope to the admin's own company so another company's session can't be renewed/resurrected.
+      const onboardingSession = await prisma.onboardingSession.findFirst({
+        where: { id: token, company_id: session.companyId },
       });
 
       if (!onboardingSession) {

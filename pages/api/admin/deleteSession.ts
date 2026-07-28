@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 
 export default withAuth(
-  async (req, res) => {
+  async (req, res, session) => {
     const { token } = req.query;
 
     if (!token || typeof token !== "string") {
@@ -10,8 +10,10 @@ export default withAuth(
     }
 
     try {
-      const onboardingSession = await prisma.onboardingSession.findUnique({
-        where: { id: token },
+      // Scope to the admin's own company — a session id from another company must 404, not delete
+      // that company's session + client.
+      const onboardingSession = await prisma.onboardingSession.findFirst({
+        where: { id: token, company_id: session.companyId },
         select: { id: true, client_id: true }
       });
 
