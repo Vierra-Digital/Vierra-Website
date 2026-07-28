@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
+import { safeCompare } from "@/lib/crypto";
 
 /**
  * Lightweight, token-authed endpoint for the Vierra browser extension to bump
@@ -38,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const expected = (process.env.EXTENSION_TRACK_TOKEN || "").trim();
   const provided = (req.headers.authorization || "").replace(/^Bearer\s+/i, "").trim();
-  if (!expected || provided !== expected) {
+  if (!expected || !safeCompare(provided, expected)) {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
