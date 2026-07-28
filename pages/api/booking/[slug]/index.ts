@@ -4,7 +4,7 @@ import { asStr } from "@/lib/api/parsing";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { getBusy, createCalendarEvent, buildIcs, type BusyInterval } from "@/lib/calendar/googleCalendar";
 import { computeSlots, DEFAULT_AVAILABILITY, type Availability } from "@/lib/booking/slots";
-import { sendEmailCore } from "@/lib/gmail/sendCore";
+import { sendEmailCore, escapeHtml } from "@/lib/gmail/sendCore";
 
 function baseUrl(req: NextApiRequest): string {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "";
@@ -139,7 +139,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     attendeeEmail: inviteeEmail,
   });
   const when = start.toLocaleString("en-US", { dateStyle: "full", timeStyle: "short", timeZone: link.timezone || "UTC" });
-  const confirmationHtml = `<p>Hi ${inviteeName},</p><p>Your meeting <strong>${link.title}</strong> is confirmed for <strong>${when} (${link.timezone || "UTC"})</strong>.</p>${notes ? `<p>Your notes: ${notes}</p>` : ""}<p>See you then!</p>`;
+  // Invitee fields are attacker-controlled on this public endpoint — escape before embedding in the
+  // HTML bodies (the host-notification lands in the host's own inbox, so raw HTML here would be an
+  // injection/phishing vector). link.title is host-owned but escaped too for consistency.
+  const safeName = escapeHtml(inviteeName);
+  const safeEmail = escapeHtml(inviteeEmail);
+  const safeNotes = escapeHtml(notes);
+  const safeTitle = escapeHtml(link.title);
+  const confirmationHtml = `<p>Hi ${safeName},</p><p>Your meeting <strong>${safeTitle}</strong> is confirmed for <strong>${when} (${link.timezone || "UTC"})</strong>.</p>${notes ? `<p>Your notes: ${safeNotes}</p>` : ""}<p>See you then!</p>`;
   const attachments = [{ filename: "invite.ics", contentType: "text/calendar", contentBase64: Buffer.from(ics, "utf8").toString("base64") }];
 
   await sendEmailCore(
@@ -156,7 +163,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         accountEmail: link.account_email,
         to: link.account_email,
         subject: `New booking: ${link.title} with ${inviteeName}`,
-        bodyHtml: `<p>${inviteeName} (${inviteeEmail}) booked <strong>${link.title}</strong> for <strong>${when}</strong>.</p>${notes ? `<p>Notes: ${notes}</p>` : ""}`,
+        bodyHtml: `<p>${safeName} (${safeEmail}) booked <strong>${safeTitle}</strong> for <strong>${when}</strong>.</p>${notes ? `<p>Notes: ${safeNotes}</p>` : ""}`,
         body: `${inviteeName} (${inviteeEmail}) booked ${link.title} for ${when}.`,
         attachments,
       },

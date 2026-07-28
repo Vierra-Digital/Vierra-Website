@@ -2,6 +2,20 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getFileBuffer, putFileAsset, STORAGE_BUCKETS, toStorageKeySegment } from "@/lib/storage";
 
+/**
+ * How long a signing link stays valid after creation. A pending session past this age is reported
+ * as "expired" on read (below), so a leaked/forwarded link — and the PDF behind it — can't be
+ * opened or signed forever. Override with SIGNING_LINK_TTL_DAYS; defaults to 30 days.
+ */
+const SIGNING_LINK_TTL_MS =
+  (Number.isFinite(Number(process.env.SIGNING_LINK_TTL_DAYS)) && Number(process.env.SIGNING_LINK_TTL_DAYS) > 0
+    ? Number(process.env.SIGNING_LINK_TTL_DAYS)
+    : 30) *
+  24 *
+  60 *
+  60 *
+  1000;
+
 type PdfFieldType = "signature" | "date" | "text";
 
 export interface PdfField {
@@ -58,6 +72,11 @@ async function toSessionData(row: {
 
   const pdfBuffer = await getFileBuffer(STORAGE_BUCKETS.docs, row.pdf_storage_key);
 
+  // A pending session past the TTL is surfaced as "expired" — the sign page 404s expired sessions
+  // and submitSignature rejects them, so the link and its PDF stop working once the window closes.
+  const isExpired =
+    row.status === "pending" && Date.now() - row.created_at.getTime() > SIGNING_LINK_TTL_MS;
+
   return {
     token: row.token,
     originalFilename: row.original_filename,
@@ -65,7 +84,7 @@ async function toSessionData(row: {
     pdfBase64: pdfBuffer ? pdfBuffer.toString("base64") : undefined,
     coordinates,
     fields,
-    status: row.status as SessionData["status"],
+    status: isExpired ? "expired" : (row.status as SessionData["status"]),
     createdAt: row.created_at.getTime(),
     signerEmail: row.signer_email ?? undefined,
   };
