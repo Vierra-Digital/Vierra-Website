@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 
 export default withAuth(
-  async (req, res) => {
+  async (req, res, session) => {
     const { clientId, isActive } = req.body;
 
     if (!clientId || typeof clientId !== "string") {
@@ -14,8 +14,9 @@ export default withAuth(
     }
 
     try {
-      const client = await prisma.client.findUnique({
-        where: { id: clientId }
+      // Scope to the admin's own company so another company's client can't be toggled.
+      const client = await prisma.client.findFirst({
+        where: { id: clientId, company_id: session.companyId }
       });
 
       if (!client) {
