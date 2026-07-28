@@ -284,6 +284,13 @@ export async function maybeNotifyDiscord(msg: InboundMessage): Promise<void> {
   if (!discordConfigured()) return;
   // Only reply threads (In-Reply-To present) from humans — not cold inbound / automated mail.
   if (!msg.inReplyTo || isAutomatedSender(msg)) return;
+  // Per-inbox opt-out: skip if this mailbox has reply notifications turned off in settings.
+  // No settings row → default on (preserves the pre-toggle behavior of notifying for every inbox).
+  const setting = await prisma.emailAccountSetting.findUnique({
+    where: { user_id_account_email: { user_id: msg.userId, account_email: msg.accountEmail } },
+    select: { reply_notifications_enabled: true },
+  });
+  if (setting && !setting.reply_notifications_enabled) return;
   const base = (process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "").replace(/\/$/, "");
   // Deep link into the panel: opens this mailbox and the full conversation so you can respond
   // right there. If logged out, login bounces back here via ?returnTo.
