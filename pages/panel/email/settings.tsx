@@ -322,11 +322,16 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   });
 
   const connectedAccounts = useMemo(() => accounts.filter((account) => account.connected), [accounts]);
-  /** Primary connected mailbox used for API rows; preferences are user-scoped (see save sync in API). */
+  /** First connected mailbox — the default the account switcher starts on. */
   const primaryAccountEmail = useMemo(
     () => (connectedAccounts[0]?.email ? connectedAccounts[0].email : ""),
     [connectedAccounts]
   );
+  // Which inbox's per-account settings (signatures, templates, vacation responder, contact
+  // visibility) are currently being edited. Falls back to the primary until the switcher moves it.
+  const [selectedAccountEmail, setSelectedAccountEmail] = useState("");
+  const [switchingAccount, setSwitchingAccount] = useState(false);
+  const activeAccountEmail = selectedAccountEmail || primaryAccountEmail;
 
   const roleLabel = useMemo(() => {
     const r = (userRole || "").trim();
@@ -343,12 +348,12 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   }, [connectedAccounts]);
 
   const hasUnsavedSettingsChanges = useMemo(() => {
-    if (!primaryAccountEmail || !savedSettings || !savedContactVisibility) return false;
+    if (!activeAccountEmail || !savedSettings || !savedContactVisibility) return false;
     return (
       JSON.stringify(settings) !== JSON.stringify(savedSettings) ||
       JSON.stringify(contactVisibility) !== JSON.stringify(savedContactVisibility)
     );
-  }, [primaryAccountEmail, settings, contactVisibility, savedSettings, savedContactVisibility]);
+  }, [activeAccountEmail, settings, contactVisibility, savedSettings, savedContactVisibility]);
 
   const loadAccounts = useCallback(async (): Promise<string> => {
     const response = await fetch("/api/gmail/status");
@@ -416,13 +421,28 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   };
 
+  // Switch which inbox's per-account settings are shown. Reloads that account's data and resets
+  // the unsaved-changes baseline (loadAccountData updates savedSettings/savedContactVisibility).
+  const handleSelectAccount = async (email: string) => {
+    const normalized = (email || "").toLowerCase();
+    if (!normalized || normalized === activeAccountEmail) return;
+    setSelectedAccountEmail(normalized);
+    setSwitchingAccount(true);
+    setStatus("");
+    try {
+      await loadAccountData(normalized);
+    } finally {
+      setSwitchingAccount(false);
+    }
+  };
+
   const removeBlockedSender = async (id: string) => {
     await fetch("/api/gmail/blocked-senders", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    await loadAccountData(primaryAccountEmail);
+    await loadAccountData(activeAccountEmail);
   };
 
   const createProviderAccount = async () => {
@@ -431,7 +451,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          accountEmail: newProvider.accountEmail || primaryAccountEmail,
+          accountEmail: newProvider.accountEmail || activeAccountEmail,
           providerLabel: newProvider.providerLabel,
           smtpHost: newProvider.smtpHost,
           smtpPort: Number(newProvider.smtpPort || 465),
@@ -464,7 +484,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         popPort: "995",
         popSecure: true,
       });
-      await loadAccountData(primaryAccountEmail);
+      await loadAccountData(activeAccountEmail);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Failed to create provider account");
     }
@@ -476,7 +496,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    await loadAccountData(primaryAccountEmail);
+    await loadAccountData(activeAccountEmail);
   };
 
   const testProviderAccount = async (id: string) => {
@@ -732,12 +752,12 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   };
 
   const saveSettings = async () => {
-    if (!primaryAccountEmail || saving) return;
+    if (!activeAccountEmail || saving) return;
     setSaving(true);
     setStatus("");
     try {
       const [settingsRes, visibilityRes] = await Promise.all([
-        fetch(`/api/gmail/settings?accountEmail=${encodeURIComponent(primaryAccountEmail)}`, {
+        fetch(`/api/gmail/settings?accountEmail=${encodeURIComponent(activeAccountEmail)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -751,7 +771,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
             vacationEndAt: settings.vacationEndAt || null,
           }),
         }),
-        fetch(`/api/contacts/visibility?accountEmail=${encodeURIComponent(primaryAccountEmail)}`, {
+        fetch(`/api/contacts/visibility?accountEmail=${encodeURIComponent(activeAccountEmail)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(contactVisibility),
@@ -769,7 +789,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   };
 
   const createSignature = () => {
-    if (!primaryAccountEmail) return;
+    if (!activeAccountEmail) return;
     setPromptConfig({
       title: "New signature",
       fields: [{ name: "name", label: "Signature name", required: true, maxLength: 120 }],
@@ -778,9 +798,9 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         await fetch("/api/gmail/signatures", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accountEmail: primaryAccountEmail, name, signatureText: "" }),
+          body: JSON.stringify({ accountEmail: activeAccountEmail, name, signatureText: "" }),
         });
-        await loadAccountData(primaryAccountEmail);
+        await loadAccountData(activeAccountEmail);
       },
     });
   };
@@ -791,11 +811,11 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    await loadAccountData(primaryAccountEmail);
+    await loadAccountData(activeAccountEmail);
   };
 
   const createTemplate = () => {
-    if (!primaryAccountEmail) return;
+    if (!activeAccountEmail) return;
     setPromptConfig({
       title: "New template",
       fields: [{ name: "name", label: "Template name", required: true, maxLength: 120 }],
@@ -804,9 +824,9 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         await fetch("/api/gmail/templates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accountEmail: primaryAccountEmail, name, subject: "", bodyText: "" }),
+          body: JSON.stringify({ accountEmail: activeAccountEmail, name, subject: "", bodyText: "" }),
         });
-        await loadAccountData(primaryAccountEmail);
+        await loadAccountData(activeAccountEmail);
       },
     });
   };
@@ -817,7 +837,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    await loadAccountData(primaryAccountEmail);
+    await loadAccountData(activeAccountEmail);
   };
 
   const createTag = () => {
@@ -834,7 +854,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, color: color || "#701CC0" }),
         });
-        await loadAccountData(primaryAccountEmail);
+        await loadAccountData(activeAccountEmail);
       },
     });
   };
@@ -853,7 +873,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: tag.id, name: name || tag.name, color: color || tag.color || "#701CC0" }),
         });
-        await loadAccountData(primaryAccountEmail);
+        await loadAccountData(activeAccountEmail);
       },
     });
   };
@@ -894,6 +914,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         // loading gate forever. On failure we fall through to an empty accounts state.
         const primary = await loadAccounts().catch(() => "");
         if (cancelled) return;
+        setSelectedAccountEmail(primary);
         const accountScoped = primary ? loadAccountData(primary) : Promise.resolve();
         await Promise.allSettled([independent, accountScoped]);
       } finally {
@@ -931,7 +952,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: tagToDelete.id }),
       });
-      await loadAccountData(primaryAccountEmail);
+      await loadAccountData(activeAccountEmail);
     } finally {
       setDeletingTag(false);
       setTagToDelete(null);
@@ -979,13 +1000,44 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   <span className="font-medium text-[#374151]">{roleLabel} account.</span>{" "}
                 </>
               ) : null}
-              These preferences apply to your user account (not to individual mailbox logins). When a Gmail account is connected,
-              signatures and templates use your primary connection; tracking and visibility sync across your addresses.
+              Signatures, templates, the vacation responder, and contact field visibility apply to the inbox selected below.
+              Email tracking applies to all your connected inboxes.
             </p>
             {connectedAccounts.length === 0 ? (
               <p className="mt-3 text-sm text-amber-800">
                 No connected Gmail accounts. Connect Gmail from the email panel to enable mailbox-specific options.
               </p>
+            ) : null}
+            {connectedAccounts.length > 1 ? (
+              <div className="mt-4 flex flex-col gap-3 rounded-xl border border-[#ECEAF1] bg-white p-4 shadow-[0_2px_12px_-4px_rgba(46,16,80,0.14)] sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <label
+                    htmlFor="settings-account"
+                    className="block text-xs font-semibold uppercase tracking-wide text-[#847FA0]"
+                  >
+                    Editing settings for
+                  </label>
+                  <p className="mt-1 text-xs text-[#9A93AE]">
+                    Switch inbox to edit its signatures, templates, vacation responder, and contact visibility.
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {switchingAccount ? <span className="text-xs text-[#9CA3AF]">Loading…</span> : null}
+                  <select
+                    id="settings-account"
+                    value={activeAccountEmail}
+                    onChange={(event) => handleSelectAccount(event.target.value)}
+                    disabled={switchingAccount}
+                    className="max-w-[240px] truncate rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm font-medium text-[#1E1B2E] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {connectedAccounts.map((account) => (
+                      <option key={account.email} value={account.email}>
+                        {account.email}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             ) : null}
           </div>
 
@@ -1389,7 +1441,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Email tracking"
-                description="Control analytics for outbound mail for your user account."
+                description="Analytics for outbound mail. Applies to all your connected inboxes."
                 icon={FiActivity}
               >
                 <div className="space-y-5">
@@ -1430,7 +1482,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Vacation responder"
-                description="Automatic reply while you are away."
+                description="Automatic reply while you are away, for the selected inbox."
                 icon={FiCoffee}
               >
                 <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-5">
@@ -1599,7 +1651,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Signatures"
-                description="Saved signatures for your primary connected mailbox."
+                description="Saved signatures for the selected inbox."
                 icon={FiEdit3}
                 right={
                   <button type="button" onClick={createSignature} className={btnPrimary}>
@@ -1627,7 +1679,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Templates"
-                description="Reusable email templates."
+                description="Reusable email templates for the selected inbox."
                 icon={FiFileText}
                 right={
                   <button type="button" onClick={createTemplate} className={btnPrimary}>
@@ -1887,7 +1939,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     <button
                       type="button"
                       onClick={saveSettings}
-                      disabled={saving || !primaryAccountEmail}
+                      disabled={saving || switchingAccount || !activeAccountEmail}
                       className={btnPrimary}
                     >
                       {saving ? "Saving…" : "Save settings"}
