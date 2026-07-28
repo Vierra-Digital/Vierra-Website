@@ -80,17 +80,30 @@ export async function resurfaceDueSnoozes(now: Date): Promise<{ resurfaced: numb
 
   let resurfaced = 0;
   for (const group of groups.values()) {
-    const token = await getValidGmailAccessToken(group.userId, group.accountEmail);
-    const labelId = token.ok ? await getOrCreateLabelId(token.accessToken, SNOOZE_LABEL) : null;
-    for (const row of group.rows) {
-      if (token.ok) {
-        await modifyMessageLabels(token.accessToken, row.message_id, {
-          addLabelIds: ["INBOX", "UNREAD"],
-          removeLabelIds: labelId ? [labelId] : [],
-        });
+    try {
+      const token = await getValidGmailAccessToken(group.userId, group.accountEmail);
+      // Token invalid (account disconnected / needs reconnect): leave these rows SNOOZED so a later
+      // tick retries once the token recovers, instead of marking them resurfaced while the message
+      // is still hidden from the inbox (which would strand it there permanently).
+      if (!token.ok) continue;
+      const labelId = await getOrCreateLabelId(token.accessToken, SNOOZE_LABEL);
+      for (const row of group.rows) {
+        try {
+          const ok = await modifyMessageLabels(token.accessToken, row.message_id, {
+            addLabelIds: ["INBOX", "UNREAD"],
+            removeLabelIds: labelId ? [labelId] : [],
+          });
+          // Only flip to RESURFACED once the message is actually back in the inbox; a failed modify
+          // leaves the row SNOOZED to retry rather than losing the message.
+          if (!ok) continue;
+          await prisma.emailSnooze.update({ where: { id: row.id }, data: { status: "RESURFACED", updated_at: now } });
+          resurfaced += 1;
+        } catch {
+          /* per-row guard: one failure must not abort the batch (or block the rest of the cron) */
+        }
       }
-      await prisma.emailSnooze.update({ where: { id: row.id }, data: { status: "RESURFACED", updated_at: now } });
-      resurfaced += 1;
+    } catch {
+      /* per-group guard: a token/label failure for one account must not abort the others */
     }
   }
   return { resurfaced };
