@@ -179,6 +179,7 @@ type Settings = {
   vacationBodyText: string;
   vacationStartAt: string;
   vacationEndAt: string;
+  replyNotificationsEnabled: boolean;
 };
 
 const defaultSettings: Settings = {
@@ -190,6 +191,7 @@ const defaultSettings: Settings = {
   vacationBodyText: "",
   vacationStartAt: "",
   vacationEndAt: "",
+  replyNotificationsEnabled: true,
 };
 
 type PageProps = {
@@ -400,6 +402,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         vacationBodyText: String(rawSettings.vacationBodyText || ""),
         vacationStartAt: rawSettings.vacationStartAt ? String(rawSettings.vacationStartAt).slice(0, 16) : "",
         vacationEndAt: rawSettings.vacationEndAt ? String(rawSettings.vacationEndAt).slice(0, 16) : "",
+        replyNotificationsEnabled: Boolean(rawSettings.replyNotificationsEnabled ?? true),
       };
       setSettings(nextSettings);
       setSignatures(Array.isArray(signaturesPayload?.signatures) ? signaturesPayload.signatures : []);
@@ -769,6 +772,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
             vacationBodyText: settings.vacationBodyText,
             vacationStartAt: settings.vacationStartAt || null,
             vacationEndAt: settings.vacationEndAt || null,
+            replyNotificationsEnabled: settings.replyNotificationsEnabled,
           }),
         }),
         fetch(`/api/contacts/visibility?accountEmail=${encodeURIComponent(activeAccountEmail)}`, {
@@ -1477,6 +1481,25 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                       disabled={!settings.trackingEnabled}
                     />
                   </div>
+                </div>
+              </SettingsSection>
+
+              <SettingsSection
+                title="Reply notifications"
+                description="Ping the team Discord when a real reply lands in this inbox. Set per inbox."
+                icon={FiZap}
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-[#1E1B2E]">Notify on replies to this inbox</p>
+                    <p className="text-sm text-[#6B7280]">
+                      When someone replies to a thread from this inbox, send a Discord notification.
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={settings.replyNotificationsEnabled}
+                    onChange={(v) => setSettings((prev) => ({ ...prev, replyNotificationsEnabled: v }))}
+                  />
                 </div>
               </SettingsSection>
 
