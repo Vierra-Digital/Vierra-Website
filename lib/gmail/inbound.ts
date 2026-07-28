@@ -83,6 +83,24 @@ async function fetchInboundMessage(
   };
 }
 
+/**
+ * Atomically claim a message before its side-effecting hooks run. Returns true if this call won
+ * the claim, false if the message was already processed (unique-index collision). This makes the
+ * hooks run at most once per message across a re-listed history boundary record and a concurrent
+ * Pub/Sub push + poll run. A non-collision DB error is rethrown so the caller retries the message.
+ */
+async function claimInboundMessage(userId: string, accountEmail: string, messageId: string): Promise<boolean> {
+  try {
+    await prisma.gmailProcessedMessage.create({
+      data: { user_id: userId, account_email: accountEmail, gmail_message_id: messageId },
+    });
+    return true;
+  } catch (error) {
+    if ((error as { code?: string }).code === "P2002") return false;
+    throw error;
+  }
+}
+
 async function processAccount(
   userId: string,
   accountEmail: string,
@@ -177,6 +195,17 @@ async function processAccount(
         recFullyProcessed = false;
         break;
       }
+      // Claim before running the side-effecting hooks so a re-listed boundary record or a
+      // concurrent push+poll run can't run them twice. A claim DB error is treated like a fetch
+      // failure — stop before advancing the cursor so the message is retried, not skipped.
+      let claimed: boolean;
+      try {
+        claimed = await claimInboundMessage(userId, accountEmail, id);
+      } catch {
+        recFullyProcessed = false;
+        break;
+      }
+      if (!claimed) continue; // already processed by another tick/run — don't re-run its hooks
       // Each hook is best-effort and must not throw; guard anyway.
       for (const hook of [applyFilters, maybeSendVacationReply, maybeAutoDraft, maybeHandleMdn, maybeReplyIntelligence, maybeNotifyDiscord]) {
         try {
@@ -215,6 +244,13 @@ export async function processInboundForAllAccounts(baseUrl: string, now: Date): 
   });
 
   const summary: InboundSummary = { accounts: 0, processed: 0, errors: 0 };
+
+  // Prune processed-message markers past Gmail's ~1-week history window so the dedup table stays
+  // bounded — anything older can never be re-listed, so its marker is no longer needed.
+  await prisma.gmailProcessedMessage
+    .deleteMany({ where: { processed_at: { lt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) } } })
+    .catch(() => {});
+
   for (const row of tokens) {
     const accountEmail = row.platform.replace(/^gmail:/, "").toLowerCase();
     if (!accountEmail) continue;
