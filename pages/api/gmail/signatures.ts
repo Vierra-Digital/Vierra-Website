@@ -26,12 +26,13 @@ export default withAuth(async (req, res, session) => {
 
   if (req.method === "GET") {
     const accountEmail = queryAccountEmail(req.query.accountEmail);
-    const accountId = accountEmail ? await resolveAccountId(userId, accountEmail) : null;
+    // Scope by account_email (works for Gmail OAuth accounts, which have no account_id). A row with
+    // a null account_email is a legacy/global signature shown for every inbox.
     const signatures = await prisma.emailSignature.findMany({
       where: {
         user_id: userId,
-        ...(accountId !== undefined && accountEmail
-          ? { OR: [{ account_id: accountId }, { account_id: null }] }
+        ...(accountEmail
+          ? { OR: [{ account_email: accountEmail }, { account_email: null }] }
           : {}),
       },
       orderBy: [{ is_default: "desc" }, { created_at: "desc" }],
@@ -51,7 +52,7 @@ export default withAuth(async (req, res, session) => {
     const isDefault = Boolean(req.body?.isDefault);
     if (isDefault) {
       await prisma.emailSignature.updateMany({
-        where: { user_id: userId, account_id: accountId, is_default: true },
+        where: { user_id: userId, account_email: accountEmail, is_default: true },
         data: { is_default: false },
       });
     }
@@ -59,6 +60,7 @@ export default withAuth(async (req, res, session) => {
       data: {
         user_id: userId,
         account_id: accountId,
+        account_email: accountEmail,
         name,
         signature_html: asStr(req.body?.signatureHtml) || null,
         signature_text: asStr(req.body?.signatureText) || null,
@@ -83,7 +85,7 @@ export default withAuth(async (req, res, session) => {
     const isDefault = Boolean(req.body?.isDefault);
     if (isDefault) {
       await prisma.emailSignature.updateMany({
-        where: { user_id: userId, account_id: existing.account_id, is_default: true },
+        where: { user_id: userId, account_email: existing.account_email, is_default: true },
         data: { is_default: false },
       });
     }
