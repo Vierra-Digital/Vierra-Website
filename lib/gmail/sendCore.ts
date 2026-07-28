@@ -373,10 +373,25 @@ export async function sendEmailCore(userId: string, payload: SendEmailPayload, b
   // pixel/link-rewrite the user never enabled on THIS mailbox). Default: tracking ON when the
   // mailbox has no explicit settings row, since open/click tracking is a core outreach feature;
   // an explicit row with tracking_enabled=false turns it off.
-  const setting = await prisma.emailAccountSetting.findUnique({
-    where: { user_id_account_email: { user_id: userId, account_email: accountEmail } },
-    select: { tracking_enabled: true, open_tracking_enabled: true, click_tracking_enabled: true },
-  });
+  // Prefer this mailbox's own row; fall back to the user's synced tracking preference. The
+  // settings PUT syncs the tracking flags across ALL the user's rows (updateMany by user_id),
+  // so any row reflects the user's choice — this lets a user with multiple mailboxes turn
+  // tracking off for addresses that have no row of their own (not just the primary). With no
+  // rows at all, both lookups miss and tracking defaults ON below.
+  const trackingSelect = {
+    tracking_enabled: true,
+    open_tracking_enabled: true,
+    click_tracking_enabled: true,
+  } as const;
+  const setting =
+    (await prisma.emailAccountSetting.findUnique({
+      where: { user_id_account_email: { user_id: userId, account_email: accountEmail } },
+      select: trackingSelect,
+    })) ??
+    (await prisma.emailAccountSetting.findFirst({
+      where: { user_id: userId },
+      select: trackingSelect,
+    }));
 
   // Only embed tracking when baseUrl is a real absolute origin — otherwise the pixel/click URLs
   // would be relative and dead in a delivered email (and the row would falsely read as tracked).
