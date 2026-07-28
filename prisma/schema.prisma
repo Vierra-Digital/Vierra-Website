@@ -394,6 +394,18 @@ model GmailInboxSyncState {
   @@unique([user_id, account_email], map: "uq_gmail_inbox_sync_state")
 }
 
+model GmailProcessedMessage {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String   @db.Uuid
+  account_email    String
+  gmail_message_id String
+  processed_at     DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("gmail_processed_messages")
+  @@unique([user_id, account_email, gmail_message_id], map: "uq_gmail_processed_messages")
+  @@index([processed_at], map: "idx_gmail_processed_messages_processed_at")
+}
+
 model EmailFilter {
   id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id          String   @db.Uuid
