@@ -8,6 +8,12 @@ const DEFAULT_BATCH_SIZE = 20;
 const RETRY_DELAY_MS = 60 * 60 * 1000;
 /** How many send attempts for one step before we give up and stop rescheduling the contact. */
 const MAX_SEND_ATTEMPTS = 3;
+/**
+ * Cadence of the cron dispatcher (campaigns/send-queue/dispatch runs every 5 min). Used to convert
+ * a per-campaign send gap into a per-tick allowance so pacing averages out to the configured rate
+ * across ticks — a serverless tick can't sleep between sends, so pacing is enforced ACROSS ticks.
+ */
+const TICK_INTERVAL_SECONDS = 300;
 
 type TickResult = { processed: number; sent: number; failed: number; skipped: number };
 type ContactOutcome = "skipped" | "completed" | "failed" | "sent";
@@ -235,7 +241,33 @@ export async function runCampaignSendQueueTick(companyId: string, batchSize = DE
     });
     if (sentToday >= campaign.daily_send_limit) continue;
 
-    const remainingBudget = Math.min(batchSize - result.processed, campaign.daily_send_limit - sentToday);
+    // Per-send pacing: honor send_delay_seconds (+ up to send_jitter_seconds) instead of firing the
+    // whole batch back-to-back. A serverless tick can't sleep, so pace across ticks — skip the
+    // campaign until a jittered gap has elapsed since its last send, then allow only as many sends
+    // as that gap divides into one tick interval, so the average send rate matches the configured
+    // delay. The first-ever send is seeded at 1 to start the cadence cleanly.
+    const gapSeconds =
+      Math.max(1, campaign.send_delay_seconds) +
+      Math.floor(Math.random() * (Math.max(0, campaign.send_jitter_seconds) + 1));
+    const lastSend = await prisma.emailOutboundMessage.findFirst({
+      where: { campaign_id: campaign.id },
+      orderBy: { created_at: "desc" },
+      select: { created_at: true },
+    });
+    let pacingAllowance: number;
+    if (!lastSend) {
+      pacingAllowance = 1;
+    } else {
+      const elapsedSeconds = (Date.now() - lastSend.created_at.getTime()) / 1000;
+      if (elapsedSeconds < gapSeconds) continue;
+      pacingAllowance = Math.max(1, Math.ceil(TICK_INTERVAL_SECONDS / gapSeconds));
+    }
+
+    const remainingBudget = Math.min(
+      batchSize - result.processed,
+      campaign.daily_send_limit - sentToday,
+      pacingAllowance
+    );
     if (remainingBudget <= 0) continue;
 
     const due = await prisma.campaignContact.findMany({
