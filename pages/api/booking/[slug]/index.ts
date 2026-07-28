@@ -6,6 +6,15 @@ import { getBusy, createCalendarEvent, buildIcs, type BusyInterval } from "@/lib
 import { computeSlots, DEFAULT_AVAILABILITY, type Availability } from "@/lib/booking/slots";
 import { sendEmailCore, escapeHtml } from "@/lib/gmail/sendCore";
 
+// Anti-abuse throttle for the public (unauthenticated) booking endpoint. Keyed off the bookings
+// table (no new infra) — since only a successful booking creates a row, this directly caps the
+// harmful side effects (a calendar event + emails sent from the host's account). Probe/validation
+// failures create no row and have no side effects, so they don't need throttling here.
+const RATE_WINDOW_MS = 60 * 1000;
+const MAX_BOOKINGS_PER_LINK_PER_WINDOW = 5;
+const EMAIL_WINDOW_MS = 60 * 60 * 1000;
+const MAX_BOOKINGS_PER_EMAIL_PER_LINK = 5;
+
 function baseUrl(req: NextApiRequest): string {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "";
   if (explicit) return explicit.replace(/\/$/, "");
@@ -40,6 +49,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(400).json({ message: "Your name and a valid email are required." });
     return;
   }
+
+  // Throttle before doing any Google/calendar work or sending mail.
+  const nowMs = Date.now();
+  const recentForLink = await prisma.booking.count({
+    where: { booking_link_id: link.id, created_at: { gte: new Date(nowMs - RATE_WINDOW_MS) } },
+  });
+  if (recentForLink >= MAX_BOOKINGS_PER_LINK_PER_WINDOW) {
+    res.status(429).json({ message: "Too many booking attempts right now. Please try again in a minute." });
+    return;
+  }
+  const recentForEmail = await prisma.booking.count({
+    where: {
+      booking_link_id: link.id,
+      invitee_email: inviteeEmail,
+      created_at: { gte: new Date(nowMs - EMAIL_WINDOW_MS) },
+    },
+  });
+  if (recentForEmail >= MAX_BOOKINGS_PER_EMAIL_PER_LINK) {
+    res.status(429).json({ message: "You've booked this link several times recently. Please wait a bit before booking again." });
+    return;
+  }
+
   const end = new Date(start.getTime() + link.duration_minutes * 60 * 1000);
 
   const token = await getValidGmailAccessToken(link.user_id, link.account_email);
