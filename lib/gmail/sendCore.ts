@@ -20,8 +20,26 @@ export function normalizeEmail(value: string) {
 }
 
 function splitRecipients(value: string) {
-  return value
-    .split(",")
+  // Split on commas that separate addresses, NOT commas inside a quoted display name
+  // (`"Doe, John" <j@x>`) or inside the angle-bracketed address. A naive `.split(",")` would
+  // shatter `"Doe, John" <j@x>` into `"Doe` + `John" <j@x>` and corrupt the recipient list.
+  const parts: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  let inAngle = false;
+  for (const ch of value) {
+    if (ch === '"') inQuotes = !inQuotes;
+    else if (ch === "<") inAngle = true;
+    else if (ch === ">") inAngle = false;
+    if (ch === "," && !inQuotes && !inAngle) {
+      parts.push(current);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  parts.push(current);
+  return parts
     .map((entry) => parseAddressFromHeader(entry, { lower: false }))
     .map((entry) => entry.trim())
     .filter(Boolean);
