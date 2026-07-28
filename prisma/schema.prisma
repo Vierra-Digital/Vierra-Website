@@ -184,6 +184,7 @@ model ContactFieldVisibilitySetting {
   id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id                 String                   @db.Uuid
   account_id              String?                  @db.Uuid
+  account_email           String?
   show_phone              Boolean                  @default(true)
   show_business           Boolean                  @default(true)
   show_website            Boolean                  @default(true)
@@ -194,6 +195,7 @@ model ContactFieldVisibilitySetting {
 
   @@map("contact_field_visibility_settings")
   @@index([user_id], map: "idx_contact_field_visibility_user_id")
+  @@index([user_id, account_email], map: "idx_contact_field_visibility_user_account_email")
   @@unique([user_id, account_id], map: "uq_contact_field_visibility_user_account")
 }
 
@@ -751,6 +753,7 @@ model EmailSignature {
   id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id                 String                   @db.Uuid
   account_id              String?                  @db.Uuid
+  account_email           String?
   name                    String
   signature_html          String?
   signature_text          String?
@@ -762,6 +765,7 @@ model EmailSignature {
 
   @@map("email_signatures")
   @@index([user_id], map: "idx_email_signatures_user_id")
+  @@index([user_id, account_email], map: "idx_email_signatures_user_account_email")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -769,6 +773,7 @@ model EmailTemplate {
   id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id                 String                   @db.Uuid
   account_id              String?                  @db.Uuid
+  account_email           String?
   name                    String
   subject                 String?
   body_html               String?
@@ -782,6 +787,7 @@ model EmailTemplate {
 
   @@map("email_templates")
   @@index([user_id], map: "idx_email_templates_user_id")
+  @@index([user_id, account_email], map: "idx_email_templates_user_account_email")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
