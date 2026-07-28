@@ -1062,7 +1062,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                                 }}
                                                 className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
                                             >
-                                                <option value="user">Client</option>
+                                                <option value="client">Client</option>
                                                 <option value="business">Business</option>
                                                 <option value="status">Status</option>
                                                 <option value="created">Created Date</option>
