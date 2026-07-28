@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr } from "@/lib/api/parsing";
+import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { snoozeMessages, unsnooze, type SnoozeItem } from "@/lib/gmail/snooze";
 
 /** Snooze / list / un-snooze messages for the caller. */
@@ -61,7 +62,15 @@ export default withAuth(
       res.status(400).json({ message: "snoozeUntil must be a future time." });
       return;
     }
-    const result = await snoozeMessages(userId, accountEmail, items, until);
+    // Own mailbox, or a shared inbox granted WITH send permission. Snooze under the OWNER's id so
+    // both the label change here and the later resurface (resurfaceDueSnoozes) use the owner's
+    // token — a delegate has no token for the shared account.
+    const access = await resolveMailboxOwner(userId, accountEmail);
+    if (!access || !access.canSend) {
+      res.status(403).json({ message: "You don't have permission to act on this mailbox." });
+      return;
+    }
+    const result = await snoozeMessages(access.ownerUserId, accountEmail, items, until);
     if (!result.ok) {
       res.status(400).json({ message: result.message || "Failed to snooze." });
       return;
