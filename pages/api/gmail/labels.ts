@@ -1,5 +1,6 @@
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
+import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { asStr } from "@/lib/api/parsing";
 
 const LABELS_URL = "https://gmail.googleapis.com/gmail/v1/users/me/labels";
@@ -14,7 +15,18 @@ export default withAuth(
       res.status(400).json({ message: "accountEmail is required." });
       return;
     }
-    const token = await getValidGmailAccessToken(userId, accountEmail);
+    const access = await resolveMailboxOwner(userId, accountEmail);
+    if (!access) {
+      res.status(403).json({ message: "You don't have access to this mailbox." });
+      return;
+    }
+    // Listing labels is a read (allowed for any grant); creating/deleting a label modifies the
+    // mailbox and requires send permission.
+    if (req.method !== "GET" && !access.canSend) {
+      res.status(403).json({ message: "You don't have permission to modify this mailbox." });
+      return;
+    }
+    const token = await getValidGmailAccessToken(access.ownerUserId, accountEmail);
     if (!token.ok) {
       res.status(400).json({ message: token.message });
       return;

@@ -1,5 +1,6 @@
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
+import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { asStr } from "@/lib/api/parsing";
 
 export default withAuth(
@@ -13,7 +14,13 @@ export default withAuth(
       res.status(400).json({ message: "accountEmail, messageId, and labelId are required." });
       return;
     }
-    const token = await getValidGmailAccessToken(userId, accountEmail);
+    // Own mailbox, or a shared inbox granted WITH send permission (read-only grants can't modify).
+    const access = await resolveMailboxOwner(userId, accountEmail);
+    if (!access || !access.canSend) {
+      res.status(403).json({ message: "You don't have permission to act on this mailbox." });
+      return;
+    }
+    const token = await getValidGmailAccessToken(access.ownerUserId, accountEmail);
     if (!token.ok) {
       res.status(400).json({ message: token.message });
       return;
