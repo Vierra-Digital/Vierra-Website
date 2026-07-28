@@ -144,8 +144,6 @@ const ClientViewOutreachSection: React.FC<{ clientId?: string | null }> = ({ cli
       revenue: number;
       engagementRateProxy: number;
     };
-    benchmarkAngles?: Array<{ keyword: string; title: string; angle: string }>;
-    enrichedKeywords?: string[];
   } | null>(null);
 
   const fullPostText = useMemo(() => {
