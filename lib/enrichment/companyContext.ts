@@ -39,11 +39,6 @@ export type Popularity = {
 // popularity lists don't cover), via free keyless RDAP.
 export type DomainAge = { registered: string; ageYears: number };
 
-// Domain authority (0-10) + global rank from Open PageRank — covers ~800M domains
-// incl. small sites (based on the Common Crawl link graph). Free, but needs an API
-// key (OPENPAGERANK_API_KEY). Dormant/omitted when no key is configured.
-export type Authority = { score: number; rank: number | null };
-
 // Open-roles snapshot from a company's public ATS board (Greenhouse/Lever/Ashby/
 // Workable/Recruitee/SmartRecruiters). Free + keyless. A strong buying-intent
 // signal: what they're hiring for = what they're investing in.
@@ -77,7 +72,6 @@ export type CompanyContext = {
   tech: string[];
   profile: OrgProfile;
   popularity: Popularity | null;
-  authority: Authority | null;
   domainAge: DomainAge | null;
   hiring: Hiring | null;
   visits: Visits | null;
@@ -622,39 +616,6 @@ export async function fetchTranco(domain: string): Promise<Popularity | null> {
   }
 }
 
-/**
- * Domain authority (0-10) + global rank via Open PageRank. This is the ONE source
- * that covers essentially ALL websites (incl. small ones) — based on the Common
- * Crawl link graph. Free, but requires a key in OPENPAGERANK_API_KEY; returns null
- * (feature dormant) when no key is set, or for brand-new sites with no links.
- */
-export async function fetchAuthority(domain: string): Promise<Authority | null> {
-  const key = (process.env.OPENPAGERANK_API_KEY || "").trim();
-  if (!key) return null;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 6000);
-  try {
-    const res = await fetch(`https://openpagerank.com/api/v1.0/getPageRank?domains%5B0%5D=${encodeURIComponent(domain)}`, {
-      signal: controller.signal,
-      headers: { "API-OPR": key, Accept: "application/json" },
-    });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    const j = (await res.json()) as {
-      response?: Array<{ status_code: number; page_rank_decimal?: number; rank?: string | number | null }>;
-    };
-    const row = j.response && j.response[0];
-    if (!row || row.status_code !== 200) return null;
-    const score = typeof row.page_rank_decimal === "number" ? row.page_rank_decimal : null;
-    if (score == null || score <= 0) return null; // no meaningful authority yet
-    const rankNum = row.rank != null && String(row.rank).trim() && Number(row.rank) > 0 ? Number(row.rank) : null;
-    return { score, rank: rankNum };
-  } catch {
-    clearTimeout(timer);
-    return null;
-  }
-}
-
 // IANA RDAP bootstrap (tld -> registry RDAP base), cached in-module. Hitting the
 // registry directly is fast (~0.2-0.5s); the rdap.org redirector is not (30s+).
 let rdapBootstrap: Record<string, string> | null = null;
@@ -765,7 +726,6 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
   // it. Each resolves to null on failure, so awaiting later never rejects.
   const trancoP = fetchTranco(domain);
   const domainAgeP = fetchDomainAge(domain);
-  const authorityP = fetchAuthority(domain);
   const visitsP = fetchVisits(domain);
 
   const controller = new AbortController();
@@ -808,11 +768,19 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
     /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i,
   ]);
 
+  // Prefer the actual brand mark (apple-touch-icon / og:logo / favicon) over
+  // og:image, which is usually a social-share BANNER, not the logo.
   let logo = metaContent(html, [
-    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+    /<link[^>]+rel=["']apple-touch-icon[^"']*["'][^>]+href=["']([^"']+)["']/i,
+    /<link[^>]+href=["']([^"']+)["'][^>]+rel=["']apple-touch-icon[^"']*["']/i,
+    /<meta[^>]+property=["']og:logo["'][^>]+content=["']([^"']+)["']/i,
     /<link[^>]+rel=["'][^"']*icon[^"']*["'][^>]+href=["']([^"']+)["']/i,
+    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
   ]);
-  if (logo && logo.startsWith("/")) logo = `https://${domain}${logo}`;
+  if (logo) {
+    if (logo.startsWith("//")) logo = "https:" + logo;
+    else if (logo.startsWith("/")) logo = `https://${domain}${logo}`;
+  }
 
   const socials: Record<string, string> = {};
   for (const [key, re] of SOCIAL_PATTERNS) {
@@ -823,13 +791,12 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
   const profile = extractOrgProfile(html);
   // Wikidata + hiring both need the fetched page (name / ATS links); run together.
   // The other three were started above and are (mostly) already done by now.
-  const [wd, hiring, financials, popularity, domainAge, authority, visits] = await Promise.all([
+  const [wd, hiring, financials, popularity, domainAge, visits] = await Promise.all([
     fetchWikidata(name || "", domain),
     fetchHiring(domain, html),
     fetchFilings(name || domain.split(".")[0]),
     trancoP,
     domainAgeP,
-    authorityP,
     visitsP,
   ]);
   if (wd) {
@@ -855,7 +822,6 @@ export async function getCompanyContext(input: string): Promise<CompanyContext |
     tech: detectTech(html, headers),
     profile,
     popularity,
-    authority,
     domainAge,
     hiring,
     visits,
