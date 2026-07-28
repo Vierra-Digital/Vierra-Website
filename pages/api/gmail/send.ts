@@ -13,6 +13,12 @@ import {
   type ConfidentialExpiry,
 } from "@/lib/email/confidential";
 
+// Attachments and inline images are base64-encoded into the JSON body. A max-size attachment set
+// (ATTACHMENTS_MAX_BYTES = 24 MB decoded in sendCore) is ~32 MB once base64-encoded, plus the HTML
+// body — so raise the limit well above Next's 1 MB default, or legitimate sub-cap sends are rejected
+// with an opaque 413 before the handler (and its clearer error) ever runs.
+export const config = { api: { bodyParser: { sizeLimit: "36mb" } } };
+
 function getPublicBaseUrl(req: NextApiRequest) {
   const normalizeExplicitBaseUrl = (value: string) => {
     const raw = value.trim();

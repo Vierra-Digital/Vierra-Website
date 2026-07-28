@@ -2629,6 +2629,14 @@ ${sourceText}`;
     setUndoCountdown(null);
   };
 
+  // Closing/discarding the composer must abort any in-flight undo-send window. The Undo banner
+  // lives inside this modal, so once it's closed there's no way to cancel — leaving the timer
+  // running would send a message the user just tried to abort (and could clobber a fresh draft).
+  const closeCompose = () => {
+    cancelUndoSend();
+    setIsComposeOpen(false);
+  };
+
   // Undo-send: hold the message for a short window with an Undo affordance, then actually send.
   const handleSendCompose = () => {
     const strippedHtml = composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim();
@@ -4430,7 +4438,7 @@ ${sourceText}`;
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsComposeOpen(false)}
+                  onClick={closeCompose}
                   className="rounded-full p-2 text-white/90 hover:bg-white/15"
                   aria-label="Close compose"
                 >
@@ -4976,7 +4984,7 @@ ${sourceText}`;
                   </div>
                   <button
                     type="button"
-                    onClick={() => setIsComposeOpen(false)}
+                    onClick={closeCompose}
                     className="shrink-0 rounded px-3 py-1.5 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
                   >
                     Discard

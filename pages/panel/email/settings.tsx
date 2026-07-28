@@ -1027,7 +1027,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     id="settings-account"
                     value={activeAccountEmail}
                     onChange={(event) => handleSelectAccount(event.target.value)}
-                    disabled={switchingAccount}
+                    disabled={switchingAccount || loading}
                     className="max-w-[240px] truncate rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm font-medium text-[#1E1B2E] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {connectedAccounts.map((account) => (
