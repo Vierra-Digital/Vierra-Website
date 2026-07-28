@@ -879,20 +879,26 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const independent = Promise.allSettled([
-        loadFilters(),
-        loadAccountPrefs(),
-        loadBookingLinks(),
-        loadBookings(),
-        loadAiPrefs(),
-        loadNavLayout(),
-        loadMailboxGrants(),
-      ]);
-      const primary = await loadAccounts();
-      if (cancelled) return;
-      const accountScoped = primary ? loadAccountData(primary) : Promise.resolve();
-      await Promise.allSettled([independent, accountScoped]);
-      if (!cancelled) setLoading(false);
+      try {
+        const independent = Promise.allSettled([
+          loadFilters(),
+          loadAccountPrefs(),
+          loadBookingLinks(),
+          loadBookings(),
+          loadAiPrefs(),
+          loadNavLayout(),
+          loadMailboxGrants(),
+        ]);
+        // loadAccounts is the one loader without its own try/catch; guard it so a failed
+        // /api/gmail/status fetch can't reject out of the IIFE and wedge the page on the
+        // loading gate forever. On failure we fall through to an empty accounts state.
+        const primary = await loadAccounts().catch(() => "");
+        if (cancelled) return;
+        const accountScoped = primary ? loadAccountData(primary) : Promise.resolve();
+        await Promise.allSettled([independent, accountScoped]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
     return () => {
       cancelled = true;
