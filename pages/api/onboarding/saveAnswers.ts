@@ -18,6 +18,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(404).json({ message: "Session not found" });
     }
 
+    // Enforce the same expiry / single-submission gate the read path (session/[token].ts) applies,
+    // so an expired or already-submitted onboarding link can't be replayed to overwrite answers.
+    const now = new Date();
+    if (session.expires_at && now > session.expires_at) {
+      return res.status(410).json({ message: "This onboarding link has expired." });
+    }
+    if (session.status === "completed" || session.submitted_at) {
+      return res.status(410).json({ message: "This onboarding form was already submitted." });
+    }
+
     const existingAnswers = (session.answers as any) || {};
     const updatedAnswers = { ...existingAnswers, ...answers };
     let newStatus: string | undefined;
