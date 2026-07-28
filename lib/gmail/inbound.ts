@@ -54,7 +54,7 @@ async function fetchInboundMessage(
 ): Promise<InboundMessage | null> {
   const { ok, data } = await gmailGet(
     accessToken,
-    `/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=Content-Type&metadataHeaders=Auto-Submitted`
+    `/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=Content-Type&metadataHeaders=Auto-Submitted&metadataHeaders=Precedence&metadataHeaders=List-Id&metadataHeaders=List-Unsubscribe`
   );
   if (!ok || !data || typeof data !== "object") return null;
   const msg = data as {
