@@ -506,13 +506,13 @@ function GmailVisual() {
 }
 
 // --- CRM box: orbital grid — tools revolve around a central Vierra "V". ---
-const orbitTools: { Icon: IconType; color: string; label: string }[] = [
-  { Icon: SiGmail, color: "#EA4335", label: "Gmail" },
-  { Icon: FaLinkedin, color: "#0A66C2", label: "LinkedIn" },
-  { Icon: SiInstagram, color: "#E4405F", label: "Instagram" },
-  { Icon: SiGoogleads, color: "#4285F4", label: "Google Ads" },
-  { Icon: SiHubspot, color: "#FF7A59", label: "HubSpot" },
-  { Icon: SiSalesforce, color: "#00A1E0", label: "Salesforce" },
+const orbitTools: { Icon: IconType; color: string }[] = [
+  { Icon: SiGmail, color: "#EA4335" },
+  { Icon: FaLinkedin, color: "#0A66C2" },
+  { Icon: SiInstagram, color: "#E4405F" },
+  { Icon: SiGoogleads, color: "#4285F4" },
+  { Icon: SiHubspot, color: "#FF7A59" },
+  { Icon: SiSalesforce, color: "#00A1E0" },
 ]
 
 function OrbitVisual() {

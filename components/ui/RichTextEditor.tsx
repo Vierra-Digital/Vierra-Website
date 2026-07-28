@@ -63,7 +63,6 @@ const RichTextEditor: React.FC<{
     "48": "7",
     "72": "7",
   }
-  const fontSizeOptions = FONT_SIZE_OPTIONS
   const allowFontSize = (size: string) => {
     if (!size) return false
     const n = parseInt(size, 10)
@@ -1110,7 +1109,7 @@ const RichTextEditor: React.FC<{
           </button>
           {fontSizeMenuOpen && (
             <div className="absolute left-0 mt-1 w-14 bg-white rounded-lg shadow-lg border border-[#E5E7EB] py-1 z-50 max-h-40 overflow-auto">
-              {fontSizeOptions.map((size) => (
+              {FONT_SIZE_OPTIONS.map((size) => (
                 <button
                   key={size}
                   type="button"
