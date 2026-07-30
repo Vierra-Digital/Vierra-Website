@@ -3,7 +3,6 @@ import { withAuth } from "@/lib/api/withAuth"
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens"
 import {
   getCalendarVisibilityPreferences,
-  isCalendarVisibilityTableMissing,
   upsertCalendarVisibilityPreference,
 } from "@/lib/googleCalendar/visibility"
 
@@ -42,10 +41,7 @@ export default withAuth(async (req, res, session) => {
         return
       }
 
-      const visibilityRows = await getCalendarVisibilityPreferences(userId).catch((error) => {
-        if (isCalendarVisibilityTableMissing(error)) return []
-        throw error
-      })
+      const visibilityRows = await getCalendarVisibilityPreferences(userId)
       const visibilityMap = new Map(visibilityRows.map((row) => [`${row.accountEmail}::${row.calendarId}`, row.isEnabled]))
 
       const accounts = await Promise.all(
@@ -113,10 +109,6 @@ export default withAuth(async (req, res, session) => {
       res.status(200).json({ ok: true })
       return
     } catch (error) {
-      if (isCalendarVisibilityTableMissing(error)) {
-        res.status(500).json({ message: "Calendar settings table is missing. Run Prisma migration first." })
-        return
-      }
       console.error("/api/google-calendar/calendars POST error", error)
       res.status(500).json({ message: "Failed to update calendar setting" })
       return

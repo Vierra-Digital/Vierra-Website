@@ -96,6 +96,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } = req.body ?? {};
     if (!id) return res.status(400).json({ message: "id is required" });
     try {
+      // The membership update below is company-scoped, but the user.name/email update and prefs are
+      // not — gate the whole PUT on the target being a member of the admin's own company so one
+      // company's admin can't edit another company's user record by id.
+      const target = await prisma.companyMembership.findFirst({
+        where: { company_id: companyId, user_id: String(id) },
+        select: { user_id: true },
+      });
+      if (!target) return res.status(404).json({ message: "User not found" });
+
       const userUpdateData: Record<string, unknown> = {};
       if (name !== undefined) userUpdateData.name = name;
       if (email !== undefined) userUpdateData.email = email;
@@ -158,6 +167,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const userId = Array.isArray(id) ? id[0] : id;
     if (!userId) return res.status(400).json({ message: "id is required" });
     try {
+      // Only delete users who belong to the admin's own company — never any user id system-wide.
+      const target = await prisma.companyMembership.findFirst({
+        where: { company_id: companyId, user_id: String(userId) },
+        select: { user_id: true },
+      });
+      if (!target) return res.status(404).json({ message: "User not found" });
       await prisma.client.updateMany({ where: { user_id: userId }, data: { user_id: null } });
       await prisma.user.delete({ where: { id: userId } });
       return res.status(200).json({ deleted: userId });

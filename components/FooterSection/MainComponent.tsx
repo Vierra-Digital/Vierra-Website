@@ -1,14 +1,12 @@
 import React, { useState } from "react";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
-import { Bricolage_Grotesque, Inter, Figtree } from "next/font/google";
+import { bricolage, inter, figtree } from "@/lib/fonts";
 import { ArrowUpRight } from "lucide-react";
 import CheckItem from "./CheckItem";
 import Footer from "./Footer";
 import { Modal } from "@/components/Modal";
+import { track } from "@/lib/track";
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
-const inter = Inter({ subsets: ["latin"] });
-const figtree = Figtree({ subsets: ["latin"] });
 
 const checks = ["Discovery & Bottlenecks", "LTV Evaluation", "Fill Sales Calendar"];
 
@@ -85,7 +83,7 @@ export function FooterSection() {
           </div>
           <div className="relative z-10 flex flex-col w-[69%] max-md:w-full px-20 max-md:px-8 max-sm:px-5">
             <div className="flex flex-col items-start mt-20 max-md:mt-10 max-sm:text-center">
-              <div className={`${bricolage.className} text-5xl font-semibold tracking-wide text-white leading-[68px] max-md:text-4xl max-md:leading-[54px] max-sm:text-3xl max-sm:leading-10`}>
+              <h2 className={`${bricolage.className} text-5xl font-semibold tracking-wide text-white leading-[68px] max-md:text-4xl max-md:leading-[54px] max-sm:text-3xl max-sm:leading-10`}>
                 Want To{" "}
                 <span
                   className="bg-clip-text text-transparent bg-[length:200%_auto]"
@@ -101,14 +99,14 @@ export function FooterSection() {
                   Explode
                 </span>{" "}
                 Profits?
-              </div>
+              </h2>
               <div className={`${bricolage.className} mt-14 text-3xl font-light tracking-wide leading-none text-white opacity-80 max-md:text-2xl max-sm:text-xl`}>
                 Claim your free evaluation call. Discover how you can elevate your business and double your MRR.
               </div>
               <div className={`flex gap-5 mt-12 max-sm:flex-col max-sm:mx-auto ${inter.className}`}>
                 <button
                   className="group flex items-center justify-center gap-2 px-8 py-4 text-sm font-bold tracking-wide text-[#3B0A66] bg-white rounded-lg shadow-[0_6px_18px_-8px_rgba(0,0,0,0.3)] transition-transform duration-300 ease-out hover:-translate-y-0.5 max-sm:w-full"
-                  onClick={() => setIsModalOpen(true)}
+                  onClick={() => { track("cta_click", { location: "footer" }); setIsModalOpen(true); }}
                 >
                   Let&apos;s Talk
                   <ArrowUpRight className="w-5 h-5 arrow-bob" />

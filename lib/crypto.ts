@@ -12,6 +12,17 @@ export function encrypt(plaintext: string) {
   return Buffer.concat([iv, tag, enc]).toString("base64");
 }
 
+/**
+ * Constant-time string comparison for secrets (cron tokens, passcode hashes). Hashes both
+ * sides to a fixed 32-byte digest first, so timingSafeEqual never throws on a length mismatch
+ * and the length itself isn't leaked.
+ */
+export function safeCompare(a: string, b: string): boolean {
+  const ha = crypto.createHash("sha256").update(String(a)).digest();
+  const hb = crypto.createHash("sha256").update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
 export function decrypt(b64: string) {
   const raw = Buffer.from(b64, "base64");
   const iv = raw.subarray(0, 12);

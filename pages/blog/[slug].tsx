@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import { Header } from "@/components/Header";
 import { motion } from "framer-motion";
 import Footer from "@/components/FooterSection/Footer";
 import SocialShareBar from "@/components/Blog/SocialShareBar";
-import { authorSameAs } from "@/lib/authorProfiles";
+import AuthorBio from "@/components/Blog/AuthorBio";
+import { authorSameAs, getAuthorProfile } from "@/lib/authorProfiles";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getPostBySlug, getRelatedPosts, getAllSlugs } from '@/lib/blog';
@@ -23,8 +24,6 @@ type BlogPostProps = {
     relatedPosts: { title: string; slug: string; publishedDate: string; author: { name: string }; tag?: string | null; description?: string | null }[];
 };
 
-const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
-const inter = Inter({ subsets: ["latin"] });
 
 const formatDate = (dateString: string): string => {
     const dateStr = dateString.split('T')[0];
@@ -49,6 +48,11 @@ const BlogViewPage = ({
     const authorPageUrl = `https://vierradev.com/blog/author/${encodeURIComponent(author.name)}`;
     const publishedDateISO = new Date(publishedDate).toISOString();
     const modifiedDateISO = new Date(updatedDate ?? publishedDate).toISOString();
+    const authorProfile = getAuthorProfile(author.name);
+    const authorImageUrl = authorProfile.image ? `https://vierradev.com${authorProfile.image}` : undefined;
+    // Per-post social/AI card generated on the fly from the title (app/api/og),
+    // so every post has a unique OG image instead of the shared meta-banner.
+    const ogImage = `https://vierradev.com/api/og?title=${encodeURIComponent(title)}${tag ? `&tag=${encodeURIComponent(tag.split(',')[0].trim())}` : ''}`;
 
     const [progress, setProgress] = useState(0);
 
@@ -92,8 +96,10 @@ const BlogViewPage = ({
                 <meta property="og:title" content={title} />
                 <meta property="og:description" content={description || `${title} - Insights and strategies from Vierra.`} />
                 <meta property="og:url" content={blogUrl} />
-                <meta property="og:site_name" content="Vierra" />
-                <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
+                <meta property="og:site_name" content="Vierra Digital" />
+                <meta property="og:image" content={ogImage} />
+                <meta property="og:image:width" content="1200" />
+                <meta property="og:image:height" content="630" />
                 <meta property="article:published_time" content={publishedDateISO} />
                 <meta property="article:modified_time" content={modifiedDateISO} />
                 <meta property="article:author" content={author.name} />
@@ -106,7 +112,7 @@ const BlogViewPage = ({
                 <meta name="twitter:title" content={title} />
                 <meta name="twitter:description" content={description || `${title} - Insights and strategies from Vierra.`} />
                 <meta name="twitter:creator" content="@vierradev" />
-                <meta name="twitter:image" content="https://vierradev.com/assets/meta-banner.png" />
+                <meta name="twitter:image" content={ogImage} />
             </Head>
             <script
                 id="schema-org-breadcrumbs"
@@ -147,26 +153,22 @@ const BlogViewPage = ({
                         "@type": "BlogPosting",
                         headline: title,
                         description: description || `${title} - Insights and strategies from Vierra.`,
-                        image: ["https://vierradev.com/assets/meta-banner.png"],
+                        image: [ogImage],
                         datePublished: publishedDateISO,
                         dateModified: modifiedDateISO,
                         author: {
                             "@type": "Person",
                             name: author.name,
                             url: authorPageUrl,
+                            jobTitle: authorProfile.jobTitle,
+                            description: authorProfile.bio,
+                            image: authorImageUrl,
                             sameAs: authorSameAs(author.name),
-                            worksFor: { "@id": "https://vierradev.com/#organization" },
+                            worksFor: authorProfile.company
+                                ? { "@type": "Organization", name: authorProfile.company }
+                                : { "@id": "https://vierradev.com/#organization" },
                         },
-                        publisher: {
-                            "@type": "Organization",
-                            name: "Vierra Digital",
-                            logo: {
-                                "@type": "ImageObject",
-                                url: "https://vierradev.com/assets/vierra-logo.png",
-                                width: 464,
-                                height: 188,
-                            },
-                        },
+                        publisher: { "@id": "https://vierradev.com/#organization" },
                         mainEntityOfPage: {
                             "@type": "WebPage",
                             "@id": blogUrl,
@@ -177,6 +179,8 @@ const BlogViewPage = ({
                             name: "Vierra Blog",
                         },
                         keywords: tag || "marketing, lead generation, business growth",
+                        wordCount: (content || "").replace(/<[^>]+>/g, " ").split(/\s+/).filter(Boolean).length || undefined,
+                        about: (tag || "B2B Lead Generation").split(",").map((t) => ({ "@type": "Thing", name: t.trim() })),
                     }),
                 }}
             />
@@ -245,6 +249,7 @@ const BlogViewPage = ({
                     </div>
                 </header>
                 </div>
+                <main>
                 <div id="view-section" className="bg-white px-6 md:px-8 lg:px-20">
                     <div id="blog-text" className="flex flex-col pb-16 md:pb-20 items-center pt-12 md:pt-16 lg:pt-20">
                         <div id="blog-text-content" className="w-full max-w-3xl">
@@ -354,6 +359,12 @@ const BlogViewPage = ({
                                 <div dangerouslySetInnerHTML={{ __html: content }} />
                             </div>
                         </div>
+                        {/* Author bio: sibling of #blog-text-content — same centered
+                            column and padded container, so it's free of the prose
+                            styles yet flows right under the article with no gap. */}
+                        <div className="w-full max-w-3xl">
+                            <AuthorBio name={author.name} />
+                        </div>
                     </div>
                 </div>
                 <SocialShareBar
@@ -403,6 +414,7 @@ const BlogViewPage = ({
                         </div>
                     </div>
                 )}
+            </main>
             </div>
             <Footer />
         </>
@@ -411,11 +423,15 @@ const BlogViewPage = ({
 
 export const getStaticPaths: GetStaticPaths = async () => {
     try {
-    // Prerender only the most recent posts at build time; older and newly-added
-    // posts are generated on-demand via fallback: 'blocking'. This keeps Netlify
-    // build time bounded as the post count grows (each prerender is a remote
-    // Supabase round-trip, serialized by connection_limit=1).
-    const slugs = await getAllSlugs(25);
+    // Prerender EVERY post at build time so each blog URL is static HTML served
+    // straight from the CDN — no on-demand DB round-trip on first hit. This is the
+    // fix for slow/unreliable indexing (Google was crawling posts that weren't
+    // pre-generated, hitting a cold Supabase round-trip serialized by
+    // connection_limit=1 → slow TTFB / 500s during crawl bursts) and for slow
+    // first loads. fallback:'blocking' stays only as a safety net for a post added
+    // between deploys (generated once, then ISR-cached); on-demand revalidation
+    // still fires on publish/edit.
+    const slugs = await getAllSlugs();
     const paths = slugs.map((slug) => ({ params: { slug } }));
 
     return { paths, fallback: 'blocking' };
@@ -424,6 +440,21 @@ export const getStaticPaths: GetStaticPaths = async () => {
         return { paths: [], fallback: 'blocking' };
     }
 };
+
+// Add native lazy-loading + async decoding to images inside CMS post bodies.
+// The first image is left eager (it may be the post's LCP element); every later
+// image defers until near the viewport, cutting bandwidth and CLS on long posts.
+// Images that already declare `loading` are left untouched.
+function addLazyImages(html: string): string {
+    if (!html) return html;
+    let seen = 0;
+    return html.replace(/<img\b[^>]*>/gi, (tag) => {
+        seen += 1;
+        if (seen === 1) return tag;
+        if (/\bloading\s*=/i.test(tag)) return tag;
+        return tag.replace(/<img\b/i, '<img loading="lazy" decoding="async"');
+    });
+}
 
 export const getStaticProps: GetStaticProps = async ({ params }) => {
     const slug = params?.slug as string;
@@ -448,7 +479,7 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
         props: {
             title: post.title,
             description: post.description,
-            content: post.content,
+            content: addLazyImages(post.content),
             author: { name: post.author.name },
             publishedDate: post.published_date,
             updatedDate: post.updated_date,
@@ -463,8 +494,10 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
                 description: p.description,
             }))
         },
-        // 5-minute ISR window (on-demand revalidation still fires on publish/edit).
-        revalidate: 300,
+        // 1-hour ISR window. Posts are prerendered and on-demand revalidation
+        // fires on publish/edit, so a longer window is safe and sharply cuts
+        // background regeneration DB load during crawl bursts.
+        revalidate: 3600,
     };
     } catch (error) {
         // Transient DB failure (e.g. Supabase pooler saturation during a GSC crawl

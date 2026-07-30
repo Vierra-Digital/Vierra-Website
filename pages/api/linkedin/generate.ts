@@ -125,12 +125,11 @@ export default withSession(async (req, res, session) => {
     );
     if (!clientId) return res.status(400).json({ message: "clientId is required." });
 
-    const context = await getLinkedInContext(clientId);
+    const [context, metrics] = await Promise.all([getLinkedInContext(clientId), getLinkedInMetrics(clientId)]);
     if (!context) return res.status(404).json({ message: "Client context not found." });
 
     const selectedAssetIds = sanitizeArray(body.selectedAssetIds);
     const selectedAssets = context.imageAssets.filter((asset) => selectedAssetIds.includes(asset.id));
-    const metrics = await getLinkedInMetrics(clientId);
 
     const seededKeyword = (body.keywords || context.overrides.keywords || "linkedin growth").trim();
     const enrichment = await enrichKeywordWithAnswerThePublic(seededKeyword);

@@ -148,6 +148,7 @@ export async function getBlogIndexMarkdown(): Promise<string> {
 
 export async function getTagMarkdown(tag: string): Promise<string | null> {
   const posts = await prisma.blogPost.findMany({
+    where: { tag: { contains: tag, mode: "insensitive" } },
     select: {
       slug: true,
       title: true,
@@ -158,6 +159,7 @@ export async function getTagMarkdown(tag: string): Promise<string | null> {
     },
     orderBy: { published_date: "desc" },
   });
+  // DB `contains` pre-filters; the JS pass below keeps exact comma-separated tag matching.
   const filtered = posts.filter(
     (p) =>
       isRealPost(p.slug, p.title) &&
@@ -234,7 +236,7 @@ export function getFaqMarkdown(): string {
     header({
       title: "Frequently Asked Questions — Vierra",
       description:
-        "Answers about Vierra Digital: what we do, how risk-averse lead generation works, who we serve, location, and how to get started.",
+        "Answers about Vierra Digital: what we do, how risk-averse, results-based lead generation works, who we serve, location, and how to get started.",
       canonical: `${SITE_URL}/faq`,
     }),
     qa,
@@ -274,13 +276,22 @@ export async function getLlmsTxt(): Promise<string> {
   const lines: string[] = [
     "# Vierra",
     "",
-    "> Vierra is a digital marketing and lead generation platform that helps businesses increase ROI, leads, and conversions through case-study-proven lead generation services.",
+    "> Vierra is a digital marketing and lead generation platform that helps businesses increase ROI, leads, and conversions through risk-averse, case-study-proven lead generation services.",
     "",
     "Append `.md` to any page URL to fetch a clean Markdown version of that page. The links below point directly to those Markdown mirrors.",
     "",
+    "## Company",
+    "",
+    "- Organization: Vierra Digital LLC",
+    "- Type: B2B digital marketing and lead generation agency",
+    "- Headquarters: 3 Ashland Street, Medford, MA 02155, United States",
+    "- Office: New York, NY, United States",
+    "- Founded: 2019",
+    "- Contact: alex@vierradev.com | +1-339-333-0929",
+    "",
     "## Main",
     "",
-    `- [Vierra — Home](${SITE_URL}/index.md): Risk-averse lead engine for your business.`,
+    `- [Vierra — Home](${SITE_URL}/index.md): Risk-averse, results-based lead generation for your business.`,
     `- [Brand Kit](${SITE_URL}/branding.md): Logo, colors, gradients, and typography guidelines.`,
     "",
     "## Legal",
@@ -291,7 +302,7 @@ export async function getLlmsTxt(): Promise<string> {
     "",
     "## Support",
     "",
-    `- [Frequently Asked Questions](${SITE_URL}/faq.md): What Vierra does, how lead generation works, who we serve, and how to start.`,
+    `- [Frequently Asked Questions](${SITE_URL}/faq.md): What Vierra does, how risk-averse lead generation works, who we serve, and how to start.`,
     "",
     "## Careers",
     "",

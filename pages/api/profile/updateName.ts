@@ -13,15 +13,6 @@ export default withAuth(
     if (!userEmail) {
       return res.status(400).json({ message: "User email not found in session" });
     }
-    const existingUser = await prisma.user.findUnique({
-      where: { email: userEmail },
-      select: { id: true, name: true, email: true },
-    });
-
-    if (!existingUser) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
     const updated = await prisma.user.update({
       where: { email: userEmail },
       data: { name: name.trim() || null },

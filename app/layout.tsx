@@ -1,13 +1,6 @@
-import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import RootLayoutClient from "./layout.client"
 import Script from "next/script"
-
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] })
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-})
 
 const SITE_URL = "https://vierradev.com"
 const META_IMAGE_URL = `${SITE_URL}/assets/meta-banner.png`
@@ -21,7 +14,7 @@ export const metadata = {
     template: "Vierra | %s",
   },
   description:
-    "Build your funnel, research leads, capture buying signals, and schedule meetings autonomously. Risk-averse, results-based B2B lead generation for scaling businesses.",
+    "Risk-averse, results-based B2B lead generation. Fill your sales calendar with qualified leads and eliminate risky marketing investments.",
   keywords: [
     "marketing",
     "lead generation",
@@ -29,7 +22,7 @@ export const metadata = {
     "digital optimization",
     "business scaling",
     "risk-averse marketing",
-    "GTM engine",
+    "risk-averse lead generation",
     "digital marketing agency",
     "B2B lead generation",
     "sales pipeline",
@@ -39,24 +32,17 @@ export const metadata = {
   authors: [{ name: "Alex Shick", url: "https://vierradev.com" }],
   creator: "Vierra Digital",
   publisher: "Vierra Digital",
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-    },
-  },
+  // NOTE: `robots` is intentionally NOT set here. It lives on app/page.tsx so it
+  // applies to the homepage without cascading onto the not-found boundary (which
+  // Next.js auto-marks `noindex`). A layout-level `index, follow` conflicted with
+  // that framework `noindex` on the 404 page.
   openGraph: {
     type: "website",
     url: SITE_URL,
     title: "Vierra | Risk-Averse Lead Engine For Your Business",
     description:
-      "Build your funnel, research leads, capture buying signals, and schedule meetings autonomously. Risk-averse, results-based lead generation for scaling businesses.",
-    siteName: "Vierra",
+      "Risk-averse, results-based B2B lead generation. Fill your sales calendar and eliminate risky marketing investments.",
+    siteName: "Vierra Digital",
     locale: "en_US",
     images: [
       {
@@ -74,7 +60,7 @@ export const metadata = {
     site: "@vierradev",
     title: "Vierra | Risk-Averse Lead Engine For Your Business",
     description:
-      "Build your funnel, research leads, capture buying signals, and schedule meetings autonomously. Risk-averse, results-based lead generation for scaling businesses.",
+      "Risk-averse, results-based B2B lead generation. Fill your sales calendar and eliminate risky marketing investments.",
     images: [
       {
         url: META_IMAGE_URL,
@@ -107,7 +93,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" style={{ scrollBehavior: "smooth" }}>
+    <html lang="en" style={{ scrollBehavior: "smooth" }} suppressHydrationWarning>
       <head>
         {/* Google Analytics — rendered by next/script on every environment so the
             tag is part of React's tree (hydration-safe). `afterInteractive` loads
@@ -124,6 +110,15 @@ export default function RootLayout({
               {`
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
+                // Consent Mode v2 — deny all storage by default until the visitor
+                // accepts via the consent banner. GA still loads (modeled/cookieless).
+                gtag('consent', 'default', {
+                  ad_storage: 'denied',
+                  ad_user_data: 'denied',
+                  ad_personalization: 'denied',
+                  analytics_storage: 'denied',
+                  wait_for_update: 500,
+                });
                 gtag('js', new Date());
                 gtag('config', '${GA_MEASUREMENT_ID}');
               `}
@@ -136,8 +131,6 @@ export default function RootLayout({
         <link rel="alternate" type="application/rss+xml" title="Vierra Blog RSS Feed" href="https://vierradev.com/blog/rss.xml" />
         
         
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://cdn.jsdelivr.net" />
         <link rel="preconnect" href="https://vierra-server.vercel.app" />
         <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
@@ -145,8 +138,8 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://www.youtube-nocookie.com" />
 
         <meta name="geo.region" content="US-MA" />
-        <meta name="geo.placename" content="Cambridge, Massachusetts" />
-        <meta name="ICBM" content="42.3736, -71.1097" />
+        <meta name="geo.placename" content="Medford, Massachusetts" />
+        <meta name="ICBM" content="42.4184, -71.1062" />
 
         <script
           id="schema-org-organization"
@@ -165,12 +158,13 @@ export default function RootLayout({
                 width: 464,
                 height: 188,
               },
-              description: "Build your funnel, research leads, capture buying signals, and schedule meetings autonomously. Risk-averse, results-based lead generation for scaling businesses.",
+              description: "Risk-averse, results-based B2B lead generation that fills your sales calendar with qualified leads and eliminates risky marketing investments.",
               address: {
                 "@type": "PostalAddress",
-                addressLocality: "Cambridge",
+                streetAddress: "3 Ashland Street",
+                addressLocality: "Medford",
                 addressRegion: "MA",
-                postalCode: "02138",
+                postalCode: "02155",
                 addressCountry: "US",
               },
               contactPoint: {
@@ -184,8 +178,10 @@ export default function RootLayout({
               sameAs: [
                 "https://www.linkedin.com/company/vierra/",
                 "https://www.instagram.com/vierra.dev",
-                "https://www.facebook.com/share/1GXE6s4NSX/",
+                "https://www.facebook.com/vierradigital",
                 "https://x.com/vierradev",
+                "https://www.crunchbase.com/organization/vierra-digital",
+                "https://clutch.co/profile/vierra",
               ],
               foundingDate: "2019",
               numberOfEmployees: {
@@ -193,6 +189,47 @@ export default function RootLayout({
                 minValue: 5,
                 maxValue: 10,
               },
+              location: [
+                {
+                  "@type": "Place",
+                  name: "Vierra Digital (Medford HQ)",
+                  address: {
+                    "@type": "PostalAddress",
+                    addressLocality: "Medford",
+                    addressRegion: "MA",
+                    postalCode: "02155",
+                    addressCountry: "US",
+                  },
+                  geo: {
+                    "@type": "GeoCoordinates",
+                    latitude: 42.4184,
+                    longitude: -71.1062,
+                  },
+                },
+                {
+                  "@type": "Place",
+                  name: "Vierra Digital (New York)",
+                  address: {
+                    "@type": "PostalAddress",
+                    addressLocality: "New York",
+                    addressRegion: "NY",
+                    addressCountry: "US",
+                  },
+                },
+              ],
+              hasOfferCatalog: {
+                "@type": "OfferCatalog",
+                name: "Vierra Services",
+                itemListElement: [
+                  { "@type": "Offer", itemOffered: { "@type": "Service", name: "B2B Lead Generation" } },
+                  { "@type": "Offer", itemOffered: { "@type": "Service", name: "Risk-Averse, Results-Based Lead Generation" } },
+                  { "@type": "Offer", itemOffered: { "@type": "Service", name: "Marketing Automation" } },
+                  { "@type": "Offer", itemOffered: { "@type": "Service", name: "Sales Pipeline Optimization" } },
+                  { "@type": "Offer", itemOffered: { "@type": "Service", name: "Ad Campaign Optimization" } },
+                  { "@type": "Offer", itemOffered: { "@type": "Service", name: "Appointment Setting" } },
+                ],
+              },
+              subOrganization: { "@id": `${SITE_URL}/#localbusiness` },
             }),
           }}
         />
@@ -227,6 +264,7 @@ export default function RootLayout({
               "@context": "https://schema.org",
               "@type": ["ProfessionalService", "LocalBusiness"],
               "@id": `${SITE_URL}/#localbusiness`,
+              parentOrganization: { "@id": `${SITE_URL}/#organization` },
               name: "Vierra Digital",
               legalName: "Vierra Digital LLC",
               url: SITE_URL,
@@ -238,18 +276,19 @@ export default function RootLayout({
               },
               image: META_IMAGE_URL,
               description:
-                "B2B digital marketing and lead generation agency in Cambridge, MA. Risk-averse lead engine for scaling businesses.",
+                "B2B digital marketing and lead generation agency headquartered in Medford, MA with an office in New York, NY. Risk-averse, results-based lead generation for scaling businesses.",
               address: {
                 "@type": "PostalAddress",
-                addressLocality: "Cambridge",
+                streetAddress: "3 Ashland Street",
+                addressLocality: "Medford",
                 addressRegion: "MA",
-                postalCode: "02138",
+                postalCode: "02155",
                 addressCountry: "US",
               },
               geo: {
                 "@type": "GeoCoordinates",
-                latitude: 42.3736,
-                longitude: -71.1097,
+                latitude: 42.4184,
+                longitude: -71.1062,
               },
               telephone: "+1-339-333-0929",
               email: "alex@vierradev.com",
@@ -260,8 +299,8 @@ export default function RootLayout({
               },
               foundingDate: "2019",
               areaServed: [
-                { "@type": "City", name: "Cambridge" },
                 { "@type": "City", name: "Medford" },
+                { "@type": "City", name: "New York" },
                 { "@type": "Country", name: "United States" },
               ],
               openingHoursSpecification: {
@@ -279,18 +318,17 @@ export default function RootLayout({
               sameAs: [
                 "https://www.linkedin.com/company/vierra/",
                 "https://www.instagram.com/vierra.dev",
-                "https://www.facebook.com/share/1GXE6s4NSX/",
+                "https://www.facebook.com/vierradigital",
                 "https://x.com/vierradev",
+                "https://www.crunchbase.com/organization/vierra-digital",
+                "https://clutch.co/profile/vierra",
               ],
             }),
           }}
         />
       </head>
-      <body>
-        <RootLayoutClient
-          geistSansVariable={geistSans.variable}
-          geistMonoVariable={geistMono.variable}
-        >
+      <body suppressHydrationWarning>
+        <RootLayoutClient>
           {children}
         </RootLayoutClient>
       </body>

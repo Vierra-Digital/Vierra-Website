@@ -35,6 +35,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (sessionData.status === 'signed') {
              return res.status(400).json({ message: 'Document already signed.' });
         }
+        if (sessionData.status === 'expired') {
+            return res.status(410).json({ message: 'This signing link has expired.' });
+        }
 
         const fields = sessionData.fields ?? (position ? [{
             type: 'signature' as const,

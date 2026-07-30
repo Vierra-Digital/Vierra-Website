@@ -5,10 +5,17 @@ import { sendPasswordResetEmail } from "@/lib/emailSender";
 import { resolveBaseUrl } from "@/lib/api/url";
 
 export default withAuth(
-  async (req, res) => {
+  async (req, res, session) => {
     const id = req.query.id || (req.body && req.body.id);
     const userId = Array.isArray(id) ? id[0] : id;
     if (!userId) return res.status(400).json({ message: "id is required" });
+
+    // Only trigger a reset for a user in the admin's own company, not any user id system-wide.
+    const membership = await prisma.companyMembership.findFirst({
+      where: { company_id: session.companyId, user_id: String(userId) },
+      select: { user_id: true },
+    });
+    if (!membership) return res.status(404).json({ message: "User not found" });
 
     const user = await prisma.user.findUnique({
       where: { id: String(userId) },

@@ -2,10 +2,7 @@ import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/api/withAuth"
 import { handleApiError } from "@/lib/api/guards"
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens"
-import {
-  getCalendarVisibilityPreferences,
-  isCalendarVisibilityTableMissing,
-} from "@/lib/googleCalendar/visibility"
+import { getCalendarVisibilityPreferences } from "@/lib/googleCalendar/visibility"
 
 type GoogleCalendarListResponse = {
   items?: Array<{
@@ -110,24 +107,23 @@ export default withAuth(async (req, res, session) => {
       return
     }
 
-    const validConnections: Array<{ email: string; accessToken: string }> = []
-    for (const row of tokenRows) {
-      const email = row.platform.replace(/^gmail:/, "")
-      const tokenResult = await getValidGmailAccessToken(userId, email)
-      if (tokenResult.ok) {
-        validConnections.push({ email, accessToken: tokenResult.accessToken })
-      }
-    }
+    const tokenResults = await Promise.all(
+      tokenRows.map(async (row) => {
+        const email = row.platform.replace(/^gmail:/, "")
+        const tokenResult = await getValidGmailAccessToken(userId, email)
+        return tokenResult.ok ? { email, accessToken: tokenResult.accessToken } : null
+      })
+    )
+    const validConnections = tokenResults.filter(
+      (c): c is { email: string; accessToken: string } => c !== null
+    )
 
     if (!validConnections.length) {
       res.status(200).json({ connected: false, meetings: [] })
       return
     }
     const nowIso = new Date().toISOString()
-    const visibilityRows = await getCalendarVisibilityPreferences(userId).catch((error) => {
-      if (isCalendarVisibilityTableMissing(error)) return []
-      throw error
-    })
+    const visibilityRows = await getCalendarVisibilityPreferences(userId)
     const visibilityMap = new Map(visibilityRows.map((row) => [`${row.accountEmail}::${row.calendarId}`, row.isEnabled]))
     let needsReconnect = false
     let issueCode: "none" | "permission" | "api_disabled" | "google_error" | "no_calendars" = "none"

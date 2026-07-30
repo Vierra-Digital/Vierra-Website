@@ -1,9 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { prisma } from "@/lib/prisma";
-import { decrypt } from "@/lib/crypto";
-import { requireSession } from "@/lib/auth";
-
-const asStr = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+import { handlePlatformStatus } from "@/lib/api/oauth";
 
 async function linkedinTokenIsValid(token: string) {
   try {
@@ -20,58 +16,6 @@ async function linkedinTokenIsValid(token: string) {
   }
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
-
-  if (req.method !== "GET") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-  const sessionId = asStr(req.query.session);
-  if (sessionId) {
-    try {
-      const row = await prisma.onboardingPlatformToken.findUnique({
-        where: { session_id_platform: { session_id: sessionId, platform: "linkedin" } },
-        select: { access_token: true },
-      });
-      if (!row) {
-        res.status(200).json({ connected: false });
-        return;
-      }
-      const token = decrypt(row.access_token);
-      const connected = await linkedinTokenIsValid(token);
-      res.status(200).json({ connected });
-      return;
-    } catch (e) {
-      console.error("linkedin onboarding status error", e);
-      res.status(200).json({ connected: false });
-      return;
-    }
-  }
-  const session = await requireSession(req, res);
-  if (!session) {
-    res.status(401).json({ connected: false });
-    return;
-  }
-
-  const userId = (session.user as any).id;
-  try {
-    const row = await prisma.platformToken.findUnique({
-      where: { user_id_platform: { user_id: userId, platform: "linkedin" } },
-      select: { access_token: true },
-    });
-    if (!row) {
-      res.status(200).json({ connected: false });
-      return;
-    }
-
-    const token = decrypt(row.access_token);
-    const connected = await linkedinTokenIsValid(token);
-    res.status(200).json({ connected });
-  } catch (e) {
-    console.error("linkedin status error", e);
-    res.status(200).json({ connected: false });
-  }
+export default function handler(req: NextApiRequest, res: NextApiResponse) {
+  return handlePlatformStatus(req, res, "linkedin", linkedinTokenIsValid);
 }

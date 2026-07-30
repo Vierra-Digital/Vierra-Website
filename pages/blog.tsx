@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import { getBlogCatalog } from "@/lib/blog"
 import { Header } from "@/components/Header";
@@ -66,8 +66,6 @@ const getExcerpt = (content?: string | null, limit: number = 260): string => {
     return text.slice(0, limit).trimEnd() + '...';
 };
 
-const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
-const inter = Inter({ subsets: ["latin"] });
 const tags: string[] = ["All Blog Posts", "Case Studies", "Technology", "AI & Automation", "Finance", "Marketing", "Sales", "Management", "Leadership"]
 
 
@@ -82,9 +80,20 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
     // making every post invisible to non-JS / first-pass crawlers.
     const [filteredLatestPosts, setFilteredLatestPosts] = useState<BlogPostType[]>(latestPosts)
     const [loading, setLoading] = useState(false);
-    const [visibleCount, setVisibleCount] = useState(9);
+    // Start with every post rendered so all posts appear in the SSR HTML
+    // (crawlable internal links — previously only the first 9 were, orphaning
+    // older posts from the index). Infinite scroll still paginates on
+    // filter/search. getBlogCatalog caps the catalog at 90, so this is bounded.
+    const [visibleCount, setVisibleCount] = useState(latestPosts.length || 9);
+    // Hydrate the search box from the URL (?search=) so the WebSite SearchAction
+    // structured-data target (/blog?search={term}) actually applies the query.
+    useEffect(() => {
+        const q = new URLSearchParams(window.location.search).get("search");
+        if (q) setSearchQuery(q);
+    }, []);
     const batchSize = 9;
     const sentinelRef = useRef<HTMLDivElement | null>(null);
+    const filterInitialized = useRef(false);
 
     const filterPostsByTag = (tagName: string, posts: BlogPostType[]) => {
         if (tagName === "All Blog Posts") {
@@ -130,7 +139,10 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
         const byTag = filterPostsByTag(tagSelectedName, latestPosts);
         const bySearch = filterPostsByQuery(searchQuery, byTag);
         setFilteredLatestPosts(bySearch);
-        setVisibleCount(batchSize);
+        // Keep the initial full render intact (all posts stay in the SSR HTML for
+        // crawlers); only restart pagination when the user changes tag/search.
+        if (filterInitialized.current) setVisibleCount(batchSize);
+        else filterInitialized.current = true;
     }, [latestPosts, tagSelectedName, searchQuery]);
 
     const visiblePosts = filteredLatestPosts.slice(0, visibleCount);
@@ -163,13 +175,14 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                 <meta name="description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients. Learn about marketing, lead generation, business growth, and digital optimization." />
                 <meta name="author" content="Vierra Digital" />
                 <meta name="keywords" content="marketing blog, business growth strategies, lead generation tips, digital marketing insights, case studies, business scaling, marketing automation" />
-                {hasFetchError && <meta name="robots" content="noindex, nofollow" />}
+                {hasFetchError ? <meta name="robots" content="noindex, nofollow" /> : <meta name="robots" content="index, follow" />}
                 <link rel="canonical" href={canonicalUrl} />
                 <link rel="alternate" type="application/rss+xml" title="Vierra Blog RSS Feed" href="https://vierradev.com/blog/rss.xml" />
                 <meta property="og:title" content="Vierra | Blog" />
                 <meta property="og:description" content="Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients." />
                 <meta property="og:url" content={canonicalUrl} />
                 <meta property="og:type" content="website" />
+                <meta property="og:site_name" content="Vierra Digital" />
                 <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
                 <meta name="twitter:card" content="summary_large_image" />
                 <meta name="twitter:title" content="Vierra | Blog" />
@@ -211,35 +224,20 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                         name: "Vierra Blog",
                         description: "Insights, case studies, and strategies from Vierra to scale revenue and acquire more clients.",
                         url: "https://vierradev.com/blog",
-                        publisher: {
-                            "@type": "Organization",
-                            name: "Vierra Digital",
-                            logo: {
-                                "@type": "ImageObject",
-                                url: "https://vierradev.com/assets/vierra-logo.png",
-                                width: 464,
-                                height: 188,
-                            },
-                        },
+                        publisher: { "@id": "https://vierradev.com/#organization" },
                         blogPost: latestPosts.slice(0, 10).map(post => ({
                             "@type": "BlogPosting",
                             headline: post.title,
                             description: post.description || stripHtml(post.content).substring(0, 200),
                             url: `https://vierradev.com/blog/${post.slug}`,
                             datePublished: post.published_date,
+                            dateModified: post.published_date,
                             author: {
                                 "@type": "Person",
                                 name: post.author.name,
                                 url: `https://vierradev.com/blog/author/${encodeURIComponent(post.author.name)}`,
                             },
-                            publisher: {
-                                "@type": "Organization",
-                                name: "Vierra Digital",
-                                logo: {
-                                    "@type": "ImageObject",
-                                    url: "https://vierradev.com/assets/meta-banner.png",
-                                },
-                            },
+                            publisher: { "@id": "https://vierradev.com/#organization" },
                         })),
                     }),
                 }}
@@ -297,6 +295,7 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                         </div>
                     </header>
                 </div>
+                <main>
                 <div id="view-section" className="bg-[#F3F3F3] px-8 lg:px-20">
                     <div className="max-w-7xl mx-auto py-20">
                         {/* Categories */}
@@ -427,6 +426,7 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                         )}
                     </div>
                 </div>
+            </main>
             </div>
             <Footer />
         </>
