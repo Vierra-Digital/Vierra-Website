@@ -299,14 +299,32 @@ function IcpResearchAnim() {
   ]
   const stack = ["HubSpot", "Segment", "Snowflake"]
   const signals = ["Hiring SDRs", "Raised Series B", "Visited pricing page"]
+
+  // Interactive tilt — the card follows the cursor, springs back on leave.
+  const rx = useSpring(7, { stiffness: 120, damping: 18 })
+  const ry = useSpring(-16, { stiffness: 120, damping: 18 })
+  const onMove = (e: React.MouseEvent) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    ry.set(-16 + ((e.clientX - r.left) / r.width - 0.5) * 24)
+    rx.set(7 - ((e.clientY - r.top) / r.height - 0.5) * 18)
+  }
+  const onLeave = () => {
+    rx.set(7)
+    ry.set(-16)
+  }
+
   return (
-    <div className={`flex h-full w-full items-center justify-center [perspective:1700px] ${inter.className}`}>
+    <div
+      className={`flex h-full w-full items-center justify-center [perspective:1700px] ${inter.className}`}
+      onMouseMove={onMove}
+      onMouseLeave={onLeave}
+    >
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1, y: [0, -6, 0] }}
         transition={{ opacity: { duration: 0.5 }, y: { duration: 6, repeat: Infinity, ease: "easeInOut" } }}
-        style={{ rotateX: 7, rotateY: -16 }}
-        className="flex w-[620px] max-w-[92vw] gap-3 rounded-2xl border border-white/10 bg-gradient-to-b from-[#241046] to-[#180733] p-4 shadow-2xl ring-1 ring-black/20"
+        style={{ rotateX: rx, rotateY: ry }}
+        className="flex w-[760px] max-w-[94vw] gap-4 rounded-2xl border border-white/10 bg-gradient-to-b from-[#241046] to-[#180733] p-5 shadow-2xl ring-1 ring-black/20"
       >
         {/* Left — scored lead list */}
         <div className="w-[52%] shrink-0">
@@ -345,7 +363,7 @@ function IcpResearchAnim() {
         </div>
 
         {/* Right — enriched research panel for the top lead */}
-        <div className="flex-1 rounded-xl border border-white/10 bg-white/5 p-3">
+        <div className="flex-1 rounded-xl border border-white/10 bg-white/5 p-4">
           <div className="text-[10px] font-semibold text-white">Marcus Lee</div>
           <div className="text-[8px] text-[#B9A9D6]">Acme Fintech · San Francisco</div>
 
@@ -440,10 +458,29 @@ function CampaignLaunchAnim() {
     { Icon: FaCommentSms, c: "#22C55E", name: "SMS", sent: "410" },
     { Icon: FaWhatsapp, c: "#25D366", name: "WhatsApp", sent: "320" },
   ]
+
+  // Interactive tilt — the card follows the cursor, springs back on leave.
+  const rx = useSpring(6, { stiffness: 120, damping: 18 })
+  const ry = useSpring(-12, { stiffness: 120, damping: 18 })
+  const onMove = (e: React.MouseEvent) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    ry.set(-12 + ((e.clientX - r.left) / r.width - 0.5) * 24)
+    rx.set(6 - ((e.clientY - r.top) / r.height - 0.5) * 18)
+  }
+  const onLeave = () => {
+    rx.set(6)
+    ry.set(-12)
+  }
+
   return (
-    <div className={`flex h-full w-full items-center justify-center ${inter.className}`}>
+    <div
+      className={`flex h-full w-full items-center justify-center [perspective:1600px] ${inter.className}`}
+      onMouseMove={onMove}
+      onMouseLeave={onLeave}
+    >
       <motion.div
         className="w-[400px] max-w-[92vw] rounded-2xl border border-white/10 bg-gradient-to-b from-[#241046] to-[#180733] p-4 shadow-2xl"
+        style={{ rotateX: rx, rotateY: ry }}
         animate={{ y: [0, -6, 0] }}
         transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
       >
@@ -504,8 +541,25 @@ const CONFETTI = [
   { c: "#8F42FF", x: 18, r: 50 },
 ]
 function ClientsSignedAnim() {
+  // Interactive tilt — the card follows the cursor, springs back on leave.
+  const rx = useSpring(6, { stiffness: 120, damping: 18 })
+  const ry = useSpring(10, { stiffness: 120, damping: 18 })
+  const onMove = (e: React.MouseEvent) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    ry.set(10 + ((e.clientX - r.left) / r.width - 0.5) * 24)
+    rx.set(6 - ((e.clientY - r.top) / r.height - 0.5) * 18)
+  }
+  const onLeave = () => {
+    rx.set(6)
+    ry.set(10)
+  }
+
   return (
-    <div className={`flex h-full w-full items-center justify-center ${inter.className}`}>
+    <div
+      className={`flex h-full w-full items-center justify-center [perspective:1600px] ${inter.className}`}
+      onMouseMove={onMove}
+      onMouseLeave={onLeave}
+    >
       <div className="relative w-[300px] max-w-[92vw]">
         {/* confetti burst */}
         {CONFETTI.map((p, i) => (
@@ -521,7 +575,7 @@ function ClientsSignedAnim() {
 
         <motion.div
           className="relative rounded-2xl border border-white/10 bg-gradient-to-b from-[#F7F3FF] to-[#EADCFF] p-5 text-[#2A1148] shadow-2xl"
-          style={{ rotateY: 10, rotateX: 6 }}
+          style={{ rotateY: ry, rotateX: rx }}
           animate={{ y: [0, -6, 0] }}
           transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
         >
@@ -578,7 +632,7 @@ function MeetingBookingAnim() {
     const seq: [number, number][] = [
       [0, 1500],
       [1, 1300],
-      [2, 900],
+      [2, 2200],
       [3, 3400],
     ]
     let i = 0
@@ -783,12 +837,27 @@ function MeetingBookingAnim() {
             className="pointer-events-none absolute left-0 top-0 z-30"
             animate={{ x: cursor.x, y: cursor.y, opacity: cursor.o, scale: step === 2 ? 0.82 : 1 }}
             transition={{
-              x: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
-              y: { duration: 0.6, ease: [0.22, 1, 0.36, 1] },
+              x: { duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] },
+              y: { duration: 0.6, delay: 0.2, ease: [0.22, 1, 0.36, 1] },
               scale: { duration: 0.15 },
               opacity: { duration: 0.3 },
             }}
           >
+            {/* Click ripple — retriggers whenever a click step is entered (slot select, confirm).
+                The confirm-click ripple (step 2) waits out the cursor's move duration (0.6s)
+                so it lands once the cursor actually arrives at the Confirm button. */}
+            <AnimatePresence>
+              {(step === 1 || step === 2) && (
+                <motion.span
+                  key={`ripple-${step}`}
+                  className="absolute left-1 top-1 h-3 w-3 rounded-full border-2 border-gray-400/80 bg-gray-400/30"
+                  initial={{ scale: 0, opacity: 0.9 }}
+                  animate={{ scale: 4, opacity: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.45, ease: "easeOut", delay: step === 2 ? 0.6 : 0 }}
+                />
+              )}
+            </AnimatePresence>
             <svg viewBox="0 0 24 24" className="h-5 w-5 drop-shadow-md" fill="#111827" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round">
               <path d="M4 2 L4 20 L9 15 L12 22 L15 21 L12 14 L19 14 Z" />
             </svg>
