@@ -10,6 +10,7 @@ import { signOut } from "@/lib/session-client";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import ImageCropModal from "@/components/ImageCropModal";
 
+const inter = Inter({ subsets: ["latin"] });
 
 type Step = "password" | "company" | "name" | "photo";
 
