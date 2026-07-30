@@ -6,6 +6,12 @@ export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
   const origin = request.nextUrl.origin;
 
+  // Optional post-exchange override (e.g. a self-service recovery link needs to
+  // land on the set-password form, not the role-based landing page). Only a
+  // same-origin relative path is honored, to avoid an open redirect.
+  const nextParam = request.nextUrl.searchParams.get("next");
+  const next = nextParam && nextParam.startsWith("/") && !/^\/[/\\]/.test(nextParam) ? nextParam : null;
+
   if (!code) {
     return NextResponse.redirect(new URL("/login?error=oauth", origin));
   }
@@ -35,6 +41,11 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
   if (error || !data.user) {
+    return response;
+  }
+
+  if (next) {
+    response.headers.set("Location", new URL(next, origin).toString());
     return response;
   }
 
