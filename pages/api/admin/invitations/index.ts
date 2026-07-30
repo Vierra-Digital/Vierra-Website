@@ -29,7 +29,7 @@ export default withAuth(
     const normalizedEmail = email.trim().toLowerCase();
 
     const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
-      redirectTo: `${resolveBaseUrl(req)}/login`,
+      redirectTo: `${resolveBaseUrl(req)}/onboarding/accept-invite`,
     });
     if (inviteError) {
       return res.status(400).json({ message: inviteError.message || "Failed to send invite" });
