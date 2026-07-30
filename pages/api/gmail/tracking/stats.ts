@@ -1,25 +1,14 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 
-function asStr(v: string | string[] | undefined) {
-  return Array.isArray(v) ? v[0] : v || "";
-}
+import { asQueryStr } from "@/lib/api/parsing";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "GET") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-
-  const session = await requireRole(req, res);
-  if (!session) return;
-
+export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
-  const accountEmail = asStr(req.query.accountEmail).trim().toLowerCase();
-  const from = asStr(req.query.from).trim();
-  const to = asStr(req.query.to).trim();
+  const accountEmail = asQueryStr(req.query.accountEmail).trim().toLowerCase();
+  const from = asQueryStr(req.query.from).trim();
+  const to = asQueryStr(req.query.to).trim();
 
   let accountId: string | null = null;
   if (accountEmail) {
@@ -95,4 +84,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     },
     messages: rows,
   });
-}
+}, { methods: ["GET"] });

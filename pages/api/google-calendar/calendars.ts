@@ -1,10 +1,8 @@
-import type { NextApiRequest, NextApiResponse } from "next"
 import { prisma } from "@/lib/prisma"
-import { requireRole } from "@/lib/auth"
+import { withAuth } from "@/lib/api/withAuth"
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens"
 import {
   getCalendarVisibilityPreferences,
-  isCalendarVisibilityTableMissing,
   upsertCalendarVisibilityPreference,
 } from "@/lib/googleCalendar/visibility"
 
@@ -23,10 +21,7 @@ function canReadCalendar(accessRole: string | undefined) {
   return ["freeBusyReader", "reader", "writer", "owner"].includes(accessRole)
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res)
-  if (!session) return
-
+export default withAuth(async (req, res, session) => {
   const userId = (session.user as any).id
   if (!userId) {
     res.status(400).json({ message: "Invalid session user id" })
@@ -46,10 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return
       }
 
-      const visibilityRows = await getCalendarVisibilityPreferences(userId).catch((error) => {
-        if (isCalendarVisibilityTableMissing(error)) return []
-        throw error
-      })
+      const visibilityRows = await getCalendarVisibilityPreferences(userId)
       const visibilityMap = new Map(visibilityRows.map((row) => [`${row.accountEmail}::${row.calendarId}`, row.isEnabled]))
 
       const accounts = await Promise.all(
@@ -117,10 +109,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.status(200).json({ ok: true })
       return
     } catch (error) {
-      if (isCalendarVisibilityTableMissing(error)) {
-        res.status(500).json({ message: "Calendar settings table is missing. Run Prisma migration first." })
-        return
-      }
       console.error("/api/google-calendar/calendars POST error", error)
       res.status(500).json({ message: "Failed to update calendar setting" })
       return
@@ -128,4 +116,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   res.status(405).json({ message: "Method not allowed" })
-}
+}, { methods: ["GET", "POST"] })

@@ -1,23 +1,12 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { fetchGoogleContacts } from "@/lib/gmail/people";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
+import { asStr } from "@/lib/api/parsing";
 
-function asStr(v: unknown) {
-  return typeof v === "string" ? v.trim() : "";
-}
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-  const session = await requireRole(req, res);
-  if (!session) return;
-
+export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
   const accountEmail = asStr(req.body?.accountEmail).toLowerCase();
   if (!accountEmail) {
@@ -163,4 +152,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     nextSyncToken: responseData.nextSyncToken,
     fullSync,
   });
-}
+}, { methods: ["POST"] });

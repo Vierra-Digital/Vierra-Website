@@ -1,6 +1,7 @@
 "use client";
-import { useState, useEffect } from "react";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { useState, useEffect, useRef } from "react";
+import { track } from "@/lib/track";
+import { bricolage, inter } from "@/lib/fonts";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiX, FiArrowLeft, FiArrowRight } from "react-icons/fi";
 import ModalShell from "@/components/ui/Modal";
@@ -13,8 +14,6 @@ import {
   formatPhone,
 } from "@/components/ui/modalForm";
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
-const inter = Inter({ subsets: ["latin"] });
 
 interface ModalProps {
   isOpen: boolean;
@@ -26,13 +25,8 @@ interface FormState {
   email: string;
   phoneNumber: string;
   website: string;
-  socialMedia: string;
   monthlyRevenue: string;
   desiredRevenue: string;
-  startTimeline: string;
-  agencyExperience: string;
-  uniqueTraits: string;
-  businessIssues: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -40,17 +34,11 @@ const EMPTY_FORM: FormState = {
   email: "",
   phoneNumber: "",
   website: "",
-  socialMedia: "",
   monthlyRevenue: "",
   desiredRevenue: "",
-  startTimeline: "",
-  agencyExperience: "",
-  uniqueTraits: "",
-  businessIssues: "",
 };
 
-const STEP_TITLES = ["Your details", "Business information", "A few more details"];
-const TOTAL_STEPS = STEP_TITLES.length;
+const TOTAL_STEPS = 2;
 
 const REVENUE_OPTIONS = [
   { value: "$10k - $25k", label: "$10k - $25k" },
@@ -60,6 +48,32 @@ const REVENUE_OPTIONS = [
   { value: "$250k - $500k", label: "$250k - $500k" },
   { value: "$500k+", label: "$500k+" },
 ];
+
+// Format a free-typed amount as US currency ($ + thousands separators) while the
+// user types, preserving a trailing "+" (e.g. "50000+" -> "$50,000+"). Empty or
+// all-zero input formats to an empty string so deletion clears cleanly.
+function formatCurrency(value: string): string {
+  const hasPlus = /\+\s*$/.test(value);
+  const amount = Number(value.replace(/\D/g, ""));
+  if (!amount) return "";
+  return `$${amount.toLocaleString("en-US")}${hasPlus ? "+" : ""}`;
+}
+
+// Number of digit characters to the left of `pos` in `str`.
+function digitsBefore(str: string, pos: number): number {
+  return str.slice(0, pos).replace(/\D/g, "").length;
+}
+
+// Caret index in `formatted` that keeps `digitCount` digits to its left — used to
+// restore the cursor after re-formatting so backspace/delete edit in place.
+function caretForDigits(formatted: string, digitCount: number): number {
+  if (digitCount <= 0) return formatted.startsWith("$") ? 1 : 0;
+  let count = 0;
+  for (let i = 0; i < formatted.length; i++) {
+    if (/\d/.test(formatted[i]) && ++count === digitCount) return i + 1;
+  }
+  return formatted.length;
+}
 
 export function Modal({ isOpen, onClose }: ModalProps) {
   const [step, setStep] = useState(1);
@@ -75,15 +89,41 @@ export function Modal({ isOpen, onClose }: ModalProps) {
       setFormData(EMPTY_FORM);
       setSubmitted(false);
       setSubmitting(false);
+      track("lead_form_open");
     }
   }, [isOpen]);
+
+  // The desired-revenue field is UNCONTROLLED (defaultValue + a ref). We format
+  // it imperatively on each keystroke and set the caret ourselves, so React's
+  // controlled-input cursor handling never fights us — deletion, mid-string
+  // edits, and separator removal all stay put and behave predictably.
+  const desiredRef = useRef<HTMLInputElement>(null);
 
   const setField = (key: keyof FormState) => (value: string) =>
     setFormData((prev) => ({ ...prev, [key]: value }));
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { id, value } = e.target;
-    setFormData((prev) => ({ ...prev, [id]: id === "phoneNumber" ? formatPhone(value) : value }));
+    setFormData((prev) => ({
+      ...prev,
+      [id]: id === "phoneNumber" ? formatPhone(value) : value,
+    }));
+  };
+
+  const handleDesiredRevenue = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const raw = input.value;
+    // How many digits sit left of the caret in the raw (pre-format) text, so we
+    // can put the caret back after the same digit once it's re-formatted.
+    const digitsLeft = digitsBefore(raw, input.selectionStart ?? raw.length);
+    const formatted = formatCurrency(raw);
+    // Write the formatted value straight to the DOM (input is uncontrolled) and
+    // restore the caret in one synchronous pass — no React re-render race.
+    input.value = formatted;
+    const caret = caretForDigits(formatted, digitsLeft);
+    input.setSelectionRange(caret, caret);
+    // Keep form state in sync for validation/submit (does not re-render the input).
+    setFormData((prev) => ({ ...prev, desiredRevenue: formatted }));
   };
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim());
@@ -105,7 +145,12 @@ export function Modal({ isOpen, onClose }: ModalProps) {
     !!formData.desiredRevenue.trim() &&
     desiredValid;
 
-  const nextStep = () => setStep((s) => Math.min(TOTAL_STEPS, s + 1));
+  const nextStep = () =>
+    setStep((s) => {
+      const next = Math.min(TOTAL_STEPS, s + 1);
+      if (next !== s) track("lead_form_step", { step: next });
+      return next;
+    });
   const prevStep = () => setStep((s) => Math.max(1, s - 1));
 
   const handleSubmit = async () => {
@@ -122,6 +167,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
         return;
       }
       setSubmitted(true);
+      track("generate_lead");
     } catch (error) {
       console.error("Error submitting form:", error);
       alert("An error occurred. Please try again.");
@@ -138,14 +184,14 @@ export function Modal({ isOpen, onClose }: ModalProps) {
     <ModalShell
       onClose={onClose}
       zIndexClass="z-[200]"
-      backdropClassName="bg-[#1A1033]/50 backdrop-blur-md"
-      cardClassName={`relative flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ${inter.className}`}
+      backdropClassName="bg-[#0F0F14]/70 backdrop-blur-md"
+      cardClassName={`relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-[0_30px_80px_-28px_rgba(26,16,51,0.55)] ${inter.className}`}
       closeOnBackdrop={true}
       label="Book your free audit"
     >
       {!submitted && (
-        <div className="px-6 pt-4 sm:px-8">
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100">
+        <div className="px-7 pt-5 sm:px-10">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#701CC0]/10">
             <motion.div
               className="h-full rounded-full bg-gradient-to-r from-[#701CC0] to-[#8F42FF]"
               initial={false}
@@ -161,13 +207,13 @@ export function Modal({ isOpen, onClose }: ModalProps) {
       ) : (
         <>
           {/* Header */}
-          <div className="flex items-start justify-between gap-4 px-6 pb-5 pt-4 sm:px-8">
+          <div className="flex items-start justify-between gap-4 px-7 pb-6 pt-5 sm:px-10">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#8F42FF]">
                 Free Audit · Step {step} of {TOTAL_STEPS}
               </p>
-              <h2 className={`mt-1.5 text-xl font-semibold tracking-tight text-[#1A1033] sm:text-2xl ${bricolage.className}`}>
-                Get Your Free Audit
+              <h2 className={`mt-2 text-2xl font-semibold tracking-tight text-[#1A1033] sm:text-[1.7rem] ${bricolage.className}`}>
+                Free Audit Call
               </h2>
             </div>
             <button
@@ -179,8 +225,9 @@ export function Modal({ isOpen, onClose }: ModalProps) {
             </button>
           </div>
 
-          {/* Scrollable body */}
-          <div className="flex-1 overflow-y-auto px-6 pb-2 sm:px-8">
+          {/* Scrollable body — scrollbar hidden (rarely needed; only on short
+              viewports), matching the rest of the site's chrome-free scroll. */}
+          <div className="modal-scroll-area flex-1 overflow-y-auto px-7 pb-2 pt-1 sm:px-10">
             <AnimatePresence mode="wait">
               <motion.div
                 key={step}
@@ -188,7 +235,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -12 }}
                 transition={{ duration: 0.2 }}
-                className="space-y-4"
+                className="space-y-5"
               >
                 {step === 1 && (
                   <>
@@ -198,39 +245,41 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                         type="text"
                         value={formData.fullName}
                         onChange={handleChange}
-                        className={`${inputClass} border-gray-200`}
+                        className={inputClass}
                         placeholder="John Doe"
                       />
                     </Field>
-                    <Field
-                      label="Email"
-                      htmlFor="email"
-                      error={formData.email && !emailValid ? "Enter a valid email address." : undefined}
-                    >
-                      <input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={handleChange}
-                        className={`${inputClass} ${formData.email && !emailValid ? "border-red-400 bg-red-50/50" : "border-gray-200"}`}
-                        placeholder="john@example.com"
-                      />
-                    </Field>
-                    <Field
-                      label="Phone Number"
-                      htmlFor="phoneNumber"
-                      error={formData.phoneNumber && !phoneValid ? "Enter a valid phone number." : undefined}
-                    >
-                      <input
-                        id="phoneNumber"
-                        type="tel"
-                        inputMode="numeric"
-                        value={formData.phoneNumber}
-                        onChange={handleChange}
-                        className={`${inputClass} ${formData.phoneNumber && !phoneValid ? "border-red-400 bg-red-50/50" : "border-gray-200"}`}
-                        placeholder="(555) 123-4567"
-                      />
-                    </Field>
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                      <Field
+                        label="Email"
+                        htmlFor="email"
+                        error={formData.email && !emailValid ? "Enter a valid email address." : undefined}
+                      >
+                        <input
+                          id="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={handleChange}
+                          className={`${inputClass} ${formData.email && !emailValid ? "border-red-400 bg-red-50/50" : ""}`}
+                          placeholder="john@example.com"
+                        />
+                      </Field>
+                      <Field
+                        label="Phone Number"
+                        htmlFor="phoneNumber"
+                        error={formData.phoneNumber && !phoneValid ? "Enter a valid phone number." : undefined}
+                      >
+                        <input
+                          id="phoneNumber"
+                          type="tel"
+                          inputMode="numeric"
+                          value={formData.phoneNumber}
+                          onChange={handleChange}
+                          className={`${inputClass} ${formData.phoneNumber && !phoneValid ? "border-red-400 bg-red-50/50" : ""}`}
+                          placeholder="(555) 123-4567"
+                        />
+                      </Field>
+                    </div>
                   </>
                 )}
 
@@ -246,21 +295,11 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                         type="url"
                         value={formData.website}
                         onChange={handleChange}
-                        className={`${inputClass} ${formData.website && !websiteValid ? "border-red-400 bg-red-50/50" : "border-gray-200"}`}
-                        placeholder="https://yourwebsite.com"
+                        className={`${inputClass} ${formData.website && !websiteValid ? "border-red-400 bg-red-50/50" : ""}`}
+                        placeholder="https://vierradev.com"
                       />
                     </Field>
-                    <Field label="Social Media" htmlFor="socialMedia" optional>
-                      <input
-                        id="socialMedia"
-                        type="text"
-                        value={formData.socialMedia}
-                        onChange={handleChange}
-                        className={`${inputClass} border-gray-200`}
-                        placeholder="Instagram, LinkedIn, Facebook handles"
-                      />
-                    </Field>
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                       <Field label="Current Monthly Revenue" htmlFor="monthlyRevenue">
                         <ThemedSelect
                           id="monthlyRevenue"
@@ -276,60 +315,17 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                         error={formData.desiredRevenue && !desiredValid ? "Enter a valid amount." : undefined}
                       >
                         <input
+                          ref={desiredRef}
                           id="desiredRevenue"
                           type="text"
-                          value={formData.desiredRevenue}
-                          onChange={handleChange}
-                          className={`${inputClass} ${formData.desiredRevenue && !desiredValid ? "border-red-400 bg-red-50/50" : "border-gray-200"}`}
+                          inputMode="numeric"
+                          defaultValue={formData.desiredRevenue}
+                          onChange={handleDesiredRevenue}
+                          className={`${inputClass} ${formData.desiredRevenue && !desiredValid ? "border-red-400 bg-red-50/50" : ""}`}
                           placeholder="$50,000+"
                         />
                       </Field>
                     </div>
-                  </>
-                )}
-
-                {step === 3 && (
-                  <>
-                    <Field label="How soon can you get started?" htmlFor="startTimeline" optional>
-                      <input
-                        id="startTimeline"
-                        type="text"
-                        value={formData.startTimeline}
-                        onChange={handleChange}
-                        className={`${inputClass} border-gray-200`}
-                        placeholder="e.g. Within 2 weeks, Next month"
-                      />
-                    </Field>
-                    <Field label="Agency Experience" htmlFor="agencyExperience" optional>
-                      <textarea
-                        id="agencyExperience"
-                        value={formData.agencyExperience}
-                        onChange={handleChange}
-                        rows={2}
-                        className={`${inputClass} resize-none border-gray-200`}
-                        placeholder="Have you worked with agencies before? Share your experience..."
-                      />
-                    </Field>
-                    <Field label="What sets you apart?" htmlFor="uniqueTraits" optional>
-                      <textarea
-                        id="uniqueTraits"
-                        value={formData.uniqueTraits}
-                        onChange={handleChange}
-                        rows={2}
-                        className={`${inputClass} resize-none border-gray-200`}
-                        placeholder="What makes your business unique?"
-                      />
-                    </Field>
-                    <Field label="Industry Challenges" htmlFor="businessIssues" optional>
-                      <textarea
-                        id="businessIssues"
-                        value={formData.businessIssues}
-                        onChange={handleChange}
-                        rows={2}
-                        className={`${inputClass} resize-none border-gray-200`}
-                        placeholder="What are the biggest challenges in your industry?"
-                      />
-                    </Field>
                   </>
                 )}
               </motion.div>
@@ -337,11 +333,11 @@ export function Modal({ isOpen, onClose }: ModalProps) {
           </div>
 
           {/* Footer */}
-          <div className="mt-2 flex items-center justify-between gap-3 border-t border-gray-100 px-6 py-4 sm:px-8">
+          <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#1A1033]/10 px-7 py-4 sm:px-10">
             {step > 1 ? (
               <button
                 onClick={prevStep}
-                className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-medium text-[#6B6480] transition-colors hover:text-[#1A1033]"
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium text-[#6B6480] transition-colors hover:text-[#1A1033]"
               >
                 <FiArrowLeft className="h-4 w-4" /> Back
               </button>
@@ -352,7 +348,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
             {step < TOTAL_STEPS ? (
               <PrimaryButton
                 onClick={nextStep}
-                disabled={(step === 1 && !step1Valid) || (step === 2 && !step2Valid)}
+                disabled={step === 1 && !step1Valid}
               >
                 Continue
                 <motion.span
@@ -365,6 +361,14 @@ export function Modal({ isOpen, onClose }: ModalProps) {
             ) : (
               <PrimaryButton onClick={handleSubmit} disabled={submitting || !step1Valid || !step2Valid}>
                 {submitting ? "Submitting..." : "Submit"}
+                {!submitting && (
+                  <motion.span
+                    animate={{ x: [0, 4, 0] }}
+                    transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+                  >
+                    <FiArrowRight className="h-4 w-4" />
+                  </motion.span>
+                )}
               </PrimaryButton>
             )}
           </div>
@@ -384,17 +388,20 @@ const SuccessView: React.FC<{ onClose: () => void }> = ({ onClose }) => (
       <FiX className="h-5 w-5" />
     </button>
     <motion.div
-      className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#701CC0] to-[#8F42FF] shadow-[0_12px_30px_-8px_rgba(112,28,192,0.6)]"
+      className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#16A34A] to-[#22C55E] shadow-[0_12px_30px_-8px_rgba(22,163,74,0.6)]"
       initial={{ scale: 0, rotate: -90 }}
       animate={{ scale: 1, rotate: 0 }}
       transition={{ duration: 0.5, type: "spring", bounce: 0.45 }}
     >
-      <motion.span
-        className="absolute inset-0 rounded-full bg-[#8F42FF]/40"
-        initial={{ scale: 1, opacity: 0.6 }}
-        animate={{ scale: 1.6, opacity: 0 }}
-        transition={{ duration: 1, ease: "easeOut", delay: 0.2 }}
-      />
+      {[0, 1].map((i) => (
+        <motion.span
+          key={i}
+          className="absolute inset-0 rounded-full border-2 border-[#22C55E]"
+          initial={{ scale: 1, opacity: 0.5 }}
+          animate={{ scale: 1.85, opacity: 0 }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeOut", delay: i }}
+        />
+      ))}
       <svg className="h-9 w-9 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
         <motion.path
           d="M5 13l4 4L19 7"
@@ -405,17 +412,17 @@ const SuccessView: React.FC<{ onClose: () => void }> = ({ onClose }) => (
       </svg>
     </motion.div>
     <h2 className={`text-2xl font-semibold tracking-tight text-[#1A1033] ${bricolage.className}`}>
-      Audit requested
+      Free Audit Claimed
     </h2>
     <p className="mx-auto mt-2 max-w-sm text-[15px] leading-7 text-[#6B6480]">
-      Thanks for your interest in Vierra. We’ve received your details and our team will be in touch within 24 to 48 hours.
+      We’ve received your details and our team will be in touch within 24 hours.
     </p>
     <motion.button
       type="button"
       onClick={onClose}
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
-      className="mt-7 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#701CC0] to-[#8F42FF] px-7 py-2.5 text-sm font-medium text-white shadow-[0_6px_20px_-6px_rgba(112,28,192,0.6)] transition-all duration-200 hover:shadow-[0_8px_26px_-6px_rgba(112,28,192,0.7)]"
+      className="mt-7 inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#701CC0] to-[#8F42FF] px-7 py-2.5 text-sm font-medium text-white shadow-[0_6px_20px_-6px_rgba(112,28,192,0.6)] transition-all duration-200 hover:shadow-[0_8px_26px_-6px_rgba(112,28,192,0.7)]"
     >
       Done
     </motion.button>

@@ -8,7 +8,6 @@ import type { GetServerSideProps } from "next";
 import { requireSession } from "@/lib/auth";
 import { signOut } from "@/lib/session-client";
 
-const inter = Inter({ subsets: ["latin"] });
 
 type Step = "company" | "name" | "photo";
 const STEPS: Step[] = ["company", "name", "photo"];

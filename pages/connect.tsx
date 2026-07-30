@@ -4,14 +4,13 @@ import Head from "next/head"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useSession, signOut } from "@/lib/session-client"
-import { Inter } from "next/font/google"
+import { inter } from "@/lib/fonts";
 import { FiFileText, FiLogOut, FiLink, FiChevronRight } from "react-icons/fi"
 import type { GetServerSideProps } from "next"
 import { requireSession } from "@/lib/auth"
 import UserSettingsPage from "@/components/UserSettingsPage"
 import { profileImageSrc } from "@/lib/profileImage"
 
-const inter = Inter({ subsets: ["latin"] })
 
 type PageProps = { dashboardHref: string }
 

@@ -1,6 +1,5 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { parseContactsCsvWithValidation } from "@/lib/contacts/csv";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
@@ -52,23 +51,16 @@ function normalizePhone(value: string) {
   return `(${digits.slice(0, 3)})-${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-
-  const session = await requireRole(req, res);
-  if (!session) return;
+export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
 
   const csvText = typeof req.body?.csvText === "string" ? req.body.csvText : "";
-  const accountEmail = typeof req.body?.accountEmail === "string" ? req.body.accountEmail.trim().toLowerCase() : "";
-  const accountId = await resolveAccountId(userId, accountEmail);
   if (!csvText.trim()) {
     res.status(400).json({ message: "csvText is required." });
     return;
   }
+  const accountEmail = typeof req.body?.accountEmail === "string" ? req.body.accountEmail.trim().toLowerCase() : "";
+  const accountId = await resolveAccountId(userId, accountEmail);
 
   const parsed = parseContactsCsvWithValidation(csvText);
   if (parsed.headerErrors.length > 0) {
@@ -207,4 +199,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     errors: rowErrors,
     headerErrors: [],
   });
-}
+}, { methods: ["POST"] });

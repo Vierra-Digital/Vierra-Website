@@ -2,12 +2,12 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { FiSearch, FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck } from "react-icons/fi";
 import Image from "next/image";
 import ProfileImage from "../ProfileImage";
-import { Inter } from "next/font/google";
+import { inter } from "@/lib/fonts";
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import Modal from "@/components/ui/Modal";
 
-const inter = Inter({ subsets: ["latin"] });
 
 const StaffActionsMenu: React.FC<{
     staffId: string
@@ -453,10 +453,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
                     {loading ? (
                         <div className="flex items-center justify-center py-12">
-                            <div className="text-center">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto"></div>
-                                <p className="mt-2 text-sm text-[#6B7280]">Loading Staff Data...</p>
-                            </div>
+                            <LoadingSpinner label="Loading Staff Data..." />
                         </div>
                     ) : (
                         <>

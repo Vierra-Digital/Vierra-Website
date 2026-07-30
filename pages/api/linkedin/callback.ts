@@ -1,8 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { encrypt } from "@/lib/crypto";
 import { requireSession } from "@/lib/auth";
-import { asStr, clearOauthStateCookie, readCookies, setOnboardingSessionCookie } from "@/lib/api/oauth";
+import { appendSetCookie, asStr, clearOauthStateCookie, readCookies, setOnboardingSessionCookie } from "@/lib/api/oauth";
+import { persistPlatformToken, persistOnboardingPlatformToken } from "@/lib/api/oauthTokens";
 import { serialize as serializeCookie } from "cookie";
 
 type TokenExchangeResult = {
@@ -10,12 +10,6 @@ type TokenExchangeResult = {
   expires_in?: number;
   refresh_token?: string;
 };
-
-function appendSetCookie(res: NextApiResponse, value: string) {
-  const existing = res.getHeader("Set-Cookie");
-  const next = Array.isArray(existing) ? [...existing, value] : existing ? [String(existing), value] : [value];
-  res.setHeader("Set-Cookie", next);
-}
 
 async function exchangeLinkedInToken(params: {
   code: string;
@@ -112,8 +106,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { access_token, expires_in, refresh_token } = tokenPayload;
   if (!access_token) { res.status(400).send("No access token received"); return; }
 
-  const encAccess = encrypt(access_token);
-  const encRefresh = refresh_token ? encrypt(refresh_token) : undefined;
   const expiresAt = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
   if (hasStateCookie) {
     if (!state || cookies.li_oauth_state !== state) { res.status(400).send("Invalid state"); return; }
@@ -133,11 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!session) { res.redirect("/login"); return; }
     const userId = (session.user as any).id;
 
-    await prisma.platformToken.upsert({
-      where: { user_id_platform: { user_id: userId, platform: "linkedin" } },
-      update: { access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
-      create: { user_id: userId, platform: "linkedin", access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
-    });
+    await persistPlatformToken(userId, { platform: "linkedin", accessToken: access_token, refreshToken: refresh_token, expiresAt });
 
     res.redirect(connectedRedirect);
     return;
@@ -145,30 +133,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!state) { res.status(400).send("Missing state"); return; }
   const sess = await prisma.onboardingSession.findUnique({ where: { id: state } });
   if (!sess) {
-    const session = await requireSession(req, res);
-    if (session) {
-      const userId = (session.user as any).id;
-      await prisma.platformToken.upsert({
-        where: { user_id_platform: { user_id: userId, platform: "linkedin" } },
-        update: { access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
-        create: { user_id: userId, platform: "linkedin", access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
-      });
-      res.redirect(connectedRedirect);
-      return;
-    }
+    // No li_oauth_state cookie AND `state` is not a valid onboarding session id. Do NOT bind the
+    // token to whatever user happens to be logged in — that is a CSRF/account-injection vector
+    // (an attacker's OAuth `code` + an arbitrary `state` would attach THEIR LinkedIn token to a
+    // logged-in victim). Legitimate authenticated connects always carry the state cookie and are
+    // handled in the `hasStateCookie` branch above; anything reaching here is invalid.
     if (isSettingsSource) {
       res.redirect("/login?callbackUrl=%2Fclient%3Fsettings%3D1");
       return;
     }
-    res.status(400).send("Invalid onboarding session");
+    res.status(400).send("Invalid or missing state");
     return;
   }
 
-  await prisma.onboardingPlatformToken.upsert({
-    where: { session_id_platform: { session_id: state, platform: "linkedin" } },
-    update: { access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
-    create: { session_id: state, platform: "linkedin", access_token: encAccess, ...(encRefresh && { refresh_token: encRefresh }), ...(expiresAt && { expires_at: expiresAt }) },
-  });
+  await persistOnboardingPlatformToken(state, { platform: "linkedin", accessToken: access_token, refreshToken: refresh_token, expiresAt });
   setOnboardingSessionCookie(res, state);
 
   res.redirect(`/onboarding/${state}?linked=linkedin`);

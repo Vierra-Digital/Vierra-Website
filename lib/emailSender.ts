@@ -1,17 +1,13 @@
 import nodemailer from "nodemailer";
+import { isBrevoConfigured, sendBrevoEmail } from "@/lib/email/brevo";
 
 interface EmailData {
   fullName: string;
   email: string;
   phoneNumber: string;
   website: string;
-  socialMedia: string;
   monthlyRevenue: string;
   desiredRevenue: string;
-  startTimeline: string;
-  agencyExperience: string;
-  uniqueTraits: string;
-  businessIssues: string;
 }
 
 const transporter = nodemailer.createTransport({
@@ -24,9 +20,35 @@ const transporter = nodemailer.createTransport({
 } as nodemailer.TransportOptions);
 
 const recipients = ["alex@vierradev.com"];
-const fromEmail = process.env.FROM_EMAIL || "business@alexshick.com";
+const fromEmail = process.env.FROM_EMAIL || "alex@vierradev.com";
 const fromName = process.env.FROM_NAME || "Vierra";
 const fromAddress = `"${fromName}" <${fromEmail}>`;
+
+interface DeliverOptions {
+  to: string;
+  subject: string;
+  html: string;
+  attachments?: { filename: string; content: Buffer; contentType?: string; cid?: string }[];
+}
+
+/**
+ * Send through Brevo (authenticated for vierradev.com) when configured;
+ * otherwise fall back to Gmail SMTP. Gmail-sent mail as an @vierradev.com
+ * From address fails the domain's DMARC (p=reject) and lands in spam, so
+ * Brevo is the correct path whenever BREVO_API_KEY is set.
+ */
+async function deliver(options: DeliverOptions): Promise<void> {
+  if (isBrevoConfigured()) {
+    await sendBrevoEmail({
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+      attachments: options.attachments?.map((a) => ({ filename: a.filename, content: a.content })),
+    });
+    return;
+  }
+  await transporter.sendMail({ from: fromAddress, ...options });
+}
 
 export async function sendEmail(data: EmailData): Promise<void> {
   const formattedPhoneNumber = data.phoneNumber.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
@@ -34,39 +56,99 @@ export async function sendEmail(data: EmailData): Promise<void> {
   const mailOptions = {
     from: fromAddress,
     to: recipients.join(","),
-    subject: "New Client Form Submission",
+    subject: "Vierra | New Client Form Submission",
     html: `
-      <div style="font-family: Arial, sans-serif; background-color: #18042A; color: #FFFFFF; padding: 20px; border-radius: 10px;">
-        <div style="text-align: center; margin-bottom: 20px;">
-          <img src="https://vierradev.com/assets/vierra-logo.png" alt="Vierra Logo" style="width: 150px; height: auto;" />
-        </div>
-        <h2 style="color: #701CC0; text-align: center;">New Client Form Submission</h2>
-        <p><strong>Full Name:</strong> ${data.fullName}</p>
-        <p><strong>Email:</strong> <a href="mailto:${data.email}" style="color: #8F42FF; text-decoration: none;">${data.email}</a></p>
-        <p><strong>Phone Number:</strong> <a href="tel:${formattedPhoneNumber}" style="color: #8F42FF; text-decoration: none;">${formattedPhoneNumber}</a></p>
-        <p><strong>Website:</strong> <a href="${data.website}" target="_blank" style="color: #8F42FF; text-decoration: none;">${data.website}</a></p>
-        <p><strong>Social Media:</strong> ${data.socialMedia}</p>
-        <p><strong>Monthly Revenue:</strong> ${data.monthlyRevenue}</p>
-        <p><strong>Desired Revenue:</strong> ${data.desiredRevenue}</p>
-        <p><strong>Start Timeline:</strong> ${data.startTimeline}</p>
-        <p><strong>Agency Experience:</strong> ${data.agencyExperience}</p>
-        <p><strong>Unique Traits:</strong> ${data.uniqueTraits}</p>
-        <p><strong>Business Issues:</strong> ${data.businessIssues}</p>
-        <footer style="margin-top: 30px; text-align: center; border-top: 1px solid #701CC0; padding-top: 20px; color: #9BAFC3;">
-          <p style="margin: 0;">© 2025 Vierra Digital Inc. All rights reserved.</p>
-          <p style="margin: 0;">Visit us at <a href="https://vierradev.com" style="color: #8F42FF; text-decoration: none;">vierradev.com</a></p>
-        </footer>
+      <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
+        <table style="width:100%;max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
+              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:50px 40px;text-align:left;vertical-align:top;">
+              <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;text-align:left;">Audit Request</h2>
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 24px;text-align:left;">A new lead just submitted the free audit request form:</p>
+              <table style="width:100%;border-collapse:collapse;margin:0 0 8px;">
+                <tr>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;color:#2e0a4f;font-weight:700;font-size:15px;width:42%;">Full Name</td>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;color:#444;font-size:15px;">${data.fullName}</td>
+                </tr>
+                <tr>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;color:#2e0a4f;font-weight:700;font-size:15px;">Email</td>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;font-size:15px;"><a href="mailto:${data.email}" style="color:#7A13D0;text-decoration:none;">${data.email}</a></td>
+                </tr>
+                <tr>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;color:#2e0a4f;font-weight:700;font-size:15px;">Phone Number</td>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;font-size:15px;"><a href="tel:${formattedPhoneNumber}" style="color:#7A13D0;text-decoration:none;">${formattedPhoneNumber}</a></td>
+                </tr>
+                <tr>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;color:#2e0a4f;font-weight:700;font-size:15px;">Website</td>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;font-size:15px;"><a href="${data.website}" target="_blank" style="color:#7A13D0;text-decoration:none;">${data.website}</a></td>
+                </tr>
+                <tr>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;color:#2e0a4f;font-weight:700;font-size:15px;">Monthly Revenue</td>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;color:#444;font-size:15px;">${data.monthlyRevenue}</td>
+                </tr>
+                <tr>
+                  <td style="padding:11px 0;color:#2e0a4f;font-weight:700;font-size:15px;">Desired Revenue</td>
+                  <td style="padding:11px 0;color:#444;font-size:15px;">${data.desiredRevenue}</td>
+                </tr>
+              </table>
+              ${signedEmailFooterHtml}
+            </td>
+          </tr>
+        </table>
       </div>
     `,
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log("Email sent successfully:", info.response);
+    await deliver(mailOptions);
+    console.log("Email sent successfully");
   } catch (error) {
     console.error("Error sending email:", error);
     throw error;
   }
+}
+
+/**
+ * Auto-reply confirmation sent to the lead who submitted the free audit form,
+ * so they know it went through. Best-effort — callers should not fail the form
+ * submission if this bounces (e.g. a mistyped address).
+ */
+export async function sendAuditConfirmationEmail(data: Pick<EmailData, "fullName" | "email">): Promise<void> {
+  const firstName = (data.fullName || "").trim().split(/\s+/)[0] || "there";
+  const mailOptions = {
+    from: fromAddress,
+    to: data.email,
+    subject: "Vierra | Audit Request Claimed",
+    html: `
+      <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
+        <table style="width:100%;max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
+              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:50px 40px;text-align:left;vertical-align:top;">
+              <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;text-align:left;">Your Audit Request Has Been Claimed</h2>
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 20px;text-align:left;">
+                Hi ${firstName}, congratulations! You have claimed your free business audit. Our team will be in touch within 24 hours to schedule your call.
+              </p>
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;text-align:left;">
+                In the meantime, just reply to this email if there's anything you'd like us to know before we connect.
+              </p>
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;text-align:left;">Best Wishes,<br/>- The Vierra Team</p>
+              ${signedEmailFooterHtml}
+            </td>
+          </tr>
+        </table>
+      </div>
+    `,
+  };
+  await deliver(mailOptions);
 }
 
 function ensurePdfExtension(name: string): string {
@@ -85,13 +167,13 @@ const signedEmailFooterHtml = `
     <a href="https://www.instagram.com/vierra.dev" style="margin:0 12px;display:inline-block;">
       <img src="https://vierradev.com/assets/Socials/Instagram.png" alt="Instagram" style="width:32px;height:32px;">
     </a>
-    <a href="https://www.facebook.com/share/1GXE6s4NSX/?mibextid=wwXIfr" style="margin:0 12px;display:inline-block;">
+    <a href="https://www.facebook.com/vierradigital" style="margin:0 12px;display:inline-block;">
       <img src="https://vierradev.com/assets/Socials/Facebook.png" alt="Facebook" style="width:32px;height:32px;">
     </a>
   </div>
   <div style="color:#999;font-size:14px;margin-top:30px;padding-top:20px;border-top:1px solid #eee;text-align:center;">
     Copyright &copy; ${new Date().getFullYear()} <a href="https://vierradev.com" style="color:#7A13D0;text-decoration:none;font-weight:600;">Vierra Digital</a>. All rights reserved.<br/>
-    Contact: <a href="mailto:alex@vierradev.com" style="color:#999;text-decoration:none;">alex@vierradev.com</a>
+    Email: <a href="mailto:alex@vierradev.com" style="color:#999;text-decoration:none;">alex@vierradev.com</a>
   </div>
 `;
 
@@ -106,7 +188,7 @@ export async function sendSignedDocumentEmail(documentName: string, attachment: 
         <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
           <tr>
             <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
+              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
             </td>
           </tr>
           <tr>
@@ -138,8 +220,8 @@ export async function sendSignedDocumentEmail(documentName: string, attachment: 
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log("Signed document email sent successfully:", info.response);
+    await deliver(mailOptions);
+    console.log("Signed document email sent successfully");
   } catch (error) {
     console.error("Error sending signed document email:", error);
   }
@@ -156,7 +238,7 @@ export async function sendSignerCopyEmail(email: string, documentName: string, a
         <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
           <tr>
             <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
+              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
             </td>
           </tr>
           <tr>
@@ -188,8 +270,8 @@ export async function sendSignerCopyEmail(email: string, documentName: string, a
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Signed document copy sent to signer at ${email}:`, info.response);
+    await deliver(mailOptions);
+    console.log(`Signed document copy sent to signer at ${email}`);
   } catch (error) {
     console.error(`Error sending signed document copy to signer at ${email}:`, error);
     throw error;
@@ -206,7 +288,7 @@ export async function sendStaffSetPasswordEmail(staffEmail: string, staffName: s
         <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
           <tr>
             <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
+              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
             </td>
           </tr>
           <tr>
@@ -230,8 +312,8 @@ export async function sendStaffSetPasswordEmail(staffEmail: string, staffName: s
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Set password email sent to ${staffEmail}:`, info.response);
+    await deliver(mailOptions);
+    console.log(`Set password email sent to ${staffEmail}`);
   } catch (error) {
     console.error(`Error sending set password email to ${staffEmail}:`, error);
     throw error;
@@ -248,7 +330,7 @@ export async function sendPasswordResetEmail(email: string, name: string, resetL
         <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
           <tr>
             <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
+              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
             </td>
           </tr>
           <tr>
@@ -272,8 +354,8 @@ export async function sendPasswordResetEmail(email: string, name: string, resetL
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Password reset email sent to ${email}:`, info.response);
+    await deliver(mailOptions);
+    console.log(`Password reset email sent to ${email}`);
   } catch (error) {
     console.error(`Error sending password reset email to ${email}:`, error);
     throw error;
@@ -295,7 +377,7 @@ export async function sendClientOnboardingCompletedEmail(
         <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
           <tr>
             <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
+              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
             </td>
           </tr>
           <tr>
@@ -324,8 +406,8 @@ export async function sendClientOnboardingCompletedEmail(
   };
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Onboarding completion email sent to ${clientEmail}:`, info.response);
+    await deliver(mailOptions);
+    console.log(`Onboarding completion email sent to ${clientEmail}`);
   } catch (error) {
     console.error(`Error sending onboarding completion email to ${clientEmail}:`, error);
     throw error;

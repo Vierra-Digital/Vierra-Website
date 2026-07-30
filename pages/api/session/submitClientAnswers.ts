@@ -28,6 +28,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!precheck) throw new Error("Session not found");
     if (!precheck.clients) throw new Error("Client missing for session");
 
+    // Enforce the same expiry / single-submission gate the read path (session/[token].ts) applies.
+    // Without it an expired or already-completed link can be replayed — re-running completion resends
+    // the set-password email and re-triggers account provisioning.
+    const nowTs = new Date();
+    if (precheck.expires_at && nowTs > precheck.expires_at) {
+      return res.status(410).json({ message: "This onboarding link has expired." });
+    }
+    if (precheck.status === "completed" || precheck.submitted_at || precheck.consumed_at) {
+      return res.status(410).json({ message: "This onboarding form was already submitted." });
+    }
+
     let newSupabaseUserId: string | null = null;
     if (completed) {
       const existingUser = await prisma.user.findUnique({

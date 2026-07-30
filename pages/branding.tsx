@@ -1,14 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bricolage_Grotesque, Inter, Figtree } from 'next/font/google';
+import { bricolage, inter, figtree } from "@/lib/fonts";
 import Head from 'next/head';
 import Image from 'next/image';
 import { Header } from '@/components/Header';
 import Footer from '@/components/FooterSection/Footer';
 
-const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
-const inter = Inter({ subsets: ['latin'] });
-const figtree = Figtree({ subsets: ['latin'] });
 
 type SectionMeta = { id: string; title: string };
 
@@ -141,7 +138,10 @@ const BrandingPage: React.FC = () => {
         <meta property="og:description" content="Logo styles, colors, gradients, and typography that make up the Vierra visual identity." />
         <meta property="og:url" content="https://vierradev.com/branding" />
         <meta property="og:type" content="website" />
-        <meta name="twitter:card" content="summary" />
+        <meta property="og:site_name" content="Vierra Digital" />
+        <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="https://vierradev.com/assets/meta-banner.png" />
         <meta name="twitter:title" content="Vierra | Brand Kit" />
         <meta name="twitter:description" content="Logo styles, colors, gradients, and typography that make up the Vierra visual identity." />
       </Head>
@@ -363,7 +363,7 @@ const BrandingPage: React.FC = () => {
                       <div className="h-28" style={{ background: 'conic-gradient(from 0deg, #701cc0, #8f42ff, #d4a5ff, #8f42ff, #701cc0)' }} />
                       <div className="p-4">
                         <p className="text-sm font-semibold text-[#1A1033]">Glow Conic</p>
-                        <p className="mt-1 text-[12px] text-[#6B6480]">Animated trim on the “Free Audit Call” button</p>
+                        <p className="mt-1 text-[12px] text-[#6B6480]">Animated trim on the “Let’s Talk” button</p>
                       </div>
                     </div>
                   </div>

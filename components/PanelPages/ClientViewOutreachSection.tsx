@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Inter } from "next/font/google";
+import { inter } from "@/lib/fonts";
 import PanelSectionHeader from "@/components/ui/PanelSectionHeader";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Modal from "@/components/ui/Modal";
 import { FiGlobe, FiHeart, FiMail, FiMessageCircle, FiMoreHorizontal, FiRepeat, FiSend, FiThumbsUp } from "react-icons/fi";
 
-const inter = Inter({ subsets: ["latin"] });
 
 type Step = "cards" | "account" | "company" | "context" | "manual" | "research" | "result";
 type Mode = "manual" | "market_research";
@@ -144,8 +144,6 @@ const ClientViewOutreachSection: React.FC<{ clientId?: string | null }> = ({ cli
       revenue: number;
       engagementRateProxy: number;
     };
-    benchmarkAngles?: Array<{ keyword: string; title: string; angle: string }>;
-    enrichedKeywords?: string[];
   } | null>(null);
 
   const fullPostText = useMemo(() => {
@@ -490,10 +488,7 @@ const ClientViewOutreachSection: React.FC<{ clientId?: string | null }> = ({ cli
                 <h3 className="text-sm font-semibold text-[#111827]">Onboarding + Business Context</h3>
                 {loading ? (
                   <div className="py-8 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto" />
-                      <p className="mt-2 text-sm text-[#6B7280]">Loading Context Data...</p>
-                    </div>
+                    <LoadingSpinner label="Loading Context Data..." />
                   </div>
                 ) : (
                   <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-[#374151]">

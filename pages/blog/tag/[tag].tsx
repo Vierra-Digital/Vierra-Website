@@ -1,15 +1,13 @@
 import { GetStaticPaths, GetStaticProps } from "next"
 import Head from "next/head"
 import Link from "next/link"
-import { Bricolage_Grotesque, Inter } from "next/font/google"
+import { bricolage, inter } from "@/lib/fonts";
 import { getPostsByTag, getAllTags } from "@/lib/blog"
 import { Header } from "@/components/Header"
 import Footer from "@/components/FooterSection/Footer"
 import { motion } from "framer-motion"
 import { ChevronRight } from "lucide-react"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const inter = Inter({ subsets: ["latin"] })
 
 type TagPageProps = {
   tag: string
@@ -49,6 +47,7 @@ export default function TagPage({ tag, posts }: TagPageProps) {
         <meta property="og:description" content={`Browse Vierra blog posts tagged with ${tag}.`} />
         <meta property="og:url" content={pageUrl} />
         <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="Vierra Digital" />
         <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={`Vierra | ${tag} Blog Posts`} />
@@ -79,36 +78,19 @@ export default function TagPage({ tag, posts }: TagPageProps) {
             "@type": "CollectionPage",
             name: `Tag: ${tag}`,
             url: pageUrl,
-            publisher: {
-              "@type": "Organization",
-              name: "Vierra Digital",
-              logo: {
-                "@type": "ImageObject",
-                url: "https://vierradev.com/assets/vierra-logo.png",
-                width: 464,
-                height: 188,
-              },
-            },
+            publisher: { "@id": "https://vierradev.com/#organization" },
             hasPart: posts.map((p) => ({
               "@type": "BlogPosting",
               headline: p.title,
               url: `${baseUrl}/blog/${p.slug}`,
               datePublished: p.publishedDate,
+              dateModified: p.publishedDate,
               author: {
                 "@type": "Person",
                 name: p.author.name,
                 url: `${baseUrl}/blog/author/${encodeURIComponent(p.author.name)}`,
               },
-              publisher: {
-                "@type": "Organization",
-                name: "Vierra Digital",
-                logo: {
-                  "@type": "ImageObject",
-                  url: "https://vierradev.com/assets/vierra-logo.png",
-                  width: 464,
-                  height: 188,
-                },
-              },
+              publisher: { "@id": "https://vierradev.com/#organization" },
             })),
           }),
         }}
@@ -149,7 +131,7 @@ export default function TagPage({ tag, posts }: TagPageProps) {
         </div>
 
         {/* Posts */}
-        <div className="bg-[#F3F3F3]">
+        <main className="bg-[#F3F3F3]">
           <div className="max-w-6xl mx-auto px-6 py-16">
             {posts.length === 0 ? (
               <div className="text-center text-sm text-[#6B7280]">No posts found.</div>
@@ -193,7 +175,7 @@ export default function TagPage({ tag, posts }: TagPageProps) {
               </div>
             )}
           </div>
-        </div>
+        </main>
         <Footer />
       </div>
     </>
@@ -236,7 +218,7 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
           tag: p.tag ?? null,
         }))
       },
-      revalidate: 60,
+      revalidate: 600,
     }
   } catch (error) {
     // Transient DB failure — rethrow (non-cached 500 + retry) instead of caching a 404.

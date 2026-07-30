@@ -17,6 +17,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (!sessionData) {
             return res.status(404).json({ message: 'Session not found or expired' });
         }
+        if (sessionData.status === 'expired') {
+            return res.status(410).json({ message: 'This signing link has expired.' });
+        }
 
         const firstSignature = sessionData.fields?.find(f => f.type === 'signature');
         const coords = sessionData.coordinates ?? (firstSignature ? {

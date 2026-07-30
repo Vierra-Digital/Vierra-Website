@@ -1,3 +1,5 @@
+import { guardSpreadsheetFormula } from "@/lib/contacts/spreadsheet";
+
 export type CsvContactRow = {
   firstName: string;
   lastName: string;
@@ -161,7 +163,7 @@ export function parseContactsCsvWithValidation(text: string): ContactsCsvValidat
 }
 
 function escapeCsvCell(value: string) {
-  const normalized = value.replace(/"/g, '""');
+  const normalized = guardSpreadsheetFormula(value).replace(/"/g, '""');
   return `"${normalized}"`;
 }
 

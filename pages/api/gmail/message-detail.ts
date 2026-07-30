@@ -1,10 +1,8 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-
-function asStr(v: string | string[] | undefined) {
-  return Array.isArray(v) ? v[0] : v;
-}
+import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
+import { extractHeader, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
+import { asQueryStr } from "@/lib/api/parsing";
 
 function decodeBase64Url(data: string) {
   const padded = data.replace(/-/g, "+").replace(/_/g, "/");
@@ -34,19 +32,6 @@ function extractBodies(payload: any): { bodyText: string; bodyHtml: string } {
     bodyText = decodeBase64Url(payload.body.data);
   }
   return { bodyText, bodyHtml };
-}
-
-function extractHeader(headers: Array<{ name?: string; value?: string }> | undefined, key: string) {
-  if (!headers) return "";
-  const target = headers.find((h) => (h.name || "").toLowerCase() === key.toLowerCase());
-  return target?.value || "";
-}
-
-function extractEmailFromHeader(value: string) {
-  const trimmed = (value || "").trim();
-  const angleMatch = trimmed.match(/<([^>]+)>/);
-  if (angleMatch?.[1]) return angleMatch[1].trim().toLowerCase();
-  return trimmed.toLowerCase();
 }
 
 function parseThreadMessage(message: any) {
@@ -91,25 +76,25 @@ async function fetchWithAuthRetry(
   return response;
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "GET") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-
-  const session = await requireRole(req, res);
-  if (!session) return;
-
+export default withAuth(async (req, res, session) => {
   const userId = (session.user as any).id;
-  const accountEmail = (asStr(req.query.accountEmail) || "").trim().toLowerCase();
-  const messageId = (asStr(req.query.messageId) || "").trim();
+  const accountEmail = (asQueryStr(req.query.accountEmail) || "").trim().toLowerCase();
+  const messageId = (asQueryStr(req.query.messageId) || "").trim();
   if (!accountEmail || !messageId) {
     res.status(400).json({ message: "accountEmail and messageId are required." });
     return;
   }
 
+  // Shared-inbox access: read via the mailbox owner's token (owner === requester for own accounts).
+  const access = await resolveMailboxOwner(userId, accountEmail);
+  if (!access) {
+    res.status(403).json({ message: "You don't have access to this mailbox." });
+    return;
+  }
+  const effectiveUserId = access.ownerUserId;
+
   const getToken = async (forceRefresh = false) => {
-    const tokenResult = await getValidGmailAccessToken(userId, accountEmail, forceRefresh ? { forceRefresh: true } : undefined);
+    const tokenResult = await getValidGmailAccessToken(effectiveUserId, accountEmail, forceRefresh ? { forceRefresh: true } : undefined);
     if (!tokenResult.ok) return null;
     return tokenResult.accessToken;
   };
@@ -150,7 +135,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   let senderPhotoUrl = "";
-  const senderEmail = extractEmailFromHeader(currentMessage.fromRaw);
+  const senderEmail = parseAddressFromHeader(currentMessage.fromRaw);
   if (senderEmail && senderEmail.includes("@")) {
     const trySearchContacts = async () => {
       const peopleQuery = encodeURIComponent(senderEmail);
@@ -213,4 +198,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     senderPhotoUrl,
     threadMessages,
   });
-}
+}, { methods: ["GET"] });

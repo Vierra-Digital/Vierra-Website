@@ -1,27 +1,23 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
+import { asQueryStr } from "@/lib/api/parsing";
 
-function asStr(v: string | string[] | undefined) {
-  return Array.isArray(v) ? v[0]?.trim() || "" : v?.trim() || "";
-}
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res);
-  if (!session) return;
+export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
-  const accountEmail = asStr(req.query.accountEmail).toLowerCase() || null;
+  const accountEmail = asQueryStr(req.query.accountEmail).toLowerCase() || null;
   const accountId = await resolveAccountId(userId, accountEmail);
 
   if (req.method === "GET") {
+    // Scope by account_email so Gmail OAuth inboxes (no account_id) get their own visibility;
+    // fall back to the null-account_email global row when this inbox has none of its own.
     const setting = await prisma.contactFieldVisibilitySetting.findFirst({
-      where: { user_id: userId, account_id: accountId },
+      where: { user_id: userId, account_email: accountEmail },
     });
     const fallbackSetting =
-      !setting && accountId
+      !setting && accountEmail
         ? await prisma.contactFieldVisibilitySetting.findFirst({
-            where: { user_id: userId, account_id: null },
+            where: { user_id: userId, account_email: null },
           })
         : null;
     const effectiveSetting = setting || fallbackSetting;
@@ -45,7 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === "PUT") {
     const existing = await prisma.contactFieldVisibilitySetting.findFirst({
-      where: { user_id: userId, account_id: accountId },
+      where: { user_id: userId, account_email: accountEmail },
       select: { id: true },
     });
     const setting = existing
@@ -61,6 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           data: {
             user_id: userId,
             account_id: accountId,
+            account_email: accountEmail,
             show_phone: Boolean(req.body?.showPhone ?? true),
             show_business: Boolean(req.body?.showBusiness ?? true),
             show_website: Boolean(req.body?.showWebsite ?? true),
@@ -76,6 +73,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     return;
   }
-
-  res.status(405).json({ message: "Method Not Allowed" });
-}
+}, { methods: ["GET", "PUT"] });

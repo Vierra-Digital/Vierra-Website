@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useImperativeHandle, useMemo, forwardRef } from "react";
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useState, forwardRef } from "react";
+import PromptModal from "@/components/ui/PromptModal";
+import { COMPOSE_NEUTRAL_SCROLLBAR } from "@/components/email/constants";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -12,7 +14,11 @@ import Highlight from "@tiptap/extension-highlight";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
 import FontFamily from "@tiptap/extension-font-family";
-import { FiBold, FiItalic, FiLink2, FiImage, FiList, FiMinus } from "react-icons/fi";
+import { Table } from "@tiptap/extension-table";
+import { TableRow } from "@tiptap/extension-table-row";
+import { TableHeader } from "@tiptap/extension-table-header";
+import { TableCell } from "@tiptap/extension-table-cell";
+import { FiBold, FiItalic, FiLink2, FiImage, FiList, FiMinus, FiGrid, FiTrash2 } from "react-icons/fi";
 
 /**
  * Image with drag-to-resize. Adds a `width` attribute that serializes to an inline
@@ -51,7 +57,7 @@ const ResizableImage = Image.extend({
       const handle = document.createElement("span");
       handle.contentEditable = "false";
       handle.style.cssText =
-        "position:absolute;right:-5px;bottom:-5px;width:12px;height:12px;background:#1a73e8;border:2px solid #fff;border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.25);cursor:nwse-resize;opacity:0;transition:opacity .12s;";
+        "position:absolute;right:-5px;bottom:-5px;width:12px;height:12px;background:#701CC0;border:2px solid #fff;border-radius:2px;box-shadow:0 0 0 1px rgba(0,0,0,.25);cursor:nwse-resize;opacity:0;transition:opacity .12s;";
       container.appendChild(handle);
       container.addEventListener("mouseenter", () => (handle.style.opacity = "1"));
       container.addEventListener("mouseleave", () => { if (!resizing) handle.style.opacity = "0"; });
@@ -114,6 +120,8 @@ export type ComposeRichEditorHandle = {
   focus: () => void;
   promptInsertLink: () => void;
   promptInsertImage: () => void;
+  /** Insert a hyperlink with explicit URL + visible text at the cursor. */
+  insertLink: (url: string, text: string) => void;
 };
 
 type Props = {
@@ -133,8 +141,6 @@ const FONT_OPTIONS = [
   { label: "Mono", value: "ui-monospace, monospace" },
 ];
 
-const COMPOSE_EDITOR_SCROLL =
-  "[scrollbar-width:thin] [scrollbar-color:rgb(203_213_225)_rgb(241_245_249)] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb:hover]:bg-slate-400";
 
 function ToolbarButton({
   active,
@@ -157,7 +163,7 @@ function ToolbarButton({
       disabled={disabled}
       onClick={onClick}
       className={`inline-flex h-8 min-w-[28px] shrink-0 items-center justify-center rounded px-1.5 text-[13px] font-medium ${
-        active ? "bg-[#e8eaed] text-[#202124]" : "text-[#5f6368] hover:bg-[#f1f3f4]"
+        active ? "bg-[#EAE5F4] text-[#1E1B2E]" : "text-[#4A465C] hover:bg-[#F5EFFF]"
       } disabled:pointer-events-none disabled:opacity-40`}
     >
       {children}
@@ -165,13 +171,15 @@ function ToolbarButton({
   );
 }
 
-function setLink(editor: Editor) {
-  const previous = editor.getAttributes("link").href as string | undefined;
-  const url = window.prompt("Link URL", previous || "https://");
-  if (url === null) return;
-  const trimmed = url.trim();
+function applyLinkToEditor(editor: Editor, rawUrl: string) {
+  const trimmed = rawUrl.trim();
   if (trimmed === "") {
     editor.chain().focus().extendMarkRange("link").unsetLink().run();
+    return;
+  }
+  // Reject unsafe schemes (javascript:, data:, file:, …). A scheme-less value like "example.com"
+  // passes through — the Link extension + send-time sanitizer handle it. Defense in depth.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed) && !/^(https?|mailto):/i.test(trimmed)) {
     return;
   }
   editor.chain().focus().extendMarkRange("link").setLink({ href: trimmed }).run();
@@ -220,7 +228,7 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
         HTMLAttributes: {
           rel: "noopener noreferrer",
           target: "_blank",
-          class: "text-[#1a73e8] underline",
+          class: "text-[#701CC0] underline",
         },
       }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
@@ -230,6 +238,10 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
       Highlight.configure({ multicolor: true }),
       Placeholder.configure({ placeholder }),
       ResizableImage.configure({ allowBase64: true, inline: false }),
+      Table.configure({ resizable: true, HTMLAttributes: { style: "border-collapse:collapse;width:100%;margin:8px 0;" } }),
+      TableRow,
+      TableHeader.configure({ HTMLAttributes: { style: "border:1px solid #DEC9F6;background:#F5EFFF;padding:6px 8px;font-weight:600;text-align:left;" } }),
+      TableCell.configure({ HTMLAttributes: { style: "border:1px solid #DEC9F6;padding:6px 8px;vertical-align:top;" } }),
     ],
     [placeholder]
   );
@@ -240,7 +252,7 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
     content: valueHtml || "<p></p>",
     editorProps: {
       attributes: {
-        class: `prose prose-sm max-w-none focus:outline-none text-[#202124] ${editorClassName}`,
+        class: `prose prose-sm max-w-none focus:outline-none text-[#1E1B2E] ${editorClassName}`,
       },
     },
     onUpdate: ({ editor: ed }) => {
@@ -256,38 +268,58 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
     editor.commands.setContent(next, { emitUpdate: false });
   }, [editor, valueHtml]);
 
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkInitial, setLinkInitial] = useState("https://");
+
+  const openLinkModal = useCallback(() => {
+    if (!editor) return;
+    const previous = (editor.getAttributes("link").href as string | undefined) || "https://";
+    setLinkInitial(previous);
+    setLinkModalOpen(true);
+  }, [editor]);
+
   useImperativeHandle(
     ref,
     () => ({
       focus: () => editor?.chain().focus().run(),
-      promptInsertLink: () => editor && setLink(editor),
+      promptInsertLink: () => openLinkModal(),
       promptInsertImage: () => editor && insertImage(editor),
+      insertLink: (url: string, text: string) => {
+        if (!editor || !url) return;
+        const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        editor
+          .chain()
+          .focus()
+          .insertContent(`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(text || url)}</a>&nbsp;`)
+          .run();
+      },
     }),
-    [editor]
+    [editor, openLinkModal]
   );
 
   const chain = useCallback(() => editor?.chain().focus(), [editor]);
 
   if (!editor) {
     return (
-      <div className={`rounded-md border border-[#e8eaed] bg-white ${minHeightClass} ${className}`}>
-        <div className="p-3 text-sm text-[#70757a]">Loading editor…</div>
+      <div className={`rounded-md border border-[#EAE5F4] bg-white ${minHeightClass} ${className}`}>
+        <div className="p-3 text-sm text-[#847FA0]">Loading editor…</div>
       </div>
     );
   }
 
   return (
-    <div className={`flex min-h-0 flex-col overflow-hidden rounded-md border border-[#e8eaed] bg-white ${className}`}>
-      <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto ${COMPOSE_EDITOR_SCROLL} ${minHeightClass}`}>
+    <>
+    <div className={`flex min-h-0 flex-col overflow-hidden rounded-md border border-[#EAE5F4] bg-white ${className}`}>
+      <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto ${COMPOSE_NEUTRAL_SCROLLBAR} ${minHeightClass}`}>
         <EditorContent editor={editor} className="min-h-0 flex-1 px-3 py-2 [&_.ProseMirror]:min-h-[inherit] [&_.ProseMirror]:outline-none" />
       </div>
       {showToolbar ? (
         <div
-          className="flex flex-wrap items-center gap-0.5 border-t border-[#e8eaed] bg-[#f8f9fa] px-1.5 py-1"
+          className="flex flex-wrap items-center gap-0.5 border-t border-[#EAE5F4] bg-[#F6F3FD] px-1.5 py-1"
           onMouseDown={(e) => e.preventDefault()}
         >
           <select
-            className="mr-1 max-h-8 rounded border border-transparent bg-transparent px-1 text-xs text-[#202124] hover:border-[#dadce0]"
+            className="mr-1 max-h-8 rounded border border-transparent bg-transparent px-1 text-xs text-[#1E1B2E] hover:border-[#DEC9F6]"
             value={
               editor.isActive("heading", { level: 1 })
                 ? "h1"
@@ -313,7 +345,7 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
           </select>
 
           <select
-            className="mr-1 max-h-8 max-w-[7rem] rounded border border-transparent bg-transparent px-1 text-xs text-[#202124] hover:border-[#dadce0]"
+            className="mr-1 max-h-8 max-w-[7rem] rounded border border-transparent bg-transparent px-1 text-xs text-[#1E1B2E] hover:border-[#DEC9F6]"
             value={(editor.getAttributes("textStyle").fontFamily as string) || ""}
             onChange={(e) => {
               const v = e.target.value;
@@ -346,14 +378,14 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
             <span className="text-sm line-through">S</span>
           </ToolbarButton>
 
-          <span className="mx-0.5 inline-block h-5 w-px shrink-0 bg-[#dadce0]" aria-hidden />
+          <span className="mx-0.5 inline-block h-5 w-px shrink-0 bg-[#DEC9F6]" aria-hidden />
 
           <input
             type="color"
             title="Text color"
             aria-label="Text color"
             className="h-7 w-8 cursor-pointer overflow-hidden rounded border-0 bg-transparent p-0"
-            value={(editor.getAttributes("textStyle").color as string) || "#202124"}
+            value={(editor.getAttributes("textStyle").color as string) || "#1E1B2E"}
             onChange={(e) => chain()?.setColor(e.target.value).run()}
           />
           <input
@@ -365,7 +397,7 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
             onChange={(e) => chain()?.toggleHighlight({ color: e.target.value }).run()}
           />
 
-          <span className="mx-0.5 inline-block h-5 w-px shrink-0 bg-[#dadce0]" aria-hidden />
+          <span className="mx-0.5 inline-block h-5 w-px shrink-0 bg-[#DEC9F6]" aria-hidden />
 
           <ToolbarButton title="Align left" active={editor.isActive({ textAlign: "left" })} onClick={() => chain()?.setTextAlign("left").run()}>
             <span className="text-xs font-semibold">L</span>
@@ -381,7 +413,7 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
             <span className="text-xs font-semibold">R</span>
           </ToolbarButton>
 
-          <span className="mx-0.5 inline-block h-5 w-px shrink-0 bg-[#dadce0]" aria-hidden />
+          <span className="mx-0.5 inline-block h-5 w-px shrink-0 bg-[#DEC9F6]" aria-hidden />
 
           <ToolbarButton title="Bullet list" active={editor.isActive("bulletList")} onClick={() => chain()?.toggleBulletList().run()}>
             <FiList className="h-4 w-4" aria-hidden />
@@ -393,16 +425,32 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
             <FiMinus className="h-4 w-4" aria-hidden />
           </ToolbarButton>
 
-          <span className="mx-0.5 inline-block h-5 w-px shrink-0 bg-[#dadce0]" aria-hidden />
+          <span className="mx-0.5 inline-block h-5 w-px shrink-0 bg-[#DEC9F6]" aria-hidden />
 
-          <ToolbarButton title="Link" active={editor.isActive("link")} onClick={() => setLink(editor)}>
+          <ToolbarButton title="Link" active={editor.isActive("link")} onClick={() => openLinkModal()}>
             <FiLink2 className="h-4 w-4" aria-hidden />
           </ToolbarButton>
           <ToolbarButton title="Insert image" onClick={() => insertImage(editor)}>
             <FiImage className="h-4 w-4" aria-hidden />
           </ToolbarButton>
+          <ToolbarButton title="Insert table" onClick={() => chain()?.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>
+            <FiGrid className="h-4 w-4" aria-hidden />
+          </ToolbarButton>
+          {editor.isActive("table") ? (
+            <>
+              <ToolbarButton title="Add column" onClick={() => chain()?.addColumnAfter().run()}>
+                <span className="text-xs font-semibold">+Col</span>
+              </ToolbarButton>
+              <ToolbarButton title="Add row" onClick={() => chain()?.addRowAfter().run()}>
+                <span className="text-xs font-semibold">+Row</span>
+              </ToolbarButton>
+              <ToolbarButton title="Delete table" onClick={() => chain()?.deleteTable().run()}>
+                <FiTrash2 className="h-4 w-4" aria-hidden />
+              </ToolbarButton>
+            </>
+          ) : null}
 
-          <span className="mx-0.5 inline-block h-5 w-px shrink-0 bg-[#dadce0]" aria-hidden />
+          <span className="mx-0.5 inline-block h-5 w-px shrink-0 bg-[#DEC9F6]" aria-hidden />
 
           <ToolbarButton title="Undo" onClick={() => chain()?.undo().run()}>
             <span className="text-xs">↶</span>
@@ -413,6 +461,19 @@ const ComposeRichEditor = forwardRef<ComposeRichEditorHandle, Props>(function Co
         </div>
       ) : null}
     </div>
+      <PromptModal
+        open={linkModalOpen}
+        title="Insert link"
+        description="Add a link to the selected text. Leave the field empty to remove an existing link."
+        fields={[{ name: "url", type: "text", placeholder: "https://example.com", defaultValue: linkInitial }]}
+        confirmLabel="Apply link"
+        onCancel={() => setLinkModalOpen(false)}
+        onSubmit={(values) => {
+          if (editor) applyLinkToEditor(editor, values.url);
+          setLinkModalOpen(false);
+        }}
+      />
+    </>
   );
 });
 
@@ -424,7 +485,7 @@ export function printComposeContent(subject: string, htmlBody: string) {
   if (!w) return;
   const safeTitle = subject.replace(/</g, "&lt;").replace(/>/g, "&gt;");
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${safeTitle}</title>
-  <style>body{font-family:system-ui,sans-serif;padding:24px;color:#202124;} @media print { body { padding: 12px; } }</style>
+  <style>body{font-family:system-ui,sans-serif;padding:24px;color:#1E1B2E;} @media print { body { padding: 12px; } }</style>
   </head><body><div>${htmlBody || "<p></p>"}</div></body></html>`);
   w.document.close();
   w.focus();
