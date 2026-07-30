@@ -1,32 +1,51 @@
 "use client";
 
-import React, { useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { inter } from "@/lib/fonts";
 import { Eye, EyeOff } from "lucide-react";
 import { FiCheck } from "react-icons/fi";
-
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 export default function SetPasswordPage() {
     const router = useRouter();
-    const params = useParams();
-    const token = params?.token as string | undefined;
+    const [hasSession, setHasSession] = useState<boolean | null>(null);
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [linkError, setLinkError] = useState("");
+
+    useEffect(() => {
+        // Recovery links land here with tokens in the URL hash (never sent to the
+        // server, so this has to run client-side) or, if the link expired, with
+        // an #error_description instead of tokens.
+        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+        const hashError = hashParams.get("error_description");
+        if (hashError) {
+            setLinkError(hashError.replace(/\+/g, " "));
+            setHasSession(false);
+            return;
+        }
+
+        const supabase = getSupabaseBrowserClient();
+        supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
+            setHasSession(!!result.data.session);
+        });
+
+        const { data: subscription } = supabase.auth.onAuthStateChange((event: AuthChangeEvent) => {
+            if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") setHasSession(true);
+        });
+        return () => subscription.subscription.unsubscribe();
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
-
-        if (!token) {
-            setError("Invalid link. Please use the link from your email.");
-            return;
-        }
 
         if (password.length < 6) {
             setError("Password must be at least 6 characters long.");
@@ -43,7 +62,7 @@ export default function SetPasswordPage() {
             const response = await fetch("/api/auth/setPassword", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ token, password }),
+                body: JSON.stringify({ password }),
             });
             const data = await response.json().catch(() => ({}));
 
@@ -60,10 +79,12 @@ export default function SetPasswordPage() {
         }
     };
 
-    if (!token) {
+    if (hasSession === false) {
         return (
             <div className={`min-h-screen bg-[#FAFAFA] flex items-center justify-center p-4 ${inter.className}`}>
-                <div className="text-[#374151]">Invalid or missing link. Please use the link from your email.</div>
+                <div className="text-[#374151]">
+                    {linkError || "This link is invalid or has expired."} Please request a new one.
+                </div>
             </div>
         );
     }
@@ -152,7 +173,7 @@ export default function SetPasswordPage() {
                                 )}
                                 <button
                                     type="submit"
-                                    disabled={isSubmitting}
+                                    disabled={isSubmitting || hasSession === null}
                                     className="mt-6 w-full px-6 py-2.5 bg-[#701CC0] text-white rounded-lg font-medium text-sm hover:bg-[#5F18B0] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                 >
                                     {isSubmitting ? "Setting Password..." : "Set Password"}
