@@ -628,7 +628,7 @@ function MeetingBookingAnim() {
   const cursor = booked
     ? { x: 280, y: 285, o: 0 }
     : step >= 2
-    ? { x: 452, y: 118, o: 1 }
+    ? { x: 500, y: 118, o: 1 }
     : { x: 356, y: 118, o: 1 }
 
   // Interactive tilt — the card follows the cursor, springs back on leave.
