@@ -24,11 +24,6 @@ function parsePlatformKey(platform: string) {
   }
 }
 
-export function isCalendarVisibilityTableMissing(error: unknown) {
-  void error
-  return false
-}
-
 export async function getCalendarVisibilityPreferences(userId: string) {
   const rows = await prisma.platformToken.findMany({
     where: {

@@ -1,20 +1,11 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 
 function normalizeEmail(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-
-  const session = await requireRole(req, res);
-  if (!session) return;
-
+export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
 
   const email = normalizeEmail(req.body?.email);
@@ -39,4 +30,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error("gmail delete error", error);
     res.status(500).json({ message: "Failed to delete Gmail account." });
   }
-}
+}, { methods: ["POST"] });

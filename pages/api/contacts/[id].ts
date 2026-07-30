@@ -1,21 +1,16 @@
-import type { NextApiRequest, NextApiResponse } from "next";
+import type { NextApiRequest } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
 import { serializeContact } from "@/lib/api/contacts";
-
-function asStr(v: unknown) {
-  return typeof v === "string" ? v.trim() : "";
-}
+import { asStr } from "@/lib/api/parsing";
 
 function getId(req: NextApiRequest) {
   const raw = req.query.id;
   return Array.isArray(raw) ? raw[0] : raw || "";
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res);
-  if (!session) return;
+export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
   const id = getId(req);
   if (!id) {
@@ -70,6 +65,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(200).json({ ok: true });
     return;
   }
-
-  res.status(405).json({ message: "Method Not Allowed" });
-}
+}, { methods: ["GET", "PUT", "PATCH", "DELETE"] });

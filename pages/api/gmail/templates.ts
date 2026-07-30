@@ -1,17 +1,7 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
-
-function asStr(v: unknown) {
-  return typeof v === "string" ? v.trim() : "";
-}
-
-function queryAccountEmail(req: NextApiRequest) {
-  const raw = Array.isArray(req.query.accountEmail) ? req.query.accountEmail[0] : req.query.accountEmail;
-  const value = asStr(raw).toLowerCase();
-  return value || null;
-}
+import { asStr, queryAccountEmail } from "@/lib/api/parsing";
 
 function serializeTemplate(t: {
   id: string; user_id: string; account_id: string | null; name: string;
@@ -32,19 +22,18 @@ function serializeTemplate(t: {
   };
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res);
-  if (!session) return;
+export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
 
   if (req.method === "GET") {
-    const accountEmail = queryAccountEmail(req);
-    const accountId = accountEmail ? await resolveAccountId(userId, accountEmail) : null;
+    const accountEmail = queryAccountEmail(req.query.accountEmail);
+    // Scope by account_email (works for Gmail OAuth accounts, which have no account_id). A row with
+    // a null account_email is a legacy/global template shown for every inbox.
     const templates = await prisma.emailTemplate.findMany({
       where: {
         user_id: userId,
-        ...(accountId !== undefined && accountEmail
-          ? { OR: [{ account_id: accountId }, { account_id: null }] }
+        ...(accountEmail
+          ? { OR: [{ account_email: accountEmail }, { account_email: null }] }
           : {}),
       },
       orderBy: [{ is_default: "desc" }, { created_at: "desc" }],
@@ -64,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const isDefault = Boolean(req.body?.isDefault);
     if (isDefault) {
       await prisma.emailTemplate.updateMany({
-        where: { user_id: userId, account_id: accountId, is_default: true },
+        where: { user_id: userId, account_email: accountEmail, is_default: true },
         data: { is_default: false },
       });
     }
@@ -72,6 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       data: {
         user_id: userId,
         account_id: accountId,
+        account_email: accountEmail,
         name,
         subject: asStr(req.body?.subject) || null,
         body_html: asStr(req.body?.bodyHtml) || null,
@@ -97,7 +87,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const isDefault = Boolean(req.body?.isDefault);
     if (isDefault) {
       await prisma.emailTemplate.updateMany({
-        where: { user_id: userId, account_id: existing.account_id, is_default: true },
+        where: { user_id: userId, account_email: existing.account_email, is_default: true },
         data: { is_default: false },
       });
     }
@@ -125,6 +115,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(200).json({ ok: true });
     return;
   }
-
-  res.status(405).json({ message: "Method Not Allowed" });
-}
+}, { methods: ["GET", "POST", "PUT", "DELETE"] });

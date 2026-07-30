@@ -1,13 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bricolage_Grotesque, Inter } from 'next/font/google';
+import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import Link from 'next/link';
 import { Header } from '@/components/Header';
 import Footer from '@/components/FooterSection/Footer';
 
-const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
-const inter = Inter({ subsets: ['latin'] });
 
 type SectionMeta = { id: string; title: string };
 
@@ -111,7 +109,10 @@ const TermsOfServicePage: React.FC = () => {
         <meta property="og:description" content="Vierra Digital Terms of Service. Read our terms and conditions for using our services." />
         <meta property="og:url" content="https://vierradev.com/terms-of-service" />
         <meta property="og:type" content="website" />
-        <meta name="twitter:card" content="summary" />
+        <meta property="og:site_name" content="Vierra Digital" />
+        <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="https://vierradev.com/assets/meta-banner.png" />
         <meta name="twitter:title" content="Vierra | Terms of Service" />
         <meta name="twitter:description" content="Vierra Digital Terms of Service. Read our terms and conditions for using our services." />
       </Head>
@@ -490,7 +491,8 @@ const TermsOfServicePage: React.FC = () => {
                     <div className="mt-2 rounded-2xl border border-[#701CC0]/15 bg-gradient-to-br from-[#701CC0]/[0.06] to-transparent p-6">
                       <p className="not-prose text-[#3A3352]">
                         <strong className="text-[#1A1033]">Vierra Digital LLC</strong><br />
-                        Cambridge, MA 02138<br />
+                        3 Ashland Street<br />
+                        Medford, MA 02155<br />
                         United States<br />
                         Phone: (+1) 339-333-0929<br />
                         <a href="mailto:business@vierradev.com">business@vierradev.com</a>

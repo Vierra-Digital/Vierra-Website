@@ -2,11 +2,10 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import Head from "next/head";
 import Image from "next/image";
 import { useRouter } from "next/router";
-import { Inter } from "next/font/google";
+import { inter } from "@/lib/fonts";
 import type { GetServerSideProps } from "next"; import { prisma } from "@/lib/prisma";
 import { serialize as serializeCookie } from "cookie";
 
-const inter = Inter({ subsets: ["latin"] });
 
 interface ClientSessionData {
   clientName: string;

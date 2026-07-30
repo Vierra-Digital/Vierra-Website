@@ -3,6 +3,7 @@ import Image from "next/image"
 import ProfileImage from "../ProfileImage"
 import { FiPlus, FiFilter, FiTrash2, FiCheckCircle, FiXCircle, FiEye } from 'react-icons/fi'
 import PanelSearchInput from "@/components/ui/PanelSearchInput"
+import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import PanelSectionHeader from "@/components/ui/PanelSectionHeader"
 import PaginationControls from "@/components/ui/PaginationControls"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
@@ -365,10 +366,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                 />
                 {loading ? (
                     <div className="flex items-center justify-center py-12">
-                        <div className="text-center">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto"></div>
-                            <p className="mt-2 text-sm text-[#6B7280]">Loading Client Data...</p>
-                        </div>
+                        <LoadingSpinner label="Loading Client Data..." />
                     </div>
                 ) : (
                     <>

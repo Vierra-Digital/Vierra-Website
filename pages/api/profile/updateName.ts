@@ -1,35 +1,18 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res);
-  if (!session) return;
+export default withAuth(
+  async (req, res, session) => {
+    const { name } = req.body ?? {};
 
-  if (req.method !== "PUT") {
-    return res.status(405).json({ message: "Method Not Allowed" });
-  }
+    if (typeof name !== "string") {
+      return res.status(400).json({ message: "Name must be a string" });
+    }
 
-  const { name } = req.body ?? {};
-  
-  if (typeof name !== "string") {
-    return res.status(400).json({ message: "Name must be a string" });
-  }
-
-  try {
     const userEmail = (session.user as any)?.email;
     if (!userEmail) {
       return res.status(400).json({ message: "User email not found in session" });
     }
-    const existingUser = await prisma.user.findUnique({
-      where: { email: userEmail },
-      select: { id: true, name: true, email: true },
-    });
-
-    if (!existingUser) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
     const updated = await prisma.user.update({
       where: { email: userEmail },
       data: { name: name.trim() || null },
@@ -37,8 +20,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     return res.status(200).json(updated);
-  } catch (e) {
-    console.error("profile/updateName", e);
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-}
+  },
+  { methods: ["PUT"] }
+);

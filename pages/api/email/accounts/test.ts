@@ -1,22 +1,9 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import nodemailer from "nodemailer";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
-import { decrypt } from "@/lib/crypto";
+import { withAuth } from "@/lib/api/withAuth";
+import { createSmtpTransport, isBlockedSmtpHost } from "@/lib/email/smtp";
+import { asStr } from "@/lib/api/parsing";
 
-function asStr(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-
-  const session = await requireRole(req, res);
-  if (!session) return;
-
+export default withAuth(async (req, res, session) => {
   const userId = (session.user as any).id;
   const id = asStr(req.body?.id);
   if (!id) {
@@ -31,24 +18,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(404).json({ message: "Provider account not found." });
     return;
   }
+  if (isBlockedSmtpHost(account.smtp_host)) {
+    res.status(400).json({ ok: false, message: "That SMTP host isn't allowed." });
+    return;
+  }
 
-  const transporter = nodemailer.createTransport({
-    host: account.smtp_host,
-    port: account.smtp_port,
-    secure: account.smtp_secure,
-    auth: {
-      user: account.smtp_username,
-      pass: decrypt(account.smtp_password_enc),
-    },
-  });
+  const transporter = createSmtpTransport(account);
 
   try {
     await transporter.verify();
     res.status(200).json({ ok: true });
-  } catch (error) {
-    res.status(400).json({
-      ok: false,
-      message: error instanceof Error ? error.message : "SMTP test failed.",
-    });
+  } catch {
+    // Deliberately generic: returning the raw connect error would let a caller distinguish
+    // open/closed/non-SMTP ports on the internal network (SSRF oracle).
+    res.status(400).json({ ok: false, message: "Couldn't connect with those SMTP settings." });
   }
-}
+}, { methods: ["POST"] });

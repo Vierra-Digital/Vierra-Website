@@ -1,15 +1,10 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { requireSession } from "@/lib/auth";
+import { withSession } from "@/lib/api/withSession";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireSession(req, res);
-  if (!session) {
-    return res.status(401).json({ message: "Not authenticated" });
-  }
+export default withSession(async (req, res, session) => {
   return res.status(200).json({
     ...session.user,
     kind: session.kind,
     companyId: (session as any).companyId,
     clientId: (session as any).clientId,
   });
-}
+});

@@ -1,9 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { prisma } from "@/lib/prisma";
-import { encrypt } from "@/lib/crypto";
 import { requireSession } from "@/lib/auth";
-import { asStr, clearOauthStateCookie, readCookies } from "@/lib/api/oauth";
-import { resolveGoogleWebClientCredentials } from "@/lib/googleOAuthClient";
+import { appendSetCookie, asStr, clearOauthStateCookie, readCookies, resolveGoogleWebClientCredentials, resolveRuntimeBaseUrl } from "@/lib/api/oauth";
+import { persistPlatformToken } from "@/lib/api/oauthTokens";
 import { serialize as serializeCookie } from "cookie";
 
 type GoogleTokenResponse = {
@@ -16,21 +14,6 @@ type GoogleUserInfo = {
   email?: string;
   email_verified?: boolean;
 };
-
-function appendSetCookie(res: NextApiResponse, value: string) {
-  const existing = res.getHeader("Set-Cookie");
-  const next = Array.isArray(existing) ? [...existing, value] : existing ? [String(existing), value] : [value];
-  res.setHeader("Set-Cookie", next);
-}
-
-function resolveRuntimeBaseUrl(req: NextApiRequest) {
-  const host = req.headers.host || "localhost:3000";
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  const proto = Array.isArray(forwardedProto)
-    ? forwardedProto[0]
-    : forwardedProto || (host.includes("localhost") || host.startsWith("127.0.0.1") ? "http" : "https");
-  return `${proto}://${host}`.replace(/\/+$/, "");
-}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
@@ -132,24 +115,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const platform = `gmail:${email}`;
-  const encAccess = encrypt(tokenJson.access_token);
-  const encRefresh = tokenJson.refresh_token ? encrypt(tokenJson.refresh_token) : undefined;
   const expiresAt = tokenJson.expires_in ? new Date(Date.now() + tokenJson.expires_in * 1000) : undefined;
 
-  await prisma.platformToken.upsert({
-    where: { user_id_platform: { user_id: userId, platform } },
-    update: {
-      access_token: encAccess,
-      ...(encRefresh && { refresh_token: encRefresh }),
-      ...(expiresAt && { expires_at: expiresAt }),
-    },
-    create: {
-      user_id: userId,
-      platform,
-      access_token: encAccess,
-      ...(encRefresh && { refresh_token: encRefresh }),
-      ...(expiresAt && { expires_at: expiresAt }),
-    },
+  await persistPlatformToken(userId, {
+    platform,
+    accessToken: tokenJson.access_token,
+    refreshToken: tokenJson.refresh_token,
+    expiresAt,
   });
 
   appendSetCookie(

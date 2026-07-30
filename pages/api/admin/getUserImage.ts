@@ -1,22 +1,23 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { sendImageAsset } from "@/lib/api/image";
 import { STORAGE_BUCKETS } from "@/lib/storage";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res, ["admin", "staff"]);
-  if (!session) return;
-
-  if (req.method !== "GET") {
-    return res.status(405).json({ message: "Method Not Allowed" });
-  }
-
-  try {
+export default withAuth(
+  async (req, res, session) => {
     const { userId } = req.query;
-    
+
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
+    }
+
+    // Scope to the admin's own company so another company's user avatar can't be read by id.
+    const membership = await prisma.companyMembership.findFirst({
+      where: { company_id: session.companyId, user_id: String(userId) },
+      select: { user_id: true },
+    });
+    if (!membership) {
+      return res.status(404).json({ message: "No image found" });
     }
 
     const user = await prisma.user.findUnique({
@@ -36,8 +37,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!sent) {
       return res.status(404).json({ message: "No image found" });
     }
-  } catch (e) {
-    console.error("admin/getUserImage", e);
-    return res.status(500).json({ message: "Internal Server Error" });
-  }
-}
+  },
+  { methods: ["GET"], roles: ["admin", "staff"] }
+);

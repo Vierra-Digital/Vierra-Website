@@ -8,7 +8,7 @@ import { FiChevronDown, FiCheck } from "react-icons/fi";
    (job application + free audit). White surface, purple accents. */
 
 export const inputClass =
-  "w-full rounded-xl bg-gray-100 px-4 py-2 text-[15px] text-[#1A1033] placeholder-gray-400 outline-none transition-all duration-200 hover:bg-gray-200/70 focus:bg-white focus:ring-2 focus:ring-[#701CC0]/40";
+  "w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-[15px] text-[#1A1033] placeholder-gray-400 shadow-sm outline-none transition-all duration-200 hover:border-gray-400 focus:border-[#701CC0] focus:ring-2 focus:ring-[#701CC0]/30";
 
 export const labelClass = "mb-1.5 block text-sm font-medium text-[#3A3352]";
 
@@ -84,7 +84,7 @@ export const PrimaryButton: React.FC<{
     disabled={disabled}
     whileHover={disabled ? undefined : { scale: 1.02 }}
     whileTap={disabled ? undefined : { scale: 0.98 }}
-    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#701CC0] via-[#8F42FF] to-[#701CC0] animate-gradient px-6 py-2.5 text-sm font-medium text-white shadow-[0_6px_20px_-6px_rgba(112,28,192,0.6)] transition-all duration-200 hover:shadow-[0_8px_26px_-6px_rgba(112,28,192,0.7)] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+    className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-[#701CC0] via-[#8F42FF] to-[#701CC0] animate-gradient px-6 py-2.5 text-sm font-medium text-white shadow-[0_6px_20px_-6px_rgba(112,28,192,0.6)] transition-all duration-200 hover:shadow-[0_8px_26px_-6px_rgba(112,28,192,0.7)] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
   >
     {children}
   </motion.button>
@@ -209,7 +209,7 @@ export const ThemedSelect: React.FC<{
                 exit={{ opacity: 0, y: -4 }}
                 transition={{ duration: 0.14, ease: "easeOut" }}
                 style={{ position: "fixed", left: coords.left, top: coords.top, width: coords.width, zIndex: 300 }}
-                className="max-h-60 overflow-auto rounded-xl border border-gray-100 bg-white p-1.5 shadow-[0_16px_40px_-12px_rgba(26,16,51,0.3)]"
+                className="modal-scroll-area max-h-80 overflow-auto rounded-2xl border border-gray-200 bg-white p-1.5 shadow-[0_20px_50px_-16px_rgba(26,16,51,0.4)]"
               >
                 {options.map((o) => {
                   const active = o.value === value;
@@ -222,7 +222,7 @@ export const ThemedSelect: React.FC<{
                           setOpen(false);
                         }}
                         className={`flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[15px] transition-colors ${
-                          active ? "bg-[#701CC0]/10 font-medium text-[#701CC0]" : "text-[#3A3352] hover:bg-gray-50"
+                          active ? "bg-[#701CC0]/10 font-medium text-[#701CC0]" : "text-[#3A3352] hover:bg-[#701CC0]/5 hover:text-[#701CC0]"
                         }`}
                       >
                         <span className="truncate">{o.label}</span>

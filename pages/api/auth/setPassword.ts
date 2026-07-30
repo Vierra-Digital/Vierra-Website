@@ -25,6 +25,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (error) {
     console.error("auth/setPassword: update failed", error);
     return res.status(500).json({ message: "Failed to set password. Please try again." });
+    const session = await requireSession(req, res);
+    if (!session) return res.status(401).json({ message: "Not authenticated" });
+
+    const userId = (session.user as any).id;
+    const { error } = await getSupabaseAdmin().auth.admin.updateUserById(userId, { password });
+    if (error) {
+      console.error("auth/setPassword: Supabase update failed", error);
+      return res.status(500).json({ message: "Failed to set password. Please try again." });
+    }
+
+    return res.status(200).json({ message: "Password set successfully. You can now log in." });
+  } catch (e) {
+    console.error("auth/setPassword", e);
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 
   return res.status(200).json({ message: "Password set successfully." });

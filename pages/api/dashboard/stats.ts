@@ -1,6 +1,5 @@
-import type { NextApiRequest, NextApiResponse } from "next"
 import { prisma } from "@/lib/prisma"
-import { requireRole } from "@/lib/auth"
+import { withAuth } from "@/lib/api/withAuth"
 
 type GrowthDirection = "up" | "flat" | "down"
 
@@ -37,15 +36,7 @@ function getGrowthDirection(current: number, previous: number): GrowthDirection 
   return "flat"
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "GET") {
-    res.setHeader("Allow", ["GET"])
-    return res.status(405).json({ message: "Method Not Allowed" })
-  }
-
-  const session = await requireRole(req, res, ["admin", "staff"])
-  if (!session) return
-
+export default withAuth(async (req, res, session) => {
   try {
     const userId = session.user.id
     const companyId = session.companyId
@@ -139,4 +130,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error("/api/dashboard/stats error", error)
     res.status(500).json({ message: "Failed to load dashboard stats" })
   }
-}
+}, { methods: ["GET"], roles: ["admin", "staff"] })

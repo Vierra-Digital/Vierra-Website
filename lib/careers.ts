@@ -23,6 +23,9 @@ export interface JobRole {
   /** What the role offers — perks and benefits */
   benefits: string[];
   niceToHave?: string[];
+  /** Stable ISO date the role was first posted (JobPosting.datePosted). Kept out
+   *  of build-time generation so deploys don't look like fresh re-postings. */
+  datePosted?: string;
 }
 
 const CAREERS_LOCATION = 'In-Person NYC';

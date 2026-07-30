@@ -1,27 +1,33 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import type { EmailProviderAccount } from "@prisma/client";
+import { withAuth } from "@/lib/api/withAuth";
 import { decrypt, encrypt } from "@/lib/crypto";
+import { asStr, asPort } from "@/lib/api/parsing";
+import { isBlockedSmtpHost } from "@/lib/email/smtp";
 
-function asStr(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
+// The panel + settings page consume camelCase; map snake→camel here (and never leak the
+// encrypted password — only whether one is set).
+function serializeAccount(row: EmailProviderAccount) {
+  return {
+    id: row.id,
+    accountEmail: row.account_email,
+    providerLabel: row.provider_label ?? null,
+    smtpHost: row.smtp_host,
+    smtpPort: row.smtp_port,
+    smtpSecure: row.smtp_secure,
+    smtpUsername: row.smtp_username,
+    imapHost: row.imap_host ?? null,
+    imapPort: row.imap_port ?? null,
+    imapSecure: row.imap_secure ?? null,
+    popHost: row.pop_host ?? null,
+    popPort: row.pop_port ?? null,
+    popSecure: row.pop_secure ?? null,
+    isDefaultSender: row.is_default_sender,
+    hasPassword: Boolean(row.smtp_password_enc),
+  };
 }
 
-function asPort(value: unknown, fallback: number) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
-  return Math.floor(numeric);
-}
-
-function serializeAccount<T extends { smtp_password_enc: string }>(row: T) {
-  const { smtp_password_enc, ...rest } = row;
-  return { ...rest, hasPassword: Boolean(smtp_password_enc) };
-}
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await requireRole(req, res);
-  if (!session) return;
-
+export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
   if (req.method === "GET") {
     const rows = await prisma.emailProviderAccount.findMany({
@@ -39,6 +45,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const smtpPassword = asStr(req.body?.smtpPassword);
     if (!accountEmail || !smtpHost || !smtpUsername || !smtpPassword) {
       res.status(400).json({ message: "accountEmail, smtpHost, smtpUsername, and smtpPassword are required." });
+      return;
+    }
+    if (isBlockedSmtpHost(smtpHost)) {
+      res.status(400).json({ message: "That SMTP host isn't allowed." });
       return;
     }
 
@@ -83,6 +93,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
     if (!existing) {
       res.status(404).json({ message: "Provider account not found." });
+      return;
+    }
+    if (req.body?.smtpHost !== undefined && asStr(req.body?.smtpHost) && isBlockedSmtpHost(asStr(req.body?.smtpHost))) {
+      res.status(400).json({ message: "That SMTP host isn't allowed." });
       return;
     }
 
@@ -136,6 +150,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(200).json({ ok: true });
     return;
   }
-
-  res.status(405).json({ message: "Method Not Allowed" });
-}
+}, { methods: ["GET", "POST", "PUT", "DELETE"] });

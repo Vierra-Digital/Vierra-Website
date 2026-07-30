@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { notifyIndexNow } from "@/lib/indexnow";
 import { createPost, updatePost, deletePost } from "@/lib/blog";
+import { requireRole } from "@/lib/auth";
 
 /**
  * On-demand ISR revalidation: regenerate the affected blog post page(s) immediately
@@ -19,6 +20,9 @@ async function revalidateBlog(res: NextApiResponse, slugs: Array<string | null |
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const session = await requireRole(req, res, ["admin", "staff"]);
+  if (!session) return;
+
   if (req.method === "POST" || req.method === "PUT") {
     try {
       const { id, title, description, content, date, tag, authorName } = req.body || {};

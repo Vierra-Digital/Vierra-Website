@@ -1,20 +1,18 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bricolage_Grotesque, Inter } from 'next/font/google';
+import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import { HelpCircle, ChevronDown } from 'lucide-react';
 import { Header } from '@/components/Header';
 import Footer from '@/components/FooterSection/Footer';
 import { Modal } from '@/components/Modal';
-import { FAQ_ITEMS } from '@/lib/faq';
+import { FAQ_ITEMS, FAQ_LAST_UPDATED } from '@/lib/faq';
 
-const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
-const inter = Inter({ subsets: ['latin'] });
 
 const CANONICAL = 'https://vierradev.com/faq';
 const META_TITLE = 'Vierra | Frequently Asked Questions';
 const META_DESCRIPTION =
-  'Answers to common questions about Vierra Digital — what we do, how our risk-averse, guaranteed lead generation works, who we work with, pricing, and how to get started.';
+  'Answers to common questions about Vierra Digital — what we do, how our risk-averse, results-based lead generation works, who we work with, pricing, and how to get started.';
 
 const FaqPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -25,6 +23,7 @@ const FaqPage: React.FC = () => {
     '@type': 'FAQPage',
     '@id': `${CANONICAL}#faqpage`,
     url: CANONICAL,
+    dateModified: FAQ_LAST_UPDATED,
     mainEntity: FAQ_ITEMS.map((item) => ({
       '@type': 'Question',
       name: item.question,
@@ -35,6 +34,17 @@ const FaqPage: React.FC = () => {
     })),
   };
 
+  // BreadcrumbList — mirrors the blog/author pages so every non-home page exposes
+  // its position in the site hierarchy to crawlers and AI answer engines.
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://vierradev.com' },
+      { '@type': 'ListItem', position: 2, name: 'FAQ', item: CANONICAL },
+    ],
+  };
+
   return (
     <>
       <Head>
@@ -42,7 +52,7 @@ const FaqPage: React.FC = () => {
         <meta name="description" content={META_DESCRIPTION} />
         <meta
           name="keywords"
-          content="Vierra FAQ, lead generation questions, digital marketing agency FAQ, guaranteed leads, how Vierra works, Vierra Digital"
+          content="Vierra FAQ, lead generation questions, digital marketing agency FAQ, risk-averse lead generation, how Vierra works, Vierra Digital"
         />
         <meta name="robots" content="index, follow" />
         <link rel="canonical" href={CANONICAL} />
@@ -52,6 +62,10 @@ const FaqPage: React.FC = () => {
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Vierra Digital" />
         <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:image:alt" content="Vierra - Risk-Averse Lead Engine For Your Business" />
+        <meta property="og:image:type" content="image/png" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={META_TITLE} />
         <meta name="twitter:description" content={META_DESCRIPTION} />
@@ -60,6 +74,28 @@ const FaqPage: React.FC = () => {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }}
+      />
+      <script
+        id="schema-org-breadcrumbs-faq"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+      />
+      <script
+        id="schema-org-speakable-faq"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'WebPage',
+            '@id': 'https://vierradev.com/faq#webpage',
+            url: 'https://vierradev.com/faq',
+            isPartOf: { '@id': 'https://vierradev.com/#website' },
+            speakable: {
+              '@type': 'SpeakableSpecification',
+              cssSelector: ['.faq-item summary', '.faq-answer'],
+            },
+          }),
+        }}
       />
 
       <div className={`relative min-h-screen bg-[#F3F3F3] text-[#2A2140] ${inter.className}`}>
@@ -114,7 +150,7 @@ const FaqPage: React.FC = () => {
         </div>
 
         {/* Content */}
-        <div className="relative z-10 mx-auto max-w-4xl px-5 pb-24 pt-14 md:px-8">
+        <main className="relative z-10 mx-auto max-w-4xl px-5 pb-24 pt-14 md:px-8">
           <div className="space-y-5">
             {FAQ_ITEMS.map((item, i) => (
               <details
@@ -148,11 +184,11 @@ const FaqPage: React.FC = () => {
                 onClick={() => setIsModalOpen(true)}
                 className="audit-glow mt-7 inline-flex items-center gap-2 rounded-lg border-2 border-[#701CC0] bg-transparent px-8 py-4 font-medium text-white transition-all duration-300 hover:border-[#8F42FF]"
               >
-                Claim Your Free Audit Call
+                Let&apos;s Talk
               </button>
             </section>
           </div>
-        </div>
+        </main>
 
         <Footer />
       </div>

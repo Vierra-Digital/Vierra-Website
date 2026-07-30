@@ -1,35 +1,12 @@
-import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { requireRole } from "@/lib/auth";
+import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-
-type GmailLabel = {
-  id?: string;
-  messagesUnread?: number;
-  messagesTotal?: number;
-};
-
-type GmailLabelsResponse = {
-  labels?: GmailLabel[];
-};
+import { asQueryStr } from "@/lib/api/parsing";
 
 type GmailListEstimateResponse = {
   resultSizeEstimate?: number;
 };
 
-function asStr(v: string | string[] | undefined) {
-  return Array.isArray(v) ? v[0] : v;
-}
-
-function readLabelUnreadCount(labels: GmailLabel[], id: string) {
-  const label = labels.find((entry) => (entry.id || "").toUpperCase() === id.toUpperCase());
-  return Number(label?.messagesUnread || 0);
-}
-
-function readLabelTotalMessages(labels: GmailLabel[], id: string) {
-  const label = labels.find((entry) => (entry.id || "").toUpperCase() === id.toUpperCase());
-  return Number(label?.messagesTotal || 0);
-}
 
 async function fetchEstimate(accessToken: string, query: string) {
   const params = new URLSearchParams({
@@ -75,51 +52,20 @@ async function fetchMailboxCounts(accessToken: string) {
     fetchEstimate(accessToken, "-in:inbox -in:sent -in:drafts -in:spam -in:trash is:unread"),
   ]);
 
-  // Keep a labels fallback in place for resilience if Gmail query behavior changes.
-  let labelsFallback: GmailLabel[] = [];
-  try {
-    const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/labels", {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    });
-    if (response.ok) {
-      const payload = (await response.json()) as GmailLabelsResponse;
-      labelsFallback = Array.isArray(payload.labels) ? payload.labels : [];
-    }
-  } catch {
-    // Best-effort fallback only.
-  }
-
-  return {
-    inbox: Number.isFinite(inbox) ? inbox : readLabelUnreadCount(labelsFallback, "INBOX"),
-    sent: Number.isFinite(sent) ? sent : readLabelUnreadCount(labelsFallback, "SENT"),
-    drafts: Number.isFinite(draftsTotal) ? draftsTotal : readLabelTotalMessages(labelsFallback, "DRAFT"),
-    spam: Number.isFinite(spam) ? spam : readLabelUnreadCount(labelsFallback, "SPAM"),
-    trash: Number.isFinite(trash) ? trash : readLabelUnreadCount(labelsFallback, "TRASH"),
-    archive,
-  };
+  return { inbox, sent, drafts: draftsTotal, spam, trash, archive };
 }
 
 function isAuthError(error: unknown) {
   return error instanceof Error && /gmail (unread estimate|label DRAFT) failed 401/i.test(error.message);
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default withAuth(async (req, res, session) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
 
-  if (req.method !== "GET") {
-    res.status(405).json({ message: "Method Not Allowed" });
-    return;
-  }
-
-  const session = await requireRole(req, res);
-  if (!session) return;
-
   const userId = session.user.id;
-  const accountsParam = asStr(req.query.accounts);
+  const accountsParam = asQueryStr(req.query.accounts);
   const selectedEmails = (accountsParam || "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
@@ -169,6 +115,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const accountErrors: Array<{ accountEmail: string; message: string }> = [];
   const aggregated = { inbox: 0, sent: 0, drafts: 0, spam: 0, trash: 0, archive: 0 };
 
+  // Independent of the Gmail label fetches — start it now so it runs in parallel with them.
+  const composeDraftPromise = prisma.emailComposeDraft.count({ where: composeDraftWhere });
+
   await Promise.all(
     accountRows.map(async (account) => {
       try {
@@ -202,11 +151,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
   );
 
-  const composeDraftCount = await prisma.emailComposeDraft.count({ where: composeDraftWhere });
-  aggregated.drafts += composeDraftCount;
+  aggregated.drafts += await composeDraftPromise;
 
   res.status(200).json({
     counts: aggregated,
     accountErrors,
   });
-}
+}, { methods: ["GET"] });
