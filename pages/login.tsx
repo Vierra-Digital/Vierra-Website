@@ -61,11 +61,14 @@ const AnimatedBackground = () => (
 );
 
 const LoginPage = () => {
+  const [mode, setMode] = useState<"password" | "magicLink" | "forgotPassword">("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [resetLinkSent, setResetLinkSent] = useState(false);
   const router = useRouter();
   const { data: session, status } = useSession();
 
@@ -122,6 +125,67 @@ const LoginPage = () => {
     }
   };
 
+  const handleMagicLinkSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+    setError("");
+    setIsSubmitting(true);
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email: email.trim().toLowerCase(),
+        options: {
+          // Only existing accounts may sign in this way — a magic link should
+          // never double as an account-creation path.
+          shouldCreateUser: false,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+
+      if (!otpError) {
+        setMagicLinkSent(true);
+      } else {
+        setError("We couldn't send a sign-in link. Check your email and try again.");
+      }
+    } catch {
+      setError("Sign-in is temporarily unavailable. Please try again in a moment.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleForgotPasswordSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+    setError("");
+    setIsSubmitting(true);
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+        redirectTo: `${window.location.origin}/auth/callback?next=/set-password`,
+      });
+
+      if (!resetError) {
+        setResetLinkSent(true);
+      } else {
+        setError("We couldn't send a reset link. Check your email and try again.");
+      }
+    } catch {
+      setError("Sign-in is temporarily unavailable. Please try again in a moment.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const switchMode = (next: "password" | "magicLink" | "forgotPassword") => {
+    setMode(next);
+    setError("");
+    setMagicLinkSent(false);
+    setResetLinkSent(false);
+  };
+
   if (status === "loading" || status === "authenticated") {
     return (
       <div className="login-shell flex flex-col items-center justify-center gap-6">
@@ -175,100 +239,143 @@ const LoginPage = () => {
               />
             </h1>
 
-            <form onSubmit={handleSubmit} noValidate className="space-y-4">
-              <div>
-                <label
-                  htmlFor="email"
-                  className={`mb-1.5 block text-sm font-medium text-white/80 ${inter.className}`}
-                >
-                  Email
-                </label>
-                <div className="login-field">
-                  <Mail className="login-field__icon" size={18} aria-hidden="true" />
-                  <input
-                    type="email"
-                    id="email"
-                    autoComplete="username"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (error) setError("");
-                    }}
-                    className={`login-input ${showEmailError ? "login-input--invalid" : ""} ${inter.className}`}
-                    placeholder="you@vierradev.com"
-                    required
-                    aria-invalid={showEmailError}
-                    aria-describedby={showEmailError ? "email-error" : undefined}
-                    disabled={isSubmitting}
-                  />
+            {(mode === "magicLink" && magicLinkSent) || (mode === "forgotPassword" && resetLinkSent) ? (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-white/12 bg-white/5 px-3 py-2.5 text-center text-sm text-white/80">
+                  Check your inbox for a {mode === "magicLink" ? "sign-in link" : "password reset link"}.
                 </div>
-                {showEmailError && (
-                  <p id="email-error" className="mt-1.5 text-xs text-red-300">
-                    Enter a valid email address.
-                  </p>
-                )}
+                <button
+                  type="button"
+                  onClick={() => switchMode("password")}
+                  className={`w-full text-center text-sm text-white/60 hover:text-white/90 transition-colors ${inter.className}`}
+                >
+                  Back to password sign-in
+                </button>
               </div>
-
-              <div>
-                <label
-                  htmlFor="password"
-                  className={`mb-1.5 block text-sm font-medium text-white/80 ${inter.className}`}
-                >
-                  Password
-                </label>
-                <div className="login-field">
-                  <Lock className="login-field__icon" size={18} aria-hidden="true" />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    id="password"
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      if (error) setError("");
-                    }}
-                    className={`login-input login-input--password ${inter.className}`}
-                    placeholder="Enter your password"
-                    required
-                    disabled={isSubmitting}
-                  />
-                  <button
-                    type="button"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    className="login-field__toggle"
-                    onClick={() => setShowPassword(!showPassword)}
-                    disabled={isSubmitting}
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </div>
-
-              {error && (
-                <div
-                  role="alert"
-                  aria-live="polite"
-                  className="rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-center text-sm text-red-200"
-                >
-                  {error}
-                </div>
-              )}
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                style={{ marginTop: "1.75rem" }}
-                className={`login-submit ${inter.className}`}
+            ) : (
+              <form
+                onSubmit={
+                  mode === "password" ? handleSubmit : mode === "magicLink" ? handleMagicLinkSubmit : handleForgotPasswordSubmit
+                }
+                noValidate
+                className="space-y-4"
               >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" />
-                    Signing in…
-                  </>
-                ) : (
-                  "Sign in"
+                <div>
+                  <label
+                    htmlFor="email"
+                    className={`mb-1.5 block text-sm font-medium text-white/80 ${inter.className}`}
+                  >
+                    Email
+                  </label>
+                  <div className="login-field">
+                    <Mail className="login-field__icon" size={18} aria-hidden="true" />
+                    <input
+                      type="email"
+                      id="email"
+                      autoComplete="username"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (error) setError("");
+                      }}
+                      className={`login-input ${showEmailError ? "login-input--invalid" : ""} ${inter.className}`}
+                      placeholder="you@vierradev.com"
+                      required
+                      aria-invalid={showEmailError}
+                      aria-describedby={showEmailError ? "email-error" : undefined}
+                      disabled={isSubmitting}
+                    />
+                  </div>
+                  {showEmailError && (
+                    <p id="email-error" className="mt-1.5 text-xs text-red-300">
+                      Enter a valid email address.
+                    </p>
+                  )}
+                </div>
+
+                {mode === "password" && (
+                  <div>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <label htmlFor="password" className={`block text-sm font-medium text-white/80 ${inter.className}`}>
+                        Password
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => switchMode("forgotPassword")}
+                        disabled={isSubmitting}
+                        className={`text-xs text-white/50 hover:text-white/90 transition-colors disabled:opacity-60 ${inter.className}`}
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
+                    <div className="login-field">
+                      <Lock className="login-field__icon" size={18} aria-hidden="true" />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        id="password"
+                        autoComplete="current-password"
+                        value={password}
+                        onChange={(e) => {
+                          setPassword(e.target.value);
+                          if (error) setError("");
+                        }}
+                        className={`login-input login-input--password ${inter.className}`}
+                        placeholder="Enter your password"
+                        required
+                        disabled={isSubmitting}
+                      />
+                      <button
+                        type="button"
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        className="login-field__toggle"
+                        onClick={() => setShowPassword(!showPassword)}
+                        disabled={isSubmitting}
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
                 )}
-              </button>
-            </form>
+
+                {error && (
+                  <div
+                    role="alert"
+                    aria-live="polite"
+                    className="rounded-xl border border-red-400/30 bg-red-500/10 px-3 py-2.5 text-center text-sm text-red-200"
+                  >
+                    {error}
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  style={{ marginTop: "1.75rem" }}
+                  className={`login-submit ${inter.className}`}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      {mode === "password" ? "Signing in…" : "Sending link…"}
+                    </>
+                  ) : mode === "password" ? (
+                    "Sign in"
+                  ) : mode === "magicLink" ? (
+                    "Email me a sign-in link"
+                  ) : (
+                    "Send reset link"
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => switchMode(mode === "password" ? "magicLink" : "password")}
+                  disabled={isSubmitting}
+                  className={`w-full text-center text-sm text-white/60 hover:text-white/90 transition-colors disabled:opacity-60 ${inter.className}`}
+                >
+                  {mode === "password" ? "Email me a sign-in link instead" : "Back to password sign-in"}
+                </button>
+              </form>
+            )}
           </div>
         </div>
       </div>
