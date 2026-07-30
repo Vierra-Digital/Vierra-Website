@@ -1,5 +1,6 @@
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
+import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { prisma } from "@/lib/prisma";
 import { asStr } from "@/lib/api/parsing";
 
@@ -14,7 +15,9 @@ type ActionType =
   | "archive"
   | "moveToInbox"
   | "moveToSpam"
-  | "moveToTrash";
+  | "moveToTrash"
+  | "star"
+  | "unstar";
 
 type ActionItem = {
   accountEmail: string;
@@ -39,13 +42,7 @@ async function callGmailAction(accessToken: string, action: ActionType, messageI
       headers: { Authorization: `Bearer ${accessToken}` },
     });
   }
-  if (action === "trash") {
-    return fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/trash`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-  }
-  if (action === "moveToTrash") {
+  if (action === "trash" || action === "moveToTrash") {
     return fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/trash`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -61,19 +58,20 @@ async function callGmailAction(accessToken: string, action: ActionType, messageI
   const body: { addLabelIds: string[]; removeLabelIds: string[] } = { addLabelIds: [], removeLabelIds: [] };
   if (action === "archive") {
     body.removeLabelIds = ["INBOX"];
-  } else if (action === "moveToInbox") {
+  } else if (action === "moveToInbox" || action === "unspam") {
     body.addLabelIds = ["INBOX"];
     body.removeLabelIds = ["SPAM"];
   } else if (action === "moveToSpam" || action === "spam") {
     body.addLabelIds = ["SPAM"];
     body.removeLabelIds = ["INBOX"];
-  } else if (action === "unspam") {
-    body.addLabelIds = ["INBOX"];
-    body.removeLabelIds = ["SPAM"];
   } else if (action === "markRead") {
     body.removeLabelIds = ["UNREAD"];
   } else if (action === "markUnread") {
     body.addLabelIds = ["UNREAD"];
+  } else if (action === "star") {
+    body.addLabelIds = ["STARRED"];
+  } else if (action === "unstar") {
+    body.removeLabelIds = ["STARRED"];
   }
 
   return fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/modify`, {
@@ -101,6 +99,8 @@ export default withAuth(async (req, res, session) => {
     "moveToInbox",
     "moveToSpam",
     "moveToTrash",
+    "star",
+    "unstar",
   ];
   if (!validActions.includes(action)) {
     res.status(400).json({ message: "Invalid action." });
@@ -114,8 +114,17 @@ export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
   const uniqueAccounts = Array.from(new Set(items.map((item) => item.accountEmail)));
   const tokenMap = new Map<string, string | null>();
+  // Resolve WHOSE token to act with: your own mailbox, or a shared inbox you were granted WITH send
+  // permission. Read-only grants (canSend false) resolve to null → their actions fail as "no
+  // permission" rather than silently running against your own (missing) token.
+  const ownerMap = new Map<string, string | null>();
   for (const accountEmail of uniqueAccounts) {
-    const tokenResult = await getValidGmailAccessToken(userId, accountEmail);
+    const access = await resolveMailboxOwner(userId, accountEmail);
+    const ownerUserId = access && access.canSend ? access.ownerUserId : null;
+    ownerMap.set(accountEmail, ownerUserId);
+    const tokenResult = ownerUserId
+      ? await getValidGmailAccessToken(ownerUserId, accountEmail)
+      : { ok: false as const };
     tokenMap.set(accountEmail, tokenResult.ok ? tokenResult.accessToken : null);
   }
   // Resolve accountEmail -> account_id for outbound message cleanup
@@ -134,12 +143,18 @@ export default withAuth(async (req, res, session) => {
     items.map(async (item) => {
       const token = tokenMap.get(item.accountEmail);
       if (!token) {
-        return { ...item, ok: false, error: "Account token not found" };
+        const owner = ownerMap.get(item.accountEmail);
+        return {
+          ...item,
+          ok: false,
+          error: owner ? "Account token not found" : "You don't have permission to act on this mailbox.",
+        };
       }
       try {
+        const owner = ownerMap.get(item.accountEmail) || userId;
         let response = await callGmailAction(token, action, item.messageId);
         if (response.status === 401) {
-          const refreshResult = await getValidGmailAccessToken(userId, item.accountEmail, { forceRefresh: true });
+          const refreshResult = await getValidGmailAccessToken(owner, item.accountEmail, { forceRefresh: true });
           if (!refreshResult.ok) {
             return { ...item, ok: false, error: refreshResult.message };
           }

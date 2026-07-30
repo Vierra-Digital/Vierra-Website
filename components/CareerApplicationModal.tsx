@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { bricolage, inter } from "@/lib/fonts";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiUploadCloud, FiFileText, FiX, FiArrowLeft, FiArrowRight } from "react-icons/fi";
 import Modal from "@/components/ui/Modal";
@@ -14,8 +14,6 @@ import {
   formatPhone,
 } from "@/components/ui/modalForm";
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
-const inter = Inter({ subsets: ["latin"] });
 
 interface CareerApplicationModalProps {
   isOpen: boolean;
@@ -51,6 +49,36 @@ const EMPTY_FORM: FormState = {
 const STEP_TITLES = ["Basic information", "Resume & cover letter", "Additional notes"];
 const TOTAL_STEPS = STEP_TITLES.length;
 
+// Files are streamed to Drive in pieces via /api/careers/apply-chunk. 3 MB keeps
+// each request well under the serverless function's ~6 MB payload limit, so there
+// is no practical ceiling on total attachment size. Must be a multiple of 256 KB
+// for Google Drive resumable uploads (every chunk but the last).
+const CHUNK_SIZE = 3 * 1024 * 1024;
+
+/** Stream one file to its Drive resumable session, a chunk at a time. */
+async function uploadFileInChunks(file: File, uploadUrl: string) {
+  const total = file.size;
+  let offset = 0;
+  while (offset < total) {
+    const end = Math.min(offset + CHUNK_SIZE, total);
+    const buffer = await file.slice(offset, end).arrayBuffer();
+    const res = await fetch("/api/careers/apply-chunk", {
+      method: "PUT",
+      headers: {
+        "x-upload-url": uploadUrl,
+        "content-range": `bytes ${offset}-${end - 1}/${total}`,
+        "x-file-content-type": file.type || "application/octet-stream",
+      },
+      body: buffer,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.message || "Upload failed. Please try again.");
+    }
+    offset = end;
+  }
+}
+
 export function CareerApplicationModal({
   isOpen,
   onClose,
@@ -64,6 +92,11 @@ export function CareerApplicationModal({
   const [resume, setResume] = useState<File | null>(null);
   const [coverLetter, setCoverLetter] = useState<File | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  // Honeypot: real applicants never see or fill this field. Bots that fill every
+  // field trip it, and the server silently no-ops instead of uploading.
+  const [website, setWebsite] = useState("");
 
   useLockBodyScroll(isOpen);
 
@@ -75,6 +108,9 @@ export function CareerApplicationModal({
       setResume(null);
       setCoverLetter(null);
       setSubmitted(false);
+      setSubmitting(false);
+      setSubmitError(null);
+      setWebsite("");
     }
   }, [isOpen, roleSlug]);
 
@@ -106,11 +142,61 @@ export function CareerApplicationModal({
   const nextStep = () => setStep((s) => Math.min(TOTAL_STEPS, s + 1));
   const prevStep = () => setStep((s) => Math.max(1, s - 1));
 
-  const handleSubmit = () => {
-    if (alreadyApplied || submitted || !basicInfoValid || !attachmentsValid) return;
-    // The application is intentionally not sent anywhere for now.
-    setSubmitted(true);
-    onSubmitted();
+  const handleSubmit = async () => {
+    if (alreadyApplied || submitted || submitting || !basicInfoValid || !attachmentsValid) return;
+    if (!resume || !coverLetter) return;
+
+    setSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      // 1. Validate + open a Drive resumable upload session per attachment.
+      const startRes = await fetch("/api/careers/apply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roleSlug,
+          fullName: formData.fullName.trim(),
+          email: formData.email.trim(),
+          phoneNumber: formData.phoneNumber.trim(),
+          currentLocation: formData.currentLocation.trim(),
+          needRelocate: formData.needRelocate,
+          usCitizen: formData.usCitizen,
+          additionalNotes: formData.additionalNotes.trim(),
+          website, // honeypot — always empty for real users
+          files: [
+            { field: "resume", name: resume.name, mimeType: resume.type, size: resume.size },
+            { field: "coverLetter", name: coverLetter.name, mimeType: coverLetter.type, size: coverLetter.size },
+          ],
+        }),
+      });
+      if (!startRes.ok) {
+        const data = await startRes.json().catch(() => null);
+        throw new Error(data?.message || "Something went wrong. Please try again.");
+      }
+      const startData = (await startRes.json().catch(() => null)) as
+        | { sessions?: { field: string; uploadUrl: string }[] }
+        | null;
+
+      // 2. Stream each file directly to its session, chunked to stay under the
+      //    function payload limit. No sessions => honeypot path; nothing to upload.
+      const sessions = startData?.sessions ?? [];
+      if (sessions.length) {
+        const filesByField: Record<string, File> = { resume, coverLetter };
+        for (const { field, uploadUrl } of sessions) {
+          const file = filesByField[field];
+          if (!file) continue;
+          await uploadFileInChunks(file, uploadUrl);
+        }
+      }
+
+      setSubmitted(true);
+      onSubmitted();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -162,6 +248,22 @@ export function CareerApplicationModal({
             >
               <FiX className="h-5 w-5" />
             </button>
+          </div>
+
+          {/* Honeypot — invisible to sighted users and screen readers; real
+              applicants never populate it. Kept off-screen rather than
+              display:none, since some bots skip display:none fields. */}
+          <div style={{ position: "absolute", left: "-9999px", top: "-9999px", height: 0, width: 0, overflow: "hidden" }} aria-hidden="true">
+            <label htmlFor="website">Website</label>
+            <input
+              id="website"
+              name="website"
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+            />
           </div>
 
           {/* Scrollable body */}
@@ -271,6 +373,15 @@ export function CareerApplicationModal({
             </AnimatePresence>
           </div>
 
+          {/* Submit error */}
+          {submitError && (
+            <div className="px-6 pt-3 sm:px-8">
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+                {submitError}
+              </p>
+            </div>
+          )}
+
           {/* Footer */}
           <div className="mt-2 flex items-center justify-between gap-3 border-t border-gray-100 px-6 py-4 sm:px-8">
             {step > 1 ? (
@@ -298,8 +409,16 @@ export function CareerApplicationModal({
                 </motion.span>
               </PrimaryButton>
             ) : (
-              <PrimaryButton onClick={handleSubmit} disabled={!basicInfoValid || !attachmentsValid}>
-                Submit Application
+              <PrimaryButton onClick={handleSubmit} disabled={!basicInfoValid || !attachmentsValid || submitting}>
+                {submitting ? "Submitting…" : "Submit"}
+                {!submitting && (
+                  <motion.span
+                    animate={{ x: [0, 4, 0] }}
+                    transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+                  >
+                    <FiArrowRight className="h-4 w-4" />
+                  </motion.span>
+                )}
               </PrimaryButton>
             )}
           </div>
@@ -380,7 +499,7 @@ const SuccessView: React.FC<{ roleTitle: string; firstTime: boolean; onClose: ()
       <FiX className="h-5 w-5" />
     </button>
     <motion.div
-      className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#701CC0] to-[#8F42FF] shadow-[0_12px_30px_-8px_rgba(112,28,192,0.6)]"
+      className="relative mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#16A34A] to-[#22C55E] shadow-[0_12px_30px_-8px_rgba(22,163,74,0.6)]"
       initial={{ scale: 0, rotate: -90 }}
       animate={{ scale: 1, rotate: 0 }}
       transition={{ duration: 0.5, type: "spring", bounce: 0.45 }}
@@ -389,7 +508,7 @@ const SuccessView: React.FC<{ roleTitle: string; firstTime: boolean; onClose: ()
       {[0, 1].map((i) => (
         <motion.span
           key={i}
-          className="absolute inset-0 rounded-full border-2 border-[#8F42FF]"
+          className="absolute inset-0 rounded-full border-2 border-[#22C55E]"
           initial={{ scale: 1, opacity: 0.5 }}
           animate={{ scale: 1.85, opacity: 0 }}
           transition={{ duration: 2, repeat: Infinity, ease: "easeOut", delay: i }}

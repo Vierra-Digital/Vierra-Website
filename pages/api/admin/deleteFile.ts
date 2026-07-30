@@ -17,7 +17,7 @@ export default withAuth(
     try {
       const file = await prisma.storedFile.findUnique({
         where: { id: fileId },
-        select: { user_id: true, client_id: true, is_deletion_protected: true, storage_key: true },
+        select: { user_id: true, client_id: true, company_id: true, is_deletion_protected: true, storage_key: true },
       })
       if (!file) {
         return res.status(404).json({ message: "File not found." })
@@ -25,9 +25,12 @@ export default withAuth(
       if (file.is_deletion_protected) {
         return res.status(403).json({ message: "This file is protected and cannot be deleted." })
       }
+      // Company-scope the admin/staff path so they can't delete another company's file by id; the
+      // owner path (own file) is inherently safe.
+      const inCompany = file.company_id === session.companyId
       const isOwner = file.user_id != null && uid != null && file.user_id === uid
-      const canManageClientFile = (role === "admin" || role === "staff") && file.client_id != null
-      const canDelete = role === "admin" || isOwner || canManageClientFile
+      const canManage = (role === "admin" || role === "staff") && inCompany
+      const canDelete = isOwner || canManage
       if (!canDelete) {
         return res.status(403).json({ message: "You can only delete files saved to you." })
       }

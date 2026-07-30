@@ -1,8 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
+import { getAccessibleGmailAccounts } from "@/lib/email/mailboxAccess";
+import { extractHeader } from "@/lib/gmail/gmailApi";
+import { asQueryStr } from "@/lib/api/parsing";
 
-type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive";
+type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive" | "allmail" | "starred" | "important" | "scheduled";
 const OPEN_BASE_WINDOW_MS = 15_000;
 const OPEN_SESSION_GAP_MS = 5 * 60 * 1000;
 const OPEN_MAX_CONTINUOUS_STEP_MS = 60_000;
@@ -40,6 +43,7 @@ type MessageRow = {
   messageIdHeader: string;
   references: string;
   unread: boolean;
+  starred?: boolean;
   tracked: boolean;
   trackingOpenCount?: number;
   trackingClickCount?: number;
@@ -57,9 +61,6 @@ type MessageRow = {
   composePreviewHtml?: string;
 };
 
-function asStr(v: string | string[] | undefined) {
-  return Array.isArray(v) ? v[0] : v;
-}
 
 function parseMailbox(v: string | undefined): Mailbox {
   const value = (v || "").toLowerCase();
@@ -68,6 +69,10 @@ function parseMailbox(v: string | undefined): Mailbox {
   if (value === "spam") return "spam";
   if (value === "trash") return "trash";
   if (value === "archive") return "archive";
+  if (value === "allmail") return "allmail";
+  if (value === "starred") return "starred";
+  if (value === "important") return "important";
+  if (value === "scheduled") return "scheduled";
   return "inbox";
 }
 
@@ -78,16 +83,14 @@ function buildMailboxQuery(mailbox: Mailbox) {
   if (mailbox === "sent") {
     return { q: "in:sent -in:trash" };
   }
+  if (mailbox === "allmail") return { q: "-in:trash -in:spam" };
+  if (mailbox === "starred") return { q: "is:starred -in:trash" };
+  if (mailbox === "important") return { q: "is:important -in:trash -in:spam" };
+  if (mailbox === "scheduled") return { q: "in:scheduled" };
   if (mailbox === "drafts") return "DRAFT";
   if (mailbox === "spam") return "SPAM";
   if (mailbox === "trash") return "TRASH";
   return "INBOX";
-}
-
-function extractHeader(headers: Array<{ name?: string; value?: string }> | undefined, key: string) {
-  if (!headers) return "";
-  const target = headers.find((h) => (h.name || "").toLowerCase() === key.toLowerCase());
-  return target?.value || "";
 }
 
 function normalizeMailboxIdentity(value: string) {
@@ -130,13 +133,21 @@ function firstRecipient(text: string) {
   return first || cleaned;
 }
 
-async function fetchGmailList(accessToken: string, mailbox: Mailbox, maxResults: number) {
+async function fetchGmailList(accessToken: string, mailbox: Mailbox, maxResults: number, search?: string, labelId?: string) {
   const params = new URLSearchParams({ maxResults: String(maxResults) });
-  const mailboxQuery = buildMailboxQuery(mailbox);
-  if (typeof mailboxQuery === "string") {
-    params.set("labelIds", mailboxQuery);
+  const searchTerm = (search || "").trim();
+  if (labelId) {
+    // Viewing a custom label overrides the mailbox filter.
+    params.set("labelIds", labelId);
+    if (searchTerm) params.set("q", searchTerm);
   } else {
-    params.set("q", mailboxQuery.q);
+    const mailboxQuery = buildMailboxQuery(mailbox);
+    if (typeof mailboxQuery === "string") {
+      params.set("labelIds", mailboxQuery);
+      if (searchTerm) params.set("q", searchTerm);
+    } else {
+      params.set("q", searchTerm ? `${mailboxQuery.q} ${searchTerm}` : mailboxQuery.q);
+    }
   }
   const response = await fetchWithRetry(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params.toString()}`, {
     headers: {
@@ -203,28 +214,30 @@ export default withAuth(async (req, res, session) => {
   res.setHeader("Expires", "0");
 
   const userId = session.user.id;
-  const mailbox = parseMailbox(asStr(req.query.mailbox));
-  const pageRaw = Number(asStr(req.query.page));
+  const mailbox = parseMailbox(asQueryStr(req.query.mailbox));
+  const pageRaw = Number(asQueryStr(req.query.page));
   const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
-  const pageSizeRaw = Number(asStr(req.query.limit));
+  const pageSizeRaw = Number(asQueryStr(req.query.limit));
   const pageSize = Number.isFinite(pageSizeRaw) && pageSizeRaw > 0 ? Math.min(Math.floor(pageSizeRaw), 50) : 50;
-  const maxResults = Math.min(page * pageSize, 500);
-  const accountsParam = asStr(req.query.accounts);
+  // We fetch (and merge/sort) at most the newest MAX_FETCH messages per account, so global
+  // recency order is only trustworthy within [0, MAX_FETCH]. Pages beyond that can't be served
+  // correctly with a merge-and-slice, so the inbox is capped there.
+  const MAX_FETCH = 500;
+  const maxResults = Math.min(page * pageSize, MAX_FETCH);
+  const accountsParam = asQueryStr(req.query.accounts);
+  const searchQuery = (asQueryStr(req.query.q) || "").trim();
+  const labelIdFilter = (asQueryStr(req.query.labelId) || "").trim();
   const selectedEmails = (accountsParam || "")
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
 
-  const rows = await prisma.platformToken.findMany({
-    where: { user_id: userId, platform: { startsWith: "gmail:" } },
-    select: { platform: true },
-  });
-
-  const accountRows = rows
-    .map((row) => ({
-      email: row.platform.replace(/^gmail:/, "").toLowerCase(),
-    }))
-    .filter((row) => (selectedEmails.length ? selectedEmails.includes(row.email) : true));
+  // Accessible = owned + admin-granted (shared inboxes). Each carries the ownerUserId whose
+  // token/data to use; for owned accounts ownerUserId === userId (identical to before).
+  const accessibleAccounts = await getAccessibleGmailAccounts(userId);
+  const accountRows = accessibleAccounts.filter((row) =>
+    selectedEmails.length ? selectedEmails.includes(row.email) : true
+  );
 
   if (accountRows.length === 0) {
     res.status(200).json({ messages: [], accountErrors: [] });
@@ -236,13 +249,13 @@ export default withAuth(async (req, res, session) => {
   const messagesByAccount = await Promise.all(
     accountRows.map(async (account) => {
       try {
-        const tokenResult = await getValidGmailAccessToken(userId, account.email);
+        const tokenResult = await getValidGmailAccessToken(account.ownerUserId, account.email);
         if (!tokenResult.ok) {
           throw new Error(tokenResult.message);
         }
 
         const loadAccountMessages = async (accessToken: string) => {
-          const list = await fetchGmailList(accessToken, mailbox, maxResults);
+          const list = await fetchGmailList(accessToken, mailbox, maxResults, searchQuery, labelIdFilter);
           accountHasMore.push(Boolean(list.nextPageToken));
           const ids = (list.messages || []).map((m) => m.id).filter(Boolean);
           if (ids.length === 0) return [] as MessageRow[];
@@ -263,6 +276,7 @@ export default withAuth(async (req, res, session) => {
             const references = extractHeader(headers, "References") || "";
             const timestamp = Number(msg.internalDate || 0) || Date.parse(date) || 0;
             const unread = Array.isArray(msg.labelIds) ? msg.labelIds.includes("UNREAD") : false;
+            const starred = Array.isArray(msg.labelIds) ? msg.labelIds.includes("STARRED") : false;
             return {
               id: msg.id,
               threadId: msg.threadId,
@@ -280,6 +294,7 @@ export default withAuth(async (req, res, session) => {
               messageIdHeader,
               references,
               unread,
+              starred,
               tracked: false,
             } as MessageRow;
           });
@@ -289,7 +304,7 @@ export default withAuth(async (req, res, session) => {
           return await loadAccountMessages(tokenResult.accessToken);
         } catch (error) {
           if (!isAuthFailure(error)) throw error;
-          const refreshResult = await getValidGmailAccessToken(userId, account.email, { forceRefresh: true });
+          const refreshResult = await getValidGmailAccessToken(account.ownerUserId, account.email, { forceRefresh: true });
           if (!refreshResult.ok) {
             throw new Error(refreshResult.message);
           }
@@ -375,30 +390,22 @@ export default withAuth(async (req, res, session) => {
     mergedMessages = [...mappedDrafts, ...mergedMessages].sort((a, b) => b.timestamp - a.timestamp);
   }
   const offset = (page - 1) * pageSize;
-  const pageMessages = mergedMessages.slice(offset, offset + pageSize);
+  // Don't serve past the fetch window — beyond it the slice would be an incorrect cross-account
+  // subset (messages silently dropped/reordered) rather than the true global order.
+  const pageMessages = offset >= MAX_FETCH ? [] : mergedMessages.slice(offset, Math.min(offset + pageSize, MAX_FETCH));
 
-  // Resolve account_id -> account_email mapping for tracked message lookup
-  const accountEmailToId = new Map<string, string>();
-  if (pageMessages.length > 0) {
-    const accountEmailsOnPage = [...new Set(pageMessages.map((m) => m.accountEmail).filter(Boolean))];
-    const providerAccounts = await prisma.emailProviderAccount.findMany({
-      where: { user_id: userId, account_email: { in: accountEmailsOnPage } },
-      select: { id: true, account_email: true },
-    });
-    for (const pa of providerAccounts) {
-      accountEmailToId.set(pa.account_email.toLowerCase(), pa.id);
-    }
-  }
+  // Tracking rows for a granted (shared) mailbox belong to the OWNER, not the requester — scope
+  // by every accessible account's ownerUserId so shared-inbox stats show up.
+  const ownerUserIds = [...new Set(accessibleAccounts.map((a) => a.ownerUserId))];
 
   const trackedRows = await prisma.emailOutboundMessage.findMany({
     where: {
-      user_id: userId,
+      user_id: { in: ownerUserIds },
       tracking_enabled: true,
       gmail_message_id: { in: pageMessages.map((message) => message.id) },
     },
     select: {
       gmail_message_id: true,
-      account_id: true,
       email_tracking_events: {
         where: { event_type: { in: ["OPEN", "CLICK"] } },
         select: {
@@ -410,20 +417,16 @@ export default withAuth(async (req, res, session) => {
     },
   });
 
-  // Build reverse mapping: account_id -> account_email
-  const accountIdToEmail = new Map<string, string>();
-  for (const [email, id] of accountEmailToId.entries()) {
-    accountIdToEmail.set(id, email);
-  }
-
+  // Key stats by the globally-unique Gmail message id — no account_id→email mapping needed.
+  // (That mapping failed for Gmail/OAuth accounts, which have no provider-account row, so the
+  // "opened" dot never showed for them.)
   const trackedStatsByKey = new Map<
     string,
     { openCount: number; clickCount: number; firstOpenedAt: string | null; lastOpenedAt: string | null; totalOpenWindowMs: number }
   >();
   for (const row of trackedRows) {
     if (!row.gmail_message_id) continue;
-    const rowAccountEmail = accountIdToEmail.get(row.account_id) ?? "";
-    const key = `${rowAccountEmail.toLowerCase()}::${String(row.gmail_message_id)}`;
+    const key = String(row.gmail_message_id);
     let openCount = 0;
     let clickCount = 0;
     let firstOpenedAt: Date | null = null;
@@ -465,14 +468,15 @@ export default withAuth(async (req, res, session) => {
   }
   const messages = pageMessages.map((message) => ({
     ...message,
-    tracked: trackedStatsByKey.has(`${message.accountEmail.toLowerCase()}::${message.id}`),
-    trackingOpenCount: trackedStatsByKey.get(`${message.accountEmail.toLowerCase()}::${message.id}`)?.openCount || 0,
-    trackingClickCount: trackedStatsByKey.get(`${message.accountEmail.toLowerCase()}::${message.id}`)?.clickCount || 0,
-    trackingFirstOpenedAt: trackedStatsByKey.get(`${message.accountEmail.toLowerCase()}::${message.id}`)?.firstOpenedAt || null,
-    trackingLastOpenedAt: trackedStatsByKey.get(`${message.accountEmail.toLowerCase()}::${message.id}`)?.lastOpenedAt || null,
-    trackingTotalOpenWindowMs: trackedStatsByKey.get(`${message.accountEmail.toLowerCase()}::${message.id}`)?.totalOpenWindowMs || 0,
+    tracked: trackedStatsByKey.has(message.id),
+    trackingOpenCount: trackedStatsByKey.get(message.id)?.openCount || 0,
+    trackingClickCount: trackedStatsByKey.get(message.id)?.clickCount || 0,
+    trackingFirstOpenedAt: trackedStatsByKey.get(message.id)?.firstOpenedAt || null,
+    trackingLastOpenedAt: trackedStatsByKey.get(message.id)?.lastOpenedAt || null,
+    trackingTotalOpenWindowMs: trackedStatsByKey.get(message.id)?.totalOpenWindowMs || 0,
   }));
-  const hasNextPage = mergedMessages.length > offset + pageSize || accountHasMore.some(Boolean);
+  const hasNextPage =
+    offset + pageSize < MAX_FETCH && (mergedMessages.length > offset + pageSize || accountHasMore.some(Boolean));
 
   res.status(200).json({
     mailbox,

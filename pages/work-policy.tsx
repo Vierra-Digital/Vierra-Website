@@ -1,12 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bricolage_Grotesque, Inter } from 'next/font/google';
+import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import { Header } from '@/components/Header';
 import Footer from '@/components/FooterSection/Footer';
 
-const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
-const inter = Inter({ subsets: ['latin'] });
 
 type SectionMeta = { id: string; title: string };
 
@@ -103,7 +101,10 @@ const WorkPolicyPage: React.FC = () => {
         <meta property="og:description" content="Vierra Digital Work Policy. Learn about our work standards and processes." />
         <meta property="og:url" content="https://vierradev.com/work-policy" />
         <meta property="og:type" content="website" />
-        <meta name="twitter:card" content="summary" />
+        <meta property="og:site_name" content="Vierra Digital" />
+        <meta property="og:image" content="https://vierradev.com/assets/meta-banner.png" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:image" content="https://vierradev.com/assets/meta-banner.png" />
         <meta name="twitter:title" content="Vierra | Work Policy" />
         <meta name="twitter:description" content="Vierra Digital Work Policy. Learn about our work standards and processes." />
       </Head>

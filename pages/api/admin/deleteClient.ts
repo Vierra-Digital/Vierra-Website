@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 
 export default withAuth(
-  async (req, res) => {
+  async (req, res, session) => {
     const { clientId } = req.query;
 
     if (!clientId || typeof clientId !== "string") {
@@ -10,8 +10,9 @@ export default withAuth(
     }
 
     try {
-      const client = await prisma.client.findUnique({
-        where: { id: clientId }
+      // Scope to the admin's own company — a client id from another company must 404, not delete.
+      const client = await prisma.client.findFirst({
+        where: { id: clientId, company_id: session.companyId }
       });
 
       if (!client) {

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Inter } from "next/font/google";
+import { inter } from "@/lib/fonts";
 import { useSession } from "@/lib/session-client";
 import {
   FiPlus,
@@ -21,7 +21,6 @@ import {
 import ProfileImage from "../ProfileImage";
 import Modal from "@/components/ui/Modal";
 
-const inter = Inter({ subsets: ["latin"] });
 
 type ProjectTaskStatus = "not_started" | "ongoing" | "under_review" | "completed";
 

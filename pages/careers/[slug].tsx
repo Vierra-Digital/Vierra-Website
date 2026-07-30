@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Bricolage_Grotesque, Inter } from 'next/font/google';
+import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import type { GetStaticPaths, GetStaticProps } from 'next';
@@ -10,8 +10,6 @@ import Footer from '@/components/FooterSection/Footer';
 import { CareerApplicationModal } from '@/components/CareerApplicationModal';
 import { JOB_ROLES, getJobRole, type JobRole } from '@/lib/careers';
 
-const bricolage = Bricolage_Grotesque({ subsets: ['latin'] });
-const inter = Inter({ subsets: ['latin'] });
 
 const APPLIED_STORAGE_KEY = 'vierra-applied-roles';
 
@@ -41,6 +39,10 @@ const DetailBlock: React.FC<{ title: string; items: string[] }> = ({ title, item
     </ul>
   </section>
 );
+
+// Stable fallback for JobPosting.datePosted — a fixed date, NOT new Date(), so
+// each deploy doesn't reset the posting date (which Google Jobs reads as a re-post).
+const DEFAULT_DATE_POSTED = '2026-06-01T00:00:00.000Z';
 
 // Map our employment labels to schema.org JobPosting employmentType values.
 const SCHEMA_EMPLOYMENT_TYPE: Record<JobRole['employmentType'], string> = {
@@ -117,8 +119,9 @@ const RolePage: React.FC<{ role: JobRole; datePosted: string; validThrough: stri
     employmentType: SCHEMA_EMPLOYMENT_TYPE[role.employmentType],
     hiringOrganization: {
       '@type': 'Organization',
+      '@id': 'https://vierradev.com/#organization',
       name: 'Vierra Digital',
-      sameAs: 'https://vierradev.com',
+      url: 'https://vierradev.com',
       logo: 'https://vierradev.com/assets/vierra-logo.png',
     },
     // Roles are remote/hybrid, so we declare TELECOMMUTE + applicant location
@@ -234,7 +237,7 @@ const RolePage: React.FC<{ role: JobRole; datePosted: string; validThrough: stri
         </div>
 
         {/* Content */}
-        <div className="relative z-10 mx-auto max-w-5xl px-5 pb-24 pt-14 md:px-8">
+        <main className="relative z-10 mx-auto max-w-5xl px-5 pb-24 pt-14 md:px-8">
           <div className="space-y-6">
             <section className="rounded-[26px] border border-[#701CC0]/10 bg-white/90 p-6 shadow-[0_10px_40px_-18px_rgba(112,28,192,0.25)] ring-1 ring-black/[0.02] backdrop-blur-sm md:p-9">
               <h2 className={`text-xl md:text-2xl font-semibold tracking-tight text-[#1A1033] ${bricolage.className}`}>
@@ -281,7 +284,7 @@ const RolePage: React.FC<{ role: JobRole; datePosted: string; validThrough: stri
               </motion.button>
             </section>
           </div>
-        </div>
+        </main>
 
         <Footer />
       </div>
@@ -309,17 +312,19 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
   if (!role) {
     return { notFound: true };
   }
-  // Build-time timestamp used for JobPosting structured data (datePosted).
-  // validThrough is required-recommended by Google for Jobs — without it a
-  // posting can be silently expired/de-prioritized. We use a rolling 90-day
-  // window from build time; each deploy refreshes it so listings stay valid.
-  const now = new Date();
-  const validThrough = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+  // Both JobPosting dates are STABLE (not recomputed each build): datePosted is
+  // fixed per role, and validThrough is a fixed 1-year window derived from it —
+  // so redeploys never shift the posting dates (which Google Jobs can read as
+  // churn). Bump the role's datePosted to re-open/refresh a listing.
+  const datePosted = role.datePosted ?? DEFAULT_DATE_POSTED;
+  const validThrough = new Date(
+    new Date(datePosted).getTime() + 365 * 24 * 60 * 60 * 1000
+  ).toISOString();
   return {
     props: {
       role,
-      datePosted: now.toISOString(),
-      validThrough: validThrough.toISOString(),
+      datePosted,
+      validThrough,
     },
   };
 };

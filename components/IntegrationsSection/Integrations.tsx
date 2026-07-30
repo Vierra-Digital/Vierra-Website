@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, type ReactNode } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Bricolage_Grotesque, Inter } from "next/font/google"
+import Image from "next/image"
+import { bricolage, inter } from "@/lib/fonts";
 import { ArrowUpRight } from "lucide-react"
 import { Modal } from "@/components/Modal"
 import type { IconType } from "react-icons"
@@ -23,8 +24,6 @@ import {
   SiDropbox,
 } from "react-icons/si"
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] })
-const inter = Inter({ subsets: ["latin"] })
 
 // Illustrative booked-meeting feed (sample data, not real bookings).
 type Meeting = { company: string; source: string; Icon: IconType; color: string; time: string }
@@ -138,7 +137,7 @@ const calTone: Record<"blue" | "pink" | "purple" | "plain", string> = {
   purple: "bg-[#EAE2FB] text-[#46256E]",
   plain: "bg-white border border-[#ECE8F2] text-[#3A3346]",
 }
-type Meeting = {
+type CalMeeting = {
   id: string
   col: number
   row: number
@@ -151,7 +150,7 @@ type Meeting = {
   link: string
 }
 // Meetings populate in a random order onto the empty grid each cycle.
-const calMeetings: Meeting[] = [
+const calMeetings: CalMeeting[] = [
   { id: "tilebar", col: 0, row: 0, client: "TileBar", type: "Discovery Call", t12: "11AM – 12PM", t24: "11:00 – 12:00", tone: "blue", attendee: "Jordan Lee · Head of Growth", link: "meet.vierra.co/tb-9f2" },
   { id: "standup1", col: 1, row: 0, client: "Sales Standup", type: "Internal", t12: "11 – 11:30AM", t24: "11:00 – 11:30", tone: "plain", attendee: "Vierra Sales team", link: "meet.vierra.co/standup" },
   { id: "ids", col: 2, row: 0, client: "IDS Society", type: "Product Demo", t12: "11AM – 12PM", t24: "11:00 – 12:00", tone: "pink", attendee: "Priya N · Director", link: "meet.vierra.co/ids-3k1" },
@@ -163,7 +162,7 @@ const calMeetings: Meeting[] = [
 
 // Decorative — opens and closes on its own as part of the loop, so it's
 // pointer-events-none and has no interactive controls. Deliberately minimal.
-function MeetingModal({ m, mode }: { m: Meeting; mode: "12h" | "24h" }) {
+function MeetingModal({ m, mode }: { m: CalMeeting; mode: "12h" | "24h" }) {
   return (
     <motion.div
       className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center p-3"
@@ -334,8 +333,7 @@ const chatScript: ChatMsg[] = [
 ]
 
 function ChatAvatar({ src, name }: { src: string; name: string }) {
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt={name} className="h-9 w-9 shrink-0 rounded-xl object-cover" />
+  return <Image src={src} alt={name} width={36} height={36} className="h-9 w-9 shrink-0 rounded-xl object-cover" />
 }
 
 function ChatBubble({ m }: { m: ChatMsg }) {
@@ -508,13 +506,13 @@ function GmailVisual() {
 }
 
 // --- CRM box: orbital grid — tools revolve around a central Vierra "V". ---
-const orbitTools: { Icon: IconType; color: string; label: string }[] = [
-  { Icon: SiGmail, color: "#EA4335", label: "Gmail" },
-  { Icon: FaLinkedin, color: "#0A66C2", label: "LinkedIn" },
-  { Icon: SiInstagram, color: "#E4405F", label: "Instagram" },
-  { Icon: SiGoogleads, color: "#4285F4", label: "Google Ads" },
-  { Icon: SiHubspot, color: "#FF7A59", label: "HubSpot" },
-  { Icon: SiSalesforce, color: "#00A1E0", label: "Salesforce" },
+const orbitTools: { Icon: IconType; color: string }[] = [
+  { Icon: SiGmail, color: "#EA4335" },
+  { Icon: FaLinkedin, color: "#0A66C2" },
+  { Icon: SiInstagram, color: "#E4405F" },
+  { Icon: SiGoogleads, color: "#4285F4" },
+  { Icon: SiHubspot, color: "#FF7A59" },
+  { Icon: SiSalesforce, color: "#00A1E0" },
 ]
 
 function OrbitVisual() {
@@ -558,8 +556,7 @@ function OrbitVisual() {
       {/* center Vierra badge (static, on top) — the 2D V mark on a white tile */}
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white ring-1 ring-[#701CC0]/15 shadow-[0_14px_34px_-10px_rgba(112,28,192,0.55)]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/assets/vierra-v-2d.png" alt="Vierra" className="h-8 w-auto" />
+          <Image src="/assets/vierra-v-2d.png" alt="Vierra" width={210} height={184} className="h-8 w-auto" />
         </div>
       </div>
     </div>

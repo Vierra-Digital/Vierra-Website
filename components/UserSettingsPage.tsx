@@ -703,8 +703,14 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               </div>
             </div>
 
-            {updateMessage?.type === "error" && (
-              <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 text-sm">
+            {updateMessage && (
+              <div
+                className={`mt-4 p-3 rounded-xl border text-sm ${
+                  updateMessage.type === "success"
+                    ? "bg-green-500/10 border-green-500/20 text-green-600"
+                    : "bg-red-500/10 border-red-500/20 text-red-600"
+                }`}
+              >
                 {updateMessage.text}
               </div>
             )}

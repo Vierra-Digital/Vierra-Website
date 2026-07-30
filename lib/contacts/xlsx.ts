@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import ExcelJS from "exceljs";
+import { guardSpreadsheetFormula } from "@/lib/contacts/spreadsheet";
 import {
   putFileAsset,
   deleteFileAsset,
@@ -37,7 +38,8 @@ type SpreadsheetColumn = { key: RawColumnKey; header: string };
 
 function asSheetValue(value: string | null | undefined) {
   const normalized = typeof value === "string" ? value.trim() : "";
-  return normalized || "N/A";
+  if (!normalized) return "N/A";
+  return guardSpreadsheetFormula(normalized);
 }
 
 export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsheetInput) {

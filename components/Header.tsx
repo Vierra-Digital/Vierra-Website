@@ -1,14 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Bricolage_Grotesque, Inter } from "next/font/google";
+import { bricolage, inter } from "@/lib/fonts";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowUpRight, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/Modal";
+import { track } from "@/lib/track";
+import { scrollToHomeSection } from "@/lib/sectionScroll";
 
-const bricolage = Bricolage_Grotesque({ subsets: ["latin"] });
-const inter = Inter({ subsets: ["latin"] });
 
 export function Header() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -27,12 +27,7 @@ export function Header() {
     if (closeMobile) {
       setIsMobileMenuOpen(false)
     }
-    if (typeof window === "undefined") return
-    if (window.location.pathname !== "/") {
-      window.location.href = `/#${sectionId}`
-      return
-    }
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth" })
+    scrollToHomeSection(sectionId)
   }
 
   return (
@@ -44,7 +39,7 @@ export function Header() {
           </Link>
           <nav className={`hidden md:flex items-center gap-8 text-[16px] ${bricolage.className}`}>
             <Link
-              href="/#services"
+              href="/"
               className="relative group transition-colors duration-300 hover:text-white"
               onClick={(event) => handleSectionClick(event, "services")}
             >
@@ -60,7 +55,7 @@ export function Header() {
         <Button
           variant="secondary"
           className={`audit-glow hidden md:flex items-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-transparent text-white rounded-md px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] transition-all duration-300 hover:border-[#8F42FF] ${inter.className}`}
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => { track("cta_click", { location: "header" }); setIsModalOpen(true); }}
         >
           Let&apos;s Talk <ArrowUpRight className="w-4 h-4 arrow-bob" />
         </Button>
@@ -88,7 +83,7 @@ export function Header() {
                 </div>
                 <nav className={`flex flex-col p-4 ${bricolage.className}`}>
                   <Link
-                    href="/#services"
+                    href="/"
                     className="py-3 text-xl text-white hover:text-[#8F42FF] transition-colors"
                     onClick={(event) => handleSectionClick(event, "services", true)}
                   >
@@ -102,7 +97,7 @@ export function Header() {
                     className={`w-full flex items-center justify-center gap-2 border-2 border-[#701CC0] bg-transparent hover:bg-[#8F42FF] text-white rounded-md px-8 py-7 shadow-[0px_4px_15.9px_0px_#701CC061] ${inter.className}`}
                     onClick={() => {
                       setIsMobileMenuOpen(false);
-                      setIsModalOpen(true);
+                      track("cta_click", { location: "header_mobile" }); setIsModalOpen(true);
                     }}
                   >
                     Let&apos;s Talk <ArrowUpRight className="w-4 h-4 arrow-bob" />

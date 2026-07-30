@@ -4,6 +4,7 @@ import Head from "next/head";
 import Script from "next/script";
 import { useRouter } from "next/router";
 import { SessionProvider } from "@/lib/session-client";
+import ConsentBanner from "@/components/ConsentBanner";
 
 // GA for pages-router routes (blog, careers, legal). App-router pages get it from
 // app/layout.tsx. Both use next/script so the tag is hydration-safe (no edge inject).
@@ -26,6 +27,7 @@ export default function App({ Component, pageProps }: AppProps) {
           <link rel="shortcut icon" href="/favicon.ico" />
         </Head>
         <Component {...pageProps} />
+        {analyticsEnabled && <ConsentBanner />}
         {analyticsEnabled && (
           <>
             <Script
@@ -36,6 +38,13 @@ export default function App({ Component, pageProps }: AppProps) {
               {`
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
+                gtag('consent', 'default', {
+                  ad_storage: 'denied',
+                  ad_user_data: 'denied',
+                  ad_personalization: 'denied',
+                  analytics_storage: 'denied',
+                  wait_for_update: 500,
+                });
                 gtag('js', new Date());
                 gtag('config', '${GA_MEASUREMENT_ID}');
               `}

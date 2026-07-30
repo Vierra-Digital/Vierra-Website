@@ -24,8 +24,12 @@ export default withAuth(
         if (!userId) {
           return res.status(400).json({ message: "Invalid recipientId for staff." })
         }
-        const user = await prisma.user.findUnique({ where: { id: userId } })
-        if (!user) {
+        // Recipient must be a member of the admin's own company, not any user id system-wide.
+        const membership = await prisma.companyMembership.findFirst({
+          where: { company_id: companyId, user_id: userId },
+          select: { user_id: true },
+        })
+        if (!membership) {
           return res.status(404).json({ message: "Staff member not found." })
         }
         const existing = await prisma.storedFile.findFirst({
@@ -45,7 +49,7 @@ export default withAuth(
         })
       } else {
         const clientId = String(recipientId)
-        const client = await prisma.client.findUnique({ where: { id: clientId } })
+        const client = await prisma.client.findFirst({ where: { id: clientId, company_id: companyId } })
         if (!client) {
           return res.status(404).json({ message: "Client not found." })
         }

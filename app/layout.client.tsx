@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import { useReportWebVitals } from "next/web-vitals";
+import ConsentBanner from "@/components/ConsentBanner";
 import {
   initializeAnalytics,
   storeAnalyticsData,
@@ -9,8 +11,6 @@ import {
 
 interface ClientLayoutProps {
   children: React.ReactNode;
-  geistSansVariable: string;
-  geistMonoVariable: string;
 }
 if (typeof window !== "undefined") {
   const originalError = console.error.bind(console)
@@ -57,9 +57,21 @@ if (typeof window !== "undefined") {
 
 export default function RootLayoutClient({
   children,
-  geistSansVariable,
-  geistMonoVariable,
 }: ClientLayoutProps) {
+  // Real-user Core Web Vitals → GA4 as events (field LCP/INP/CLS/FCP/TTFB without
+  // needing the CrUX/PSI API key). CLS is scaled x1000 per GA convention.
+  useReportWebVitals((metric) => {
+    if (typeof window === "undefined") return;
+    const w = window as unknown as { gtag?: (...a: unknown[]) => void };
+    if (typeof w.gtag !== "function") return;
+    w.gtag("event", metric.name, {
+      value: Math.round(metric.name === "CLS" ? metric.value * 1000 : metric.value),
+      metric_id: metric.id,
+      metric_rating: metric.rating,
+      non_interaction: true,
+    });
+  });
+
   // Analytics validation runs in the background as a side effect. It must NOT
   // gate rendering: blocking children behind this client-only fetch left every
   // App Router page server-rendering only a spinner (no <h1>, no content) until
@@ -98,8 +110,9 @@ export default function RootLayoutClient({
   }, []);
 
   return (
-    <div className={`${geistSansVariable} ${geistMonoVariable} antialiased`}>
+    <div className="antialiased">
       {children}
+      <ConsentBanner />
     </div>
   );
 }

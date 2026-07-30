@@ -9,13 +9,15 @@ export default withAuth(async (req, res, session) => {
   const accountId = await resolveAccountId(userId, accountEmail);
 
   if (req.method === "GET") {
+    // Scope by account_email so Gmail OAuth inboxes (no account_id) get their own visibility;
+    // fall back to the null-account_email global row when this inbox has none of its own.
     const setting = await prisma.contactFieldVisibilitySetting.findFirst({
-      where: { user_id: userId, account_id: accountId },
+      where: { user_id: userId, account_email: accountEmail },
     });
     const fallbackSetting =
-      !setting && accountId
+      !setting && accountEmail
         ? await prisma.contactFieldVisibilitySetting.findFirst({
-            where: { user_id: userId, account_id: null },
+            where: { user_id: userId, account_email: null },
           })
         : null;
     const effectiveSetting = setting || fallbackSetting;
@@ -39,7 +41,7 @@ export default withAuth(async (req, res, session) => {
 
   if (req.method === "PUT") {
     const existing = await prisma.contactFieldVisibilitySetting.findFirst({
-      where: { user_id: userId, account_id: accountId },
+      where: { user_id: userId, account_email: accountEmail },
       select: { id: true },
     });
     const setting = existing
@@ -55,6 +57,7 @@ export default withAuth(async (req, res, session) => {
           data: {
             user_id: userId,
             account_id: accountId,
+            account_email: accountEmail,
             show_phone: Boolean(req.body?.showPhone ?? true),
             show_business: Boolean(req.body?.showBusiness ?? true),
             show_website: Boolean(req.body?.showWebsite ?? true),

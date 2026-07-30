@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
+import { getAccessibleGmailAccounts } from "@/lib/email/mailboxAccess";
 
 type GmailConnection = {
   email: string;
@@ -36,7 +37,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const accounts: GmailConnection[] = await Promise.all(
       rows.map(async (row) => {
-        const email = row.platform.replace(/^gmail:/, "");
+        // Lowercase to match the normalized unique key (gmail:<lowercased email>); a mixed-case
+        // stored platform would otherwise miss the token lookup and read as disconnected.
+        const email = row.platform.replace(/^gmail:/, "").toLowerCase();
         const tokenResult = await getValidGmailAccessToken(userId, email);
         const connected = tokenResult.ok;
         return {
@@ -52,6 +55,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         };
       })
     );
+
+    // Append shared inboxes granted to this user (read/send happens via the owner's token).
+    try {
+      const ownedEmails = new Set(accounts.map((a) => a.email.toLowerCase()));
+      const accessible = await getAccessibleGmailAccounts(userId);
+      for (const acc of accessible) {
+        if (ownedEmails.has(acc.email)) continue;
+        const tokenResult = await getValidGmailAccessToken(acc.ownerUserId, acc.email);
+        accounts.push({
+          email: acc.email,
+          connected: tokenResult.ok,
+          expiresAt: tokenResult.ok && tokenResult.expiresAt ? tokenResult.expiresAt.toISOString() : null,
+          reconnectReason: tokenResult.ok ? null : "shared",
+        });
+      }
+    } catch (e) {
+      console.error("gmail status: granted accounts", e);
+    }
 
     res.status(200).json({
       connected: accounts.some((a) => a.connected),

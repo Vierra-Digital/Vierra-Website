@@ -1,19 +1,18 @@
 import type { NextApiResponse } from "next";
-import { uploadObject, downloadObject } from "@/lib/storage";
+import { downloadObject, putFileAsset } from "@/lib/storage";
 
 export function decodeBase64Image(imageData: string): Buffer {
   return Buffer.from(imageData, "base64");
 }
 
-/** Store an image in object storage; returns the storage key. */
+/** Store an image in object storage; returns the storage key. Thin alias over putFileAsset. */
 export async function putImageAsset(
   bucket: string,
   key: string,
   buffer: Buffer,
   mimeType: string
 ): Promise<string> {
-  await uploadObject(bucket, key, buffer, mimeType);
-  return key;
+  return putFileAsset(bucket, key, buffer, mimeType);
 }
 
 /** Send an image from object storage by `storageKey`; returns false when there's no key. */

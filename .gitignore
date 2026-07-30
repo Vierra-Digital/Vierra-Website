@@ -39,3 +39,5 @@ todo.txt
 /scripts/update-env.js
 /scripts/README.md
 .vscode/
+# Local secrets / service-account keys — never commit
+secrets/

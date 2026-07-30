@@ -380,7 +380,8 @@ We may update this Privacy Notice from time to time. The updated version will be
 If you have questions or comments about this notice, you may email us at [business@vierradev.com](mailto:business@vierradev.com) or contact us by post at:
 
 **Vierra Digital LLC**  
-Cambridge, MA 02138  
+3 Ashland Street  
+Medford, MA 02155  
 United States
 
 ## How Can You Review, Update, or Delete the Data We Collect From You?

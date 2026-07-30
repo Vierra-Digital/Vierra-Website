@@ -132,6 +132,18 @@ export default withSession(async (req, res, session) => {
   const clientId = await resolveClientId(req, role, sessionUserId, sessionEmail);
   if (!clientId) return res.status(400).json({ message: "clientId is required." });
 
+  // admin/staff pass an arbitrary clientId in the query — verify it belongs to their company before
+  // reading or writing its context. (The "user" role's clientId was self-resolved from their own
+  // account above, so it's inherently owned.)
+  if (role !== "user") {
+    const companyId = (session as { companyId?: string }).companyId;
+    const owned = await prisma.client.findFirst({
+      where: { id: clientId, company_id: companyId },
+      select: { id: true },
+    });
+    if (!owned) return res.status(404).json({ message: "Client not found." });
+  }
+
   if (req.method === "GET") {
     try {
       const [client, latestSession, files] = await Promise.all([

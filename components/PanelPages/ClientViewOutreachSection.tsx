@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Inter } from "next/font/google";
+import { inter } from "@/lib/fonts";
 import PanelSectionHeader from "@/components/ui/PanelSectionHeader";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import Modal from "@/components/ui/Modal";
 import { FiGlobe, FiHeart, FiMail, FiMessageCircle, FiMoreHorizontal, FiRepeat, FiSend, FiThumbsUp } from "react-icons/fi";
 
-const inter = Inter({ subsets: ["latin"] });
 
 type Step = "cards" | "account" | "company" | "context" | "manual" | "research" | "result";
 type Mode = "manual" | "market_research";
@@ -145,8 +144,6 @@ const ClientViewOutreachSection: React.FC<{ clientId?: string | null }> = ({ cli
       revenue: number;
       engagementRateProxy: number;
     };
-    benchmarkAngles?: Array<{ keyword: string; title: string; angle: string }>;
-    enrichedKeywords?: string[];
   } | null>(null);
 
   const fullPostText = useMemo(() => {

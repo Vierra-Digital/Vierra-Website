@@ -4,12 +4,11 @@ import Head from "next/head"
 import { FiUsers, FiLogOut, FiFileText } from "react-icons/fi"
 import Image from "next/image"
 import Link from "next/link"
-import { Inter } from "next/font/google"
+import { inter } from "@/lib/fonts";
 import { signOut } from "@/lib/session-client"
 import type { GetServerSideProps } from "next"
 import { requireSession } from "@/lib/auth"
 
-const inter = Inter({ subsets: ["latin"] })
 
 type PageProps = { dashboardHref: string }
 

@@ -4,15 +4,16 @@ import { sendImageAsset } from "@/lib/api/image";
 import { STORAGE_BUCKETS } from "@/lib/storage";
 
 export default withAuth(
-  async (req, res) => {
+  async (req, res, session) => {
     const { clientId } = req.query;
 
     if (!clientId) {
       return res.status(400).json({ message: "Client ID is required" });
     }
 
-    const client = await prisma.client.findUnique({
-      where: { id: String(clientId) },
+    // Scope to the admin's own company so another company's client avatar can't be read by id.
+    const client = await prisma.client.findFirst({
+      where: { id: String(clientId), company_id: session.companyId },
       select: { image_storage_key: true, image_mime_type: true },
     });
 
