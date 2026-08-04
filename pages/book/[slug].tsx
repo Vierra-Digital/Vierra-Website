@@ -7,6 +7,10 @@ type SlotsResponse = { title: string; description: string | null; durationMinute
 export default function BookingPage() {
   const router = useRouter();
   const slug = typeof router.query.slug === "string" ? router.query.slug : "";
+  // Optional campaign-contact attribution, carried through from the email that linked here
+  // (see components/PanelPages/EmailingPlatformSection.tsx's "Insert booking link"). Absent for
+  // plain shared booking-page links — booking still works identically either way.
+  const ref = typeof router.query.ref === "string" ? router.query.ref : "";
   const [data, setData] = useState<SlotsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -47,7 +51,7 @@ export default function BookingPage() {
       const res = await fetch(`/api/booking/${encodeURIComponent(slug)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ start: selected, inviteeName: name.trim(), inviteeEmail: email.trim(), notes: notes.trim() }),
+        body: JSON.stringify({ start: selected, inviteeName: name.trim(), inviteeEmail: email.trim(), notes: notes.trim(), ref }),
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload?.message || "Could not book that time.");

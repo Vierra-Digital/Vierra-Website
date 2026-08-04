@@ -491,29 +491,103 @@ model BookingLink {
   timezone         String    @default("UTC")
   availability     Json?     @db.JsonB
   active           Boolean   @default(true)
+  // google_meet | zoom | microsoft_teams — which provider a booking through this link uses.
+  provider         String    @default("google_meet")
+  // Set when this is a team/round-robin link (Phase 3); NULL = solo link owned by user_id.
+  company_id       String?   @db.Uuid
   created_at       DateTime  @default(now()) @db.Timestamptz(6)
   updated_at       DateTime  @default(now()) @db.Timestamptz(6)
   bookings         Booking[]
 
   @@map("booking_links")
   @@index([user_id], map: "idx_booking_links_user_id")
+  @@index([company_id], map: "idx_booking_links_company_id")
 }
 
 model Booking {
-  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  booking_link_id String      @db.Uuid
-  invitee_name    String
-  invitee_email   String
-  invitee_notes   String?
-  start_at        DateTime    @db.Timestamptz(6)
-  end_at          DateTime    @db.Timestamptz(6)
-  status          String      @default("confirmed")
-  google_event_id String?
-  created_at      DateTime    @default(now()) @db.Timestamptz(6)
-  booking_links   BookingLink @relation(fields: [booking_link_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  booking_link_id     String                @db.Uuid
+  invitee_name        String
+  invitee_email       String
+  invitee_notes       String?
+  start_at            DateTime              @db.Timestamptz(6)
+  end_at              DateTime              @db.Timestamptz(6)
+  status              String                @default("confirmed")
+  google_event_id     String?
+  // google_meet | zoom | microsoft_teams — copied from the link at booking time.
+  provider            String                @default("google_meet")
+  provider_meeting_id String?
+  meeting_join_url    String?
+  // booked | held | not_held — attendance outcome, independent of `status`.
+  attendance_status   String                @default("booked")
+  attendee_emails     Json?                 @db.JsonB
+  attendee_count      Int?
+  duration_seconds    Int?
+  held_at             DateTime?             @db.Timestamptz(6)
+  // automatic | csv_import | manual_override — how attendance_status was last set.
+  attendance_source   String?
+  campaign_contact_id String?               @db.Uuid
+  // Team-link claim queue (Phase 3). status='slot_claimed' means the prospect picked a time on
+  // a team BookingLink but no host is paired yet; claimed_by_user_id is set once someone claims
+  // it (manually or via the round-robin auto-assign job) and status moves to 'confirmed'.
+  claimed_by_user_id  String?               @db.Uuid
+  claim_deadline_at   DateTime?             @db.Timestamptz(6)
+  reminder_sent_at    DateTime?             @db.Timestamptz(6)
+  // Set once the 1-year retention job (or a manual erasure request) has nulled out invitee_name/
+  // invitee_email/attendee_emails on this row — scheduled_end/status/aggregate counts are kept
+  // for analytics. Presence of this timestamp is the idempotency marker (see lib/booking/retention.ts).
+  pii_erased_at       DateTime?             @db.Timestamptz(6)
+  created_at          DateTime              @default(now()) @db.Timestamptz(6)
+  booking_links       BookingLink           @relation(fields: [booking_link_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("bookings")
   @@index([booking_link_id], map: "idx_bookings_link_id")
+  @@index([campaign_contact_id], map: "idx_bookings_campaign_contact_id")
+  @@index([status, claim_deadline_at], map: "idx_bookings_claim_deadline")
+}
+
+// Audit log for team-link reassignment (either the current host or a company admin can
+// approve — see pages/api/booking/[id]/reassign.ts). Always written, even though a
+// reassignment resets round-robin fairness as if the original claim never happened.
+model BookingReassignmentEvent {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  booking_id         String   @db.Uuid
+  from_user_id       String?  @db.Uuid
+  to_user_id         String   @db.Uuid
+  approved_by_user_id String? @db.Uuid
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("booking_reassignment_events")
+  @@index([booking_id], map: "idx_booking_reassignment_events_booking_id")
+}
+
+// Audit log for manual attendance_status overrides — mirrors lead_status_events.
+model BookingStatusEvent {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  booking_id         String   @db.Uuid
+  from_status        String?
+  to_status          String
+  changed_by_user_id String?  @db.Uuid
+  note               String?
+  created_at         DateTime @default(now()) @db.Timestamptz(6)
+  users              User?    @relation(fields: [changed_by_user_id], references: [id], onUpdate: NoAction)
+
+  @@map("booking_status_events")
+  @@index([booking_id], map: "idx_booking_status_events_booking_id")
+}
+
+// Reschedule log — mutates Booking.start_at/end_at in place; this is the history.
+model BookingRescheduleEvent {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  booking_id        String   @db.Uuid
+  previous_start_at DateTime @db.Timestamptz(6)
+  new_start_at      DateTime @db.Timestamptz(6)
+  // host | prospect
+  rescheduled_by    String
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("booking_reschedule_events")
+  @@index([booking_id], map: "idx_booking_reschedule_events_booking_id")
 }
 
 // LinkedIn unified inbox — synced by the Sales Nav extension (per user: staff see their own
@@ -1003,6 +1077,8 @@ model PlatformToken {
   access_token  String
   refresh_token String?
   expires_at    DateTime?    @db.Timestamptz(6)
+  // Per-connection flags: { isWorkspaceOrOrgAccount?, attendanceReportsAvailable?, needsReconnect?, planTier? }
+  meta          Json?        @db.JsonB
   created_at    DateTime     @default(now()) @db.Timestamptz(6)
   users         User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
@@ -1143,6 +1219,7 @@ model User {
   updated_at                                                    DateTime                            @default(now()) @db.Timestamptz(6)
   clients_clients_assigned_toTousers                            Client[]                           @relation("clients_assigned_toTousers")
   clients_clients_user_idTousers                                Client?                            @relation("clients_user_idTousers")
+  booking_status_events                                         BookingStatusEvent[]
   company_memberships_company_memberships_mentor_idTousers      CompanyMembership[]               @relation("company_memberships_mentor_idTousers")
   company_memberships_company_memberships_user_idTousers        CompanyMembership?                @relation("company_memberships_user_idTousers")
   contact_field_visibility_settings                             ContactFieldVisibilitySetting[]

@@ -8,7 +8,27 @@ type GoogleTokenResponse = {
   access_token: string;
   expires_in?: number;
   refresh_token?: string;
+  id_token?: string;
 };
+
+/**
+ * Decode the `hd` (hosted domain) claim off the ID token JWT, without verifying its signature —
+ * safe here because the token came straight from Google's token endpoint over TLS in the same
+ * request, not from an untrusted client. Personal Gmail accounts have no `hd` claim; Google
+ * Workspace accounts do. Used to gate Meet attendance-report expectations (Workspace-only API).
+ */
+function decodeHostedDomainClaim(idToken: string | undefined): boolean {
+  if (!idToken) return false;
+  try {
+    const payloadSegment = idToken.split(".")[1];
+    if (!payloadSegment) return false;
+    const json = Buffer.from(payloadSegment.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
+    const payload = JSON.parse(json) as { hd?: string };
+    return typeof payload.hd === "string" && payload.hd.length > 0;
+  } catch {
+    return false;
+  }
+}
 
 type GoogleUserInfo = {
   email?: string;
@@ -116,12 +136,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const platform = `gmail:${email}`;
   const expiresAt = tokenJson.expires_in ? new Date(Date.now() + tokenJson.expires_in * 1000) : undefined;
+  const isWorkspaceOrOrgAccount = decodeHostedDomainClaim(tokenJson.id_token);
 
   await persistPlatformToken(userId, {
     platform,
     accessToken: tokenJson.access_token,
     refreshToken: tokenJson.refresh_token,
     expiresAt,
+    meta: { isWorkspaceOrOrgAccount },
   });
 
   appendSetCookie(

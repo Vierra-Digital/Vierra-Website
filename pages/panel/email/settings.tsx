@@ -252,7 +252,15 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     dkim: { found: boolean };
   };
   const [deliverability, setDeliverability] = useState<Record<string, DeliverabilityResult>>({});
-  type BookingLinkRow = { id: string; slug: string; title: string; account_email: string; duration_minutes: number; active: boolean };
+  type BookingLinkRow = {
+    id: string;
+    slug: string;
+    title: string;
+    account_email: string;
+    duration_minutes: number;
+    active: boolean;
+    needsReconnect?: boolean;
+  };
   const [bookingLinks, setBookingLinks] = useState<BookingLinkRow[]>([]);
   type BookingRow = {
     id: string;
@@ -261,6 +269,10 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     startAt: string;
     endAt: string;
     status: string;
+    attendanceStatus: string;
+    attendanceSource: string | null;
+    meetingJoinUrl: string | null;
+    provider?: string;
     title: string;
     accountEmail: string;
   };
@@ -305,6 +317,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     startHour: "9",
     endHour: "17",
     days: [1, 2, 3, 4, 5] as number[],
+    provider: "google_meet" as "google_meet" | "zoom" | "microsoft_teams",
+    team: false,
   });
   const [savingBooking, setSavingBooking] = useState(false);
   const [newProvider, setNewProvider] = useState({
@@ -605,6 +619,36 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   }, []);
 
+  type OrgQueueSlot = { id: string; inviteeName: string; startAt: string; endAt: string; claimDeadlineAt: string | null; title: string; provider: string };
+  const [orgQueue, setOrgQueue] = useState<OrgQueueSlot[]>([]);
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+  const loadOrgQueue = useCallback(async () => {
+    try {
+      const r = await fetch("/api/booking/org-queue");
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) setOrgQueue(Array.isArray(d?.slots) ? d.slots : []);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const claimSlot = async (id: string) => {
+    if (claimingId) return;
+    setClaimingId(id);
+    try {
+      const r = await fetch(`/api/booking/${id}/claim`, { method: "POST" });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        setOrgQueue((prev) => prev.filter((s) => s.id !== id));
+        await loadBookings();
+      } else if (typeof window !== "undefined") {
+        window.alert(d?.message || "Couldn't claim that slot.");
+        await loadOrgQueue();
+      }
+    } finally {
+      setClaimingId(null);
+    }
+  };
+
 
   // ---- Shared-inbox delegation (admin only) ----
   const loadMailboxGrants = useCallback(async () => {
@@ -647,6 +691,61 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   };
 
+  const [attendanceBusyId, setAttendanceBusyId] = useState<string | null>(null);
+  const importAttendanceCsv = async (bookingId: string, file: File) => {
+    if (attendanceBusyId) return;
+    setAttendanceBusyId(bookingId);
+    try {
+      const csv = await file.text();
+      const r = await fetch(`/api/booking/${bookingId}/attendance-import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv, fileName: file.name }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        setBookings((prev) =>
+          prev.map((b) => (b.id === bookingId ? { ...b, attendanceStatus: d.attendanceStatus, attendanceSource: "csv_import" } : b))
+        );
+      } else if (typeof window !== "undefined") {
+        window.alert(d?.message || "Couldn't import that file.");
+      }
+    } finally {
+      setAttendanceBusyId(null);
+    }
+  };
+
+  const cancelHostBooking = async (bookingId: string) => {
+    if (attendanceBusyId) return;
+    if (typeof window !== "undefined" && !window.confirm("Cancel this meeting?")) return;
+    setAttendanceBusyId(bookingId);
+    try {
+      const r = await fetch(`/api/booking/${bookingId}/cancel`, { method: "POST" });
+      if (r.ok) setBookings((prev) => prev.map((b) => (b.id === bookingId ? { ...b, status: "cancelled" } : b)));
+    } finally {
+      setAttendanceBusyId(null);
+    }
+  };
+
+  const setBookingAttendance = async (bookingId: string, status: "held" | "not_held") => {
+    if (attendanceBusyId) return;
+    setAttendanceBusyId(bookingId);
+    try {
+      const r = await fetch(`/api/booking/${bookingId}/attendance`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (r.ok) {
+        setBookings((prev) =>
+          prev.map((b) => (b.id === bookingId ? { ...b, attendanceStatus: status, attendanceSource: "manual_override" } : b))
+        );
+      }
+    } finally {
+      setAttendanceBusyId(null);
+    }
+  };
+
   const revokeGrant = async (id: string) => {
     await fetch("/api/email/mailbox-grants", {
       method: "DELETE",
@@ -656,7 +755,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     setMailboxGrants((prev) => prev.filter((g) => g.id !== id));
   };
 
-  const createBookingLink = async () => {
+  const createBookingLink = async (acknowledgeNoAttendanceAnalytics = false) => {
     if (savingBooking || !newBooking.title.trim() || !newBooking.accountEmail) return;
     setSavingBooking(true);
     try {
@@ -673,8 +772,29 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
             startMinutes: (Number(newBooking.startHour) || 9) * 60,
             endMinutes: (Number(newBooking.endHour) || 17) * 60,
           },
+          provider: newBooking.provider,
+          team: newBooking.team,
+          acknowledgeNoAttendanceAnalytics,
         }),
       });
+      if (r.status === 409) {
+        const d = await r.json().catch(() => ({}));
+        if (d?.code === "personal_gmail_no_attendance" || d?.code === "provider_no_attendance") {
+          const confirmed =
+            typeof window !== "undefined" &&
+            window.confirm(
+              `${d.message} Create it anyway?`
+            );
+          if (confirmed) {
+            await createBookingLink(true);
+          }
+          return;
+        }
+        if (d?.code === "provider_not_connected") {
+          if (typeof window !== "undefined") window.alert(d.message);
+          return;
+        }
+      }
       if (r.ok) {
         setNewBooking({
           title: "",
@@ -684,6 +804,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
           startHour: "9",
           endHour: "17",
           days: [1, 2, 3, 4, 5],
+          provider: "google_meet",
+          team: false,
         });
         await loadBookingLinks();
       }
@@ -909,6 +1031,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
           loadAccountPrefs(),
           loadBookingLinks(),
           loadBookings(),
+          loadOrgQueue(),
           loadAiPrefs(),
           loadNavLayout(),
           loadMailboxGrants(),
@@ -1153,6 +1276,14 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 icon={FiCalendar}
               >
                 <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    <a href="/api/zoom/initiate" className={btnSecondary}>
+                      Connect Zoom
+                    </a>
+                    <a href="/api/msteams/initiate" className={btnSecondary}>
+                      Connect Microsoft Teams
+                    </a>
+                  </div>
                   {bookingLinks.length === 0 ? (
                     <p className="text-sm text-[#6B7280]">No booking links yet.</p>
                   ) : (
@@ -1166,16 +1297,29 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                                 {l.title} <span className="text-xs font-normal text-[#9A93AE]">· {l.duration_minutes}m · {l.account_email}</span>
                               </p>
                               <p className="mt-0.5 truncate text-xs text-[#701CC0]">{url}</p>
+                              {l.needsReconnect ? (
+                                <p className="mt-0.5 text-xs font-medium text-amber-600">
+                                  Google connection needs reconnecting — new bookings on this link won&apos;t get attendance
+                                  tracking until it&apos;s fixed.
+                                </p>
+                              ) : null}
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (typeof window !== "undefined" && navigator.clipboard) navigator.clipboard.writeText(url);
-                              }}
-                              className={btnSecondary}
-                            >
-                              Copy link
-                            </button>
+                            <div className="flex shrink-0 items-center gap-2">
+                              {l.needsReconnect ? (
+                                <a href={`/api/gmail/initiate?account=${encodeURIComponent(l.account_email)}&from=panel-settings`} className={btnSecondary}>
+                                  Reconnect
+                                </a>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (typeof window !== "undefined" && navigator.clipboard) navigator.clipboard.writeText(url);
+                                }}
+                                className={btnSecondary}
+                              >
+                                Copy link
+                              </button>
+                            </div>
                           </li>
                         );
                       })}
@@ -1213,9 +1357,26 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                         <option value="45">45 minutes</option>
                         <option value="60">60 minutes</option>
                       </select>
+                      <select
+                        className={fieldClass}
+                        value={newBooking.provider}
+                        onChange={(e) => setNewBooking({ ...newBooking, provider: e.target.value as typeof newBooking.provider })}
+                      >
+                        <option value="google_meet">Google Meet</option>
+                        <option value="zoom">Zoom</option>
+                        <option value="microsoft_teams">Microsoft Teams</option>
+                      </select>
+                      <label className="flex items-center gap-2 text-xs font-medium text-[#4A465C]">
+                        <input
+                          type="checkbox"
+                          checked={newBooking.team}
+                          onChange={(e) => setNewBooking({ ...newBooking, team: e.target.checked })}
+                        />
+                        Team link (round-robin across your company)
+                      </label>
                       <button
                         type="button"
-                        onClick={createBookingLink}
+                        onClick={() => createBookingLink()}
                         disabled={savingBooking || !newBooking.title.trim() || !newBooking.accountEmail}
                         className={btnPrimary}
                       >
@@ -1307,6 +1468,34 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     </p>
                   </div>
 
+                  {orgQueue.length > 0 ? (
+                    <div>
+                      <p className="mb-2 text-xs font-semibold text-[#4A465C]">Open team slots — claim one</p>
+                      <ul className="space-y-2">
+                        {orgQueue.map((s) => (
+                          <li key={s.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#ECEAF1] bg-white p-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-[#1E1B2E]">
+                                {s.inviteeName} <span className="text-xs font-normal text-[#9A93AE]">· {s.title}</span>
+                              </p>
+                              <p className="mt-0.5 text-xs text-[#6B7280]">
+                                {new Date(s.startAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={claimingId === s.id}
+                              onClick={() => claimSlot(s.id)}
+                              className={btnPrimary}
+                            >
+                              {claimingId === s.id ? "Claiming…" : "Claim"}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
                   <div>
                     <p className="mb-2 text-xs font-semibold text-[#4A465C]">Upcoming &amp; recent meetings</p>
                     {bookings.length === 0 ? (
@@ -1316,6 +1505,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                         {bookings.slice(0, 20).map((b) => {
                           const start = new Date(b.startAt);
                           const upcoming = start.getTime() >= Date.now();
+                          const attendanceLabel =
+                            b.attendanceStatus === "held" ? "Held" : b.attendanceStatus === "not_held" ? "Not held" : null;
                           return (
                             <li key={b.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#ECEAF1] bg-white p-3">
                               <div className="min-w-0">
@@ -1325,6 +1516,16 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                                 <p className="mt-0.5 truncate text-xs text-[#6B7280]">
                                   {b.inviteeEmail} · {b.accountEmail}
                                 </p>
+                                {b.meetingJoinUrl ? (
+                                  <a
+                                    href={b.meetingJoinUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-0.5 block truncate text-xs text-[#701CC0] hover:underline"
+                                  >
+                                    {b.meetingJoinUrl}
+                                  </a>
+                                ) : null}
                               </div>
                               <div className="shrink-0 text-right">
                                 <p className="text-xs font-medium text-[#1E1B2E]">
@@ -1341,6 +1542,64 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                                 >
                                   {b.status !== "confirmed" ? b.status : upcoming ? "Upcoming" : "Past"}
                                 </span>
+                                {attendanceLabel ? (
+                                  <span
+                                    className={`mt-1 ml-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                                      b.attendanceStatus === "held" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"
+                                    }`}
+                                  >
+                                    {attendanceLabel}
+                                    {b.attendanceSource === "manual_override" ? " · manual" : ""}
+                                  </span>
+                                ) : null}
+                                {upcoming && b.status === "confirmed" ? (
+                                  <button
+                                    type="button"
+                                    disabled={attendanceBusyId === b.id}
+                                    onClick={() => cancelHostBooking(b.id)}
+                                    className="mt-1 rounded-full border border-red-200 px-2 py-0.5 text-[10px] font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                  >
+                                    Cancel
+                                  </button>
+                                ) : null}
+                                {!upcoming && b.status === "confirmed" ? (
+                                  <div className="mt-1 flex flex-col items-end gap-1">
+                                    <div className="flex justify-end gap-1">
+                                      <button
+                                        type="button"
+                                        disabled={attendanceBusyId === b.id}
+                                        onClick={() => setBookingAttendance(b.id, "held")}
+                                        className="rounded-full border border-[#E5E7EB] px-2 py-0.5 text-[10px] font-medium text-[#4A465C] hover:border-[#701CC0] disabled:opacity-50"
+                                      >
+                                        Mark held
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={attendanceBusyId === b.id}
+                                        onClick={() => setBookingAttendance(b.id, "not_held")}
+                                        className="rounded-full border border-[#E5E7EB] px-2 py-0.5 text-[10px] font-medium text-[#4A465C] hover:border-[#701CC0] disabled:opacity-50"
+                                      >
+                                        Mark not held
+                                      </button>
+                                    </div>
+                                    {b.provider && b.provider !== "google_meet" && b.attendanceSource !== "automatic" ? (
+                                      <label className="cursor-pointer text-[10px] font-medium text-[#701CC0] hover:underline">
+                                        Import attendance CSV
+                                        <input
+                                          type="file"
+                                          accept=".csv,text/csv"
+                                          className="hidden"
+                                          disabled={attendanceBusyId === b.id}
+                                          onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) importAttendanceCsv(b.id, file);
+                                            e.target.value = "";
+                                          }}
+                                        />
+                                      </label>
+                                    ) : null}
+                                  </div>
+                                ) : null}
                               </div>
                             </li>
                           );
