@@ -251,9 +251,21 @@ export async function processInboundForAllAccounts(baseUrl: string, now: Date): 
     .deleteMany({ where: { processed_at: { lt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) } } })
     .catch(() => {});
 
+  // Mailboxes connected on the Smartlead side (smartlead_email_account_id set) must NOT also be
+  // polled here — a reply would otherwise be processed twice: once by this poller
+  // (maybeReplyIntelligence) and once by the Smartlead webhook (pages/api/campaigns/webhooks/
+  // smartlead.ts), producing a duplicate LeadStatusEvent and a duplicate Discord ping. See
+  // .claude/schema_v2_campaigns_smartlead_integration.md Flow 4.
+  const smartleadManaged = await prisma.emailProviderAccount.findMany({
+    where: { smartlead_email_account_id: { not: null } },
+    select: { user_id: true, account_email: true },
+  });
+  const smartleadManagedKeys = new Set(smartleadManaged.map((a) => `${a.user_id}:${a.account_email.toLowerCase()}`));
+
   for (const row of tokens) {
     const accountEmail = row.platform.replace(/^gmail:/, "").toLowerCase();
     if (!accountEmail) continue;
+    if (smartleadManagedKeys.has(`${row.user_id}:${accountEmail}`)) continue;
     summary.accounts += 1;
     try {
       const result = await processAccount(row.user_id, accountEmail, baseUrl, now);

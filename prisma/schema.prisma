@@ -559,6 +559,12 @@ model Campaign {
   started_at              DateTime?            @db.Timestamptz(6)
   completed_at            DateTime?            @db.Timestamptz(6)
   paused_at               DateTime?            @db.Timestamptz(6)
+  // "internal" (local SMTP send via sendQueueTick.ts) | "smartlead" (Smartlead owns send
+  // execution; see .claude/schema_v2_campaigns_smartlead_integration.md). Per-campaign, not
+  // global — set at creation and immutable after first launch (no mid-campaign migration).
+  send_provider           String               @default("internal")
+  // Set once this campaign is first mirrored into Smartlead via POST /campaigns.
+  smartlead_campaign_id   String?
   created_at              DateTime             @default(now()) @db.Timestamptz(6)
   updated_at              DateTime             @default(now()) @db.Timestamptz(6)
   campaign_steps          CampaignStep[]
@@ -605,12 +611,16 @@ model CampaignContact {
   next_send_at        DateTime?          @db.Timestamptz(6)
   last_sent_at        DateTime?          @db.Timestamptz(6)
   completed_at        DateTime?          @db.Timestamptz(6)
+  // Maps this contact to its Smartlead lead record, for correlating inbound webhook events
+  // back to the right row. Null for "internal"-provider campaigns.
+  smartlead_lead_id   String?
   created_at          DateTime           @default(now()) @db.Timestamptz(6)
   updated_at          DateTime           @default(now()) @db.Timestamptz(6)
   campaigns           Campaign           @relation(fields: [campaign_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   campaign_step_sends CampaignStepSend[]
 
   @@map("campaign_contacts")
+  @@index([smartlead_lead_id])
 }
 
 model CampaignStepSend {
@@ -680,6 +690,18 @@ model AssignmentEvent {
   @@map("assignment_events")
 }
 
+// Dedup log for the Smartlead webhook receiver (pages/api/campaigns/webhooks/smartlead.ts).
+// Smartlead's own retry behavior means the same event can arrive more than once; smartlead_request_id
+// is their X-Request-Id header, used to skip re-processing an already-handled event.
+model SmartleadWebhookEvent {
+  id                    String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  smartlead_request_id  String   @unique
+  event_type            String
+  received_at           DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("smartlead_webhook_events")
+}
+
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model EmailOutboundMessage {
   id                        String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -741,6 +763,12 @@ model EmailProviderAccount {
   pop_port                          Int?
   pop_secure                        Boolean?
   is_default_sender                 Boolean                             @default(false)
+  // Non-null means this mailbox is connected/managed on the Smartlead side (however that
+  // connection turns out to work — see open question in
+  // .claude/schema_v2_campaigns_smartlead_integration.md §9). Used to exclude this account
+  // from the local Gmail inbound poller so a reply isn't processed twice (once via Smartlead's
+  // webhook, once via lib/gmail/inbound.ts polling).
+  smartlead_email_account_id        String?
   created_at                        DateTime                            @default(now()) @db.Timestamptz(6)
   updated_at                        DateTime                            @default(now()) @db.Timestamptz(6)
   contact_field_visibility_settings ContactFieldVisibilitySetting[]

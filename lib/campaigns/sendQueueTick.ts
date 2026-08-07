@@ -221,7 +221,11 @@ export async function runCampaignSendQueueTick(companyId: string, batchSize = DE
   const result: TickResult = { processed: 0, sent: 0, failed: 0, skipped: 0 };
 
   const activeCampaigns = await prisma.campaign.findMany({
-    where: { company_id: companyId, status: "active" },
+    // "smartlead"-provider campaigns are excluded here — Smartlead's own backend owns send
+    // timing/execution for those once leads are pushed (lib/campaigns/audienceSync.ts); this
+    // tick (and all the pacing/SMTP-send logic below) only drives "internal" campaigns. See
+    // .claude/schema_v2_campaigns_smartlead_integration.md Flow 3.
+    where: { company_id: companyId, status: "active", send_provider: "internal" },
     include: { email_provider_accounts: true },
   });
 

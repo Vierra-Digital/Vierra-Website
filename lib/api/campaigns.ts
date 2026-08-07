@@ -14,7 +14,10 @@ export const LEAD_STATUSES = [
 ] as const;
 export type LeadStatus = (typeof LEAD_STATUSES)[number];
 
-export const QUEUE_STATUSES = ["queued", "sending", "sent", "failed", "skipped", "completed"] as const;
+// "paused" = sequence held after a reply (lib/gmail/inboundActions.ts maybeReplyIntelligence,
+// pages/api/campaigns/webhooks/smartlead.ts EMAIL_REPLY) — distinct from "skipped" (permanently
+// excluded, e.g. DNC/hard-bounce) since a paused contact can still be manually resumed.
+export const QUEUE_STATUSES = ["queued", "sending", "sent", "failed", "skipped", "completed", "paused"] as const;
 export type QueueStatus = (typeof QUEUE_STATUSES)[number];
 
 type CampaignRow = {
