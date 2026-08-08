@@ -248,7 +248,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const joinLinkHtml = finalJoinUrl ? `<p>Join link: <a href="${escapeHtml(finalJoinUrl)}">${escapeHtml(finalJoinUrl)}</a></p>` : "";
   const manageUrl = `${baseUrl(req)}/manage/${booking.id}`;
   const confirmationHtml = `<p>Hi ${safeName},</p><p>Your meeting <strong>${safeTitle}</strong> is confirmed for <strong>${when} (${link.timezone || "UTC"})</strong>.</p>${joinLinkHtml}${notes ? `<p>Your notes: ${safeNotes}</p>` : ""}<p>See you then!</p><p><a href="${escapeHtml(manageUrl)}">Need to reschedule or cancel?</a></p>`;
-  const attachments = [{ filename: "invite.ics", contentType: "text/calendar", contentBase64: Buffer.from(ics, "utf8").toString("base64") }];
+  // Only attach our own .ics when there's no real Calendar event: createCalendarEvent's
+  // sendUpdates=all already makes Google send the invitee (and host) a native calendar invite
+  // in that case, so attaching a second, separately-built .ics (different UID) on top would
+  // hand them two invites for the same meeting — most calendar clients add that as two separate
+  // events rather than recognizing them as one.
+  const attachments = created
+    ? undefined
+    : [{ filename: "invite.ics", contentType: "text/calendar", contentBase64: Buffer.from(ics, "utf8").toString("base64") }];
 
   await sendEmailCore(
     link.user_id,

@@ -16,11 +16,15 @@ export type ClaimResult =
  * (netlify/functions/auto-assign-meetings.ts) so there's exactly one place this happens.
  */
 export async function claimBookingSlot(bookingId: string, hostUserId: string): Promise<ClaimResult> {
+  // Snapshotted onto the booking so "who took this meeting" survives the host's users row
+  // later being deleted (claimed_by_user_id alone would just go SET NULL).
+  const host = await prisma.user.findUnique({ where: { id: hostUserId }, select: { email: true } });
+
   // Atomic conditional update — only one caller can flip status='slot_claimed' -> a transitional
   // 'claiming' marker; whoever's updateMany reports count=1 won the race.
   const claimed = await prisma.booking.updateMany({
     where: { id: bookingId, status: "slot_claimed" },
-    data: { status: "claiming", claimed_by_user_id: hostUserId },
+    data: { status: "claiming", claimed_by_user_id: hostUserId, claimed_by_user_email: host?.email ?? null },
   });
   if (claimed.count === 0) return { ok: false, reason: "not_claimable" };
 
@@ -30,7 +34,10 @@ export async function claimBookingSlot(bookingId: string, hostUserId: string): P
   const hostGmailAccountEmail = await findFirstGmailAccountForUser(hostUserId);
   if (!hostGmailAccountEmail) {
     // Roll back to slot_claimed so someone else (or a future auto-assign pass) can take it.
-    await prisma.booking.update({ where: { id: bookingId }, data: { status: "slot_claimed", claimed_by_user_id: null } });
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: { status: "slot_claimed", claimed_by_user_id: null, claimed_by_user_email: null },
+    });
     return { ok: false, reason: "no_calendar_connected" };
   }
 

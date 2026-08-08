@@ -2,15 +2,16 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 
 /**
- * List the caller's booked meetings (across all of their booking links), newest first.
- * Scoped by ownership of the parent booking link. Degrades gracefully if the table is
- * missing (P2021).
+ * List the caller's booked meetings, newest first: bookings on links they own, plus team-link
+ * bookings they personally claimed (claimed_by_user_id) — otherwise a member who claims a slot
+ * on someone else's team link would never see it in their own panel. Degrades gracefully if the
+ * table is missing (P2021).
  */
 export default withAuth(
   async (_req, res, session) => {
     try {
       const bookings = await prisma.booking.findMany({
-        where: { booking_links: { user_id: session.user.id } },
+        where: { OR: [{ booking_links: { user_id: session.user.id } }, { claimed_by_user_id: session.user.id }] },
         orderBy: { start_at: "desc" },
         take: 100,
         select: {

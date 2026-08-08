@@ -44,9 +44,10 @@ export default withAuth(
     }
 
     const companyId = booking.booking_links.company_id;
-    const [callerMembership, targetMembership] = await Promise.all([
+    const [callerMembership, targetMembership, toUser] = await Promise.all([
       prisma.companyMembership.findUnique({ where: { user_id: session.user.id }, select: { company_id: true, role: true } }),
       prisma.companyMembership.findUnique({ where: { user_id: toUserId }, select: { company_id: true } }),
+      prisma.user.findUnique({ where: { id: toUserId }, select: { email: true } }),
     ]);
     if (!targetMembership || targetMembership.company_id !== companyId) {
       res.status(400).json({ message: "toUserId isn't a member of this team." });
@@ -108,13 +109,22 @@ export default withAuth(
         where: { id },
         data: {
           claimed_by_user_id: toUserId,
+          claimed_by_user_email: toUser?.email ?? null,
           google_event_id: provisioned.googleEventId,
           provider_meeting_id: provisioned.providerMeetingId,
           meeting_join_url: provisioned.joinUrl,
         },
       }),
       prisma.bookingReassignmentEvent.create({
-        data: { booking_id: id, from_user_id: fromUserId, to_user_id: toUserId, approved_by_user_id: session.user.id },
+        data: {
+          booking_id: id,
+          from_user_id: fromUserId,
+          from_user_email: booking.claimed_by_user_email,
+          to_user_id: toUserId,
+          to_user_email: toUser?.email ?? null,
+          approved_by_user_id: session.user.id,
+          approved_by_user_email: session.user.email,
+        },
       }),
     ]);
 

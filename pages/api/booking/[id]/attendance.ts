@@ -22,10 +22,20 @@ export default withAuth(
 
     const booking = await prisma.booking.findUnique({
       where: { id },
-      include: { booking_links: { select: { user_id: true } } },
+      include: { booking_links: { select: { user_id: true, company_id: true } } },
     });
-    if (!booking || booking.booking_links.user_id !== session.user.id) {
+    if (!booking) {
       res.status(404).json({ message: "Booking not found." });
+      return;
+    }
+    const isOwner = booking.booking_links.user_id === session.user.id || booking.claimed_by_user_id === session.user.id;
+    let isAdmin = false;
+    if (!isOwner && booking.booking_links.company_id) {
+      const membership = await prisma.companyMembership.findUnique({ where: { user_id: session.user.id }, select: { company_id: true, role: true } });
+      isAdmin = membership?.company_id === booking.booking_links.company_id && membership.role === "admin";
+    }
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ message: "Not authorized to update this booking." });
       return;
     }
 
@@ -45,6 +55,7 @@ export default withAuth(
           from_status: fromStatus,
           to_status: status,
           changed_by_user_id: session.user.id,
+          changed_by_user_email: session.user.email,
           note: note || null,
         },
       }),

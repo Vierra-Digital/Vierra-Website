@@ -1,13 +1,25 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr } from "@/lib/api/parsing";
-import { DEFAULT_AVAILABILITY } from "@/lib/booking/slots";
+import type { Availability } from "@/lib/booking/slots";
 import type { Prisma } from "@prisma/client";
 
 function slugify(title: string): string {
   const base = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "meeting";
   const rand = Math.random().toString(36).slice(2, 7);
   return `${base}-${rand}`;
+}
+
+// Hosts must set their own business hours — no silent default (previously fell back to a fixed
+// Mon-Fri 14:00-22:00 UTC window when omitted, which is wrong for most hosts' actual availability).
+function parseAvailability(input: unknown): Availability | null {
+  if (!input || typeof input !== "object") return null;
+  const { days, startMinutes, endMinutes } = input as Record<string, unknown>;
+  if (!Array.isArray(days) || days.length === 0) return null;
+  if (!days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6)) return null;
+  if (!Number.isInteger(startMinutes) || !Number.isInteger(endMinutes)) return null;
+  if ((startMinutes as number) < 0 || (endMinutes as number) > 24 * 60 || (startMinutes as number) >= (endMinutes as number)) return null;
+  return { days: days as number[], startMinutes: startMinutes as number, endMinutes: endMinutes as number };
 }
 
 /** List / create the caller's meeting booking links. */
@@ -107,6 +119,12 @@ export default withAuth(
       companyId = membership.company_id;
     }
 
+    const availability = parseAvailability(req.body?.availability);
+    if (!availability) {
+      res.status(400).json({ message: "Set your business hours (at least one day, with a start time before the end time)." });
+      return;
+    }
+
     const durationRaw = Number(req.body?.durationMinutes);
     const bufferRaw = Number(req.body?.bufferMinutes);
     const link = await prisma.bookingLink.create({
@@ -119,7 +137,7 @@ export default withAuth(
         duration_minutes: Number.isFinite(durationRaw) && durationRaw > 0 ? Math.min(Math.floor(durationRaw), 480) : 30,
         buffer_minutes: Number.isFinite(bufferRaw) && bufferRaw >= 0 ? Math.min(Math.floor(bufferRaw), 240) : 0,
         timezone: asStr(req.body?.timezone).trim() || "UTC",
-        availability: (req.body?.availability as Prisma.InputJsonValue) ?? (DEFAULT_AVAILABILITY as unknown as Prisma.InputJsonValue),
+        availability: availability as unknown as Prisma.InputJsonValue,
         provider,
         company_id: companyId,
       },

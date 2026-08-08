@@ -282,6 +282,9 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [promptBusy, setPromptBusy] = useState(false);
   const [tagToDelete, setTagToDelete] = useState<ContactTag | null>(null);
   const [deletingTag, setDeletingTag] = useState(false);
+  const [linkToDelete, setLinkToDelete] = useState<BookingLinkRow | null>(null);
+  const [deletingLink, setDeletingLink] = useState(false);
+  const [deleteLinkError, setDeleteLinkError] = useState("");
   const [navHidden, setNavHidden] = useState<string[]>([]);
   const [navSaving, setNavSaving] = useState(false);
   const detectedTimeZone = useMemo(() => {
@@ -1086,6 +1089,23 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   };
 
+  const confirmDeleteLink = async () => {
+    if (!linkToDelete || deletingLink) return;
+    setDeletingLink(true);
+    setDeleteLinkError("");
+    try {
+      const res = await fetch(`/api/booking/links/${encodeURIComponent(linkToDelete.id)}`, { method: "DELETE" });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.message || "Could not delete this link.");
+      await loadBookingLinks();
+      setLinkToDelete(null);
+    } catch (e) {
+      setDeleteLinkError(e instanceof Error ? e.message : "Could not delete this link.");
+    } finally {
+      setDeletingLink(false);
+    }
+  };
+
   return (
     <>
       <Head>
@@ -1318,6 +1338,9 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                                 className={btnSecondary}
                               >
                                 Copy link
+                              </button>
+                              <button type="button" onClick={() => setLinkToDelete(l)} className={btnDangerOutline}>
+                                Delete
                               </button>
                             </div>
                           </li>
@@ -2272,6 +2295,25 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
           if (!deletingTag) setTagToDelete(null);
         }}
         onConfirm={() => void confirmDeleteTag()}
+      />
+      <ConfirmActionModal
+        isOpen={Boolean(linkToDelete)}
+        title="Delete booking link"
+        message={
+          <>
+            Delete <span className="font-semibold text-[#1E1B2E]">{linkToDelete?.title || "this link"}</span>? Its page will stop
+            accepting new bookings.
+            {deleteLinkError ? <span className="mt-2 block text-red-600">{deleteLinkError}</span> : null}
+          </>
+        }
+        confirmLabel={deletingLink ? "Deleting…" : "Delete link"}
+        onCancel={() => {
+          if (!deletingLink) {
+            setLinkToDelete(null);
+            setDeleteLinkError("");
+          }
+        }}
+        onConfirm={() => void confirmDeleteLink()}
       />
     </>
   );

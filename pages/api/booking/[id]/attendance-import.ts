@@ -69,6 +69,7 @@ export default withAuth(
           from_status: fromStatus,
           to_status: toStatus,
           changed_by_user_id: session.user.id,
+          changed_by_user_email: session.user.email,
           note: `csv_import: ${fileName}`,
         },
       }),

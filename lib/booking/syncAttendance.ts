@@ -103,17 +103,29 @@ export async function syncBookingAttendance(bookingId: string): Promise<SyncResu
     meetingEndIso: booking.end_at.toISOString(),
   });
 
-  await prisma.booking.update({
-    where: { id: booking.id },
-    data: {
-      attendance_status: held ? "held" : "not_held",
-      attendee_emails: participants as unknown as Prisma.InputJsonValue,
-      attendee_count: attendeeCount,
-      duration_seconds: durationSeconds,
-      held_at: held ? new Date() : null,
-      attendance_source: "automatic",
-    },
-  });
+  const toStatus = held ? "held" : "not_held";
+  await prisma.$transaction([
+    prisma.booking.update({
+      where: { id: booking.id },
+      data: {
+        attendance_status: toStatus,
+        attendee_emails: participants as unknown as Prisma.InputJsonValue,
+        attendee_count: attendeeCount,
+        duration_seconds: durationSeconds,
+        held_at: held ? new Date() : null,
+        attendance_source: "automatic",
+      },
+    }),
+    prisma.bookingStatusEvent.create({
+      data: {
+        booking_id: booking.id,
+        from_status: booking.attendance_status,
+        to_status: toStatus,
+        changed_by_user_id: null,
+        note: "automatic sync",
+      },
+    }),
+  ]);
 
   return held ? "held" : "not_held";
 }

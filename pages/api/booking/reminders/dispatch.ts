@@ -53,8 +53,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
       (process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "").replace(/\/$/, "")
     ).catch(() => null);
-    await prisma.booking.update({ where: { id: booking.id }, data: { reminder_sent_at: new Date() } });
-    if (result?.ok) sent += 1;
+    // Only mark as sent on success — leaving reminder_sent_at null on failure lets the next
+    // hourly run (still inside the 23-25h window) retry instead of silently giving up forever.
+    if (result?.ok) {
+      await prisma.booking.update({ where: { id: booking.id }, data: { reminder_sent_at: new Date() } });
+      sent += 1;
+    }
   }
 
   res.status(200).json({ checked: due.length, sent });
