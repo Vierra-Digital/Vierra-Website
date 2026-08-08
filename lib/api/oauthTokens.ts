@@ -8,6 +8,8 @@ interface PersistTokenInput {
   /** Raw refresh token, if the provider returned one. */
   refreshToken?: string | null;
   expiresAt?: Date | null;
+  /** Per-connection flags (Workspace detection, attendance-report availability, etc). Replaces any existing value. */
+  meta?: Record<string, unknown> | null;
 }
 
 /**
@@ -22,6 +24,7 @@ export async function persistPlatformToken(userId: string, input: PersistTokenIn
     access_token,
     ...(refresh_token && { refresh_token }),
     ...(input.expiresAt && { expires_at: input.expiresAt }),
+    ...(input.meta !== undefined && { meta: input.meta as object | null }),
   };
   await prisma.platformToken.upsert({
     where: { user_id_platform: { user_id: userId, platform: input.platform } },
