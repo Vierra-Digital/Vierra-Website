@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decrypt, encrypt } from "@/lib/crypto";
 
@@ -62,6 +63,6 @@ export async function mergePlatformTokenMeta(userId: string, platform: string, p
   const row = await prisma.platformToken.findUnique({ where: { user_id_platform: { user_id: userId, platform } }, select: { meta: true } });
   const nextMeta = { ...((row?.meta as Record<string, unknown> | null) || {}), ...patch };
   await prisma.platformToken
-    .update({ where: { user_id_platform: { user_id: userId, platform } }, data: { meta: nextMeta } })
+    .update({ where: { user_id_platform: { user_id: userId, platform } }, data: { meta: nextMeta as Prisma.InputJsonValue } })
     .catch(() => {});
 }

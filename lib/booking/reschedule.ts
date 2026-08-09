@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { computeSlots, DEFAULT_AVAILABILITY, type Availability } from "@/lib/booking/slots";
 import { getTeamBusyIntersection, findFirstGmailAccountForUser } from "@/lib/booking/teamAvailability";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getBusy, cancelCalendarEvent, buildIcs, type BusyInterval } from "@/lib/calendar/googleCalendar";
+import { getBusy, cancelCalendarEvent, type BusyInterval } from "@/lib/calendar/googleCalendar";
 import { getValidZoomAccessTokenForUser } from "@/lib/zoom/tokens";
 import { getValidMsTeamsAccessTokenForUser } from "@/lib/msteams/tokens";
 import { cancelZoomMeeting } from "@/lib/calendar/zoomMeetings";

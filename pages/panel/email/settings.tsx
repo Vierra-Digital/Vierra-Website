@@ -1297,9 +1297,14 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               >
                 <div className="space-y-3">
                   <div className="flex flex-wrap gap-2">
+                    {/* Plain <a>, not next/link: these are OAuth-initiate API routes that
+                    redirect out to the provider's consent screen — they need a real full-page
+                    navigation, and Link's hover/viewport prefetch would fire the redirect early. */}
+                    {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
                     <a href="/api/zoom/initiate" className={btnSecondary}>
                       Connect Zoom
                     </a>
+                    {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
                     <a href="/api/msteams/initiate" className={btnSecondary}>
                       Connect Microsoft Teams
                     </a>
