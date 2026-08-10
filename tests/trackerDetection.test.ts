@@ -32,6 +32,30 @@ describe("scoreTrackerImage", () => {
     });
     expect(v.tracked).toBe(false);
   });
+
+  it("names the vendor on a known tracker-pixel host (high confidence)", () => {
+    const v = scoreTrackerImage({ src: "https://mailtrack.io/trace/abc123" });
+    expect(v.tracked).toBe(true);
+    expect(v.vendor).toBe("Mailtrack");
+    expect(v.confidence).toBe("high");
+    expect(v.score).toBeGreaterThanOrEqual(5);
+  });
+
+  it("detects a 1px beacon declared via inline style", () => {
+    const v = scoreTrackerImage({
+      src: "https://beacon.example.com/p/z9y8x7w6v5u4t3s2",
+      style: "width:1px;height:1px;display:none",
+    });
+    expect(v.reasons).toContain("tiny");
+    expect(v.reasons).toContain("hidden");
+    expect(v.tracked).toBe(true);
+  });
+
+  it("treats a known CDN image with no vendor hit as not-a-beacon", () => {
+    const v = scoreTrackerImage({ src: "https://d111111abcdef8.cloudfront.net/banner.png" });
+    expect(v.tracked).toBe(false);
+    expect(v.reasons).toContain("cdn");
+  });
 });
 
 describe("decodeProxiedUrl", () => {
