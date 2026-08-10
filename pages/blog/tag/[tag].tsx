@@ -203,7 +203,11 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
     const posts = await getPostsByTag(tag, 50)
 
     if (posts.length === 0) {
-      return { notFound: true }
+      // Revalidate the 404 so a tag that gains its first post between deploys
+      // (e.g. a newly published "Case Studies" post) stops 404ing on its own
+      // within the window, instead of the negative result sticking until the
+      // next build.
+      return { notFound: true, revalidate: 600 }
     }
 
     return {
