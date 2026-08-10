@@ -1,0 +1,17 @@
+# CodeRabbit configuration — https://docs.coderabbit.ai/guides/configure-coderabbit
+# rena-control has no config file (it runs on the CodeRabbit app's defaults); this makes the same
+# behavior explicit for Vierra. The app must still be installed on the repo from the CodeRabbit
+# dashboard for reviews to run.
+language: "en-US"
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "master"
+chat:
+  auto_reply: true
