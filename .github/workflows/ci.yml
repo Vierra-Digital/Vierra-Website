@@ -42,5 +42,5 @@ jobs:
       - name: Lint
         run: npx next lint
 
-      - name: Unit tests
-        run: npm run test
+      - name: Unit tests + coverage
+        run: npm run test:coverage
