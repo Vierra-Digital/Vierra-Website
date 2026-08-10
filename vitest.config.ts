@@ -15,13 +15,20 @@ export default defineConfig({
       reporter: ["text", "text-summary", "html", "lcov"],
       // Scope coverage to the modules that actually have tests, so the threshold is a real gate on
       // tested code rather than diluted to ~0% by the whole app. Add files here as tests land.
-      include: ["lib/contacts/spreadsheet.ts", "lib/email/trackerDetection.ts"],
-      // Floor set just below current levels: passes today, blocks regressions, raise as tests grow.
+      include: [
+        "lib/contacts/spreadsheet.ts",
+        "lib/email/trackerDetection.ts",
+        "lib/api/parsing.ts",
+        "lib/email/templateRender.ts",
+        "lib/campaigns/mergeTags.ts",
+      ],
+      // Floor set below current levels (~93% stmts/branch, 100% funcs) with margin: passes today,
+      // blocks regressions, raise further as tests grow.
       thresholds: {
-        statements: 75,
-        branches: 70,
-        functions: 90,
-        lines: 75,
+        statements: 88,
+        branches: 85,
+        functions: 95,
+        lines: 88,
       },
     },
   },
