@@ -223,6 +223,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // Set when a brand-new compose opens (openNewCompose) so the signatures effect appends the
   // account's default signature once — never on replies/drafts (their body is pre-filled).
   const composeInsertDefaultSigRef = useRef(false);
+  const [composeSignatures, setComposeSignatures] = useState<
+    Array<{ id: string; name: string; signatureHtml: string | null; signatureText: string | null; isDefault: boolean }>
+  >([]);
+  const [composeSignatureMenuOpen, setComposeSignatureMenuOpen] = useState(false);
   const [saveTemplateModalOpen, setSaveTemplateModalOpen] = useState(false);
   const [newLabelModalOpen, setNewLabelModalOpen] = useState(false);
   const [newLabelName, setNewLabelName] = useState("");
@@ -1065,6 +1069,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       .then((payload) => {
         if (cancelled) return;
         const list = Array.isArray(payload?.signatures) ? payload.signatures : [];
+        setComposeSignatures(list);
         // Auto-insert the default signature into a brand-new compose only (flag set by
         // openNewCompose). Guard on an empty body via the functional updater so we never clobber
         // a reply/draft or text the user has already started typing while the fetch was in flight.
@@ -2852,6 +2857,20 @@ ${sourceText}`;
       setComposeBodyHtml(`<p>${esc(raw).replace(/\n/g, "<br />")}</p>`);
     }
     setComposeTemplateMenuOpen(false);
+  };
+
+  // Append a chosen signature to the end of the current body (unlike templates, which replace it).
+  const applyComposeSignature = (signatureId: string) => {
+    const sig = composeSignatures.find((s) => s.id === signatureId);
+    if (!sig) return;
+    const escSig = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const sigHtml =
+      sig.signatureHtml && sig.signatureHtml.trim()
+        ? sig.signatureHtml
+        : `<p>${escSig(sig.signatureText || "").replace(/\n/g, "<br />")}</p>`;
+    setComposeBodyHtml((prev) => `${prev || ""}<p><br /></p>${sigHtml}`);
+    setComposeBody((prev) => `${(prev || "").replace(/\s+$/, "")}\n\n${sig.signatureText || ""}`.trim());
+    setComposeSignatureMenuOpen(false);
   };
 
   const handlePrintCompose = () => {
@@ -5046,6 +5065,37 @@ ${sourceText}`;
                           >
                             Save as template…
                           </button>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setComposeSignatureMenuOpen((open) => !open)}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        title="Insert signature"
+                        aria-label="Insert signature"
+                        aria-expanded={composeSignatureMenuOpen}
+                      >
+                        <FiEdit3 className="h-[18px] w-[18px]" aria-hidden />
+                      </button>
+                      {composeSignatureMenuOpen ? (
+                        <div className="absolute left-0 top-full z-[130] mt-1 max-h-56 w-56 overflow-y-auto rounded-md border border-[#EAE5F4] bg-white py-1 shadow-lg">
+                          {composeSignatures.length === 0 ? (
+                            <div className="px-3 py-2 text-xs text-[#5f6368]">No signatures yet</div>
+                          ) : (
+                            composeSignatures.map((sig) => (
+                              <button
+                                key={sig.id}
+                                type="button"
+                                className="block w-full truncate px-3 py-2 text-left text-sm text-[#1E1B2E] hover:bg-[#f1f3f4]"
+                                onClick={() => applyComposeSignature(sig.id)}
+                              >
+                                {sig.name}
+                                {sig.isDefault ? " (default)" : ""}
+                              </button>
+                            ))
+                          )}
                         </div>
                       ) : null}
                     </div>
