@@ -63,7 +63,7 @@
     "react-share": "^5.2.2",
     "react-signature-canvas": "^1.1.0-alpha.2",
     "recharts": "^3.2.1",
-    "sanitize-html": "^2.17.5",
+    "sanitize-html": "^2.17.6",
     "stripe": "^20.3.1",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
@@ -85,7 +85,7 @@
     "@vitest/coverage-v8": "^4.1.10",
     "eslint": "^9.39.4",
     "eslint-config-next": "^15.5.18",
-    "postcss": "^8.5.18",
+    "postcss": "^8.5.26",
     "prisma": "^6.19.3",
     "tailwindcss": "^3.4.1",
     "typescript": "^5.9.2",
@@ -96,19 +96,19 @@
     "picomatch": "2.3.2",
     "jws": "3.2.3",
     "preact": "10.29.1",
-    "js-yaml": "4.2.0",
+    "js-yaml": "5.2.3",
     "yaml": "2.8.3",
     "ajv": "6.14.0",
     "diff": "4.0.4",
     "defu": "6.1.7",
     "glob": "10.5.0",
     "@eslint/config-array": "0.23.4",
+    "sharp": "0.35.3",
+    "postcss": "$postcss",
     "glob@7.2.3": {
       "minimatch": "3.1.4"
     },
-    "next": {
-      "postcss": "8.5.15"
-    },
+    "brace-expansion@1.1.15": "1.1.18",
     "exceljs": {
       "uuid": "$uuid"
     }
