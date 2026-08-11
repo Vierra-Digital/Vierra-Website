@@ -63,7 +63,7 @@
     "react-share": "^5.2.2",
     "react-signature-canvas": "^1.1.0-alpha.2",
     "recharts": "^3.2.1",
-    "sanitize-html": "^2.17.2",
+    "sanitize-html": "^2.17.5",
     "stripe": "^20.3.1",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
