@@ -274,6 +274,27 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [deletingTag, setDeletingTag] = useState(false);
   const [navHidden, setNavHidden] = useState<string[]>([]);
   const [navSaving, setNavSaving] = useState(false);
+  // Undo-send window (seconds). Stored in localStorage — the same key the composer reads before it
+  // actually sends — so this is a per-device preference (no server round-trip).
+  const [undoSendDelay, setUndoSendDelay] = useState(5);
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("email-undo-delay");
+      const parsed = raw != null ? Number(raw) : NaN;
+      if (Number.isFinite(parsed)) setUndoSendDelay(Math.max(0, Math.min(30, parsed)));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const updateUndoSendDelay = (value: number) => {
+    const clamped = Math.max(0, Math.min(30, value));
+    setUndoSendDelay(clamped);
+    try {
+      window.localStorage.setItem("email-undo-delay", String(clamped));
+    } catch {
+      /* ignore */
+    }
+  };
   const detectedTimeZone = useMemo(() => {
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -1075,6 +1096,29 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     );
                   })}
                 </ul>
+              </SettingsSection>
+              <SettingsSection
+                title="Undo send"
+                description="How long a sent email is held with an Undo option before it actually goes out (this device)."
+                icon={FiZap}
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-[#1E1B2E]">Cancellation window</p>
+                    <p className="text-sm text-[#6B7280]">Set to 0 to send immediately with no undo.</p>
+                  </div>
+                  <select
+                    value={undoSendDelay}
+                    onChange={(e) => updateUndoSendDelay(Number(e.target.value))}
+                    className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#1E1B2E] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                  >
+                    {[0, 5, 10, 20, 30].map((s) => (
+                      <option key={s} value={s}>
+                        {s === 0 ? "Off" : `${s} seconds`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </SettingsSection>
               <SettingsSection
                 title="Accounts"
