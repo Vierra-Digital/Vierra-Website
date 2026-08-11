@@ -253,3 +253,51 @@ export function scoreTrackerImage(input: {
   const confidence: TrackerVerdict["confidence"] = score >= 5 ? "high" : score >= 3 ? "medium" : "low";
   return { tracked: score >= 3, vendor, confidence, score, reasons };
 }
+
+/** Read a single HTML attribute out of a tag string (quoted or unquoted); null if absent. */
+function readAttr(tag: string, name: string): string | null {
+  const m = tag.match(new RegExp(`${name}\s*=\s*("([^"]*)"|'([^']*)'|([^\s">]+))`, "i"));
+  if (!m) return null;
+  return m[2] ?? m[3] ?? m[4] ?? "";
+}
+
+/**
+ * Server-side (DOM-free) tracker scan over raw email HTML — the regex-based twin of the client's
+ * DOMParser scan, so open/click beacons are flagged identically at fetch time. Covers <img> tags
+ * and CSS `background-image: url(...)` beacons. Returns the tracked count and named vendors.
+ */
+export function scanHtmlForTrackers(
+  html: string,
+  senderDomain?: string
+): { count: number; vendors: string[] } {
+  if (!html) return { count: 0, vendors: [] };
+  let count = 0;
+  const vendors = new Set<string>();
+  const record = (verdict: TrackerVerdict) => {
+    if (!verdict.tracked) return;
+    count += 1;
+    if (verdict.vendor) vendors.add(verdict.vendor);
+  };
+
+  for (const tag of html.match(/<img\b[^>]*>/gi) || []) {
+    record(
+      scoreTrackerImage({
+        src: readAttr(tag, "src") || "",
+        width: readAttr(tag, "width"),
+        height: readAttr(tag, "height"),
+        style: readAttr(tag, "style"),
+        alt: readAttr(tag, "alt"),
+        senderDomain,
+      })
+    );
+  }
+
+  // background-image: url(...) beacons hidden in inline styles.
+  for (const m of html.matchAll(/style\s*=\s*("([^"]*)"|'([^']*)')/gi)) {
+    const style = m[2] ?? m[3] ?? "";
+    const url = style.match(/background(?:-image)?\s*:\s*url\((['"]?)([^'")]+)\1\)/i);
+    if (url) record(scoreTrackerImage({ src: url[2], style, senderDomain }));
+  }
+
+  return { count, vendors: [...vendors] };
+}

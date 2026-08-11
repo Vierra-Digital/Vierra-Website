@@ -3,6 +3,7 @@ import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { extractHeader, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
+import { scanHtmlForTrackers } from "@/lib/email/trackerDetection";
 
 function decodeBase64Url(data: string) {
   const padded = data.replace(/-/g, "+").replace(/_/g, "/");
@@ -197,5 +198,8 @@ export default withAuth(async (req, res, session) => {
     references: currentMessage.references,
     senderPhotoUrl,
     threadMessages,
+    // Authoritative tracker scan (DOM-free) so the "tracker blocked" badge is consistent with the
+    // client's own detection and available without client-side rendering.
+    trackers: scanHtmlForTrackers(currentMessage.bodyHtml || ""),
   });
 }, { methods: ["GET"] });
