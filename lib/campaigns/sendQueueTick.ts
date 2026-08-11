@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import type { CampaignContact, Prisma } from "@prisma/client";
 import { createSmtpTransport } from "@/lib/email/smtp";
 import { renderMergeTags } from "@/lib/campaigns/mergeTags";
+import { mergeClickTrackUrls, rewriteTrackedLinksInHtml } from "@/lib/gmail/sendCore";
 
 const DEFAULT_BATCH_SIZE = 20;
 /** How far out to reschedule a contact after a send failure, so a tick doesn't tight-loop on it. */
@@ -80,11 +81,25 @@ async function processContact(
   // https base URL is configured — otherwise the pixel would be a dead relative URL. The token
   // lives on the outbound record created after a successful send below (no id needed pre-send).
   const trackingBaseUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "").replace(/\/$/, "");
-  const openToken = /^https:\/\//i.test(trackingBaseUrl) ? randomUUID().replace(/-/g, "") : null;
+  const trackingOn = /^https:\/\//i.test(trackingBaseUrl);
+  const openToken = trackingOn ? randomUUID().replace(/-/g, "") : null;
+  // Click tracking: rewrite each link to a tracked redirect. Tokens are generated up-front (like the
+  // open token) so the emailTrackingLink rows can be written AFTER a successful send below — no
+  // reorder of the send flow needed. The /track/click endpoint rolls first clicks into daily stats.
+  const clickLinks: Array<{ token: string; url: string }> = [];
+  const clickReplacements = new Map<string, string>();
+  if (trackingOn && bodyHtml) {
+    for (const url of mergeClickTrackUrls(bodyText, bodyHtml)) {
+      const token = randomUUID().replace(/-/g, "");
+      clickLinks.push({ token, url });
+      clickReplacements.set(url, `${trackingBaseUrl}/api/email/track/click/${token}`);
+    }
+  }
+  const htmlWithClicks = clickReplacements.size > 0 ? rewriteTrackedLinksInHtml(bodyHtml, clickReplacements) : bodyHtml;
   const trackedHtml =
-    openToken && bodyHtml
-      ? `<img src="${trackingBaseUrl}/api/email/track/open/${openToken}.gif" width="1" height="1" alt="" aria-hidden="true" style="width:1px;height:1px;opacity:0;position:absolute;left:-9999px;top:auto;border:0;overflow:hidden;" />${bodyHtml}`
-      : bodyHtml;
+    openToken && htmlWithClicks
+      ? `<img src="${trackingBaseUrl}/api/email/track/open/${openToken}.gif" width="1" height="1" alt="" aria-hidden="true" style="width:1px;height:1px;opacity:0;position:absolute;left:-9999px;top:auto;border:0;overflow:hidden;" />${htmlWithClicks}`
+      : htmlWithClicks;
 
   const account = campaign.email_provider_accounts;
   let sendError: string | null = null;
@@ -149,6 +164,18 @@ async function processContact(
       open_token: openToken,
     },
   });
+
+  if (clickLinks.length > 0) {
+    // Best-effort: the send already succeeded, so a failure writing link rows must not fail the tick.
+    try {
+      await prisma.emailTrackingLink.createMany({
+        data: clickLinks.map((l) => ({ outbound_message_id: outbound.id, token: l.token, original_url: l.url })),
+        skipDuplicates: true,
+      });
+    } catch {
+      /* click tracking is best-effort */
+    }
+  }
 
   await prisma.campaignStepSend.upsert({
     where: { campaign_contact_id_step_id: { campaign_contact_id: contact.id, step_id: stepToSend.id } },
