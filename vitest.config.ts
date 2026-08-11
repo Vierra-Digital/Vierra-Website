@@ -21,6 +21,7 @@ export default defineConfig({
         "lib/api/parsing.ts",
         "lib/email/templateRender.ts",
         "lib/campaigns/mergeTags.ts",
+        "lib/api/marketing.ts",
       ],
       // Floor set below current levels (~93% stmts/branch, 100% funcs) with margin: passes today,
       // blocks regressions, raise further as tests grow.
