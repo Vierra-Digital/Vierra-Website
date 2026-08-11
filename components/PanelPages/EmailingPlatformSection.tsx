@@ -246,6 +246,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [confidentialOpen, setConfidentialOpen] = useState(false);
   /** Request a read receipt (Disposition-Notification-To) on send. */
   const [requestReceipt, setRequestReceipt] = useState(false);
+  // Set on a brand-new compose so the settings effect can apply this inbox's read-receipt default
+  // once — never on replies/drafts, and the user can still toggle it off.
+  const composeReadReceiptDefaultRef = useRef(false);
   const undoSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [artemisDrafting, setArtemisDrafting] = useState(false);
@@ -1048,6 +1051,23 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         if (cancelled) return;
         const list = Array.isArray(payload?.templates) ? payload.templates : [];
         setComposeTemplates(list);
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, [isComposeOpen, composeAccountEmail]);
+
+  // Apply this inbox's read-receipt default once on a brand-new compose (flag set by
+  // openNewCompose); never on replies/drafts, and the user can still toggle it off after.
+  useEffect(() => {
+    if (!isComposeOpen || !composeAccountEmail || !composeReadReceiptDefaultRef.current) return;
+    composeReadReceiptDefaultRef.current = false;
+    let cancelled = false;
+    void fetch(`/api/gmail/settings?accountEmail=${encodeURIComponent(composeAccountEmail)}`)
+      .then((r) => r.json())
+      .then((payload) => {
+        if (!cancelled && payload?.settings?.defaultReadReceipt) setRequestReceipt(true);
       })
       .catch(() => null);
     return () => {
@@ -2280,6 +2300,7 @@ ${sourceText}`;
     setConfidentialPasscode("");
     setConfidentialOpen(false);
     setRequestReceipt(false);
+    composeReadReceiptDefaultRef.current = true;
     setComposeAccountEmail(defaultAccount);
     setComposeThreadId("");
     setComposeInReplyTo("");
