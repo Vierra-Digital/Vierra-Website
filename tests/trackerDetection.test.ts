@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scoreTrackerImage, decodeProxiedUrl } from "@/lib/email/trackerDetection";
+import { scoreTrackerImage, decodeProxiedUrl, scanHtmlForTrackers } from "@/lib/email/trackerDetection";
 
 describe("scoreTrackerImage", () => {
   it("ignores inline/embedded images (data:, cid:) and empty src", () => {
@@ -55,6 +55,28 @@ describe("scoreTrackerImage", () => {
     const v = scoreTrackerImage({ src: "https://d111111abcdef8.cloudfront.net/banner.png" });
     expect(v.tracked).toBe(false);
     expect(v.reasons).toContain("cdn");
+  });
+});
+
+describe("scanHtmlForTrackers (server-side, DOM-free)", () => {
+  it("returns nothing for empty or tracker-free HTML", () => {
+    expect(scanHtmlForTrackers("")).toEqual({ count: 0, vendors: [] });
+    expect(
+      scanHtmlForTrackers('<p>Hi</p><img src="https://www.example.com/logo.png" width="200" alt="Logo">')
+    ).toEqual({ count: 0, vendors: [] });
+  });
+
+  it("names the vendor for a known tracker-pixel <img>", () => {
+    const r = scanHtmlForTrackers('<img src="https://mailtrack.io/trace/abc" width="1" height="1">');
+    expect(r.count).toBe(1);
+    expect(r.vendors).toContain("Mailtrack");
+  });
+
+  it("catches a beacon hidden in a background-image style", () => {
+    const r = scanHtmlForTrackers(
+      '<div style="background-image:url(\'https://track.example.com/o/abcd1234efgh5678\');width:1px;height:1px"></div>'
+    );
+    expect(r.count).toBeGreaterThanOrEqual(1);
   });
 });
 

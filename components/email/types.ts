@@ -72,6 +72,7 @@ export type MessageDetail = {
   references?: string;
   senderPhotoUrl?: string;
   threadMessages?: ThreadMessage[];
+  trackers?: { count: number; vendors: string[] };
 };
 
 export type ThreadMessage = {
