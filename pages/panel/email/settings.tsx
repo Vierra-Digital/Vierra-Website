@@ -180,6 +180,7 @@ type Settings = {
   vacationStartAt: string;
   vacationEndAt: string;
   replyNotificationsEnabled: boolean;
+  defaultReadReceipt: boolean;
 };
 
 const defaultSettings: Settings = {
@@ -192,6 +193,7 @@ const defaultSettings: Settings = {
   vacationStartAt: "",
   vacationEndAt: "",
   replyNotificationsEnabled: true,
+  defaultReadReceipt: false,
 };
 
 type PageProps = {
@@ -403,6 +405,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         vacationStartAt: rawSettings.vacationStartAt ? String(rawSettings.vacationStartAt).slice(0, 16) : "",
         vacationEndAt: rawSettings.vacationEndAt ? String(rawSettings.vacationEndAt).slice(0, 16) : "",
         replyNotificationsEnabled: Boolean(rawSettings.replyNotificationsEnabled ?? true),
+        defaultReadReceipt: Boolean(rawSettings.defaultReadReceipt),
       };
       setSettings(nextSettings);
       setSignatures(Array.isArray(signaturesPayload?.signatures) ? signaturesPayload.signatures : []);
@@ -773,6 +776,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
             vacationStartAt: settings.vacationStartAt || null,
             vacationEndAt: settings.vacationEndAt || null,
             replyNotificationsEnabled: settings.replyNotificationsEnabled,
+            defaultReadReceipt: settings.defaultReadReceipt,
           }),
         }),
         fetch(`/api/contacts/visibility?accountEmail=${encodeURIComponent(activeAccountEmail)}`, {
@@ -1499,6 +1503,25 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   <Toggle
                     checked={settings.replyNotificationsEnabled}
                     onChange={(v) => setSettings((prev) => ({ ...prev, replyNotificationsEnabled: v }))}
+                  />
+                </div>
+              </SettingsSection>
+
+              <SettingsSection
+                title="Read receipts"
+                description="Request a read receipt by default when composing from this inbox."
+                icon={FiMail}
+              >
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-[#1E1B2E]">Request read receipts by default</p>
+                    <p className="text-sm text-[#6B7280]">
+                      New emails from this inbox start with &ldquo;request receipt&rdquo; on. You can still toggle it off per email.
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={settings.defaultReadReceipt}
+                    onChange={(v) => setSettings((prev) => ({ ...prev, defaultReadReceipt: v }))}
                   />
                 </div>
               </SettingsSection>
