@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import type { CampaignContact, Prisma } from "@prisma/client";
 import { createSmtpTransport } from "@/lib/email/smtp";
@@ -74,6 +75,17 @@ async function processContact(
   const bodyHtml = renderMergeTags(bodyHtmlTemplate, contact);
   const bodyText = renderMergeTags(bodyTextTemplate, contact) || bodyHtml.replace(/<[^>]+>/g, " ").trim();
 
+  // Open tracking: embed a 1×1 pixel keyed by open_token so opens attribute back to this campaign
+  // (the /track/open endpoint rolls first opens up into campaign_daily_stats). Only when a real
+  // https base URL is configured — otherwise the pixel would be a dead relative URL. The token
+  // lives on the outbound record created after a successful send below (no id needed pre-send).
+  const trackingBaseUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "").replace(/\/$/, "");
+  const openToken = /^https:\/\//i.test(trackingBaseUrl) ? randomUUID().replace(/-/g, "") : null;
+  const trackedHtml =
+    openToken && bodyHtml
+      ? `<img src="${trackingBaseUrl}/api/email/track/open/${openToken}.gif" width="1" height="1" alt="" aria-hidden="true" style="width:1px;height:1px;opacity:0;position:absolute;left:-9999px;top:auto;border:0;overflow:hidden;" />${bodyHtml}`
+      : bodyHtml;
+
   const account = campaign.email_provider_accounts;
   let sendError: string | null = null;
   try {
@@ -83,7 +95,7 @@ async function processContact(
       to: contact.contact_email,
       subject,
       text: bodyText,
-      html: bodyHtml || undefined,
+      html: trackedHtml || undefined,
     });
   } catch (error) {
     sendError = error instanceof Error ? error.message : "SMTP send failed.";
@@ -133,7 +145,8 @@ async function processContact(
       subject,
       body_html: bodyHtml,
       body_text: bodyText,
-      tracking_enabled: false,
+      tracking_enabled: Boolean(openToken),
+      open_token: openToken,
     },
   });
 
