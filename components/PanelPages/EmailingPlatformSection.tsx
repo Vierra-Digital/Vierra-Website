@@ -3379,8 +3379,28 @@ ${sourceText}`;
                           <div className="m-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{actionError}</div>
                         ) : null}
                         {accountErrors.length > 0 ? (
-                          <div className="m-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-                            Some accounts could not be loaded: {accountErrors.map((entry) => entry.accountEmail).join(", ")}
+                          <div className="m-3 space-y-1 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+                            {accountErrors.map((entry) => {
+                              // Token errors ("Reconnect required", refresh failure, token not found) get a
+                              // one-click reconnect that starts the Gmail OAuth flow for that account.
+                              const needsReconnect = /reconnect|refresh|token/i.test(entry.message);
+                              return (
+                                <div key={entry.accountEmail} className="flex flex-wrap items-center justify-between gap-2">
+                                  <span>
+                                    <span className="font-medium">{entry.accountEmail}</span>{" "}
+                                    {needsReconnect ? "needs to be reconnected." : "could not be loaded."}
+                                  </span>
+                                  {needsReconnect ? (
+                                    <a
+                                      href={`/api/gmail/initiate?from=email&account=${encodeURIComponent(entry.accountEmail)}`}
+                                      className="shrink-0 rounded-md bg-yellow-800 px-2.5 py-1 text-xs font-medium text-white hover:bg-yellow-900"
+                                    >
+                                      Reconnect
+                                    </a>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
                           </div>
                         ) : null}
 
