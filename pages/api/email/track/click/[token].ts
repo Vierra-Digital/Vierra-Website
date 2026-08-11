@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { asToken, hashIp, isLikelySelfPreview, isPrefetchOpen, trackingClientIp } from "@/lib/api/emailTracking";
+import { bumpCampaignStat } from "@/lib/campaigns/campaignStats";
 
 function normalizeTarget(url: string) {
   if (!url) return "";
@@ -60,12 +61,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
       // Roll the first unique click of a campaign message up into its daily stats.
       if (eventType === "CLICK" && campaignId && !priorClick) {
-        const day = new Date(new Date().setHours(0, 0, 0, 0));
-        await prisma.campaignDailyStat.upsert({
-          where: { campaign_id_date: { campaign_id: campaignId, date: day } },
-          create: { campaign_id: campaignId, date: day, clicks: 1 },
-          update: { clicks: { increment: 1 } },
-        });
+        await bumpCampaignStat(campaignId, "clicks");
       }
     } catch {
       /* swallow — still redirect below */
