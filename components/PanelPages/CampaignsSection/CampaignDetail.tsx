@@ -27,6 +27,9 @@ type CampaignStep = {
 const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ campaignId, onBack }) => {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [steps, setSteps] = useState<CampaignStep[]>([]);
+  const [failed, setFailed] = useState<
+    Array<{ id: string; email: string; reason: string; failedAt: string | null; attempts: number; gaveUp: boolean }>
+  >([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("Overview");
   const [busy, setBusy] = useState(false);
@@ -35,12 +38,14 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [campaignRes, stepsRes] = await Promise.all([
+      const [campaignRes, stepsRes, failedRes] = await Promise.all([
         fetch(`/api/campaigns/${campaignId}`),
         fetch(`/api/campaigns/${campaignId}/steps`),
+        fetch(`/api/campaigns/${campaignId}/failed`),
       ]);
       if (campaignRes.ok) setCampaign((await campaignRes.json()).campaign);
       if (stepsRes.ok) setSteps((await stepsRes.json()).steps || []);
+      if (failedRes.ok) setFailed((await failedRes.json()).failed || []);
     } catch (e) {
       console.error("Error loading campaign detail:", e);
     } finally {
@@ -208,6 +213,7 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
           </div>
 
           {tab === "Overview" && (
+            <div className="space-y-6">
             <div className="grid grid-cols-2 gap-6">
               <div className="bg-white rounded-lg border border-[#E5E7EB] p-4">
                 <h3 className="text-sm font-semibold text-[#111827] mb-3">Send Settings</h3>
@@ -230,6 +236,25 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
                   {steps.length === 0 && <li className="text-[#9CA3AF]">No steps yet.</li>}
                 </ol>
               </div>
+            </div>
+            {failed.length > 0 && (
+              <div className="bg-white rounded-lg border border-red-200 p-4">
+                <h3 className="text-sm font-semibold text-red-700 mb-3">Failed sends ({failed.length})</h3>
+                <ul className="text-sm divide-y divide-gray-100 max-h-64 overflow-y-auto">
+                  {failed.map((f) => (
+                    <li key={f.id} className="py-2 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[#374151] truncate">{f.email}</p>
+                        <p className="text-xs text-[#9CA3AF] truncate">{f.reason || "Unknown error"}</p>
+                      </div>
+                      <span className={`shrink-0 text-xs ${f.gaveUp ? "text-red-600" : "text-amber-600"}`}>
+                        {f.gaveUp ? "gave up" : `retry ${f.attempts}`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             </div>
           )}
 
