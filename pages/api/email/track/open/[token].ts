@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { asToken, hashIp, isLikelySelfPreview, isPrefetchOpen, trackingClientIp } from "@/lib/api/emailTracking";
+import { bumpCampaignStat } from "@/lib/campaigns/campaignStats";
 
 function normalizeOpenToken(value: string) {
   return value.trim().replace(/\.gif$/i, "");
@@ -67,12 +68,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
         // Roll the first unique open of a campaign message up into its daily stats.
         if (eventType === "OPEN" && outbound.campaign_id && !priorOpen) {
-          const day = new Date(new Date().setHours(0, 0, 0, 0));
-          await prisma.campaignDailyStat.upsert({
-            where: { campaign_id_date: { campaign_id: outbound.campaign_id, date: day } },
-            create: { campaign_id: outbound.campaign_id, date: day, opens: 1 },
-            update: { opens: { increment: 1 } },
-          });
+          await bumpCampaignStat(outbound.campaign_id, "opens");
         }
       }
     }
