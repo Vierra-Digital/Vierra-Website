@@ -135,6 +135,10 @@ const MailboxEmpty: React.FC = () => (
   </div>
 );
 
+// Client-side cap on total compose attachment bytes. Kept conservative (below the server/platform
+// request-body limit) so oversized sends fail fast with a clear message instead of an opaque 413.
+const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
 const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   initialSelectedAccounts = [],
   initialOpenThreadId = "",
@@ -2712,8 +2716,20 @@ ${sourceText}`;
         contentBase64,
       });
     }
+    // Reject up-front with a clear message rather than letting an oversized JSON body hit the API's
+    // size limit and come back as an opaque "Failed to send." (NOTE: keep this at or below the real
+    // platform request-body limit — Netlify functions cap well under the 24 MB app-level cap.)
+    const decodedBytes = (b64: string) => Math.floor((b64.length * 3) / 4);
+    const currentBytes = composeAttachments.reduce((sum, a) => sum + decodedBytes(a.contentBase64), 0);
+    const additionBytes = additions.reduce((sum, a) => sum + decodedBytes(a.contentBase64), 0);
+    if (currentBytes + additionBytes > MAX_TOTAL_ATTACHMENT_BYTES) {
+      setComposeError(
+        `Attachments exceed the ${Math.round(MAX_TOTAL_ATTACHMENT_BYTES / (1024 * 1024))} MB limit — remove some and try again.`
+      );
+      return;
+    }
     setComposeAttachments((prev) => [...prev, ...additions]);
-  }, []);
+  }, [composeAttachments]);
 
   const toggleBookingMenu = useCallback(async () => {
     setBookingMenuOpen((prev) => !prev);
