@@ -216,6 +216,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     Array<{ id: string; name: string; subject: string | null; bodyHtml: string | null; bodyText: string | null }>
   >([]);
   const [composeTemplateMenuOpen, setComposeTemplateMenuOpen] = useState(false);
+  // Set when a brand-new compose opens (openNewCompose) so the signatures effect appends the
+  // account's default signature once — never on replies/drafts (their body is pre-filled).
+  const composeInsertDefaultSigRef = useRef(false);
   const [saveTemplateModalOpen, setSaveTemplateModalOpen] = useState(false);
   const [newLabelModalOpen, setNewLabelModalOpen] = useState(false);
   const [newLabelName, setNewLabelName] = useState("");
@@ -1050,6 +1053,27 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         setComposeTemplates(list);
       })
       .catch(() => null);
+    void fetch(`/api/gmail/signatures?accountEmail=${encodeURIComponent(composeAccountEmail)}`)
+      .then((r) => r.json())
+      .then((payload) => {
+        if (cancelled) return;
+        const list = Array.isArray(payload?.signatures) ? payload.signatures : [];
+        // Auto-insert the default signature into a brand-new compose only (flag set by
+        // openNewCompose). Guard on an empty body via the functional updater so we never clobber
+        // a reply/draft or text the user has already started typing while the fetch was in flight.
+        if (!composeInsertDefaultSigRef.current) return;
+        composeInsertDefaultSigRef.current = false;
+        const def = list.find((s: { isDefault?: boolean }) => s?.isDefault);
+        if (!def || (!def.signatureHtml && !def.signatureText)) return;
+        const escSig = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const sigHtml =
+          def.signatureHtml && def.signatureHtml.trim()
+            ? def.signatureHtml
+            : `<p>${escSig(def.signatureText || "").replace(/\n/g, "<br />")}</p>`;
+        setComposeBodyHtml((prev) => (prev && prev.trim() ? prev : `<p><br /></p><p><br /></p>${sigHtml}`));
+        setComposeBody((prev) => (prev && prev.trim() ? prev : `\n\n${def.signatureText || ""}`));
+      })
+      .catch(() => null);
     return () => {
       cancelled = true;
     };
@@ -1601,6 +1625,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
           references: typeof payload?.references === "string" ? payload.references : selectedMessage.references,
           senderPhotoUrl: typeof payload?.senderPhotoUrl === "string" ? payload.senderPhotoUrl : "",
           threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
+          trackers:
+            payload?.trackers && typeof payload.trackers.count === "number"
+              ? { count: payload.trackers.count, vendors: Array.isArray(payload.trackers.vendors) ? payload.trackers.vendors : [] }
+              : undefined,
         });
       } catch (error) {
         setDetailError(error instanceof Error ? error.message : "Failed to load message detail.");
@@ -2288,6 +2316,8 @@ ${sourceText}`;
     setComposeError("");
     setComposeSuccess("");
     setComposeExpanded(false);
+    // Ask the signatures effect to drop in this account's default signature once it loads.
+    composeInsertDefaultSigRef.current = true;
     setIsComposeOpen(true);
   };
 
@@ -3899,7 +3929,8 @@ ${sourceText}`;
                               <p>To: {formatIdentity(selectedMessageDetail?.toRaw || selectedMessage.toRaw || selectedMessage.to || "-")}</p>
                               <p>{formatDetailedDate(selectedMessageDetail?.timestamp || selectedMessage.timestamp, selectedMessageDetail?.date || selectedMessage.date)}</p>
                               {(() => {
-                                const { count: trackers, vendors } = detectTrackers(selectedMessageDetail?.bodyHtml || "");
+                                const { count: trackers, vendors } =
+                                  selectedMessageDetail?.trackers ?? detectTrackers(selectedMessageDetail?.bodyHtml || "");
                                 if (trackers === 0) return null;
                                 const label = vendors.length
                                   ? `${vendors.slice(0, 2).join(", ")}${vendors.length > 2 ? ` +${vendors.length - 2}` : ""} tracker blocked`
