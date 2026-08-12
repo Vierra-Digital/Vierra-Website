@@ -15,7 +15,7 @@
  */
 
 /** Vendor URL/host signatures — matched as case-insensitive substrings of the full URL. */
-export const TRACKER_PATTERNS: { pattern: string; vendor: string }[] = [
+const TRACKER_PATTERNS: { pattern: string; vendor: string }[] = [
   // Mailtrack / Mailsuite
   { pattern: "mailtrack.io", vendor: "Mailtrack" },
   { pattern: "mltrk.io/pixel", vendor: "Mailtrack" },
@@ -91,7 +91,7 @@ export const TRACKER_PATTERNS: { pattern: string; vendor: string }[] = [
 ];
 
 /** Vendor-agnostic open-tracking path/param fragments (pair with remoteness/tiny/hidden). */
-export const GENERIC_OPEN_FRAGMENTS: string[] = [
+const GENERIC_OPEN_FRAGMENTS: string[] = [
   "/wf/open", "/track/open", "/track/open.php", "/open.php", "/ut.php",
   "/o.gif", "/trk", "/beacon", "/pixel.gif", "/pixel.png", "/open.gif",
   "?recipient=", "&recipient=", "?email=", "&email=", "?campaignid=",
@@ -99,13 +99,13 @@ export const GENERIC_OPEN_FRAGMENTS: string[] = [
 ];
 
 /** Tracking-style subdomain prefixes (boost signal, never flag alone). */
-export const TRACKING_SUBDOMAINS: string[] = [
+const TRACKING_SUBDOMAINS: string[] = [
   "track.", "tracking.", "email.", "e.", "click.", "clicks.", "link.",
   "links.", "mail.", "open.", "opens.", "px.", "pixel.", "beacon.", "t.",
 ];
 
 /** CDN / proxy hosts that dampen heuristic-only hits (still checked against TRACKER_PATTERNS). */
-export const KNOWN_CDN_HOSTS: string[] = [
+const KNOWN_CDN_HOSTS: string[] = [
   "cloudfront.net", "akamaihd.net", "fastly.net", "imgix.net",
   "cdn.shopify.com", "gstatic.com", "cloudflare.com", "wp.com",
   "gravatar.com", "s3.amazonaws.com", "ytimg.com",
@@ -252,4 +252,52 @@ export function scoreTrackerImage(input: {
 
   const confidence: TrackerVerdict["confidence"] = score >= 5 ? "high" : score >= 3 ? "medium" : "low";
   return { tracked: score >= 3, vendor, confidence, score, reasons };
+}
+
+/** Read a single HTML attribute out of a tag string (quoted or unquoted); null if absent. */
+function readAttr(tag: string, name: string): string | null {
+  const m = tag.match(new RegExp(`${name}\s*=\s*("([^"]*)"|'([^']*)'|([^\s">]+))`, "i"));
+  if (!m) return null;
+  return m[2] ?? m[3] ?? m[4] ?? "";
+}
+
+/**
+ * Server-side (DOM-free) tracker scan over raw email HTML — the regex-based twin of the client's
+ * DOMParser scan, so open/click beacons are flagged identically at fetch time. Covers <img> tags
+ * and CSS `background-image: url(...)` beacons. Returns the tracked count and named vendors.
+ */
+export function scanHtmlForTrackers(
+  html: string,
+  senderDomain?: string
+): { count: number; vendors: string[] } {
+  if (!html) return { count: 0, vendors: [] };
+  let count = 0;
+  const vendors = new Set<string>();
+  const record = (verdict: TrackerVerdict) => {
+    if (!verdict.tracked) return;
+    count += 1;
+    if (verdict.vendor) vendors.add(verdict.vendor);
+  };
+
+  for (const tag of html.match(/<img\b[^>]*>/gi) || []) {
+    record(
+      scoreTrackerImage({
+        src: readAttr(tag, "src") || "",
+        width: readAttr(tag, "width"),
+        height: readAttr(tag, "height"),
+        style: readAttr(tag, "style"),
+        alt: readAttr(tag, "alt"),
+        senderDomain,
+      })
+    );
+  }
+
+  // background-image: url(...) beacons hidden in inline styles.
+  for (const m of html.matchAll(/style\s*=\s*("([^"]*)"|'([^']*)')/gi)) {
+    const style = m[2] ?? m[3] ?? "";
+    const url = style.match(/background(?:-image)?\s*:\s*url\((['"]?)([^'")]+)\1\)/i);
+    if (url) record(scoreTrackerImage({ src: url[2], style, senderDomain }));
+  }
+
+  return { count, vendors: [...vendors] };
 }

@@ -69,7 +69,7 @@ function linkifyText(value: string) {
     .replace(/\n/g, "<br>");
 }
 
-function rewriteTrackedLinksInHtml(value: string, replacements: Map<string, string>) {
+export function rewriteTrackedLinksInHtml(value: string, replacements: Map<string, string>) {
   if (!value || replacements.size === 0) return value;
   return value.replace(/href=(['"])(https?:\/\/[^\s"'<>]+)\1/gi, (match, quote: string, href: string) => {
     const trackedHref = replacements.get(href);
@@ -120,7 +120,7 @@ function uniqueUrlsFromHtmlHref(html: string) {
   return Array.from(set);
 }
 
-function mergeClickTrackUrls(plain: string, html: string) {
+export function mergeClickTrackUrls(plain: string, html: string) {
   return Array.from(new Set([...uniqueUrls(plain), ...uniqueUrlsFromHtmlHref(html)]));
 }
 

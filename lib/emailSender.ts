@@ -278,48 +278,6 @@ export async function sendSignerCopyEmail(email: string, documentName: string, a
   }
 }
 
-export async function sendStaffSetPasswordEmail(staffEmail: string, staffName: string, setPasswordLink: string): Promise<void> {
-  const mailOptions = {
-    from: fromAddress,
-    to: staffEmail,
-    subject: "Vierra | Set Your Password",
-    html: `
-      <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
-        <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:50px 40px;text-align:left;vertical-align:top;">
-              <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">Set Your Password</h2>
-              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 24px;">
-                Hi ${staffName || "there"}, you've been added to the Vierra team. Click the button below to set your password and log in. This link expires in 7 days.
-              </p>
-              <div style="margin-bottom:40px;text-align:center;">
-                <a href="${setPasswordLink}" style="display:inline-block;background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);color:#fff;font-weight:600;text-decoration:none;padding:10px 24px;border-radius:10px;font-size:14px;box-shadow:0 4px 15px rgba(122,19,208,0.3);">
-                  Set Password
-                </a>
-              </div>
-              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">Best Wishes,<br/>- The Vierra Team</p>
-              ${signedEmailFooterHtml}
-            </td>
-          </tr>
-        </table>
-      </div>
-    `,
-  };
-
-  try {
-    await deliver(mailOptions);
-    console.log(`Set password email sent to ${staffEmail}`);
-  } catch (error) {
-    console.error(`Error sending set password email to ${staffEmail}:`, error);
-    throw error;
-  }
-}
-
 export async function sendPasswordResetEmail(email: string, name: string, resetLink: string): Promise<void> {
   const mailOptions = {
     from: fromAddress,

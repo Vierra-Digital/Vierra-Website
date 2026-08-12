@@ -1,0 +1,46 @@
+name: CI
+
+# Node/Next equivalent of rena-control's python-checks: the code-quality gate that runs on every
+# PR. Type-check + lint + unit tests are deterministic and need no env/DB. The production `next
+# build` is intentionally NOT run here — Netlify builds on deploy with real env, so duplicating it
+# would only add flakiness.
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    # Dummy value so `prisma generate` never trips on an unset env("DATABASE_URL"); nothing here
+    # connects to a database.
+    env:
+      DATABASE_URL: "postgresql://user:pass@localhost:5432/db"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npx next lint
+
+      - name: Unit tests + coverage
+        run: npm run test:coverage

@@ -9,7 +9,7 @@ import type { Prisma } from "@prisma/client";
  */
 
 /** How far ahead a send may be scheduled. */
-export const MAX_SCHEDULE_DAYS = 60;
+const MAX_SCHEDULE_DAYS = 60;
 /** How many delivery attempts before a queued send is marked FAILED. */
 const MAX_ATTEMPTS = 3;
 /** Safety cap on how many due messages one dispatch tick processes. */
