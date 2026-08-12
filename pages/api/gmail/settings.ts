@@ -8,7 +8,7 @@ function serializeSettings(s: {
   click_tracking_enabled: boolean; vacation_responder_enabled: boolean; vacation_subject: string | null;
   vacation_body_html: string | null; vacation_body_text: string | null; vacation_start_at: Date | null;
   vacation_end_at: Date | null; vacation_reply_frequency_hours: number; reply_notifications_enabled: boolean;
-  created_at: Date; updated_at: Date;
+  default_read_receipt: boolean; created_at: Date; updated_at: Date;
 }) {
   return {
     id: s.id,
@@ -24,6 +24,7 @@ function serializeSettings(s: {
     vacationEndAt: s.vacation_end_at,
     vacationReplyFrequencyHours: s.vacation_reply_frequency_hours,
     replyNotificationsEnabled: s.reply_notifications_enabled,
+    defaultReadReceipt: s.default_read_receipt,
     createdAt: s.created_at,
     updatedAt: s.updated_at,
   };
@@ -63,6 +64,7 @@ export default withAuth(async (req, res, session) => {
             vacationEndAt: null,
             vacationReplyFrequencyHours: 24,
             replyNotificationsEnabled: true,
+            defaultReadReceipt: false,
           },
     });
     return;
@@ -86,6 +88,7 @@ export default withAuth(async (req, res, session) => {
       vacation_end_at: req.body?.vacationEndAt ? new Date(req.body.vacationEndAt) : null,
       vacation_reply_frequency_hours: vacationReplyFrequencyHours,
       reply_notifications_enabled: Boolean(req.body?.replyNotificationsEnabled ?? true),
+      default_read_receipt: Boolean(req.body?.defaultReadReceipt),
     };
     const updated = await prisma.emailAccountSetting.upsert({
       where: { user_id_account_email: { user_id: userId, account_email: accountEmail } },

@@ -34,6 +34,8 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
   const [data, setData] = useState<StatsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Analytics window in days (0 = all time). The stats API supports a `from` filter; expose it.
+  const [rangeDays, setRangeDays] = useState(30);
   type ReportingSummary = {
     campaigns: number;
     activeCampaigns: number;
@@ -50,7 +52,14 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
     let cancelled = false;
     setLoading(true);
     setError("");
-    fetch("/api/gmail/tracking/stats", { cache: "no-store" })
+    const params = new URLSearchParams();
+    if (rangeDays > 0) {
+      const from = new Date();
+      from.setDate(from.getDate() - rangeDays);
+      params.set("from", from.toISOString());
+    }
+    const qs = params.toString();
+    fetch(`/api/gmail/tracking/stats${qs ? `?${qs}` : ""}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((payload) => {
         if (cancelled) return;
@@ -72,7 +81,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
     return () => {
       cancelled = true;
     };
-  }, [accountsKey]);
+  }, [accountsKey, rangeDays]);
 
   useEffect(() => {
     let cancelled = false;
@@ -168,6 +177,24 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
         <div>
           <h1 className="text-[22px] font-semibold tracking-tight text-[#1E1B2E]">Email Analytics</h1>
           <p className="text-xs text-[#847FA0] mt-0.5">Outbound performance — measures mail you send, not mail you receive.</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1 rounded-lg border border-[#EBEAF0] bg-white p-0.5">
+          {[
+            { label: "30d", days: 30 },
+            { label: "90d", days: 90 },
+            { label: "All", days: 0 },
+          ].map((opt) => (
+            <button
+              key={opt.label}
+              type="button"
+              onClick={() => setRangeDays(opt.days)}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                rangeDays === opt.days ? "bg-[#701CC0] text-white" : "text-[#6B7280] hover:bg-[#F4F1FA]"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
       </div>
 

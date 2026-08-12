@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { asToken, hashIp, isLikelySelfPreview, isPrefetchOpen, trackingClientIp } from "@/lib/api/emailTracking";
+import { bumpCampaignStat } from "@/lib/campaigns/campaignStats";
 
 function normalizeTarget(url: string) {
   if (!url) return "";
@@ -20,7 +21,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     select: {
       id: true,
       original_url: true,
-      email_outbound_messages: { select: { id: true, tracking_enabled: true, created_at: true } },
+      email_outbound_messages: { select: { id: true, tracking_enabled: true, created_at: true, campaign_id: true } },
     },
   });
 
@@ -38,6 +39,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // click stats — mirroring the open-pixel prefetch guard (stats count only "CLICK").
       const msSinceSend = Date.now() - link.email_outbound_messages.created_at.getTime();
       const eventType = isPrefetchOpen(userAgent, msSinceSend) ? "CLICK_PREFETCH" : "CLICK";
+      const campaignId = link.email_outbound_messages.campaign_id;
+      // Detect the first real click of this message BEFORE inserting the current event, so a
+      // campaign's click stat counts unique messages clicked (not every link/reload).
+      const priorClick =
+        eventType === "CLICK" && campaignId
+          ? await prisma.emailTrackingEvent.findFirst({
+              where: { outbound_message_id: link.email_outbound_messages.id, event_type: "CLICK" },
+              select: { id: true },
+            })
+          : null;
       await prisma.emailTrackingEvent.create({
         data: {
           outbound_message_id: link.email_outbound_messages.id,
@@ -48,6 +59,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           user_agent: userAgent,
         },
       });
+      // Roll the first unique click of a campaign message up into its daily stats.
+      if (eventType === "CLICK" && campaignId && !priorClick) {
+        await bumpCampaignStat(campaignId, "clicks");
+      }
     } catch {
       /* swallow — still redirect below */
     }

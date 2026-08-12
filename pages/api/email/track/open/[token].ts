@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { asToken, hashIp, isLikelySelfPreview, isPrefetchOpen, trackingClientIp } from "@/lib/api/emailTracking";
+import { bumpCampaignStat } from "@/lib/campaigns/campaignStats";
 
 function normalizeOpenToken(value: string) {
   return value.trim().replace(/\.gif$/i, "");
@@ -17,7 +18,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
    if (token) {
     const outbound = await prisma.emailOutboundMessage.findFirst({
       where: { open_token: token, tracking_enabled: true },
-      select: { id: true, created_at: true },
+      select: { id: true, created_at: true, campaign_id: true },
     });
     if (outbound) {
       const userAgent = String(req.headers["user-agent"] || "").slice(0, 512) || null;
@@ -47,6 +48,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         select: { id: true },
       });
       if (!recentDuplicate) {
+        // Detect the first real open of this message BEFORE inserting the current event, so a
+        // campaign's open stat counts unique messages opened (not every reload).
+        const priorOpen =
+          eventType === "OPEN" && outbound.campaign_id
+            ? await prisma.emailTrackingEvent.findFirst({
+                where: { outbound_message_id: outbound.id, event_type: "OPEN" },
+                select: { id: true },
+              })
+            : null;
         await prisma.emailTrackingEvent.create({
           data: {
             outbound_message_id: outbound.id,
@@ -56,6 +66,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             user_agent: userAgent,
           },
         });
+        // Roll the first unique open of a campaign message up into its daily stats.
+        if (eventType === "OPEN" && outbound.campaign_id && !priorOpen) {
+          await bumpCampaignStat(outbound.campaign_id, "opens");
+        }
       }
     }
    }

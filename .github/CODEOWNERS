@@ -1,0 +1,7 @@
+# CODEOWNERS for Vierra-Website
+#
+# NOTE: update the team slug below to a team that exists in the Vierra-Digital org
+# (or replace with individual handles, e.g. @Alex-Shick). A CODEOWNERS entry pointing
+# at a non-existent team makes "Require review from Code Owners" unsatisfiable.
+
+* @Vierra-Digital/engineering
