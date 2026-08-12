@@ -1346,6 +1346,7 @@ model CampaignContact {
   bookings            Booking[]
 
   @@map("campaign_contacts")
+  @@schema("public")
 }
 
 model CampaignStepSend {
@@ -1429,6 +1430,7 @@ model SmartleadWebhookEvent {
   received_at           DateTime @default(now()) @db.Timestamptz(6)
 
   @@map("smartlead_webhook_events")
+  @@schema("public")
 }
 
 // Dedup log for the Brevo webhook receiver. Unlike Smartlead's X-Request-Id, Brevo's payload has
@@ -1441,6 +1443,7 @@ model BrevoWebhookEvent {
   received_at DateTime @default(now()) @db.Timestamptz(6)
 
   @@map("brevo_webhook_events")
+  @@schema("public")
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
