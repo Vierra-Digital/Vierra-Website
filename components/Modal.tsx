@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { EMAIL_REGEX } from "@/lib/utils";
 import { track } from "@/lib/track";
 import { bricolage, inter } from "@/lib/fonts";
 import { motion, AnimatePresence } from "framer-motion";
@@ -126,7 +127,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
     setFormData((prev) => ({ ...prev, desiredRevenue: formatted }));
   };
 
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim());
+  const emailValid = EMAIL_REGEX.test(formData.email.trim());
   const phoneValid = formData.phoneNumber.replace(/\D/g, "").length === 10;
   const websiteValid = /^(https?:\/\/)?([\w-]+\.)+[a-zA-Z]{2,}$/.test(formData.website.trim());
   const desiredValid = /^\$?\d[\d,]*(\+)?$/.test(formData.desiredRevenue.trim());

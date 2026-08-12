@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { EMAIL_REGEX } from "@/lib/utils";
 import { withAuth } from "@/lib/api/withAuth";
 import { parseContactsCsvWithValidation } from "@/lib/contacts/csv";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
@@ -38,7 +39,6 @@ function parseTagList(input: string) {
     .filter(Boolean);
 }
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const WEBSITE_REGEX = /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:\/[^\s]*)?$/i;
 
 function hasLiteralNull(value: string) {

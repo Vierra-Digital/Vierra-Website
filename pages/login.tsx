@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { EMAIL_REGEX } from "@/lib/utils";
 import Image from "next/image";
 import Head from "next/head";
 import { inter } from "@/lib/fonts";
@@ -74,7 +75,7 @@ const LoginPage = () => {
 
   // Email validity — same rule the public modals use, surfaced inline as the
   // user types. Note: this does NOT gate the submit button.
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const emailValid = EMAIL_REGEX.test(email.trim());
   const showEmailError = email.length > 0 && !emailValid;
 
   // Post-login destination override (e.g. a deep link from a Discord alert). Only internal
