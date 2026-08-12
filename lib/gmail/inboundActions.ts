@@ -299,12 +299,11 @@ export async function maybeNotifyDiscord(msg: InboundMessage): Promise<void> {
       ? `${base}/panel/email?accounts=${encodeURIComponent(msg.accountEmail)}&thread=${encodeURIComponent(msg.threadId)}`
       : undefined;
   await notifyDiscordEmbed({
-    author: { name: `📬 Reply from ${(msg.from || msg.fromEmail).slice(0, 240)}` },
+    author: { name: `Reply From ${(msg.from || msg.fromEmail).slice(0, 240)}` },
     title: (msg.subject || "(no subject)").slice(0, 250),
     ...(threadUrl ? { url: threadUrl } : {}),
     description: msg.snippet.slice(0, 500) || undefined,
     color: 0x701cc0, // Vierra purple
     fields: [{ name: "Inbox", value: msg.accountEmail, inline: true }],
-    footer: { text: "Vierra — reply in the panel" },
   });
 }
