@@ -20,12 +20,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     process.env.LINKEDIN_REDIRECT_URI!;
   const redirectUri = isSettingsSource ? `${resolveRuntimeBaseUrl(req)}/api/linkedin/callback` : envRedirectUri;
   const scopes = mode === "company" ? [...BASIC_SCOPES, ...COMPANY_SCOPES] : BASIC_SCOPES;
-  if (onboardingSessionId) {
-    const sess = await prisma.onboardingSession.findUnique({ where: { id: onboardingSessionId } });
-    if (!sess) { res.status(400).send("Invalid onboarding session"); return; }
-    const state = isCompanyMode ? `company:${onboardingSessionId}` : onboardingSessionId;
-
-    const authUrl = "https://www.linkedin.com/oauth/v2/authorization?" + new URLSearchParams({
+  const buildAuthUrl = (state: string) =>
+    "https://www.linkedin.com/oauth/v2/authorization?" + new URLSearchParams({
       response_type: "code",
       client_id: clientId,
       redirect_uri: redirectUri,
@@ -33,7 +29,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       state,
     }).toString();
 
-    res.redirect(authUrl);
+  if (onboardingSessionId) {
+    const sess = await prisma.onboardingSession.findUnique({ where: { id: onboardingSessionId } });
+    if (!sess) { res.status(400).send("Invalid onboarding session"); return; }
+    const state = isCompanyMode ? `company:${onboardingSessionId}` : onboardingSessionId;
+    res.redirect(buildAuthUrl(state));
     return;
   }
   const session = await requireRole(req, res);
@@ -42,14 +42,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const baseState = issueOauthStateCookie(res, "li_oauth_state", "/api/linkedin/callback");
   setScopedOauthCookie(res, "li_oauth_redirect", redirectUri, "/api/linkedin/callback");
   const state = `${isCompanyMode ? "company:" : ""}${isSettingsSource ? "settings:" : ""}${baseState}`;
-
-  const authUrl = "https://www.linkedin.com/oauth/v2/authorization?" + new URLSearchParams({
-    response_type: "code",
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    scope: scopes.join(" "),
-    state,
-  }).toString();
-
-  res.redirect(authUrl);
+  res.redirect(buildAuthUrl(state));
 }
