@@ -4,6 +4,7 @@ import { asStr } from "@/lib/api/parsing";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { getBusy } from "@/lib/calendar/googleCalendar";
 import { computeSlots, DEFAULT_AVAILABILITY, type Availability } from "@/lib/booking/slots";
+import { getTeamBusyIntersection } from "@/lib/booking/teamAvailability";
 
 /** Public: available slots for a booking link over the next N days. No auth (invitee-facing). */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -11,7 +12,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(405).json({ message: "Method not allowed." });
     return;
   }
-  const slug = asStr(req.query.slug).trim();
+  const slug = asStr(req.query.id).trim();
   const link = await prisma.bookingLink.findUnique({ where: { slug } });
   if (!link || !link.active) {
     res.status(404).json({ message: "Booking link not found." });
@@ -23,8 +24,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const rangeStart = now;
   const rangeEnd = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000);
 
-  const token = await getValidGmailAccessToken(link.user_id, link.account_email);
-  const busy = token.ok ? await getBusy(token.accessToken, rangeStart.toISOString(), rangeEnd.toISOString()) : [];
+  const busy = link.company_id
+    ? await getTeamBusyIntersection(link.company_id, rangeStart.toISOString(), rangeEnd.toISOString())
+    : await (async () => {
+        const token = await getValidGmailAccessToken(link.user_id, link.account_email);
+        return token.ok ? getBusy(token.accessToken, rangeStart.toISOString(), rangeEnd.toISOString()) : [];
+      })();
 
   const availability = (link.availability as unknown as Availability) || DEFAULT_AVAILABILITY;
   const slots = computeSlots({

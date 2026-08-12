@@ -3,9 +3,14 @@ import { EMAIL_REGEX } from "@/lib/utils";
 import { prisma } from "@/lib/prisma";
 import { asStr } from "@/lib/api/parsing";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getBusy, createCalendarEvent, buildIcs, type BusyInterval } from "@/lib/calendar/googleCalendar";
+import { getBusy, createCalendarEvent, buildIcs, type BusyInterval, type CreatedCalendarEvent } from "@/lib/calendar/googleCalendar";
 import { computeSlots, DEFAULT_AVAILABILITY, type Availability } from "@/lib/booking/slots";
 import { sendEmailCore, escapeHtml } from "@/lib/gmail/sendCore";
+import { getValidZoomAccessTokenForUser } from "@/lib/zoom/tokens";
+import { getValidMsTeamsAccessTokenForUser } from "@/lib/msteams/tokens";
+import { createZoomMeeting } from "@/lib/calendar/zoomMeetings";
+import { createTeamsMeeting } from "@/lib/calendar/msTeamsMeetings";
+import { handleTeamSlotClaim } from "@/lib/booking/teamSlotClaim";
 
 // Anti-abuse throttle for the public (unauthenticated) booking endpoint. Keyed off the bookings
 // table (no new infra) — since only a successful booking creates a row, this directly caps the
@@ -30,7 +35,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(405).json({ message: "Method not allowed." });
     return;
   }
-  const slug = asStr(req.query.slug).trim();
+  const slug = asStr(req.query.id).trim();
   const link = await prisma.bookingLink.findUnique({ where: { slug } });
   if (!link || !link.active) {
     res.status(404).json({ message: "Booking link not found." });
@@ -41,6 +46,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const inviteeName = asStr(req.body?.inviteeName).trim();
   const inviteeEmail = asStr(req.body?.inviteeEmail).trim().toLowerCase();
   const notes = asStr(req.body?.notes).trim();
+  // Optional campaign-contact attribution — set when the booking link was inserted into a
+  // campaign email with a ?ref= tracking param (see components/PanelPages/EmailingPlatformSection.tsx
+  // and pages/book/[slug].tsx). Absent for plain shared booking-page links, which is fine.
+  const campaignContactId = asStr(req.body?.ref).trim();
   const start = new Date(startIso);
   if (Number.isNaN(start.getTime()) || start.getTime() <= Date.now()) {
     res.status(400).json({ message: "Pick a valid future time." });
@@ -73,6 +82,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const end = new Date(start.getTime() + link.duration_minutes * 60 * 1000);
+
+  // Team link (round-robin) — claim-queue flow, no single host to book against yet. Kept as a
+  // separate branch rather than threading through the solo logic below, since almost every step
+  // differs (team-wide availability, no meeting/calendar-event creation until claimed).
+  if (link.company_id) {
+    await handleTeamSlotClaim(req, res, link, { start, end, inviteeName, inviteeEmail, notes, campaignContactId });
+    return;
+  }
 
   const token = await getValidGmailAccessToken(link.user_id, link.account_email);
   if (!token.ok) {
@@ -138,6 +155,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         end_at: end,
         status: "confirmed",
         google_event_id: null,
+        provider: link.provider,
+        campaign_contact_id: campaignContactId || null,
       },
     });
   });
@@ -146,18 +165,64 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
 
+  // If this link uses Zoom/Teams, create the real meeting under the host's provider account
+  // FIRST so its join link can be embedded in the Google Calendar event we still write either
+  // way (free/busy blocking + the invite come from Calendar regardless of video provider — see
+  // DESIGN.md §14 deviations). Falls back to a plain Calendar event with no video link if the
+  // host's provider token is missing/invalid, same graceful-degradation shape as the existing
+  // "no calendar.events scope -> .ics only" fallback below.
+  let providerMeeting: { meetingId: string; joinUrl: string | null } | null = null;
+  if (link.provider === "zoom") {
+    const zoomToken = await getValidZoomAccessTokenForUser(link.user_id);
+    if (zoomToken.ok) {
+      providerMeeting = await createZoomMeeting(zoomToken.accessToken, {
+        topic: summary,
+        startIso: start.toISOString(),
+        durationMinutes: link.duration_minutes,
+        timezone: link.timezone || "UTC",
+      });
+    }
+  } else if (link.provider === "microsoft_teams") {
+    const teamsToken = await getValidMsTeamsAccessTokenForUser(link.user_id);
+    if (teamsToken.ok) {
+      providerMeeting = await createTeamsMeeting(teamsToken.accessToken, {
+        subject: summary,
+        startIso: start.toISOString(),
+        endIso: end.toISOString(),
+      });
+    }
+  }
+
   // Now create the calendar event (may be null if the host lacks calendar.events scope) and
-  // backfill its id. Kept outside the transaction so a slow Google call never holds the lock.
-  const eventId = await createCalendarEvent(token.accessToken, {
+  // backfill its id + join URL/code. Kept outside the transaction so a slow Google call never
+  // holds the lock. Google Meet auto-provisions its own link; Zoom/Teams pass their real join
+  // URL through as the event location instead.
+  const created: CreatedCalendarEvent | null = await createCalendarEvent(token.accessToken, {
     summary,
     description,
     startIso: start.toISOString(),
     endIso: end.toISOString(),
     timezone: link.timezone || "UTC",
     attendees: [inviteeEmail, link.account_email],
+    createConferenceLink: link.provider === "google_meet",
+    location: providerMeeting?.joinUrl || undefined,
   });
-  if (eventId) {
-    await prisma.booking.update({ where: { id: booking.id }, data: { google_event_id: eventId } });
+  const finalProviderMeetingId = providerMeeting?.meetingId ?? created?.meetingCode ?? null;
+  const finalJoinUrl = providerMeeting?.joinUrl ?? created?.joinUrl ?? null;
+  if (created || providerMeeting) {
+    await prisma.booking.update({
+      where: { id: booking.id },
+      data: { google_event_id: created?.eventId || null, provider_meeting_id: finalProviderMeetingId, meeting_join_url: finalJoinUrl },
+    });
+  }
+
+  // Best-effort: attribute this booking to a campaign contact and bump NoResponse -> FollowUp,
+  // same signal the old click-tracked landing page used ("they showed interest"). Never blocks
+  // the booking itself — a bad/stale ref shouldn't break confirmation.
+  if (campaignContactId) {
+    await prisma.campaignContact
+      .updateMany({ where: { id: campaignContactId, lead_status: "no_response" }, data: { lead_status: "follow_up" } })
+      .catch(() => {});
   }
 
   // Confirmation email to the invitee (with an .ics so it works even without a Calendar event).
@@ -178,8 +243,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const safeEmail = escapeHtml(inviteeEmail);
   const safeNotes = escapeHtml(notes);
   const safeTitle = escapeHtml(link.title);
-  const confirmationHtml = `<p>Hi ${safeName},</p><p>Your meeting <strong>${safeTitle}</strong> is confirmed for <strong>${when} (${link.timezone || "UTC"})</strong>.</p>${notes ? `<p>Your notes: ${safeNotes}</p>` : ""}<p>See you then!</p>`;
-  const attachments = [{ filename: "invite.ics", contentType: "text/calendar", contentBase64: Buffer.from(ics, "utf8").toString("base64") }];
+  // Surface the join link directly in our own email too — don't rely solely on Google's native
+  // calendar-invite email as the only place it ever appears (that invite also may not arrive if
+  // the invitee's mail client hides calendar invites, or if the host lacked calendar.events scope).
+  const joinLinkHtml = finalJoinUrl ? `<p>Join link: <a href="${escapeHtml(finalJoinUrl)}">${escapeHtml(finalJoinUrl)}</a></p>` : "";
+  const manageUrl = `${baseUrl(req)}/manage/${booking.id}`;
+  const confirmationHtml = `<p>Hi ${safeName},</p><p>Your meeting <strong>${safeTitle}</strong> is confirmed for <strong>${when} (${link.timezone || "UTC"})</strong>.</p>${joinLinkHtml}${notes ? `<p>Your notes: ${safeNotes}</p>` : ""}<p>See you then!</p><p><a href="${escapeHtml(manageUrl)}">Need to reschedule or cancel?</a></p>`;
+  // Only attach our own .ics when there's no real Calendar event: createCalendarEvent's
+  // sendUpdates=all already makes Google send the invitee (and host) a native calendar invite
+  // in that case, so attaching a second, separately-built .ics (different UID) on top would
+  // hand them two invites for the same meeting — most calendar clients add that as two separate
+  // events rather than recognizing them as one.
+  const attachments = created
+    ? undefined
+    : [{ filename: "invite.ics", contentType: "text/calendar", contentBase64: Buffer.from(ics, "utf8").toString("base64") }];
 
   await sendEmailCore(
     link.user_id,
@@ -188,7 +265,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   ).catch(() => null);
 
   // If no Calendar event was created (host lacks calendar.events scope), notify the host too.
-  if (!eventId) {
+  if (!created) {
     await sendEmailCore(
       link.user_id,
       {

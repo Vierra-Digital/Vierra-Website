@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
 
@@ -8,6 +9,8 @@ interface PersistTokenInput {
   /** Raw refresh token, if the provider returned one. */
   refreshToken?: string | null;
   expiresAt?: Date | null;
+  /** Per-connection flags (Workspace detection, attendance-report availability, etc). Replaces any existing value. */
+  meta?: Record<string, unknown> | null;
 }
 
 /**
@@ -22,6 +25,9 @@ export async function persistPlatformToken(userId: string, input: PersistTokenIn
     access_token,
     ...(refresh_token && { refresh_token }),
     ...(input.expiresAt && { expires_at: input.expiresAt }),
+    // Prisma's nullable Json fields require the Prisma.JsonNull sentinel to write SQL NULL —
+    // a raw `null` here is ambiguous with "field not provided" and isn't a valid Json input.
+    ...(input.meta !== undefined && { meta: (input.meta === null ? Prisma.JsonNull : (input.meta as Prisma.InputJsonValue)) }),
   };
   await prisma.platformToken.upsert({
     where: { user_id_platform: { user_id: userId, platform: input.platform } },

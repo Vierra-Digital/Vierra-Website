@@ -416,7 +416,7 @@ export default function OnboardingStartPage({ initialStep }: { initialStep: Step
                   >
                     {imagePreview ? (
                       <>
-                        <img src={imagePreview} alt="Preview" className="h-full w-full object-cover" />
+                        <Image src={imagePreview} alt="Preview" fill className="object-cover" />
                         <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Camera size={22} className="text-white" />
                         </div>

@@ -14,6 +14,10 @@ const SCOPES = [
   // Create booking events on the host's calendar. Accounts connected before this scope
   // was added keep read-only; the meeting booker falls back to emailed .ics invites for them.
   "https://www.googleapis.com/auth/calendar.events",
+  // Read Meet attendance reports for bookings made through this account. Workspace-only —
+  // personal Gmail accounts are granted the scope but the API 403s for them at call time;
+  // lib/calendar/googleMeet.ts treats that as "no attendance data available", not an error.
+  "https://www.googleapis.com/auth/meetings.space.readonly",
 ];
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
