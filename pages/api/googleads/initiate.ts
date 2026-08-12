@@ -10,12 +10,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const clientId   = process.env.GOOGLEADS_CLIENT_ID!;
   const redirectUri = process.env.GOOGLEADS_REDIRECT_URI!;
-  const onboardingSessionId = asStr(req.query.session);
-  if (onboardingSessionId) {
-    const sess = await prisma.onboardingSession.findUnique({ where: { id: onboardingSessionId } });
-    if (!sess) { res.status(400).send("Invalid onboarding session"); return; }
-
-    const authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" + new URLSearchParams({
+  const buildAuthUrl = (state: string) =>
+    "https://accounts.google.com/o/oauth2/v2/auth?" + new URLSearchParams({
       client_id: clientId,
       response_type: "code",
       redirect_uri: redirectUri,
@@ -23,27 +19,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       access_type: "offline",
       include_granted_scopes: "true",
       prompt: "consent",
-      state: onboardingSessionId,
+      state,
     }).toString();
 
-    res.redirect(authUrl);
+  const onboardingSessionId = asStr(req.query.session);
+  if (onboardingSessionId) {
+    const sess = await prisma.onboardingSession.findUnique({ where: { id: onboardingSessionId } });
+    if (!sess) { res.status(400).send("Invalid onboarding session"); return; }
+    res.redirect(buildAuthUrl(onboardingSessionId));
     return;
   }
   const session = await requireRole(req, res);
   if (!session) return;
 
   const state = issueOauthStateCookie(res, "ga_oauth_state", "/api/googleads/callback");
-
-  const authUrl = "https://accounts.google.com/o/oauth2/v2/auth?" + new URLSearchParams({
-    client_id: clientId,
-    response_type: "code",
-    redirect_uri: redirectUri,
-    scope: SCOPES.join(" "),
-    access_type: "offline",
-    include_granted_scopes: "true",
-    prompt: "consent",
-    state,
-  }).toString();
-
-  res.redirect(authUrl);
+  res.redirect(buildAuthUrl(state));
 }

@@ -9,26 +9,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const clientId = process.env.FACEBOOK_CLIENT_ID!;
   const redirectUri = process.env.FACEBOOK_REDIRECT_URI!;
   const scope = "public_profile,pages_manage_posts";
-  const onboardingSessionId = asStr(req.query.session);
-  if (onboardingSessionId) {
-    const sess = await prisma.onboardingSession.findUnique({ where: { id: onboardingSessionId } });
-    if (!sess) return res.status(400).send("Invalid onboarding session");
-
-    const authUrl =
-      `https://www.facebook.com/v23.0/dialog/oauth?` +
-      `client_id=${encodeURIComponent(clientId)}` +
-      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
-      `&response_type=code` +
-      `&scope=${encodeURIComponent(scope)}` +
-      `&state=${encodeURIComponent(onboardingSessionId)}`;
-
-    return res.redirect(authUrl);
-  }
-  const session = await requireRole(req, res);
-  if (!session) return;
-  const state = issueOauthStateCookie(res, "fb_oauth_state", "/api/facebook/callback");
-
-  const authUrl =
+  const buildAuthUrl = (state: string) =>
     `https://www.facebook.com/v23.0/dialog/oauth?` +
     `client_id=${encodeURIComponent(clientId)}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
@@ -36,5 +17,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     `&scope=${encodeURIComponent(scope)}` +
     `&state=${encodeURIComponent(state)}`;
 
-  return res.redirect(authUrl);
+  const onboardingSessionId = asStr(req.query.session);
+  if (onboardingSessionId) {
+    const sess = await prisma.onboardingSession.findUnique({ where: { id: onboardingSessionId } });
+    if (!sess) return res.status(400).send("Invalid onboarding session");
+    return res.redirect(buildAuthUrl(onboardingSessionId));
+  }
+  const session = await requireRole(req, res);
+  if (!session) return;
+  const state = issueOauthStateCookie(res, "fb_oauth_state", "/api/facebook/callback");
+  return res.redirect(buildAuthUrl(state));
 }

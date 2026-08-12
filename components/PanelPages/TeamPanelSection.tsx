@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { FiSearch, FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck } from "react-icons/fi";
 import Image from "next/image";
 import ProfileImage from "../ProfileImage";
@@ -8,6 +8,8 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import Modal from "@/components/ui/Modal";
 
+/** Strict email-shape check shared by the team invite/edit modals below. */
+const isValidEmail = (value: string) => /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(value);
 
 const StaffActionsMenu: React.FC<{
     staffId: string
@@ -214,7 +216,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         }
     }
 
-    const loadTeamData = async () => {
+    const loadTeamData = useCallback(async () => {
         setLoading(true)
         try {
             try {
@@ -276,7 +278,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         } finally {
         setLoading(false)
         }
-    }
+    }, [userRole])
 
     const applyFiltersAndSort = useMemo(() => {
         const filtered = rows.filter(row => {
@@ -347,7 +349,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
     useEffect(() => {
         loadTeamData()
-    }, [])
+    }, [loadTeamData])
 
     const columns = useMemo(() => {
         const baseColumns = [
@@ -725,8 +727,6 @@ const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void
     const [error, setError] = useState("")
     const [showSuccess, setShowSuccess] = useState(false)
 
-    const isValidEmail = (value: string) => /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(value)
-
     const submit = async () => {
         setSubmitting(true)
         setError("")
@@ -877,11 +877,6 @@ const ManageStaffModal: React.FC<{
 
     const handleInputChange = (field: string, value: string) => {
         setFormData(prev => ({ ...prev, [field]: value }))
-    }
-
-    const isValidEmail = (email: string) => {
-        const emailRegex = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i
-        return emailRegex.test(email)
     }
 
     const hasValidEmails = () => {

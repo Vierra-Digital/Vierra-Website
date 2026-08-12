@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { EMAIL_REGEX } from "@/lib/utils";
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import type { GetServerSideProps } from 'next';
@@ -159,7 +160,7 @@ const SignDocumentPage: React.FC = () => {
   };
 
   const validateEmail = (email: string): boolean => {
-    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const regex = EMAIL_REGEX;
     return regex.test(email);
   };
 

@@ -47,6 +47,30 @@ export function issueOauthStateCookie(res: NextApiResponse, cookieName: string, 
   return state;
 }
 
+/**
+ * Append a short-lived, callback-scoped OAuth cookie (redirect target, reconnect account,
+ * source, etc.). Uses appendSetCookie so it composes with the state cookie and other scoped
+ * cookies set on the same response. Same hardening as issueOauthStateCookie.
+ */
+export function setScopedOauthCookie(
+  res: NextApiResponse,
+  name: string,
+  value: string,
+  callbackPath: string,
+  maxAgeSec = 10 * 60
+) {
+  appendSetCookie(
+    res,
+    serializeCookie(name, value, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: callbackPath,
+      maxAge: maxAgeSec,
+    })
+  );
+}
+
 export function clearOauthStateCookie(res: NextApiResponse, cookieName: string, callbackPath: string) {
   res.setHeader(
     "Set-Cookie",

@@ -24,32 +24,79 @@ export async function getBusy(accessToken: string, timeMin: string, timeMax: str
   }
 }
 
+export type CreatedCalendarEvent = {
+  eventId: string;
+  /** Google Meet join URL, if conferenceData provisioning succeeded. */
+  joinUrl: string | null;
+  /** The Meet space's short meeting code (e.g. "abc-defg-hij") — used to look up attendance via lib/calendar/googleMeet.ts. Null for non-Meet conferencing or if provisioning failed. */
+  meetingCode: string | null;
+};
+
 /**
- * Create an event on the host's primary calendar (with a Meet link). Returns the event id,
- * or null if the account lacks calendar.events scope (403) — the caller then sends an .ics.
+ * Create an event on the host's primary calendar (with a Meet link). Returns the event id
+ * plus the Meet join URL/code, or null if the account lacks calendar.events scope (403) —
+ * the caller then sends an .ics.
  */
 export async function createCalendarEvent(
   accessToken: string,
-  opts: { summary: string; description: string; startIso: string; endIso: string; timezone: string; attendees: string[] }
-): Promise<string | null> {
+  opts: {
+    summary: string;
+    description: string;
+    startIso: string;
+    endIso: string;
+    timezone: string;
+    attendees: string[];
+    /** Request Google Meet auto-provisioning. Off when the booking uses Zoom/Teams instead (Phase 2) — the real join link is passed via `location` in that case. */
+    createConferenceLink?: boolean;
+    location?: string;
+  }
+): Promise<CreatedCalendarEvent | null> {
+  const wantsConference = opts.createConferenceLink !== false;
   try {
-    const res = await fetch(`${CAL}/calendars/primary/events?sendUpdates=all&conferenceDataVersion=1`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        summary: opts.summary,
-        description: opts.description,
-        start: { dateTime: opts.startIso, timeZone: opts.timezone },
-        end: { dateTime: opts.endIso, timeZone: opts.timezone },
-        attendees: opts.attendees.map((email) => ({ email })),
-        conferenceData: { createRequest: { requestId: `vierra-${opts.startIso}` } },
-      }),
-    });
+    const res = await fetch(
+      `${CAL}/calendars/primary/events?sendUpdates=all${wantsConference ? "&conferenceDataVersion=1" : ""}`,
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          summary: opts.summary,
+          description: opts.description,
+          location: opts.location,
+          start: { dateTime: opts.startIso, timeZone: opts.timezone },
+          end: { dateTime: opts.endIso, timeZone: opts.timezone },
+          attendees: opts.attendees.map((email) => ({ email })),
+          ...(wantsConference ? { conferenceData: { createRequest: { requestId: `vierra-${opts.startIso}` } } } : {}),
+        }),
+      }
+    );
     if (!res.ok) return null;
-    const data = (await res.json().catch(() => ({}))) as { id?: string };
-    return typeof data?.id === "string" ? data.id : null;
+    const data = (await res.json().catch(() => ({}))) as {
+      id?: string;
+      hangoutLink?: string;
+      conferenceData?: { conferenceId?: string; entryPoints?: Array<{ entryPointType?: string; uri?: string }> };
+    };
+    if (typeof data?.id !== "string") return null;
+    const videoEntry = data.conferenceData?.entryPoints?.find((e) => e.entryPointType === "video");
+    return {
+      eventId: data.id,
+      joinUrl: data.hangoutLink || videoEntry?.uri || null,
+      meetingCode: data.conferenceData?.conferenceId || null,
+    };
   } catch {
     return null;
+  }
+}
+
+/** Cancel a previously-created event (used on booking cancel/reassign). Best-effort — never throws. */
+export async function cancelCalendarEvent(accessToken: string, eventId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${CAL}/calendars/primary/events/${encodeURIComponent(eventId)}?sendUpdates=all`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return res.ok || res.status === 410; // 410 Gone = already deleted
+  } catch {
+    return false;
   }
 }
 

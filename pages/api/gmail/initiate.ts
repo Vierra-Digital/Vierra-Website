@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { requireRole } from "@/lib/auth";
-import { appendSetCookie, asStr, issueOauthStateCookie, resolveGoogleWebClientCredentials, resolveRuntimeBaseUrl } from "@/lib/api/oauth";
-import { serialize as serializeCookie } from "cookie";
+import { asStr, issueOauthStateCookie, resolveGoogleWebClientCredentials, resolveRuntimeBaseUrl, setScopedOauthCookie } from "@/lib/api/oauth";
 
 const SCOPES = [
   "openid",
@@ -15,6 +14,10 @@ const SCOPES = [
   // Create booking events on the host's calendar. Accounts connected before this scope
   // was added keep read-only; the meeting booker falls back to emailed .ics invites for them.
   "https://www.googleapis.com/auth/calendar.events",
+  // Read Meet attendance reports for bookings made through this account. Workspace-only —
+  // personal Gmail accounts are granted the scope but the API 403s for them at call time;
+  // lib/calendar/googleMeet.ts treats that as "no attendance data available", not an error.
+  "https://www.googleapis.com/auth/meetings.space.readonly",
 ];
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -37,36 +40,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const reconnectAccount = asStr(req.query.account)?.trim().toLowerCase() || "";
   const state = issueOauthStateCookie(res, "gm_oauth_state", "/api/gmail/callback");
 
-  appendSetCookie(
-    res,
-    serializeCookie("gm_oauth_redirect", redirectUri, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/api/gmail/callback",
-      maxAge: 10 * 60,
-    })
-  );
-  appendSetCookie(
-    res,
-    serializeCookie("gm_oauth_reconnect", reconnectAccount, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/api/gmail/callback",
-      maxAge: 10 * 60,
-    })
-  );
-  appendSetCookie(
-    res,
-    serializeCookie("gm_oauth_source", source, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/api/gmail/callback",
-      maxAge: 10 * 60,
-    })
-  );
+  setScopedOauthCookie(res, "gm_oauth_redirect", redirectUri, "/api/gmail/callback");
+  setScopedOauthCookie(res, "gm_oauth_reconnect", reconnectAccount, "/api/gmail/callback");
+  setScopedOauthCookie(res, "gm_oauth_source", source, "/api/gmail/callback");
   const authUrl =
     "https://accounts.google.com/o/oauth2/v2/auth?" +
     new URLSearchParams({
