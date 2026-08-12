@@ -1,8 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
-import { appendSetCookie, asStr, issueOauthStateCookie, resolveRuntimeBaseUrl } from "@/lib/api/oauth";
-import { serialize as serializeCookie } from "cookie";
+import { asStr, issueOauthStateCookie, resolveRuntimeBaseUrl, setScopedOauthCookie } from "@/lib/api/oauth";
 
 const BASIC_SCOPES = ["openid", "profile", "email", "w_member_social"];
 const COMPANY_SCOPES = ["r_organization_admin", "w_organization_social"];
@@ -41,16 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!session) return;
 
   const baseState = issueOauthStateCookie(res, "li_oauth_state", "/api/linkedin/callback");
-  appendSetCookie(
-    res,
-    serializeCookie("li_oauth_redirect", redirectUri, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/api/linkedin/callback",
-      maxAge: 10 * 60,
-    })
-  );
+  setScopedOauthCookie(res, "li_oauth_redirect", redirectUri, "/api/linkedin/callback");
   const state = `${isCompanyMode ? "company:" : ""}${isSettingsSource ? "settings:" : ""}${baseState}`;
 
   const authUrl = "https://www.linkedin.com/oauth/v2/authorization?" + new URLSearchParams({
