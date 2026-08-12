@@ -8,7 +8,7 @@ import { getOrCreateLabelId, modifyMessageLabels } from "@/lib/gmail/gmailApi";
  * EmailSnooze row. The inbound cron calls resurfaceDueSnoozes() to bring due ones back.
  */
 
-export const SNOOZE_LABEL = "Snoozed";
+const SNOOZE_LABEL = "Snoozed";
 
 export type SnoozeItem = { messageId: string; threadId?: string };
 
