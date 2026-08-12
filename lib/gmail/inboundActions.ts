@@ -3,7 +3,7 @@ import { modifyMessageLabels, getOrCreateLabelId, createGmailDraft } from "@/lib
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { sendEmailCore } from "@/lib/gmail/sendCore";
 import { artemisGenerate, artemisConfigured } from "@/lib/ai/artemis";
-import { notifyDiscord, discordConfigured } from "@/lib/notify/discord";
+import { notifyDiscordEmbed, discordConfigured } from "@/lib/notify/discord";
 import type { InboundMessage, InboundContext } from "@/lib/gmail/inboundTypes";
 
 /** True for automated/bulk mail we must never auto-reply to (prevents mail loops). */
@@ -292,14 +292,19 @@ export async function maybeNotifyDiscord(msg: InboundMessage): Promise<void> {
   });
   if (setting && !setting.reply_notifications_enabled) return;
   const base = (process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "").replace(/\/$/, "");
-  // Deep link into the panel: opens this mailbox and the full conversation so you can respond
-  // right there. If logged out, login bounces back here via ?returnTo.
-  const link =
+  // Deep link into the panel: the embed title links straight to this mailbox + conversation so you
+  // can respond right there. If logged out, login bounces back here via ?returnTo.
+  const threadUrl =
     base && msg.threadId
-      ? `\n🔗 Reply in Vierra: ${base}/panel/email?accounts=${encodeURIComponent(msg.accountEmail)}&thread=${encodeURIComponent(msg.threadId)}`
-      : "";
-  await notifyDiscord(
-    `📬 **Reply** from ${msg.from || msg.fromEmail} → ${msg.accountEmail}\n` +
-      `**${msg.subject || "(no subject)"}**\n${msg.snippet.slice(0, 240)}${link}`
-  );
+      ? `${base}/panel/email?accounts=${encodeURIComponent(msg.accountEmail)}&thread=${encodeURIComponent(msg.threadId)}`
+      : undefined;
+  await notifyDiscordEmbed({
+    author: { name: `📬 Reply from ${(msg.from || msg.fromEmail).slice(0, 240)}` },
+    title: (msg.subject || "(no subject)").slice(0, 250),
+    ...(threadUrl ? { url: threadUrl } : {}),
+    description: msg.snippet.slice(0, 500) || undefined,
+    color: 0x701cc0, // Vierra purple
+    fields: [{ name: "Inbox", value: msg.accountEmail, inline: true }],
+    footer: { text: "Vierra — reply in the panel" },
+  });
 }
