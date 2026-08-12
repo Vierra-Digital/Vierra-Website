@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { EMAIL_REGEX } from "@/lib/utils";
 import { inter } from "@/lib/fonts";
 import { FiUser, FiCheck } from 'react-icons/fi'
 import type { SessionItem } from "@/types/session";
@@ -43,7 +44,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
     setClientData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientData.clientEmail.trim());
+  const emailValid = EMAIL_REGEX.test(clientData.clientEmail.trim());
 
   const nextStep = () => setStep((s) => s + 1);
   const prevStep = () => setStep((s) => Math.max(1, s - 1));

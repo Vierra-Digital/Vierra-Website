@@ -50,6 +50,71 @@ async function deliver(options: DeliverOptions): Promise<void> {
   await transporter.sendMail({ from: fromAddress, ...options });
 }
 
+function ensurePdfExtension(name: string): string {
+  return name.toLowerCase().endsWith('.pdf') ? name : `${name}.pdf`;
+}
+
+function stripPdfExtension(name: string): string {
+  return name.replace(/\.pdf$/i, '');
+}
+
+// ---------------------------------------------------------------------------
+// Shared transactional-email chrome. Every send function renders the same
+// card shell (purple-gradient header + logo, white rounded card, social/legal
+// footer) and only supplies its own body. Keeping these in one place means the
+// branding lives in exactly one spot.
+// ---------------------------------------------------------------------------
+
+const emailHeaderRowHtml = `<tr>
+            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
+              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
+            </td>
+          </tr>`;
+
+const signedEmailFooterHtml = `
+  <div style="margin:40px 0 30px;text-align:center;">
+    <a href="https://www.LinkedIn.com/company/Vierra" style="margin:0 12px;display:inline-block;">
+      <img src="https://vierradev.com/assets/Socials/LinkedIn.png" alt="LinkedIn" style="width:32px;height:32px;">
+    </a>
+    <a href="https://www.instagram.com/vierra.dev" style="margin:0 12px;display:inline-block;">
+      <img src="https://vierradev.com/assets/Socials/Instagram.png" alt="Instagram" style="width:32px;height:32px;">
+    </a>
+    <a href="https://www.facebook.com/vierradigital" style="margin:0 12px;display:inline-block;">
+      <img src="https://vierradev.com/assets/Socials/Facebook.png" alt="Facebook" style="width:32px;height:32px;">
+    </a>
+  </div>
+  <div style="color:#999;font-size:14px;margin-top:30px;padding-top:20px;border-top:1px solid #eee;text-align:center;">
+    Copyright &copy; ${new Date().getFullYear()} <a href="https://vierradev.com" style="color:#7A13D0;text-decoration:none;font-weight:600;">Vierra Digital</a>. All rights reserved.<br/>
+    Email: <a href="mailto:alex@vierradev.com" style="color:#999;text-decoration:none;">alex@vierradev.com</a>
+  </div>
+`;
+
+/** Wrap a message body in the standard Vierra email card (header, card, footer). */
+function renderEmailShell(bodyHtml: string): string {
+  return `
+      <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
+        <table style="width:100%;max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+          ${emailHeaderRowHtml}
+          <tr>
+            <td style="padding:50px 40px;text-align:left;vertical-align:top;">
+              ${bodyHtml}
+              ${signedEmailFooterHtml}
+            </td>
+          </tr>
+        </table>
+      </div>
+    `;
+}
+
+/** The standard purple-gradient call-to-action button. */
+function ctaButton(href: string, label: string): string {
+  return `<div style="margin-bottom:40px;text-align:center;">
+                <a href="${href}" style="display:inline-block;background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);color:#fff;font-weight:600;text-decoration:none;padding:10px 24px;border-radius:10px;font-size:14px;box-shadow:0 4px 15px rgba(122,19,208,0.3);">
+                  ${label}
+                </a>
+              </div>`;
+}
+
 export async function sendEmail(data: EmailData): Promise<void> {
   const formattedPhoneNumber = data.phoneNumber.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
 
@@ -57,16 +122,7 @@ export async function sendEmail(data: EmailData): Promise<void> {
     from: fromAddress,
     to: recipients.join(","),
     subject: "Vierra | New Client Form Submission",
-    html: `
-      <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
-        <table style="width:100%;max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:50px 40px;text-align:left;vertical-align:top;">
+    html: renderEmailShell(`
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;text-align:left;">Audit Request</h2>
               <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 24px;text-align:left;">A new lead just submitted the free audit request form:</p>
               <table style="width:100%;border-collapse:collapse;margin:0 0 8px;">
@@ -94,13 +150,7 @@ export async function sendEmail(data: EmailData): Promise<void> {
                   <td style="padding:11px 0;color:#2e0a4f;font-weight:700;font-size:15px;">Desired Revenue</td>
                   <td style="padding:11px 0;color:#444;font-size:15px;">${data.desiredRevenue}</td>
                 </tr>
-              </table>
-              ${signedEmailFooterHtml}
-            </td>
-          </tr>
-        </table>
-      </div>
-    `,
+              </table>`),
   };
 
   try {
@@ -123,16 +173,7 @@ export async function sendAuditConfirmationEmail(data: Pick<EmailData, "fullName
     from: fromAddress,
     to: data.email,
     subject: "Vierra | Audit Request Claimed",
-    html: `
-      <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
-        <table style="width:100%;max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:50px 40px;text-align:left;vertical-align:top;">
+    html: renderEmailShell(`
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;text-align:left;">Your Audit Request Has Been Claimed</h2>
               <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 20px;text-align:left;">
                 Hi ${firstName}, congratulations! You have claimed your free business audit. Our team will be in touch within 24 hours to schedule your call.
@@ -140,42 +181,10 @@ export async function sendAuditConfirmationEmail(data: Pick<EmailData, "fullName
               <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;text-align:left;">
                 In the meantime, just reply to this email if there's anything you'd like us to know before we connect.
               </p>
-              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;text-align:left;">Best Wishes,<br/>- The Vierra Team</p>
-              ${signedEmailFooterHtml}
-            </td>
-          </tr>
-        </table>
-      </div>
-    `,
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;text-align:left;">Best Wishes,<br/>- The Vierra Team</p>`),
   };
   await deliver(mailOptions);
 }
-
-function ensurePdfExtension(name: string): string {
-  return name.toLowerCase().endsWith('.pdf') ? name : `${name}.pdf`;
-}
-
-function stripPdfExtension(name: string): string {
-  return name.replace(/\.pdf$/i, '');
-}
-
-const signedEmailFooterHtml = `
-  <div style="margin:40px 0 30px;text-align:center;">
-    <a href="https://www.LinkedIn.com/company/Vierra" style="margin:0 12px;display:inline-block;">
-      <img src="https://vierradev.com/assets/Socials/LinkedIn.png" alt="LinkedIn" style="width:32px;height:32px;">
-    </a>
-    <a href="https://www.instagram.com/vierra.dev" style="margin:0 12px;display:inline-block;">
-      <img src="https://vierradev.com/assets/Socials/Instagram.png" alt="Instagram" style="width:32px;height:32px;">
-    </a>
-    <a href="https://www.facebook.com/vierradigital" style="margin:0 12px;display:inline-block;">
-      <img src="https://vierradev.com/assets/Socials/Facebook.png" alt="Facebook" style="width:32px;height:32px;">
-    </a>
-  </div>
-  <div style="color:#999;font-size:14px;margin-top:30px;padding-top:20px;border-top:1px solid #eee;text-align:center;">
-    Copyright &copy; ${new Date().getFullYear()} <a href="https://vierradev.com" style="color:#7A13D0;text-decoration:none;font-weight:600;">Vierra Digital</a>. All rights reserved.<br/>
-    Email: <a href="mailto:alex@vierradev.com" style="color:#999;text-decoration:none;">alex@vierradev.com</a>
-  </div>
-`;
 
 export async function sendSignedDocumentEmail(documentName: string, attachment: Buffer): Promise<void> {
   const pdfFilename = ensurePdfExtension(documentName);
@@ -183,32 +192,13 @@ export async function sendSignedDocumentEmail(documentName: string, attachment: 
     from: fromAddress,
     to: recipients.join(","),
     subject: `Vierra | Signed Document: ${stripPdfExtension(documentName)}`,
-    html: `
-      <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
-        <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:50px 40px;text-align:left;vertical-align:top;">
+    html: renderEmailShell(`
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">Signed Document</h2>
               <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 24px;">
                 The document "${documentName}" has been signed. See the signed version attached.
               </p>
-              <div style="margin-bottom:40px;text-align:center;">
-                <a href="cid:signedPdf" style="display:inline-block;background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);color:#fff;font-weight:600;text-decoration:none;padding:10px 24px;border-radius:10px;font-size:14px;box-shadow:0 4px 15px rgba(122,19,208,0.3);">
-                  Download PDF
-                </a>
-              </div>
-              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">Best Wishes,<br/>- The Vierra Team</p>
-              ${signedEmailFooterHtml}
-            </td>
-          </tr>
-        </table>
-      </div>
-    `,
+              ${ctaButton("cid:signedPdf", "Download PDF")}
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">Best Wishes,<br/>- The Vierra Team</p>`),
     attachments: [
       {
         filename: pdfFilename,
@@ -233,32 +223,13 @@ export async function sendSignerCopyEmail(email: string, documentName: string, a
     from: fromAddress,
     to: email,
     subject: `Vierra | Signed Document: ${stripPdfExtension(documentName)}`,
-    html: `
-      <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
-        <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:50px 40px;text-align:left;vertical-align:top;">
+    html: renderEmailShell(`
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">Signed Document</h2>
               <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 24px;">
                 Thank you for signing "${documentName}" with Vierra. A copy is attached for your records.
               </p>
-              <div style="margin-bottom:40px;text-align:center;">
-                <a href="cid:signedPdf" style="display:inline-block;background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);color:#fff;font-weight:600;text-decoration:none;padding:10px 24px;border-radius:10px;font-size:14px;box-shadow:0 4px 15px rgba(122,19,208,0.3);">
-                  Download PDF
-                </a>
-              </div>
-              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">Best Wishes,<br/>- The Vierra Team</p>
-              ${signedEmailFooterHtml}
-            </td>
-          </tr>
-        </table>
-      </div>
-    `,
+              ${ctaButton("cid:signedPdf", "Download PDF")}
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">Best Wishes,<br/>- The Vierra Team</p>`),
     attachments: [
       {
         filename: pdfFilename,
@@ -283,32 +254,13 @@ export async function sendPasswordResetEmail(email: string, name: string, resetL
     from: fromAddress,
     to: email,
     subject: "Vierra | Reset Your Password",
-    html: `
-      <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
-        <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:50px 40px;text-align:left;vertical-align:top;">
+    html: renderEmailShell(`
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">Reset Your Password</h2>
               <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 24px;">
                 Hi ${name || "there"}, an admin requested a password reset for your Vierra account. Click the button below to set a new password. This link expires in 7 days.
               </p>
-              <div style="margin-bottom:40px;text-align:center;">
-                <a href="${resetLink}" style="display:inline-block;background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);color:#fff;font-weight:600;text-decoration:none;padding:10px 24px;border-radius:10px;font-size:14px;box-shadow:0 4px 15px rgba(122,19,208,0.3);">
-                  Reset Password
-                </a>
-              </div>
-              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">If you didn't request this, you can safely ignore this email.<br/>- The Vierra Team</p>
-              ${signedEmailFooterHtml}
-            </td>
-          </tr>
-        </table>
-      </div>
-    `,
+              ${ctaButton(resetLink, "Reset Password")}
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">If you didn't request this, you can safely ignore this email.<br/>- The Vierra Team</p>`),
   };
 
   try {
@@ -330,16 +282,7 @@ export async function sendClientOnboardingCompletedEmail(
     from: fromAddress,
     to: clientEmail,
     subject: "Vierra | Onboarding Complete",
-    html: `
-      <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
-        <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:50px 40px;text-align:left;vertical-align:top;">
+    html: renderEmailShell(`
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">Onboarding Complete</h2>
               <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 16px;">
                 Hi ${clientName || "there"}, your onboarding modules are complete. The Vierra team will process your information shortly. The next step in the process is to log onto your account! Click on the reset password button to set your password.
@@ -349,18 +292,8 @@ export async function sendClientOnboardingCompletedEmail(
                 <strong>Business Name:</strong> ${businessName || "N/A"}<br/>
                 <strong>Account Email:</strong> ${clientEmail}
               </p>
-              <div style="margin-bottom:40px;text-align:center;">
-                <a href="${setPasswordLink}" style="display:inline-block;background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);color:#fff;font-weight:600;text-decoration:none;padding:10px 24px;border-radius:10px;font-size:14px;box-shadow:0 4px 15px rgba(122,19,208,0.3);">
-                  Reset Password
-                </a>
-              </div>
-              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">Best Wishes,<br/>- The Vierra Team</p>
-              ${signedEmailFooterHtml}
-            </td>
-          </tr>
-        </table>
-      </div>
-    `,
+              ${ctaButton(setPasswordLink, "Reset Password")}
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">Best Wishes,<br/>- The Vierra Team</p>`),
   };
 
   try {

@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { EMAIL_REGEX } from "@/lib/utils";
 import { getJobRole } from "@/lib/careers";
 import {
   isCareersDriveConfigured,
@@ -17,7 +18,6 @@ const RATE_WINDOW_MS = 15 * 60 * 1000;
 // few MB at most. Files are streamed to Drive in chunks (see apply-chunk.ts), so
 // this no longer runs into the platform's ~6 MB function payload limit.
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB per file
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ALLOWED_EXT = ["pdf", "doc", "docx"];
 
 interface FileMeta {
