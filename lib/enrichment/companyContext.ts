@@ -11,12 +11,12 @@
 
 // A notable executive/founder, with a link to their LinkedIn profile (direct
 // when Wikidata has the handle, else a name search).
-export type KeyPerson = { name: string; role: string; url: string };
+type KeyPerson = { name: string; role: string; url: string };
 
 // Firmographics we can pull KEYLESSLY from the page's schema.org / JSON-LD.
 // (Verified funding amounts + website traffic need a paid provider like Harmonic
 // or SimilarWeb — not available without a key.)
-export type OrgProfile = {
+type OrgProfile = {
   industry: string | null;
   employees: string | null;
   founded: string | null;
@@ -29,7 +29,7 @@ export type OrgProfile = {
 
 // Global popularity rank from the Tranco research list (free, no key). Lower rank
 // = more popular. `history` is oldest->newest daily ranks for a small trend chart.
-export type Popularity = {
+type Popularity = {
   rank: number;
   previousRank: number | null; // ~30 days ago, for a trend delta
   history: { date: string; rank: number }[];
@@ -37,12 +37,12 @@ export type Popularity = {
 
 // Domain registration age — works for ANY domain (incl. tiny/new ones the
 // popularity lists don't cover), via free keyless RDAP.
-export type DomainAge = { registered: string; ageYears: number };
+type DomainAge = { registered: string; ageYears: number };
 
 // Open-roles snapshot from a company's public ATS board (Greenhouse/Lever/Ashby/
 // Workable/Recruitee/SmartRecruiters). Free + keyless. A strong buying-intent
 // signal: what they're hiring for = what they're investing in.
-export type Hiring = {
+type Hiring = {
   ats: string; // which ATS the data came from
   count: number; // total open roles
   url: string | null; // public careers/board URL
@@ -54,14 +54,14 @@ export type Hiring = {
 // (SiteWorthTraffic, derived from legacy Alexa-style rank models). No key needed,
 // but low accuracy — always labelled "Est." in the UI. There is no free source
 // for *measured* visit counts.
-export type Visits = { monthly: number; daily: number | null; source: string };
+type Visits = { monthly: number; daily: number | null; source: string };
 
 // Recent SEC filings — buying-intent events for US PUBLIC companies (keyless, needs
 // a User-Agent header). 8-K item 5.02 = leadership change, 2.01 = M&A, etc.
-export type Filing = { form: string; date: string; label: string; url: string; intent: boolean };
-export type Financials = { cik: string; ticker: string | null; filings: Filing[] };
+type Filing = { form: string; date: string; label: string; url: string; intent: boolean };
+type Financials = { cik: string; ticker: string | null; filings: Filing[] };
 
-export type CompanyContext = {
+type CompanyContext = {
   domain: string;
   url: string;
   name: string | null;
@@ -85,7 +85,7 @@ const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
 /** Normalize arbitrary input (domain, url, "www.x.com/path") to a hostname + https URL. */
-export function normalizeDomain(input: string): { domain: string; url: string } | null {
+function normalizeDomain(input: string): { domain: string; url: string } | null {
   if (!input || typeof input !== "string") return null;
   let raw = input.trim().toLowerCase();
   if (!raw) return null;
@@ -176,7 +176,7 @@ function decodeEntities(s: string): string {
     .trim();
 }
 
-export function detectTech(html: string, headers: Record<string, string>): string[] {
+function detectTech(html: string, headers: Record<string, string>): string[] {
   const found = new Set<string>();
   const lower = html.toLowerCase();
   for (const [label, re] of TECH_HTML_SIGNATURES) {
@@ -215,7 +215,7 @@ function extractEmails(html: string, domain: string): string[] {
 
 
 /** Keyless firmographics from schema.org / JSON-LD Organization blocks on the page. */
-export function extractOrgProfile(html: string): OrgProfile {
+function extractOrgProfile(html: string): OrgProfile {
   const out: OrgProfile = { industry: null, employees: null, founded: null, location: null, revenue: null, ceo: null, people: [], source: null };
   const blocks = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
   const nodes: Record<string, unknown>[] = [];
@@ -266,7 +266,7 @@ export function extractOrgProfile(html: string): OrgProfile {
  * year, industry, HQ, and revenue — for notable companies. Matches by company
  * name, then prefers the entity whose official website matches the domain.
  */
-export async function fetchWikidata(name: string, domain: string): Promise<Partial<OrgProfile> | null> {
+async function fetchWikidata(name: string, domain: string): Promise<Partial<OrgProfile> | null> {
   const query = (name || domain.split(".")[0] || "").trim();
   if (!query) return null;
 
@@ -458,7 +458,7 @@ async function fetchAtsJobs(ats: string, slug: string): Promise<Hiring | null> {
 
 // Hiring signal: detect the ATS from the site HTML; if not found, probe the top
 // three ATSes with a normalized slug guess. All keyless.
-export async function fetchHiring(domain: string, html: string): Promise<Hiring | null> {
+async function fetchHiring(domain: string, html: string): Promise<Hiring | null> {
   const detected = detectAts(html);
   if (detected) {
     const h = await fetchAtsJobs(detected.ats, detected.slug);
@@ -479,7 +479,7 @@ export async function fetchHiring(domain: string, html: string): Promise<Hiring 
  * legacy-Alexa-derived approximations, NOT measured traffic — surfaced only
  * because no free source for real visit counts exists. Always shown as "Est.".
  */
-export async function fetchVisits(domain: string): Promise<Visits | null> {
+async function fetchVisits(domain: string): Promise<Visits | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 6000);
   try {
@@ -534,7 +534,7 @@ function normCompany(s: string): string {
  * buying-intent events: 8-K item 5.02 (leadership change), 2.01 (M&A), etc. Matches
  * by company name; returns null for private/non-US/no-match to avoid wrong data.
  */
-export async function fetchFilings(name: string): Promise<Financials | null> {
+async function fetchFilings(name: string): Promise<Financials | null> {
   const q = normCompany(name || "");
   if (!q || q.length < 3) return null;
   const list = await getSecTickers();
@@ -592,7 +592,7 @@ export async function fetchFilings(name: string): Promise<Financials | null> {
  * Works server-side (no bot-blocking, unlike SimilarWeb). Returns the latest rank
  * + a ~30-day history for a trend, or null when the domain isn't in the top ~1M.
  */
-export async function fetchTranco(domain: string): Promise<Popularity | null> {
+async function fetchTranco(domain: string): Promise<Popularity | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 6000);
   try {
@@ -643,7 +643,7 @@ async function getRdapBase(tld: string): Promise<string | null> {
  * tiny/new sites the popularity lists don't cover. A useful "how established is
  * this company" signal for small prospects.
  */
-export async function fetchDomainAge(domain: string): Promise<DomainAge | null> {
+async function fetchDomainAge(domain: string): Promise<DomainAge | null> {
   const tld = domain.split(".").pop();
   if (!tld) return null;
   const base = await getRdapBase(tld);
@@ -671,7 +671,7 @@ export async function fetchDomainAge(domain: string): Promise<DomainAge | null> 
  * autocomplete endpoint. Returns the top match's domain, or null (e.g. for small
  * companies it doesn't know). No API key required.
  */
-export async function resolveCompanyDomain(name: string): Promise<string | null> {
+async function resolveCompanyDomain(name: string): Promise<string | null> {
   const q = (name || "").trim();
   if (!q) return null;
   const controller = new AbortController();
@@ -716,7 +716,7 @@ export async function getCompanyContextFor(params: {
 }
 
 /** Fetch + parse a company's public site. Returns null on invalid input or fetch failure. */
-export async function getCompanyContext(input: string): Promise<CompanyContext | null> {
+async function getCompanyContext(input: string): Promise<CompanyContext | null> {
   const norm = normalizeDomain(input);
   if (!norm) return null;
   const { domain, url } = norm;

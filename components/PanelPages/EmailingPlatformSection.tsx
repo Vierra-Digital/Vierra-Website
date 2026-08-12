@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { EMAIL_REGEX } from "@/lib/utils";
 import { Geist } from "next/font/google";
 import Image from "next/image";
 import Link from "next/link";
@@ -695,7 +696,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const createContact = async () => {
     const firstName = addContactForm.firstName.trim();
     const email = addContactForm.email.trim();
-    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    const emailValid = EMAIL_REGEX.test(email);
     const phoneValid = isPhoneValid(addContactForm.phone);
     const websiteValid = isWebsiteValid(addContactForm.website);
     if (!firstName) {
@@ -819,7 +820,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const saveEditedContact = async () => {
     const firstName = editContactForm.firstName.trim();
     const email = editContactForm.email.trim();
-    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    const emailValid = EMAIL_REGEX.test(email);
     const phoneValid = isPhoneValid(editContactForm.phone);
     const websiteValid = isWebsiteValid(editContactForm.website);
     if (!editingContactId) return;
@@ -4270,13 +4271,13 @@ ${sourceText}`;
                   onChange={(event) => setAddContactForm((prev) => ({ ...prev, email: event.target.value }))}
                   placeholder="Enter Email"
                   className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
-                    addContactForm.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addContactForm.email.trim())
+                    addContactForm.email.trim() && !EMAIL_REGEX.test(addContactForm.email.trim())
                       ? "border-red-500 bg-red-50"
                       : "border-[#E5E7EB]"
                   }`}
                 />
               </div>
-              {addContactForm.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addContactForm.email.trim()) ? (
+              {addContactForm.email.trim() && !EMAIL_REGEX.test(addContactForm.email.trim()) ? (
                 <p className="md:col-span-2 -mt-1 text-xs text-red-600">Please enter a valid email address.</p>
               ) : null}
               <div>
@@ -4345,7 +4346,7 @@ ${sourceText}`;
                   addingContact ||
                   !addContactForm.firstName.trim() ||
                   !addContactForm.email.trim() ||
-                  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addContactForm.email.trim()) ||
+                  !EMAIL_REGEX.test(addContactForm.email.trim()) ||
                   !isPhoneValid(addContactForm.phone) ||
                   !isWebsiteValid(addContactForm.website)
                 }
@@ -4416,7 +4417,7 @@ ${sourceText}`;
                   className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm ${
                     editContactTouched.email &&
                     editContactForm.email.trim() &&
-                    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editContactForm.email.trim())
+                    !EMAIL_REGEX.test(editContactForm.email.trim())
                       ? "border-red-500 bg-red-50"
                       : "border-[#D1D5DB]"
                   }`}
@@ -4487,7 +4488,7 @@ ${sourceText}`;
                   editingContact ||
                   !editContactForm.firstName.trim() ||
                   !editContactForm.email.trim() ||
-                  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editContactForm.email.trim()) ||
+                  !EMAIL_REGEX.test(editContactForm.email.trim()) ||
                   !isPhoneValid(editContactForm.phone) ||
                   !isWebsiteValid(editContactForm.website)
                 }
@@ -4495,7 +4496,7 @@ ${sourceText}`;
                   editingContact ||
                   !editContactForm.firstName.trim() ||
                   !editContactForm.email.trim() ||
-                  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editContactForm.email.trim()) ||
+                  !EMAIL_REGEX.test(editContactForm.email.trim()) ||
                   !isPhoneValid(editContactForm.phone) ||
                   !isWebsiteValid(editContactForm.website)
                     ? "bg-gray-100 text-gray-400 cursor-not-allowed"
