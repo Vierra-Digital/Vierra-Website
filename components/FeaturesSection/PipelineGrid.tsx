@@ -88,7 +88,7 @@ function NodeBox({ n }: { n: Node }) {
           {n.kind === "engine" ? (
             <div className="pl-engine flex h-full w-full items-center justify-center rounded-2xl bg-gradient-to-br from-[#8F42FF] to-[#701CC0] shadow-[0_18px_50px_-18px_rgba(112,28,192,1)] transition-transform duration-300 group-hover:scale-[1.06]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/assets/vierra-logo-panel.png" alt="Vierra" style={{ height: 26, width: "auto" }} />
+              <img src="/assets/vierra-logo-panel.png" alt="Vierra" width={71} height={26} style={{ height: 26, width: "auto" }} />
             </div>
           ) : (
             <div
@@ -102,7 +102,7 @@ function NodeBox({ n }: { n: Node }) {
             >
               {n.logo ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={n.logo} alt="" aria-hidden className="h-3.5 w-auto shrink-0 object-contain transition-transform duration-300 group-hover:scale-125" />
+                <img src={n.logo} alt="" aria-hidden width={23} height={14} className="h-3.5 w-auto shrink-0 object-contain transition-transform duration-300 group-hover:scale-125" />
               ) : Icon ? (
                 <Icon
                   style={{ color: n.color, width: 13, height: 13, flexShrink: 0 }}

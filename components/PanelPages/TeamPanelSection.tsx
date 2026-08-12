@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { FiSearch, FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck } from "react-icons/fi";
 import Image from "next/image";
 import ProfileImage from "../ProfileImage";
@@ -216,7 +216,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         }
     }
 
-    const loadTeamData = async () => {
+    const loadTeamData = useCallback(async () => {
         setLoading(true)
         try {
             try {
@@ -278,7 +278,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         } finally {
         setLoading(false)
         }
-    }
+    }, [userRole])
 
     const applyFiltersAndSort = useMemo(() => {
         const filtered = rows.filter(row => {
@@ -349,7 +349,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
     useEffect(() => {
         loadTeamData()
-    }, [])
+    }, [loadTeamData])
 
     const columns = useMemo(() => {
         const baseColumns = [

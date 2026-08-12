@@ -149,7 +149,7 @@ function FeedbackAnim() {
           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/assets/vierra-v-2d.png" alt="Vierra" className="h-7 w-auto" />
+          <img src="/assets/vierra-v-2d.png" alt="Vierra" width={32} height={28} className="h-7 w-auto" />
         </motion.div>
       </div>
     </div>
