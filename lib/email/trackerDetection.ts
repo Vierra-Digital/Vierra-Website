@@ -15,7 +15,7 @@
  */
 
 /** Vendor URL/host signatures — matched as case-insensitive substrings of the full URL. */
-export const TRACKER_PATTERNS: { pattern: string; vendor: string }[] = [
+const TRACKER_PATTERNS: { pattern: string; vendor: string }[] = [
   // Mailtrack / Mailsuite
   { pattern: "mailtrack.io", vendor: "Mailtrack" },
   { pattern: "mltrk.io/pixel", vendor: "Mailtrack" },
@@ -91,7 +91,7 @@ export const TRACKER_PATTERNS: { pattern: string; vendor: string }[] = [
 ];
 
 /** Vendor-agnostic open-tracking path/param fragments (pair with remoteness/tiny/hidden). */
-export const GENERIC_OPEN_FRAGMENTS: string[] = [
+const GENERIC_OPEN_FRAGMENTS: string[] = [
   "/wf/open", "/track/open", "/track/open.php", "/open.php", "/ut.php",
   "/o.gif", "/trk", "/beacon", "/pixel.gif", "/pixel.png", "/open.gif",
   "?recipient=", "&recipient=", "?email=", "&email=", "?campaignid=",
@@ -99,13 +99,13 @@ export const GENERIC_OPEN_FRAGMENTS: string[] = [
 ];
 
 /** Tracking-style subdomain prefixes (boost signal, never flag alone). */
-export const TRACKING_SUBDOMAINS: string[] = [
+const TRACKING_SUBDOMAINS: string[] = [
   "track.", "tracking.", "email.", "e.", "click.", "clicks.", "link.",
   "links.", "mail.", "open.", "opens.", "px.", "pixel.", "beacon.", "t.",
 ];
 
 /** CDN / proxy hosts that dampen heuristic-only hits (still checked against TRACKER_PATTERNS). */
-export const KNOWN_CDN_HOSTS: string[] = [
+const KNOWN_CDN_HOSTS: string[] = [
   "cloudfront.net", "akamaihd.net", "fastly.net", "imgix.net",
   "cdn.shopify.com", "gstatic.com", "cloudflare.com", "wp.com",
   "gravatar.com", "s3.amazonaws.com", "ytimg.com",
