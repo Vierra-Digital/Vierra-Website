@@ -11,6 +11,30 @@ type SmtpAccount = {
 };
 
 /**
+ * Narrows a possibly-identity-only account row (smtp_* fields nullable — see schema.prisma) down
+ * to one with real SMTP credentials, or throws. "internal"-provider sends need real credentials;
+ * "smartlead"/"brevo"-provider accounts may have none, since the vendor sends the mail instead.
+ */
+export function requireSmtpCredentials(account: {
+  smtp_host: string | null;
+  smtp_port: number | null;
+  smtp_secure: boolean;
+  smtp_username: string | null;
+  smtp_password_enc: string | null;
+}): SmtpAccount {
+  if (!account.smtp_host || !account.smtp_port || !account.smtp_username || !account.smtp_password_enc) {
+    throw new Error("This mailbox has no SMTP credentials configured.");
+  }
+  return {
+    smtp_host: account.smtp_host,
+    smtp_port: account.smtp_port,
+    smtp_secure: account.smtp_secure,
+    smtp_username: account.smtp_username,
+    smtp_password_enc: account.smtp_password_enc,
+  };
+}
+
+/**
  * Reject SMTP hosts that point at loopback / private / link-local space, so an authenticated
  * user can't turn "add a mailbox + test connection" into a blind SSRF / internal port scanner
  * against the server's own network (e.g. host=169.254.169.254 cloud metadata). This blocks

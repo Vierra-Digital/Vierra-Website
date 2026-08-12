@@ -1,6 +1,11 @@
 export const CAMPAIGN_STATUSES = ["draft", "active", "paused", "completed", "cancelled"] as const;
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
 
+// Chosen at creation only — immutable after first launch, no mid-campaign migration (see
+// .claude/schema_v2_campaigns_smartlead_integration.md §10 / schema_v2_campaigns_brevo_integration.md §9).
+export const SEND_PROVIDERS = ["internal", "smartlead", "brevo"] as const;
+export type SendProvider = (typeof SEND_PROVIDERS)[number];
+
 export const LEAD_STATUSES = [
   "no_response",
   "reply",
@@ -27,6 +32,7 @@ type CampaignRow = {
   created_by: string | null;
   name: string;
   status: string;
+  send_provider: string;
   audience_filter: unknown;
   audience_synced_at: Date | null;
   send_delay_seconds: number;
@@ -49,6 +55,7 @@ export function serializeCampaign(row: CampaignRow) {
     id: row.id,
     name: row.name,
     status: row.status,
+    sendProvider: row.send_provider,
     accountId: row.account_id,
     accountEmail: row.email_provider_accounts?.account_email ?? null,
     createdBy: row.created_by,

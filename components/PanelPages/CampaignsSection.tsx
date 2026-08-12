@@ -11,6 +11,7 @@ export type Campaign = {
   id: string;
   name: string;
   status: "draft" | "active" | "paused" | "completed" | "cancelled";
+  sendProvider: "internal" | "smartlead" | "brevo";
   accountId: string;
   accountEmail: string | null;
   sendDelaySeconds: number;
@@ -128,7 +129,7 @@ const CampaignsSection: React.FC = () => {
                 <table className="w-full">
                   <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
                     <tr>
-                      {["Name", "Status", "Steps", "Contacts", "Sender", "Created"].map((h) => (
+                      {["Name", "Status", "Provider", "Steps", "Contacts", "Sender", "Created"].map((h) => (
                         <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
                           {h}
                         </th>
@@ -148,6 +149,7 @@ const CampaignsSection: React.FC = () => {
                             {STATUS_LABEL[c.status]}
                           </span>
                         </td>
+                        <td className="px-4 py-4 text-sm text-[#111827] capitalize">{c.sendProvider}</td>
                         <td className="px-4 py-4 text-sm text-[#111827]">{c.stepCount ?? 0}</td>
                         <td className="px-4 py-4 text-sm text-[#111827]">{c.contactCount ?? 0}</td>
                         <td className="px-4 py-4 text-sm text-[#111827]">{c.accountEmail || "—"}</td>
@@ -176,6 +178,7 @@ const CampaignsSection: React.FC = () => {
 };
 
 type EmailAccount = { id: string; accountEmail: string };
+type BrevoSender = { email: string; name: string; active: boolean };
 type EmailTemplate = { id: string; name: string; subject: string | null };
 type ContactTag = { id: string; name: string; color: string };
 type CampaignStep = {
@@ -196,6 +199,8 @@ const MOCK_TEMPLATES: EmailTemplate[] = [{ id: "mock-template", name: "Sample Te
 // the real draft-creation POST below (there's no matching row for the API to validate against).
 const MOCK_ACCOUNTS: EmailAccount[] = [{ id: "mock-account", accountEmail: "Test mailbox (mock — not connected, nothing is sent)" }];
 const isMockAccountId = (id: string) => MOCK_ACCOUNTS.some((a) => a.id === id);
+const isMockTemplateId = (id: string) => id === "mock-template";
+const isMockCampaignId = (id: string | null) => !!id && id.startsWith("mock-");
 
 const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = ({ onClose, onDone }) => {
   const [wizardStep, setWizardStep] = useState(0);
@@ -203,12 +208,18 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
   const [saving, setSaving] = useState(false);
 
   const [accounts, setAccounts] = useState<EmailAccount[]>([]);
+  const [brevoSenders, setBrevoSenders] = useState<BrevoSender[]>([]);
+  const [brevoSendersError, setBrevoSendersError] = useState("");
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [tags, setTags] = useState<ContactTag[]>([]);
 
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [sendProvider, setSendProvider] = useState<"internal" | "brevo">("internal");
   const [accountId, setAccountId] = useState("");
+  // Only used when sendProvider is "brevo" and no existing connected mailbox is picked — Brevo
+  // doesn't need a real SMTP-connected account, just an email identity to send/reply as.
+  const [senderEmail, setSenderEmail] = useState("");
 
   const [steps, setSteps] = useState<CampaignStep[]>([]);
   const [newStepTemplateId, setNewStepTemplateId] = useState("");
@@ -216,6 +227,22 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
 
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [enrolledCount, setEnrolledCount] = useState<number | null>(null);
+
+  // Lazy: only fetch Brevo's sender list once someone actually picks that provider, so a
+  // BREVO_API_KEY-less setup never surfaces an error for reps who only use internal campaigns.
+  useEffect(() => {
+    if (sendProvider !== "brevo" || brevoSenders.length > 0 || brevoSendersError) return;
+    (async () => {
+      try {
+        const res = await fetch("/api/campaigns/brevo-senders");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Failed to load Brevo senders");
+        setBrevoSenders(data.senders || []);
+      } catch (e: any) {
+        setBrevoSendersError(e?.message || "Failed to load Brevo senders.");
+      }
+    })();
+  }, [sendProvider, brevoSenders.length, brevoSendersError]);
 
   useEffect(() => {
     (async () => {
@@ -236,15 +263,16 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
     })();
   }, []);
 
-  // Draft creation (step 0) is real and persists to the DB. Everything past it — sequence
-  // steps, audience enrollment, and launch — stays mocked, so nothing in this wizard sends.
+  // Draft creation (step 0), sequence steps (step 1), audience enrollment (step 2), and launch
+  // (step 3's button) are all real API calls now — a mock campaign/account/template still short-
+  // circuits to local-only state, for offline testing of the wizard UI itself.
   const goNext = async () => {
     setError("");
     setSaving(true);
     try {
       if (wizardStep === 0) {
-        if (!name.trim() || !accountId) {
-          setError("Name and sender account are required.");
+        if (!name.trim()) {
+          setError("Name is required.");
           return;
         }
         if (isMockAccountId(accountId)) {
@@ -252,10 +280,23 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
           setWizardStep(1);
           return;
         }
+        const useAccountId = accountId && !isMockAccountId(accountId) ? accountId : "";
+        if (sendProvider === "internal" && !useAccountId) {
+          setError("A connected mailbox is required for internal-provider campaigns.");
+          return;
+        }
+        if (sendProvider === "brevo" && !useAccountId && !senderEmail.trim()) {
+          setError("Pick a connected mailbox or enter a sender email.");
+          return;
+        }
+        const body: Record<string, unknown> = { name: name.trim(), sendProvider };
+        if (useAccountId) body.accountId = useAccountId;
+        else body.accountEmail = senderEmail.trim();
+
         const res = await fetch("/api/campaigns", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: name.trim(), accountId }),
+          body: JSON.stringify(body),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Failed to create campaign");
@@ -275,7 +316,22 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
 
       if (wizardStep === 2) {
         if (!campaignId) return;
-        setEnrolledCount(0);
+        if (isMockCampaignId(campaignId)) {
+          setEnrolledCount(0);
+          setWizardStep(3);
+          return;
+        }
+        const patchRes = await fetch(`/api/campaigns/${campaignId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ audienceFilter: { tagIds: selectedTagIds } }),
+        });
+        if (!patchRes.ok) throw new Error((await patchRes.json().catch(() => ({}))).message || "Failed to save audience filter");
+
+        const syncRes = await fetch(`/api/campaigns/${campaignId}/sync`, { method: "POST" });
+        const syncData = await syncRes.json();
+        if (!syncRes.ok) throw new Error(syncData.message || "Failed to enroll audience");
+        setEnrolledCount(syncData.enrolledCount ?? 0);
         setWizardStep(3);
         return;
       }
@@ -286,36 +342,86 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
     }
   };
 
-  const addStep = () => {
+  const addStep = async () => {
     if (!campaignId) return;
     if (!newStepTemplateId) {
       setError("Pick a template for this step.");
       return;
     }
     setError("");
-    setSteps((prev) => [
-      ...prev,
-      {
-        id: `mock-${crypto.randomUUID()}`,
-        stepOrder: prev.length,
-        name: null,
-        templateId: newStepTemplateId,
-        subjectOverride: null,
-        delayDays: newStepDelayDays,
-      },
-    ]);
-    setNewStepTemplateId("");
-    setNewStepDelayDays(0);
+    if (isMockCampaignId(campaignId) || isMockTemplateId(newStepTemplateId)) {
+      setSteps((prev) => [
+        ...prev,
+        {
+          id: `mock-${crypto.randomUUID()}`,
+          stepOrder: prev.length,
+          name: null,
+          templateId: newStepTemplateId,
+          subjectOverride: null,
+          delayDays: newStepDelayDays,
+        },
+      ]);
+      setNewStepTemplateId("");
+      setNewStepDelayDays(0);
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/steps`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ templateId: newStepTemplateId, delayDays: newStepDelayDays }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to add step");
+      setSteps((prev) => [...prev, data.step]);
+      setNewStepTemplateId("");
+      setNewStepDelayDays(0);
+    } catch (e: any) {
+      setError(e?.message || "Failed to add step.");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const removeStep = (stepId: string) => {
-    setSteps((prev) => prev.filter((s) => s.id !== stepId));
-  };
-
-  const launch = () => {
+  const removeStep = async (stepId: string) => {
+    if (isMockCampaignId(campaignId) || stepId.startsWith("mock-")) {
+      setSteps((prev) => prev.filter((s) => s.id !== stepId));
+      return;
+    }
     if (!campaignId) return;
     setError("");
-    onDone();
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/steps/${stepId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || "Failed to remove step");
+      setSteps((prev) => prev.filter((s) => s.id !== stepId));
+    } catch (e: any) {
+      setError(e?.message || "Failed to remove step.");
+    }
+  };
+
+  const launch = async () => {
+    if (!campaignId) return;
+    setError("");
+    if (isMockCampaignId(campaignId)) {
+      onDone();
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "active" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to launch campaign");
+      onDone();
+    } catch (e: any) {
+      setError(e?.message || "Failed to launch campaign.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -365,7 +471,34 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-[#374151] mb-2">Sender Account</label>
+            <label className="block text-sm font-medium text-[#374151] mb-2">Send Provider</label>
+            <div className="flex gap-2">
+              {(["internal", "brevo"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setSendProvider(p)}
+                  className={`flex-1 px-3 py-2 rounded-lg border text-sm font-medium ${
+                    sendProvider === p
+                      ? "border-[#701CC0] bg-[#F5EEFC] text-[#701CC0]"
+                      : "border-[#E5E7EB] text-[#374151] hover:bg-gray-50"
+                  }`}
+                >
+                  {p === "internal" ? "Internal (SMTP)" : "Brevo"}
+                </button>
+              ))}
+            </div>
+            {sendProvider === "brevo" && (
+              <p className="mt-2 text-xs text-[#9CA3AF]">
+                Temporary stopgap while Smartlead is unverified — see schema_v2_campaigns_brevo_integration.md.
+                Sends through Brevo&apos;s API rather than this mailbox&apos;s own SMTP connection.
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-[#374151] mb-2">
+              {sendProvider === "internal" ? "Sender Account" : "Sender Account (optional)"}
+            </label>
             <select
               value={accountId}
               onChange={(e) => setAccountId(e.target.value)}
@@ -391,6 +524,33 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
               </p>
             )}
           </div>
+          {sendProvider === "brevo" && !accountId && (
+            <div>
+              <label className="block text-sm font-medium text-[#374151] mb-2">Sender Email</label>
+              {brevoSendersError ? (
+                <p className="text-xs text-red-600">{brevoSendersError}</p>
+              ) : (
+                <select
+                  value={senderEmail}
+                  onChange={(e) => setSenderEmail(e.target.value)}
+                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                >
+                  <option value="">
+                    {brevoSenders.length === 0 ? "Loading senders…" : "Select a Brevo sender…"}
+                  </option>
+                  {brevoSenders.map((s) => (
+                    <option key={s.email} value={s.email}>
+                      {s.email} {s.active ? "" : "(not verified yet)"}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <p className="mt-2 text-xs text-[#9CA3AF]">
+                Pulled from your Brevo account&apos;s registered senders. Unverified ones will still send but land
+                proxied through Brevo&apos;s own domain until verified in Brevo&apos;s dashboard.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

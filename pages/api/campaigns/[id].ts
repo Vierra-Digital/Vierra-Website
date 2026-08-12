@@ -11,6 +11,7 @@ import {
   smartleadConfigured,
   translateMergeTagsForSmartlead,
 } from "@/lib/campaigns/smartlead/client";
+import { brevoConfigured } from "@/lib/campaigns/brevo/client";
 
 function getId(req: NextApiRequest) {
   const raw = req.query.id;
@@ -149,6 +150,15 @@ export default withAuth(async (req, res, session) => {
         }
       }
 
+      // Brevo-provider campaigns: unlike Smartlead, there's nothing to mirror on launch (Brevo
+      // is a plain transport, not a system of record), but we still must not flip a campaign to
+      // "active" if BREVO_API_KEY isn't set — otherwise every contact silently fails at send time
+      // in sendQueueTick.ts instead of being blocked upfront.
+      if (existing.send_provider === "brevo" && nextStatus === "active" && !brevoConfigured()) {
+        res.status(400).json({ message: "Brevo isn't configured (BREVO_API_KEY missing)." });
+        return;
+      }
+
       const updated = await prisma.campaign.update({
         where: { id },
         data,
@@ -206,6 +216,7 @@ export default withAuth(async (req, res, session) => {
           req.body?.scheduledStartAt !== undefined
             ? (asStr(scheduledStartAtRaw) ? new Date(asStr(scheduledStartAtRaw)) : null)
             : existing.scheduled_start_at,
+        audience_filter: req.body?.audienceFilter !== undefined ? req.body.audienceFilter : existing.audience_filter,
       },
       include: {
         email_provider_accounts: { select: { account_email: true } },
