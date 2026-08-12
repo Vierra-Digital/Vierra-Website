@@ -60,11 +60,7 @@ export async function sendEmail(data: EmailData): Promise<void> {
     html: `
       <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
         <table style="width:100%;max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
-            </td>
-          </tr>
+          ${emailHeaderRowHtml}
           <tr>
             <td style="padding:50px 40px;text-align:left;vertical-align:top;">
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;text-align:left;">Audit Request</h2>
@@ -126,11 +122,7 @@ export async function sendAuditConfirmationEmail(data: Pick<EmailData, "fullName
     html: `
       <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
         <table style="width:100%;max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
-            </td>
-          </tr>
+          ${emailHeaderRowHtml}
           <tr>
             <td style="padding:50px 40px;text-align:left;vertical-align:top;">
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;text-align:left;">Your Audit Request Has Been Claimed</h2>
@@ -159,6 +151,12 @@ function stripPdfExtension(name: string): string {
   return name.replace(/\.pdf$/i, '');
 }
 
+const emailHeaderRowHtml = `<tr>
+            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
+              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
+            </td>
+          </tr>`;
+
 const signedEmailFooterHtml = `
   <div style="margin:40px 0 30px;text-align:center;">
     <a href="https://www.LinkedIn.com/company/Vierra" style="margin:0 12px;display:inline-block;">
@@ -186,11 +184,7 @@ export async function sendSignedDocumentEmail(documentName: string, attachment: 
     html: `
       <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
         <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
-            </td>
-          </tr>
+          ${emailHeaderRowHtml}
           <tr>
             <td style="padding:50px 40px;text-align:left;vertical-align:top;">
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">Signed Document</h2>
@@ -236,11 +230,7 @@ export async function sendSignerCopyEmail(email: string, documentName: string, a
     html: `
       <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
         <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
-            </td>
-          </tr>
+          ${emailHeaderRowHtml}
           <tr>
             <td style="padding:50px 40px;text-align:left;vertical-align:top;">
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">Signed Document</h2>
@@ -286,11 +276,7 @@ export async function sendPasswordResetEmail(email: string, name: string, resetL
     html: `
       <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
         <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
-            </td>
-          </tr>
+          ${emailHeaderRowHtml}
           <tr>
             <td style="padding:50px 40px;text-align:left;vertical-align:top;">
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">Reset Your Password</h2>
@@ -333,11 +319,7 @@ export async function sendClientOnboardingCompletedEmail(
     html: `
       <div style="background:#f7f6fa;padding:32px 0;min-height:100vh;">
         <table style="max-width:600px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;font-family:Arial,sans-serif;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="background:linear-gradient(135deg, #7A13D0 0%, #9D4EDD 100%);padding:40px 0;text-align:center;">
-              <img src="https://vierradev.com/assets/vierra-logo-panel.png" alt="Vierra logo" style="width: 140px; height: auto; padding-top: 4px; padding-left: 8px; padding-right: 8px;" />
-            </td>
-          </tr>
+          ${emailHeaderRowHtml}
           <tr>
             <td style="padding:50px 40px;text-align:left;vertical-align:top;">
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">Onboarding Complete</h2>
