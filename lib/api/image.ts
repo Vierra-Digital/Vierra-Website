@@ -1,10 +1,6 @@
 import type { NextApiResponse } from "next";
 import { downloadObject, putFileAsset } from "@/lib/storage";
 
-export function decodeBase64Image(imageData: string): Buffer {
-  return Buffer.from(imageData, "base64");
-}
-
 /** Store an image in object storage; returns the storage key. Thin alias over putFileAsset. */
 export async function putImageAsset(
   bucket: string,

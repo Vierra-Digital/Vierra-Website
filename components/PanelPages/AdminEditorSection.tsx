@@ -10,6 +10,7 @@ import { motion } from "framer-motion"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import Modal from "@/components/ui/Modal"
+import LoadingSpinner from "@/components/ui/LoadingSpinner"
 
 
 type ViewType = "users" | "sessions"
@@ -329,10 +330,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
 
             {loading ? (
                 <div className="flex items-center justify-center py-12">
-                    <div className="text-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto"></div>
-                        <p className="mt-2 text-sm text-[#6B7280]">Loading User Data...</p>
-                    </div>
+                    <LoadingSpinner label="Loading User Data..." />
                 </div>
             ) : (
                 <>
@@ -1176,10 +1174,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
 
             {loading ? (
                 <div className="flex items-center justify-center py-12">
-                    <div className="text-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#701CC0] mx-auto"></div>
-                        <p className="mt-2 text-sm text-[#6B7280]">Loading Sessions...</p>
-                    </div>
+                    <LoadingSpinner label="Loading Sessions..." />
                 </div>
             ) : (
                 <>

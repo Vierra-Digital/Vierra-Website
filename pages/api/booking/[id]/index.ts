@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { EMAIL_REGEX } from "@/lib/utils";
 import { prisma } from "@/lib/prisma";
 import { asStr } from "@/lib/api/parsing";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
@@ -54,7 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(400).json({ message: "Pick a valid future time." });
     return;
   }
-  if (!inviteeName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteeEmail)) {
+  if (!inviteeName || !EMAIL_REGEX.test(inviteeEmail)) {
     res.status(400).json({ message: "Your name and a valid email are required." });
     return;
   }

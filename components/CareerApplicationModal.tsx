@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { EMAIL_REGEX } from "@/lib/utils";
 import { bricolage, inter } from "@/lib/fonts";
 import { motion, AnimatePresence } from "framer-motion";
 import { FiUploadCloud, FiFileText, FiX, FiArrowLeft, FiArrowRight } from "react-icons/fi";
@@ -124,7 +125,7 @@ export function CareerApplicationModal({
     setFormData((prev) => ({ ...prev, [id]: id === "phoneNumber" ? formatPhone(value) : value }));
   };
 
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim());
+  const emailValid = EMAIL_REGEX.test(formData.email.trim());
   const phoneValid = formData.phoneNumber.replace(/\D/g, "").length === 10;
 
   const basicInfoValid =

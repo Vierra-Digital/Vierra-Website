@@ -1,5 +1,6 @@
 /** Shared constants for the email panel (extracted from EmailingPlatformSection). */
 import React from "react";
+import { EMAIL_REGEX } from "@/lib/utils";
 import { FiInbox, FiMail, FiSend, FiUsers, FiArchive, FiTrash2, FiKey, FiCheckSquare, FiBarChart2, FiStar, FiFlag, FiClock, FiLayers } from "react-icons/fi";
 import type { ModuleKey, MailboxCounts } from "@/components/email/types";
 
@@ -15,7 +16,7 @@ export function validateRecipientCsv(label: "Cc" | "Bcc", raw: string): string |
   const trimmed = raw.trim();
   if (!trimmed) return null;
   const parts = trimmed.split(",").map((entry) => entry.trim()).filter(Boolean);
-  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailOk = EMAIL_REGEX;
   for (const part of parts) {
     const addr = part.includes("<") ? (part.match(/<([^>]+)>/)?.[1] || part).trim() : part;
     if (!emailOk.test(addr)) return `${label}: invalid address "${part}"`;

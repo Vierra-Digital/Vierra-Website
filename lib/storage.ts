@@ -39,7 +39,7 @@ function getStorage(): SupabaseClient {
   return client;
 }
 
-export async function uploadObject(
+async function uploadObject(
   bucket: string,
   path: string,
   body: Buffer,

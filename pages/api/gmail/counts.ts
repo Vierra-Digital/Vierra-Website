@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
+import { getAccessibleGmailAccounts } from "@/lib/email/mailboxAccess";
 import { asQueryStr } from "@/lib/api/parsing";
 
 type GmailListEstimateResponse = {
@@ -71,16 +72,14 @@ export default withAuth(async (req, res, session) => {
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
 
-  const rows = await prisma.platformToken.findMany({
-    where: { user_id: userId, platform: { startsWith: "gmail:" } },
-    select: { platform: true },
-  });
+  // Owned + admin-granted (shared) mailboxes, each tagged with the ownerUserId whose Gmail token to
+  // use. For owned accounts ownerUserId === userId, so this is unchanged for non-delegated users —
+  // it just lets granted shared inboxes contribute to the unread badges.
+  const accessible = await getAccessibleGmailAccounts(userId);
 
-  const accountRows = rows
-    .map((row) => ({
-      email: row.platform.replace(/^gmail:/, "").toLowerCase(),
-    }))
-    .filter((row) => (selectedEmails.length ? selectedEmails.includes(row.email) : true));
+  const accountRows = accessible.filter((row) =>
+    selectedEmails.length ? selectedEmails.includes(row.email) : true
+  );
 
   let selectedAccountIds: string[] = [];
   if (selectedEmails.length > 0) {
@@ -121,7 +120,7 @@ export default withAuth(async (req, res, session) => {
   await Promise.all(
     accountRows.map(async (account) => {
       try {
-        const tokenResult = await getValidGmailAccessToken(userId, account.email);
+        const tokenResult = await getValidGmailAccessToken(account.ownerUserId, account.email);
         if (!tokenResult.ok) {
           throw new Error(tokenResult.message);
         }
@@ -130,7 +129,7 @@ export default withAuth(async (req, res, session) => {
           counts = await fetchMailboxCounts(tokenResult.accessToken);
         } catch (error) {
           if (!isAuthError(error)) throw error;
-          const refreshResult = await getValidGmailAccessToken(userId, account.email, { forceRefresh: true });
+          const refreshResult = await getValidGmailAccessToken(account.ownerUserId, account.email, { forceRefresh: true });
           if (!refreshResult.ok) {
             throw new Error(refreshResult.message);
           }

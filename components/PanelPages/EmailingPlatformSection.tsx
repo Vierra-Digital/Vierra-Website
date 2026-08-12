@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { EMAIL_REGEX } from "@/lib/utils";
 import { Geist } from "next/font/google";
 import Image from "next/image";
 import Link from "next/link";
@@ -135,6 +136,10 @@ const MailboxEmpty: React.FC = () => (
   </div>
 );
 
+// Client-side cap on total compose attachment bytes. Kept conservative (below the server/platform
+// request-body limit) so oversized sends fail fast with a clear message instead of an opaque 413.
+const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
 const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   initialSelectedAccounts = [],
   initialOpenThreadId = "",
@@ -216,6 +221,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     Array<{ id: string; name: string; subject: string | null; bodyHtml: string | null; bodyText: string | null }>
   >([]);
   const [composeTemplateMenuOpen, setComposeTemplateMenuOpen] = useState(false);
+  // Set when a brand-new compose opens (openNewCompose) so the signatures effect appends the
+  // account's default signature once — never on replies/drafts (their body is pre-filled).
+  const composeInsertDefaultSigRef = useRef(false);
+  const [composeSignatures, setComposeSignatures] = useState<
+    Array<{ id: string; name: string; signatureHtml: string | null; signatureText: string | null; isDefault: boolean }>
+  >([]);
+  const [composeSignatureMenuOpen, setComposeSignatureMenuOpen] = useState(false);
   const [saveTemplateModalOpen, setSaveTemplateModalOpen] = useState(false);
   const [newLabelModalOpen, setNewLabelModalOpen] = useState(false);
   const [newLabelName, setNewLabelName] = useState("");
@@ -246,6 +258,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [confidentialOpen, setConfidentialOpen] = useState(false);
   /** Request a read receipt (Disposition-Notification-To) on send. */
   const [requestReceipt, setRequestReceipt] = useState(false);
+  // Set on a brand-new compose so the settings effect can apply this inbox's read-receipt default
+  // once — never on replies/drafts, and the user can still toggle it off.
+  const composeReadReceiptDefaultRef = useRef(false);
   const undoSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [artemisDrafting, setArtemisDrafting] = useState(false);
@@ -681,7 +696,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const createContact = async () => {
     const firstName = addContactForm.firstName.trim();
     const email = addContactForm.email.trim();
-    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    const emailValid = EMAIL_REGEX.test(email);
     const phoneValid = isPhoneValid(addContactForm.phone);
     const websiteValid = isWebsiteValid(addContactForm.website);
     if (!firstName) {
@@ -805,7 +820,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const saveEditedContact = async () => {
     const firstName = editContactForm.firstName.trim();
     const email = editContactForm.email.trim();
-    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    const emailValid = EMAIL_REGEX.test(email);
     const phoneValid = isPhoneValid(editContactForm.phone);
     const websiteValid = isWebsiteValid(editContactForm.website);
     if (!editingContactId) return;
@@ -1048,6 +1063,45 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         if (cancelled) return;
         const list = Array.isArray(payload?.templates) ? payload.templates : [];
         setComposeTemplates(list);
+      })
+      .catch(() => null);
+    void fetch(`/api/gmail/signatures?accountEmail=${encodeURIComponent(composeAccountEmail)}`)
+      .then((r) => r.json())
+      .then((payload) => {
+        if (cancelled) return;
+        const list = Array.isArray(payload?.signatures) ? payload.signatures : [];
+        setComposeSignatures(list);
+        // Auto-insert the default signature into a brand-new compose only (flag set by
+        // openNewCompose). Guard on an empty body via the functional updater so we never clobber
+        // a reply/draft or text the user has already started typing while the fetch was in flight.
+        if (!composeInsertDefaultSigRef.current) return;
+        composeInsertDefaultSigRef.current = false;
+        const def = list.find((s: { isDefault?: boolean }) => s?.isDefault);
+        if (!def || (!def.signatureHtml && !def.signatureText)) return;
+        const escSig = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        const sigHtml =
+          def.signatureHtml && def.signatureHtml.trim()
+            ? def.signatureHtml
+            : `<p>${escSig(def.signatureText || "").replace(/\n/g, "<br />")}</p>`;
+        setComposeBodyHtml((prev) => (prev && prev.trim() ? prev : `<p><br /></p><p><br /></p>${sigHtml}`));
+        setComposeBody((prev) => (prev && prev.trim() ? prev : `\n\n${def.signatureText || ""}`));
+      })
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, [isComposeOpen, composeAccountEmail]);
+
+  // Apply this inbox's read-receipt default once on a brand-new compose (flag set by
+  // openNewCompose); never on replies/drafts, and the user can still toggle it off after.
+  useEffect(() => {
+    if (!isComposeOpen || !composeAccountEmail || !composeReadReceiptDefaultRef.current) return;
+    composeReadReceiptDefaultRef.current = false;
+    let cancelled = false;
+    void fetch(`/api/gmail/settings?accountEmail=${encodeURIComponent(composeAccountEmail)}`)
+      .then((r) => r.json())
+      .then((payload) => {
+        if (!cancelled && payload?.settings?.defaultReadReceipt) setRequestReceipt(true);
       })
       .catch(() => null);
     return () => {
@@ -1601,6 +1655,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
           references: typeof payload?.references === "string" ? payload.references : selectedMessage.references,
           senderPhotoUrl: typeof payload?.senderPhotoUrl === "string" ? payload.senderPhotoUrl : "",
           threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
+          trackers:
+            payload?.trackers && typeof payload.trackers.count === "number"
+              ? { count: payload.trackers.count, vendors: Array.isArray(payload.trackers.vendors) ? payload.trackers.vendors : [] }
+              : undefined,
         });
       } catch (error) {
         setDetailError(error instanceof Error ? error.message : "Failed to load message detail.");
@@ -2280,6 +2338,7 @@ ${sourceText}`;
     setConfidentialPasscode("");
     setConfidentialOpen(false);
     setRequestReceipt(false);
+    composeReadReceiptDefaultRef.current = true;
     setComposeAccountEmail(defaultAccount);
     setComposeThreadId("");
     setComposeInReplyTo("");
@@ -2288,6 +2347,8 @@ ${sourceText}`;
     setComposeError("");
     setComposeSuccess("");
     setComposeExpanded(false);
+    // Ask the signatures effect to drop in this account's default signature once it loads.
+    composeInsertDefaultSigRef.current = true;
     setIsComposeOpen(true);
   };
 
@@ -2712,8 +2773,20 @@ ${sourceText}`;
         contentBase64,
       });
     }
+    // Reject up-front with a clear message rather than letting an oversized JSON body hit the API's
+    // size limit and come back as an opaque "Failed to send." (NOTE: keep this at or below the real
+    // platform request-body limit — Netlify functions cap well under the 24 MB app-level cap.)
+    const decodedBytes = (b64: string) => Math.floor((b64.length * 3) / 4);
+    const currentBytes = composeAttachments.reduce((sum, a) => sum + decodedBytes(a.contentBase64), 0);
+    const additionBytes = additions.reduce((sum, a) => sum + decodedBytes(a.contentBase64), 0);
+    if (currentBytes + additionBytes > MAX_TOTAL_ATTACHMENT_BYTES) {
+      setComposeError(
+        `Attachments exceed the ${Math.round(MAX_TOTAL_ATTACHMENT_BYTES / (1024 * 1024))} MB limit — remove some and try again.`
+      );
+      return;
+    }
     setComposeAttachments((prev) => [...prev, ...additions]);
-  }, []);
+  }, [composeAttachments]);
 
   const toggleBookingMenu = useCallback(async () => {
     setBookingMenuOpen((prev) => !prev);
@@ -2785,6 +2858,20 @@ ${sourceText}`;
       setComposeBodyHtml(`<p>${esc(raw).replace(/\n/g, "<br />")}</p>`);
     }
     setComposeTemplateMenuOpen(false);
+  };
+
+  // Append a chosen signature to the end of the current body (unlike templates, which replace it).
+  const applyComposeSignature = (signatureId: string) => {
+    const sig = composeSignatures.find((s) => s.id === signatureId);
+    if (!sig) return;
+    const escSig = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const sigHtml =
+      sig.signatureHtml && sig.signatureHtml.trim()
+        ? sig.signatureHtml
+        : `<p>${escSig(sig.signatureText || "").replace(/\n/g, "<br />")}</p>`;
+    setComposeBodyHtml((prev) => `${prev || ""}<p><br /></p>${sigHtml}`);
+    setComposeBody((prev) => `${(prev || "").replace(/\s+$/, "")}\n\n${sig.signatureText || ""}`.trim());
+    setComposeSignatureMenuOpen(false);
   };
 
   const handlePrintCompose = () => {
@@ -3293,8 +3380,28 @@ ${sourceText}`;
                           <div className="m-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{actionError}</div>
                         ) : null}
                         {accountErrors.length > 0 ? (
-                          <div className="m-3 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-                            Some accounts could not be loaded: {accountErrors.map((entry) => entry.accountEmail).join(", ")}
+                          <div className="m-3 space-y-1 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+                            {accountErrors.map((entry) => {
+                              // Token errors ("Reconnect required", refresh failure, token not found) get a
+                              // one-click reconnect that starts the Gmail OAuth flow for that account.
+                              const needsReconnect = /reconnect|refresh|token/i.test(entry.message);
+                              return (
+                                <div key={entry.accountEmail} className="flex flex-wrap items-center justify-between gap-2">
+                                  <span>
+                                    <span className="font-medium">{entry.accountEmail}</span>{" "}
+                                    {needsReconnect ? "needs to be reconnected." : "could not be loaded."}
+                                  </span>
+                                  {needsReconnect ? (
+                                    <a
+                                      href={`/api/gmail/initiate?from=email&account=${encodeURIComponent(entry.accountEmail)}`}
+                                      className="shrink-0 rounded-md bg-yellow-800 px-2.5 py-1 text-xs font-medium text-white hover:bg-yellow-900"
+                                    >
+                                      Reconnect
+                                    </a>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
                           </div>
                         ) : null}
 
@@ -3899,7 +4006,8 @@ ${sourceText}`;
                               <p>To: {formatIdentity(selectedMessageDetail?.toRaw || selectedMessage.toRaw || selectedMessage.to || "-")}</p>
                               <p>{formatDetailedDate(selectedMessageDetail?.timestamp || selectedMessage.timestamp, selectedMessageDetail?.date || selectedMessage.date)}</p>
                               {(() => {
-                                const { count: trackers, vendors } = detectTrackers(selectedMessageDetail?.bodyHtml || "");
+                                const { count: trackers, vendors } =
+                                  selectedMessageDetail?.trackers ?? detectTrackers(selectedMessageDetail?.bodyHtml || "");
                                 if (trackers === 0) return null;
                                 const label = vendors.length
                                   ? `${vendors.slice(0, 2).join(", ")}${vendors.length > 2 ? ` +${vendors.length - 2}` : ""} tracker blocked`
@@ -4163,13 +4271,13 @@ ${sourceText}`;
                   onChange={(event) => setAddContactForm((prev) => ({ ...prev, email: event.target.value }))}
                   placeholder="Enter Email"
                   className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
-                    addContactForm.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addContactForm.email.trim())
+                    addContactForm.email.trim() && !EMAIL_REGEX.test(addContactForm.email.trim())
                       ? "border-red-500 bg-red-50"
                       : "border-[#E5E7EB]"
                   }`}
                 />
               </div>
-              {addContactForm.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addContactForm.email.trim()) ? (
+              {addContactForm.email.trim() && !EMAIL_REGEX.test(addContactForm.email.trim()) ? (
                 <p className="md:col-span-2 -mt-1 text-xs text-red-600">Please enter a valid email address.</p>
               ) : null}
               <div>
@@ -4238,7 +4346,7 @@ ${sourceText}`;
                   addingContact ||
                   !addContactForm.firstName.trim() ||
                   !addContactForm.email.trim() ||
-                  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addContactForm.email.trim()) ||
+                  !EMAIL_REGEX.test(addContactForm.email.trim()) ||
                   !isPhoneValid(addContactForm.phone) ||
                   !isWebsiteValid(addContactForm.website)
                 }
@@ -4309,7 +4417,7 @@ ${sourceText}`;
                   className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm ${
                     editContactTouched.email &&
                     editContactForm.email.trim() &&
-                    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editContactForm.email.trim())
+                    !EMAIL_REGEX.test(editContactForm.email.trim())
                       ? "border-red-500 bg-red-50"
                       : "border-[#D1D5DB]"
                   }`}
@@ -4380,7 +4488,7 @@ ${sourceText}`;
                   editingContact ||
                   !editContactForm.firstName.trim() ||
                   !editContactForm.email.trim() ||
-                  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editContactForm.email.trim()) ||
+                  !EMAIL_REGEX.test(editContactForm.email.trim()) ||
                   !isPhoneValid(editContactForm.phone) ||
                   !isWebsiteValid(editContactForm.website)
                 }
@@ -4388,7 +4496,7 @@ ${sourceText}`;
                   editingContact ||
                   !editContactForm.firstName.trim() ||
                   !editContactForm.email.trim() ||
-                  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editContactForm.email.trim()) ||
+                  !EMAIL_REGEX.test(editContactForm.email.trim()) ||
                   !isPhoneValid(editContactForm.phone) ||
                   !isWebsiteValid(editContactForm.website)
                     ? "bg-gray-100 text-gray-400 cursor-not-allowed"
@@ -4978,6 +5086,37 @@ ${sourceText}`;
                           >
                             Save as template…
                           </button>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setComposeSignatureMenuOpen((open) => !open)}
+                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        title="Insert signature"
+                        aria-label="Insert signature"
+                        aria-expanded={composeSignatureMenuOpen}
+                      >
+                        <FiEdit3 className="h-[18px] w-[18px]" aria-hidden />
+                      </button>
+                      {composeSignatureMenuOpen ? (
+                        <div className="absolute left-0 top-full z-[130] mt-1 max-h-56 w-56 overflow-y-auto rounded-md border border-[#EAE5F4] bg-white py-1 shadow-lg">
+                          {composeSignatures.length === 0 ? (
+                            <div className="px-3 py-2 text-xs text-[#5f6368]">No signatures yet</div>
+                          ) : (
+                            composeSignatures.map((sig) => (
+                              <button
+                                key={sig.id}
+                                type="button"
+                                className="block w-full truncate px-3 py-2 text-left text-sm text-[#1E1B2E] hover:bg-[#f1f3f4]"
+                                onClick={() => applyComposeSignature(sig.id)}
+                              >
+                                {sig.name}
+                                {sig.isDefault ? " (default)" : ""}
+                              </button>
+                            ))
+                          )}
                         </div>
                       ) : null}
                     </div>

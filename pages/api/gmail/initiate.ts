@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { requireRole } from "@/lib/auth";
-import { appendSetCookie, asStr, issueOauthStateCookie, resolveGoogleWebClientCredentials, resolveRuntimeBaseUrl } from "@/lib/api/oauth";
-import { serialize as serializeCookie } from "cookie";
+import { asStr, issueOauthStateCookie, resolveGoogleWebClientCredentials, resolveRuntimeBaseUrl, setScopedOauthCookie } from "@/lib/api/oauth";
 
 const SCOPES = [
   "openid",
@@ -41,36 +40,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const reconnectAccount = asStr(req.query.account)?.trim().toLowerCase() || "";
   const state = issueOauthStateCookie(res, "gm_oauth_state", "/api/gmail/callback");
 
-  appendSetCookie(
-    res,
-    serializeCookie("gm_oauth_redirect", redirectUri, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/api/gmail/callback",
-      maxAge: 10 * 60,
-    })
-  );
-  appendSetCookie(
-    res,
-    serializeCookie("gm_oauth_reconnect", reconnectAccount, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/api/gmail/callback",
-      maxAge: 10 * 60,
-    })
-  );
-  appendSetCookie(
-    res,
-    serializeCookie("gm_oauth_source", source, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/api/gmail/callback",
-      maxAge: 10 * 60,
-    })
-  );
+  setScopedOauthCookie(res, "gm_oauth_redirect", redirectUri, "/api/gmail/callback");
+  setScopedOauthCookie(res, "gm_oauth_reconnect", reconnectAccount, "/api/gmail/callback");
+  setScopedOauthCookie(res, "gm_oauth_source", source, "/api/gmail/callback");
   const authUrl =
     "https://accounts.google.com/o/oauth2/v2/auth?" +
     new URLSearchParams({
