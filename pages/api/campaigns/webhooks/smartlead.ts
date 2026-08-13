@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { safeCompare } from "@/lib/crypto";
 import { addToDnc } from "@/lib/campaigns/dnc";
-import { notifyDiscord, discordConfigured } from "@/lib/notify/discord";
+import { notifyCampaignReply, discordConfigured } from "@/lib/notify/discord";
 import { REMOVE_CONTACT_STATUS } from "@/lib/api/campaigns";
 
 /**
@@ -207,16 +207,17 @@ async function processEvent(payload: SmartleadWebhookPayload): Promise<void> {
       });
       await upsertDailyStat(campaign.id, "replies");
 
-      // Campaign-aware Discord ping, fired directly here per design doc §7/§8 (the shared
-      // message-builder described in schema_v2_campaigns_discord_notifications.md doesn't exist
-      // yet — that's a separate, not-yet-built design; if/when it lands, switch this call site
-      // to use it for consistency with the "internal"-provider reply notification).
+      // Shared with the "internal"-provider reply notification (lib/gmail/inboundActions.ts
+      // maybeNotifyDiscord) via lib/notify/discord.ts notifyCampaignReply, so a reply looks the
+      // same in Discord regardless of which provider sent the campaign. See
+      // .claude/schema_v2_campaigns_discord_notifications.md §3/§6.
       if (discordConfigured()) {
-        await notifyDiscord(
-          `📬 **Reply** from ${contact.contact_email}\n` +
-            `**Campaign:** ${campaign.name}\n` +
-            `Status: ${fromStatus} → ${toStatus}`
-        );
+        await notifyCampaignReply({
+          contactEmail: contact.contact_email,
+          campaignName: campaign.name,
+          leadStatus: toStatus,
+          fromStatus,
+        });
       }
       break;
     }
