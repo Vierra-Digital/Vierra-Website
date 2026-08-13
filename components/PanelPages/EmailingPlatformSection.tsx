@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EMAIL_REGEX } from "@/lib/utils";
+import { toContactsCsv, type CsvContactRowWithMeta } from "@/lib/contacts/csv";
 import { Geist } from "next/font/google";
 import Image from "next/image";
 import Link from "next/link";
@@ -82,6 +83,23 @@ import type {
 
 // Site brand font (matches vierradev.com); replaces the panel's former Inter.
 const panelFont = Geist({ subsets: ["latin"] });
+
+type ContactsImportIssueRow = CsvContactRowWithMeta & {
+  reasons: string[];
+  saving?: boolean;
+};
+
+const ISSUE_EDITABLE_FIELDS = ["firstName", "lastName", "email", "phone", "business", "website", "address", "tags"] as const;
+const ISSUE_FIELD_LABELS: Record<(typeof ISSUE_EDITABLE_FIELDS)[number], string> = {
+  firstName: "First Name",
+  lastName: "Last Name",
+  email: "Email",
+  phone: "Phone",
+  business: "Business",
+  website: "Website",
+  address: "Address",
+  tags: "Tags",
+};
 
 /** Format a Date as a `<input type="datetime-local">` value in the viewer's local timezone. */
 function toDatetimeLocalValue(date: Date): string {
@@ -303,7 +321,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     imported: number;
     skipped: number;
     headerErrors: string[];
-    rowErrors: Array<{ lineNumber: number; email: string; reasons: string[] }>;
+    rowErrors: ContactsImportIssueRow[];
   }>({
     open: false,
     imported: 0,
@@ -899,6 +917,22 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     window.URL.revokeObjectURL(url);
   };
 
+  const mapImportRowErrors = (raw: unknown): ContactsImportIssueRow[] => {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((row) => ({
+      lineNumber: Number((row as { lineNumber?: unknown })?.lineNumber) || 0,
+      firstName: String((row as { firstName?: unknown })?.firstName || ""),
+      lastName: String((row as { lastName?: unknown })?.lastName || ""),
+      email: String((row as { email?: unknown })?.email || ""),
+      phone: String((row as { phone?: unknown })?.phone || ""),
+      business: String((row as { business?: unknown })?.business || ""),
+      website: String((row as { website?: unknown })?.website || ""),
+      address: String((row as { address?: unknown })?.address || ""),
+      tags: String((row as { tags?: unknown })?.tags || ""),
+      reasons: Array.isArray((row as { reasons?: unknown })?.reasons) ? (row as { reasons: string[] }).reasons : [],
+    }));
+  };
+
   const handleImportCsv = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -917,7 +951,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         const headerErrors = Array.isArray(payload?.headerErrors) ? payload.headerErrors : [];
-        const rowErrors = Array.isArray(payload?.errors) ? payload.errors : [];
+        const rowErrors = mapImportRowErrors(payload?.errors);
         if (headerErrors.length > 0 || rowErrors.length > 0) {
           setContactsImportIssuesModal({
             open: true,
@@ -936,7 +970,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       const imported = Number(payload?.imported || 0);
       const skipped = Number(payload?.skipped || 0);
       const headerErrors = Array.isArray(payload?.headerErrors) ? payload.headerErrors : [];
-      const rowErrors = Array.isArray(payload?.errors) ? payload.errors : [];
+      const rowErrors = mapImportRowErrors(payload?.errors);
 
       event.target.value = "";
       await Promise.all([loadContacts(), loadContactTags()]);
@@ -956,6 +990,88 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       setContactsError(error instanceof Error ? error.message : "Failed to import CSV.");
     } finally {
       event.target.value = "";
+    }
+  };
+
+  const updateIssueRowField = (lineNumber: number, field: keyof CsvContactRowWithMeta, value: string) => {
+    setContactsImportIssuesModal((prev) => ({
+      ...prev,
+      rowErrors: prev.rowErrors.map((row) => (row.lineNumber === lineNumber ? { ...row, [field]: value } : row)),
+    }));
+  };
+
+  const retryImportIssueRow = async (lineNumber: number) => {
+    const target = contactsImportIssuesModal.rowErrors.find((row) => row.lineNumber === lineNumber);
+    if (!target) return;
+    setContactsImportIssuesModal((prev) => ({
+      ...prev,
+      rowErrors: prev.rowErrors.map((row) => (row.lineNumber === lineNumber ? { ...row, saving: true } : row)),
+    }));
+    try {
+      const csvText = toContactsCsv([
+        {
+          firstName: target.firstName,
+          lastName: target.lastName,
+          email: target.email,
+          phone: target.phone,
+          business: target.business,
+          website: target.website,
+          address: target.address,
+          tags: target.tags,
+        },
+      ]);
+      const response = await fetch("/api/contacts/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountEmail: null, csvText }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      const stillFailing = mapImportRowErrors(payload?.errors);
+      const succeeded = response.ok && Number(payload?.imported || 0) > 0 && stillFailing.length === 0;
+
+      if (succeeded) {
+        let closedIssuesModal = false;
+        setContactsImportIssuesModal((prev) => {
+          const nextRowErrors = prev.rowErrors.filter((row) => row.lineNumber !== lineNumber);
+          const stillOpen = nextRowErrors.length > 0 || prev.headerErrors.length > 0;
+          closedIssuesModal = !stillOpen;
+          return {
+            ...prev,
+            imported: prev.imported + 1,
+            skipped: Math.max(0, prev.skipped - 1),
+            rowErrors: nextRowErrors,
+            open: stillOpen,
+          };
+        });
+        await Promise.all([loadContacts(), loadContactTags()]);
+        if (closedIssuesModal) {
+          setContactsImportSuccessOpen(true);
+        }
+      } else {
+        const reasons = stillFailing[0]?.reasons?.length ? stillFailing[0].reasons : ["Failed to import row."];
+        setContactsImportIssuesModal((prev) => ({
+          ...prev,
+          rowErrors: prev.rowErrors.map((row) =>
+            row.lineNumber === lineNumber ? { ...target, reasons, saving: false } : row
+          ),
+        }));
+      }
+    } catch (error) {
+      setContactsImportIssuesModal((prev) => ({
+        ...prev,
+        rowErrors: prev.rowErrors.map((row) =>
+          row.lineNumber === lineNumber
+            ? { ...row, saving: false, reasons: [error instanceof Error ? error.message : "Failed to import row."] }
+            : row
+        ),
+      }));
+    }
+  };
+
+  const retryAllIssueRows = async () => {
+    const lineNumbers = contactsImportIssuesModal.rowErrors.map((row) => row.lineNumber);
+    for (const lineNumber of lineNumbers) {
+      await retryImportIssueRow(lineNumber);
     }
   };
 
@@ -5222,7 +5338,7 @@ ${sourceText}`;
           }
         >
           <div
-            className="w-full max-w-2xl rounded-2xl bg-white/90 backdrop-blur-xl border border-white/70 shadow-[0_30px_70px_-20px_rgba(46,16,80,0.55)] p-6"
+            className="w-full max-w-4xl rounded-2xl bg-white/90 backdrop-blur-xl border border-white/70 shadow-[0_30px_70px_-20px_rgba(46,16,80,0.55)] p-6 max-h-[90vh] overflow-y-auto"
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -5254,20 +5370,54 @@ ${sourceText}`;
             ) : null}
 
             {contactsImportIssuesModal.rowErrors.length > 0 ? (
-              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-                <p className="text-sm font-semibold text-amber-800">Row Errors</p>
-                <div className="mt-2 max-h-64 overflow-auto space-y-2 text-xs text-amber-900">
-                  {contactsImportIssuesModal.rowErrors.map((row, index) => (
-                    <div key={`${row.lineNumber}-${row.email}-${index}`} className="rounded-lg border border-amber-200 bg-white px-3 py-2">
-                      <p className="font-semibold">
-                        Line {row.lineNumber}
-                        {row.email ? ` (${row.email})` : ""}
-                      </p>
-                      <ul className="mt-1 space-y-0.5">
+              <div className="mt-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-amber-800">
+                    Correct the {contactsImportIssuesModal.rowErrors.length} skipped row
+                    {contactsImportIssuesModal.rowErrors.length === 1 ? "" : "s"} below and save them individually, or fix
+                    everything then Save All.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={retryAllIssueRows}
+                    disabled={contactsImportIssuesModal.rowErrors.some((row) => row.saving)}
+                    className="shrink-0 rounded-lg bg-[#701CC0] text-white text-xs font-medium px-3 py-1.5 hover:bg-[#5f17a5] disabled:opacity-60"
+                  >
+                    Save All
+                  </button>
+                </div>
+                <div className="mt-2 max-h-[50vh] overflow-y-auto space-y-3 pr-1">
+                  {contactsImportIssuesModal.rowErrors.map((row) => (
+                    <div key={row.lineNumber} className="rounded-lg border border-amber-200 bg-white px-3 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold text-amber-900">Line {row.lineNumber}</p>
+                        <button
+                          type="button"
+                          onClick={() => retryImportIssueRow(row.lineNumber)}
+                          disabled={row.saving}
+                          className="shrink-0 rounded-md bg-[#701CC0] text-white text-xs font-medium px-3 py-1 hover:bg-[#5f17a5] disabled:opacity-60"
+                        >
+                          {row.saving ? "Saving..." : "Save Row"}
+                        </button>
+                      </div>
+                      <ul className="mt-1 space-y-0.5 text-xs text-red-600">
                         {row.reasons.map((reason, reasonIndex) => (
                           <li key={`${reason}-${reasonIndex}`}>- {reason}</li>
                         ))}
                       </ul>
+                      <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {ISSUE_EDITABLE_FIELDS.map((field) => (
+                          <label key={field} className="text-[11px] font-medium text-[#6B7280] flex flex-col gap-0.5">
+                            {ISSUE_FIELD_LABELS[field]}
+                            <input
+                              value={row[field]}
+                              onChange={(event) => updateIssueRowField(row.lineNumber, field, event.target.value)}
+                              disabled={row.saving}
+                              className="rounded-md border border-[#E5E7EB] px-2 py-1 text-xs text-[#1E1B2E] focus:outline-none focus:ring-2 focus:ring-[#701CC0]/40 disabled:opacity-60"
+                            />
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>

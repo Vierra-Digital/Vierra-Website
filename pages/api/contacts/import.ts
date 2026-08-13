@@ -78,7 +78,7 @@ export default withAuth(async (req, res, session) => {
   let imported = 0;
   let skipped = 0;
   const createdTagIds = new Map<string, string>();
-  const rowErrors: Array<{ lineNumber: number; email: string; reasons: string[] }> = [];
+  const rowErrors: Array<ImportedRow & { reasons: string[] }> = [];
 
   for (const row of rows as ImportedRow[]) {
     const email = row.email.toLowerCase();
@@ -112,7 +112,7 @@ export default withAuth(async (req, res, session) => {
     }
     if (reasons.length > 0) {
       skipped += 1;
-      rowErrors.push({ lineNumber: row.lineNumber || 0, email, reasons });
+      rowErrors.push({ ...row, email, reasons });
       continue;
     }
 
