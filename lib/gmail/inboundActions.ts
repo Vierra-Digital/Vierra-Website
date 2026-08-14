@@ -3,7 +3,7 @@ import { modifyMessageLabels, getOrCreateLabelId, createGmailDraft } from "@/lib
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { sendEmailCore } from "@/lib/gmail/sendCore";
 import { artemisGenerate, artemisConfigured } from "@/lib/ai/artemis";
-import { notifyDiscord, notifyDiscordEmbed, discordConfigured } from "@/lib/notify/discord";
+import { notifyDiscordEmbed, discordConfigured } from "@/lib/notify/discord";
 import { addToDnc } from "@/lib/campaigns/dnc";
 import type { InboundMessage, InboundContext } from "@/lib/gmail/inboundTypes";
 
