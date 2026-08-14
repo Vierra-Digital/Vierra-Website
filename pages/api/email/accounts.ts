@@ -107,7 +107,7 @@ export default withAuth(async (req, res, session) => {
         provider_label: req.body?.providerLabel !== undefined ? asStr(req.body?.providerLabel) || null : existing.provider_label,
         account_email: req.body?.accountEmail !== undefined ? asStr(req.body?.accountEmail).toLowerCase() || existing.account_email : existing.account_email,
         smtp_host: req.body?.smtpHost !== undefined ? asStr(req.body?.smtpHost) || existing.smtp_host : existing.smtp_host,
-        smtp_port: req.body?.smtpPort !== undefined ? asPort(req.body?.smtpPort, existing.smtp_port) : existing.smtp_port,
+        smtp_port: req.body?.smtpPort !== undefined ? asPort(req.body?.smtpPort, existing.smtp_port ?? 465) : existing.smtp_port,
         smtp_secure: req.body?.smtpSecure !== undefined ? Boolean(req.body?.smtpSecure) : existing.smtp_secure,
         smtp_username: req.body?.smtpUsername !== undefined ? asStr(req.body?.smtpUsername) || existing.smtp_username : existing.smtp_username,
         smtp_password_enc: nextPassword ? encrypt(nextPassword) : existing.smtp_password_enc,
@@ -144,8 +144,9 @@ export default withAuth(async (req, res, session) => {
       res.status(404).json({ message: "Provider account not found." });
       return;
     }
-    // Validate decryption before delete to surface corrupted secrets early.
-    decrypt(existing.smtp_password_enc);
+    // Validate decryption before delete to surface corrupted secrets early (identity-only
+    // accounts, e.g. vendor-provider campaigns, have no password to validate).
+    if (existing.smtp_password_enc) decrypt(existing.smtp_password_enc);
     await prisma.emailProviderAccount.delete({ where: { id } });
     res.status(200).json({ ok: true });
     return;

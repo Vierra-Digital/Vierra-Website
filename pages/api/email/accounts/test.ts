@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
-import { createSmtpTransport, isBlockedSmtpHost } from "@/lib/email/smtp";
+import { createSmtpTransport, isBlockedSmtpHost, requireSmtpCredentials } from "@/lib/email/smtp";
 import { asStr } from "@/lib/api/parsing";
 
 export default withAuth(async (req, res, session) => {
@@ -18,12 +18,16 @@ export default withAuth(async (req, res, session) => {
     res.status(404).json({ message: "Provider account not found." });
     return;
   }
+  if (!account.smtp_host) {
+    res.status(400).json({ ok: false, message: "This mailbox has no SMTP credentials configured." });
+    return;
+  }
   if (isBlockedSmtpHost(account.smtp_host)) {
     res.status(400).json({ ok: false, message: "That SMTP host isn't allowed." });
     return;
   }
 
-  const transporter = createSmtpTransport(account);
+  const transporter = createSmtpTransport(requireSmtpCredentials(account));
 
   try {
     await transporter.verify();

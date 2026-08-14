@@ -3,7 +3,8 @@ import { modifyMessageLabels, getOrCreateLabelId, createGmailDraft } from "@/lib
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { sendEmailCore } from "@/lib/gmail/sendCore";
 import { artemisGenerate, artemisConfigured } from "@/lib/ai/artemis";
-import { notifyDiscordEmbed, discordConfigured } from "@/lib/notify/discord";
+import { notifyDiscord, notifyDiscordEmbed, discordConfigured } from "@/lib/notify/discord";
+import { addToDnc } from "@/lib/campaigns/dnc";
 import type { InboundMessage, InboundContext } from "@/lib/gmail/inboundTypes";
 
 /** True for automated/bulk mail we must never auto-reply to (prevents mail loops). */
@@ -228,15 +229,20 @@ export async function maybeReplyIntelligence(msg: InboundMessage): Promise<void>
   const contact = await prisma.campaignContact.findFirst({
     where: {
       contact_email: msg.fromEmail,
-      queue_status: { notIn: ["paused", "completed", "unsubscribed", "bounced"] },
+      // Canonical QUEUE_STATUSES (lib/api/campaigns.ts) is queued|sending|sent|failed|skipped|
+      // completed|paused — "unsubscribed"/"bounced" here previously were never-valid values that
+      // this filter could never actually match (bounces land in "failed", unsubscribes/DNC in
+      // "skipped"). Fixed to the real terminal-ish states so this only matches contacts still
+      // eligible for a reply to affect.
+      queue_status: { notIn: ["paused", "completed", "skipped", "failed"] },
       ...(accountId ? { campaigns: { account_id: accountId } } : {}),
     },
     orderBy: { enrolled_at: "desc" },
   });
   if (!contact) return;
 
-  // Default: a reply pauses the sequence.
-  let leadStatus = "replied";
+  // Default: a reply pauses the sequence. ("reply" — not "replied", which isn't in LEAD_STATUSES.)
+  let leadStatus = "reply";
 
   if (artemisConfigured()) {
     const result = await artemisGenerate({
@@ -248,12 +254,15 @@ export async function maybeReplyIntelligence(msg: InboundMessage): Promise<void>
     });
     if (result.ok) {
       const label = result.text.trim().toLowerCase().replace(/[^a-z_]/g, "");
+      // Values must be canonical LEAD_STATUSES (lib/api/campaigns.ts) — "interested" and
+      // "unsubscribed" were never valid entries there (positive_response / remove_contact are);
+      // writing the old values meant these replies wouldn't match the UI's status filter chips.
       const map: Record<string, string> = {
-        interested: "interested",
+        interested: "positive_response",
         not_interested: "not_interested",
         out_of_office: "no_response",
-        unsubscribe: "unsubscribed",
-        neutral: "replied",
+        unsubscribe: "remove_contact",
+        neutral: "reply",
       };
       if (map[label]) leadStatus = map[label];
     }
@@ -277,6 +286,13 @@ export async function maybeReplyIntelligence(msg: InboundMessage): Promise<void>
       note: "Auto-updated from an inbound reply.",
     },
   });
+
+  // An auto-classified unsubscribe should actually stop future contact, same as the manual
+  // remove_contact categorization path (pages/api/campaigns/[id]/contacts/[contactId].ts) —
+  // previously this branch changed lead_status but never added the sender to the DNC list.
+  if (leadStatus === "remove_contact") {
+    await addToDnc(contact.campaign_id, msg.fromEmail, "categorization");
+  }
 }
 
 /** Notify the team Discord when a real reply (to one of your threads) arrives. */

@@ -1,8 +1,75 @@
 import { prisma } from "@/lib/prisma";
+import { addLeadsToCampaign, type SmartleadLead } from "@/lib/campaigns/smartlead/client";
 
 type AudienceFilter = {
   tagIds?: string[];
 };
+
+/**
+ * Pushes every not-yet-pushed contact (smartlead_lead_id IS NULL, still queued) for a
+ * smartlead-provider campaign to Smartlead, DNC-filtering first since Smartlead has no
+ * visibility into email_blocked_senders. Best-effort/idempotent: safe to call repeatedly —
+ * already-pushed contacts are skipped, and a partial failure just leaves the remainder for the
+ * next sync to retry. See .claude/schema_v2_campaigns_smartlead_integration.md Flow 2.
+ */
+async function pushPendingLeadsToSmartlead(campaignId: string): Promise<void> {
+  const campaign = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    select: { smartlead_campaign_id: true, email_provider_accounts: { select: { user_id: true } } },
+  });
+  if (!campaign?.smartlead_campaign_id) return; // not launched into Smartlead yet (Flow 1 hasn't run)
+
+  const pending = await prisma.campaignContact.findMany({
+    where: { campaign_id: campaignId, smartlead_lead_id: null, queue_status: "queued" },
+    select: { id: true, contact_email: true, contact_first_name: true, contact_last_name: true, contact_business: true },
+  });
+  if (pending.length === 0) return;
+
+  const dncEmails = new Set(
+    (
+      await prisma.emailBlockedSender.findMany({
+        where: {
+          user_id: campaign.email_provider_accounts.user_id,
+          email: { in: pending.map((p) => p.contact_email) },
+          soft_deleted_at: null,
+        },
+        select: { email: true },
+      })
+    ).map((r) => r.email.toLowerCase())
+  );
+
+  const blocked = pending.filter((p) => dncEmails.has(p.contact_email.toLowerCase()));
+  if (blocked.length > 0) {
+    await prisma.campaignContact.updateMany({
+      where: { id: { in: blocked.map((b) => b.id) } },
+      data: { queue_status: "skipped", skip_reason: "dnc" },
+    });
+  }
+
+  const toPush = pending.filter((p) => !dncEmails.has(p.contact_email.toLowerCase()));
+  if (toPush.length === 0) return;
+
+  const leads: SmartleadLead[] = toPush.map((p) => ({
+    email: p.contact_email,
+    first_name: p.contact_first_name || undefined,
+    last_name: p.contact_last_name || undefined,
+    company_name: p.contact_business || undefined,
+  }));
+
+  const result = await addLeadsToCampaign(campaign.smartlead_campaign_id, leads);
+  // Process result.data regardless of result.ok — on a partial failure (one batch of 400 fails
+  // after an earlier batch succeeded), the succeeded batch's leads still need their
+  // smartlead_lead_id recorded here, or the next sync would re-push (and likely duplicate) them.
+  // Any contact NOT present in result.data.leads simply stays unpushed and is retried next sync.
+
+  // Correlate Smartlead's returned lead ids back by email (order isn't guaranteed to match).
+  const byEmail = new Map((result.data.leads ?? []).map((l) => [l.email.toLowerCase(), String(l.id)]));
+  for (const p of toPush) {
+    const leadId = byEmail.get(p.contact_email.toLowerCase());
+    if (!leadId) continue; // Smartlead didn't echo this one back — leave smartlead_lead_id null, retried next sync
+    await prisma.campaignContact.update({ where: { id: p.id }, data: { smartlead_lead_id: leadId } });
+  }
+}
 
 /**
  * Enrolls newly-matching contacts into a campaign. Campaigns are company-shared but
@@ -78,5 +145,10 @@ export async function syncCampaignAudience(campaignId: string): Promise<{ enroll
   }
 
   await prisma.campaign.update({ where: { id: campaignId }, data: { audience_synced_at: new Date() } });
+
+  // No-ops for "internal"-provider campaigns (smartlead_campaign_id is null until Flow 1 launches
+  // a smartlead campaign), so safe to always call rather than branching on send_provider here.
+  await pushPendingLeadsToSmartlead(campaignId).catch(() => {});
+
   return { enrolledCount: result.count };
 }
