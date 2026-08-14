@@ -3,7 +3,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { FiClock, FiEye, FiMousePointer, FiSend, FiShield } from "react-icons/fi";
-import { GLASS_SURFACE, SHADOW_SM } from "@/components/email/emailTheme";
 
 type StatMessage = {
   messageId: string | null;
@@ -42,6 +41,10 @@ type StatsResponse = {
     sendTimes: { day: number; hour: number; sent: number; opened: number }[];
     topLinks: { url: string; clicks: number }[];
     recipientDomains: { domain: string; sent: number; opened: number }[];
+    openHours: { hour: number; count: number }[];
+    subjectStats: { label: string; sent: number; opened: number }[];
+    repeatOpened: number;
+    openedTotal: number;
   };
   messages: StatMessage[];
   truncated: boolean;
@@ -74,8 +77,6 @@ const STATUS_STYLES: Record<RecordStatus, string> = {
   fail: "bg-[#FEF2F2] text-[#B91C1C]",
 };
 
-const CARD = `rounded-2xl ${GLASS_SURFACE} ${SHADOW_SM} p-5`;
-
 const pct = (num: number, den: number) => (den > 0 ? Math.round((num / den) * 100) : 0);
 
 const dayKey = (iso: string) => {
@@ -83,6 +84,66 @@ const dayKey = (iso: string) => {
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 };
+
+/**
+ * Layout primitives for this report. The page is deliberately NOT a grid of cards — nesting
+ * bordered boxes inside bordered boxes is what made it read as cluttered. Hierarchy comes from
+ * a hairline band per section, a small-caps label, and whitespace.
+ */
+const Section: React.FC<{ title: string; note?: string; children: React.ReactNode }> = ({ title, note, children }) => (
+  <section className="border-b border-[#EDEAF3] px-6 py-7">
+    <div className="mb-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[#1E1B2E]">{title}</h2>
+      {note ? <span className="text-xs text-[#847FA0]">{note}</span> : null}
+    </div>
+    {children}
+  </section>
+);
+
+const EmptyNote: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <p className="text-sm text-[#A9A3BC]">{children}</p>
+);
+
+const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="flex items-baseline justify-between gap-2">
+    <dt className="text-[#847FA0]">{label}</dt>
+    <dd className="font-semibold tabular-nums text-[#1E1B2E]">{value}</dd>
+  </div>
+);
+
+/** Borderless table: hairline row rules only, first column truncates, rest are right-aligned. */
+const FlatTable: React.FC<{ head: string[]; rows: { key: string; cells: (string | number)[] }[] }> = ({ head, rows }) => (
+  <table className="w-full table-fixed text-sm">
+    <thead>
+      <tr className="text-[10.5px] uppercase tracking-wide text-[#847FA0]">
+        {head.map((h, i) => (
+          <th key={h} className={i === 0 ? "pb-2 text-left font-semibold" : "w-20 pb-2 text-right font-semibold"}>
+            {h}
+          </th>
+        ))}
+      </tr>
+    </thead>
+    <tbody>
+      {rows.map((row) => (
+        <tr key={row.key} className="border-t border-[#F2EFF8]">
+          {row.cells.map((cell, i) => (
+            <td
+              key={i}
+              title={i === 0 ? String(cell) : undefined}
+              className={
+                i === 0
+                  ? "max-w-0 truncate py-2 pr-2 text-[#4A465C]"
+                  : "py-2 text-right font-medium tabular-nums text-[#1E1B2E]"
+              }
+            >
+              {cell}
+            </td>
+          ))}
+        </tr>
+      ))}
+    </tbody>
+  </table>
+);
 
 const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
   const [data, setData] = useState<StatsResponse | null>(null);
@@ -151,6 +212,10 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
             recipientDomains: Array.isArray(payload?.behaviour?.recipientDomains)
               ? payload.behaviour.recipientDomains
               : [],
+            openHours: Array.isArray(payload?.behaviour?.openHours) ? payload.behaviour.openHours : [],
+            subjectStats: Array.isArray(payload?.behaviour?.subjectStats) ? payload.behaviour.subjectStats : [],
+            repeatOpened: n(payload?.behaviour?.repeatOpened),
+            openedTotal: n(payload?.behaviour?.openedTotal),
           },
           messages: Array.isArray(payload?.messages) ? payload.messages : [],
           truncated: Boolean(payload?.truncated),
@@ -295,16 +360,15 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
   ];
 
   const hasOutreach = Boolean(report && (report.campaigns > 0 || report.totalContacts > 0 || report.bookings > 0));
-
   return (
-    <div className="h-full overflow-y-auto">
-      {/* Sticky header so the range selector stays reachable while scrolling the report. */}
-      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[#EBEAF0] bg-white/85 px-5 py-3.5 backdrop-blur-md">
+    <div className="h-full overflow-y-auto bg-white">
+      {/* Sticky header — the only chrome on the page. */}
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[#EDEAF3] bg-white/90 px-6 py-3.5 backdrop-blur-md">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold tracking-tight text-[#1E1B2E]">Email Analytics</h1>
+          <h1 className="text-base font-semibold tracking-tight text-[#1E1B2E]">Email Analytics</h1>
           <p className="truncate text-xs text-[#847FA0]">Outbound performance — mail you send, not mail you receive.</p>
         </div>
-        <div className="flex shrink-0 items-center gap-1 rounded-lg border border-[#EBEAF0] bg-white p-0.5">
+        <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-[#F4F2F8] p-0.5">
           {[
             { label: "30d", days: 30 },
             { label: "90d", days: 90 },
@@ -315,7 +379,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
               type="button"
               onClick={() => setRangeDays(opt.days)}
               className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                rangeDays === opt.days ? "bg-[#701CC0] text-white" : "text-[#6B7280] hover:bg-[#F4F1FA]"
+                rangeDays === opt.days ? "bg-white text-[#1E1B2E] shadow-sm" : "text-[#6B7280] hover:text-[#1E1B2E]"
               }`}
             >
               {opt.label}
@@ -324,206 +388,221 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
         </div>
       </div>
 
-      <div className="space-y-6 p-5">
-        {/* An all-zero report is indistinguishable from a broken one, so say which it is. */}
-        {derived.sent === 0 ? (
-          <div className="rounded-xl border border-[#EBEAF0] bg-[#FAFAFB] px-4 py-3 text-sm text-[#6B7280]">
-            No sent mail in this range{accountsKey ? " for the selected inbox(es)" : ""}. Try a wider range —
-            analytics only covers mail sent from the panel, and open/click rates need tracking enabled at send time.
-          </div>
-        ) : null}
+      {derived.sent === 0 ? (
+        <p className="border-b border-[#EDEAF3] px-6 py-3 text-sm text-[#6B7280]">
+          No sent mail in this range. Try a wider range — analytics covers mail sent from the panel, and
+          open/click rates need tracking enabled at send time.
+        </p>
+      ) : null}
 
-        {/* ── Headline metrics ─────────────────────────────────────────────── */}
-        <section>
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            {kpis.map((k) => (
-              <div key={k.label} className={CARD}>
-                <div className="flex items-center gap-2 text-[#847FA0]">
-                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10 text-[#701CC0]">{k.icon}</span>
-                  <span className="text-[11px] font-semibold uppercase tracking-wide">{k.label}</span>
+      {/* ── Headline metrics: one flat strip, divided by hairlines, no boxes ───────── */}
+      <div className="grid grid-cols-2 divide-x divide-[#EDEAF3] border-b border-[#EDEAF3] lg:grid-cols-4">
+        {kpis.map((k) => (
+          <div key={k.label} className="px-6 py-5">
+            <div className="flex items-center gap-1.5 text-[#847FA0]">
+              {k.icon}
+              <span className="text-[11px] font-semibold uppercase tracking-wide">{k.label}</span>
+            </div>
+            <div className="mt-2 text-[28px] font-bold leading-none tabular-nums tracking-tight text-[#1E1B2E]">
+              {k.value}
+            </div>
+            <div className="mt-1.5 min-h-[1rem] text-xs tabular-nums text-[#847FA0]">{k.sub ?? ""}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Each Section is a hairline-separated band — hierarchy from type + space, not borders. */}
+      <Section title="Engagement" note={`${derived.tracked.toLocaleString()} tracked messages`}>
+        <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1.7fr_1fr]">
+          <div>
+            <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Opens &amp; clicks over time</h3>
+            {derived.series.length === 0 ? (
+              <EmptyNote>No tracking activity yet.</EmptyNote>
+            ) : (
+              <div className="h-[230px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={derived.series} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+                    <defs>
+                      <linearGradient id="gOpens" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#701CC0" stopOpacity={0.24} />
+                        <stop offset="100%" stopColor="#701CC0" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="gClicks" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#8B3BEE" stopOpacity={0.18} />
+                        <stop offset="100%" stopColor="#8B3BEE" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F2EFF8" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#847FA0" }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: "#847FA0" }} tickLine={false} axisLine={false} allowDecimals={false} width={32} />
+                    <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid #EAE5F4", fontSize: 12 }} />
+                    <Area type="monotone" dataKey="opens" name="Opens" stroke="#701CC0" strokeWidth={2} fill="url(#gOpens)" />
+                    <Area type="monotone" dataKey="clicks" name="Clicks" stroke="#8B3BEE" strokeWidth={2} fill="url(#gClicks)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Funnel</h3>
+            <div className="space-y-3.5">
+              {[
+                { label: "Sent", value: derived.tracked, w: 100, color: "#5E17A8" },
+                { label: "Opened", value: derived.openedMessages, w: derived.openRate, color: "#701CC0" },
+                { label: "Clicked", value: derived.clickedMessages, w: derived.clickRate, color: "#8B3BEE" },
+              ].map((s) => (
+                <div key={s.label}>
+                  <div className="mb-1.5 flex items-baseline justify-between text-xs">
+                    <span className="font-medium text-[#4A465C]">{s.label}</span>
+                    <span className="tabular-nums text-[#847FA0]">
+                      <b className="font-semibold text-[#1E1B2E]">{s.value.toLocaleString()}</b> · {s.w}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-[#F2EFF8]">
+                    <div className="h-full rounded-full" style={{ width: `${Math.max(s.w, 2)}%`, background: s.color }} />
+                  </div>
                 </div>
-                <div className="mt-3 text-3xl font-bold tabular-nums tracking-tight text-[#1E1B2E]">{k.value}</div>
-                <div className="mt-1 min-h-[1rem] text-xs tabular-nums text-[#847FA0]">{k.sub ?? ""}</div>
+              ))}
+            </div>
+            <dl className="mt-5 space-y-2 text-xs">
+              <Stat label="Click-to-open rate" value={`${derived.ctor}%`} />
+              <Stat
+                label="Opened more than once"
+                value={
+                  behaviour && behaviour.openedTotal > 0
+                    ? `${pct(behaviour.repeatOpened, behaviour.openedTotal)}%`
+                    : "—"
+                }
+              />
+              <Stat label="Total opens / clicks" value={`${derived.opens.toLocaleString()} / ${derived.clicks.toLocaleString()}`} />
+            </dl>
+          </div>
+        </div>
+      </Section>
+
+      {/* ── Deliverability ─────────────────────────────────────────────────────────── */}
+      {deliverability ? (
+        <Section title="Deliverability" note="Delivery outcomes and sender reputation">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 lg:grid-cols-5">
+            {[
+              {
+                label: "Delivered",
+                value: deliveryRate === null ? "—" : `${deliveryRate}%`,
+                sub: `${(deliverability.attempted - deliverability.failed).toLocaleString()} of ${deliverability.attempted.toLocaleString()}`,
+              },
+              { label: "Failed", value: deliverability.failed.toLocaleString(), sub: "send errors" },
+              { label: "Bounces", value: deliverability.bounces.toLocaleString(), sub: "provider-reported" },
+              { label: "Replies", value: deliverability.replies.toLocaleString(), sub: "on campaigns" },
+              { label: "Unsubscribes", value: deliverability.unsubscribes.toLocaleString(), sub: "opted out" },
+            ].map((k) => (
+              <div key={k.label}>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[#847FA0]">{k.label}</div>
+                <div className="mt-1 text-xl font-bold tabular-nums tracking-tight text-[#1E1B2E]">{k.value}</div>
+                <div className="text-xs tabular-nums text-[#847FA0]">{k.sub}</div>
               </div>
             ))}
           </div>
-        </section>
-
-        {/* ── Engagement: the trend chart leads, funnel sits beside it ──────── */}
-        <section>
-          <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#847FA0]">Engagement</h2>
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-            <div className={`${CARD} xl:col-span-2`}>
-              <h3 className="text-sm font-semibold text-[#1E1B2E]">Opens &amp; clicks over time</h3>
-              <p className="mb-3 text-xs text-[#847FA0]">
-                By send date · most recent {derived.series.length} days with activity
-              </p>
-              {derived.series.length === 0 ? (
-                <div className="flex h-[240px] items-center justify-center text-sm text-[#847FA0]">No tracking activity yet.</div>
-              ) : (
-                <div className="h-[240px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={derived.series} margin={{ top: 8, right: 8, bottom: 0, left: -18 }}>
-                      <defs>
-                        <linearGradient id="gOpens" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#701CC0" stopOpacity={0.28} />
-                          <stop offset="100%" stopColor="#701CC0" stopOpacity={0} />
-                        </linearGradient>
-                        <linearGradient id="gClicks" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#C42B9F" stopOpacity={0.2} />
-                          <stop offset="100%" stopColor="#C42B9F" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#EFEBF7" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#847FA0" }} tickLine={false} axisLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: "#847FA0" }} tickLine={false} axisLine={false} allowDecimals={false} width={32} />
-                      <Tooltip
-                        contentStyle={{ borderRadius: 12, border: "1px solid #EAE5F4", fontSize: 12, boxShadow: "0 8px 24px -10px rgba(46,16,80,0.3)" }}
-                      />
-                      <Area type="monotone" dataKey="opens" name="Opens" stroke="#701CC0" strokeWidth={2} fill="url(#gOpens)" />
-                      <Area type="monotone" dataKey="clicks" name="Clicks" stroke="#C42B9F" strokeWidth={2} fill="url(#gClicks)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </div>
-
-            <div className={CARD}>
-              <h3 className="text-sm font-semibold text-[#1E1B2E]">Funnel</h3>
-              <p className="mb-4 text-xs text-[#847FA0]">Of {derived.tracked.toLocaleString()} tracked messages</p>
-              <div className="space-y-3">
-                {[
-                  { label: "Sent", value: derived.tracked, w: 100, color: "#701CC0" },
-                  { label: "Opened", value: derived.openedMessages, w: derived.openRate, color: "#9333EA" },
-                  { label: "Clicked", value: derived.clickedMessages, w: derived.clickRate, color: "#C42B9F" },
-                ].map((s) => (
-                  <div key={s.label}>
-                    <div className="mb-1 flex items-baseline justify-between text-xs">
-                      <span className="font-medium text-[#4A465C]">{s.label}</span>
-                      <span className="tabular-nums text-[#847FA0]">
-                        <b className="font-semibold text-[#1E1B2E]">{s.value.toLocaleString()}</b> · {s.w}%
-                      </span>
-                    </div>
-                    <div className="h-2.5 overflow-hidden rounded-full bg-[#F3EEFB]">
-                      <div className="h-full rounded-full" style={{ width: `${Math.max(s.w, 2)}%`, background: s.color }} />
-                    </div>
-                  </div>
+          {deliverability.topFailReasons.length > 0 ? (
+            <div className="mt-5">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#847FA0]">Top failure reasons</div>
+              <div className="flex flex-wrap gap-2">
+                {deliverability.topFailReasons.map((r) => (
+                  <span key={r.reason} className="rounded-md bg-[#FEF2F2] px-2 py-1 text-xs font-medium text-[#B91C1C]">
+                    {r.reason}: {r.count}
+                  </span>
                 ))}
               </div>
-              <div className="mt-4 border-t border-[#EEE6F7] pt-3 text-xs text-[#847FA0]">
-                Click-to-open rate <b className="tabular-nums text-[#1E1B2E]">{derived.ctor}%</b>
-              </div>
             </div>
+          ) : null}
+          {derived.filteredOpens > 0 ? (
+            <p className="mt-4 text-xs text-[#847FA0]">
+              {derived.filteredOpens.toLocaleString()} machine pre-fetches (Apple Mail Privacy, security scanners) excluded from opens.
+            </p>
+          ) : null}
+        </Section>
+      ) : null}
+
+      {/* ── Domain authentication ──────────────────────────────────────────────────── */}
+      {domainAuth && domainAuth.length > 0 ? (
+        <Section title="Domain authentication" note="SPF, DKIM and DMARC — checked live over DNS">
+          <div className="divide-y divide-[#F2EFF8]">
+            {domainAuth.map((d) => (
+              <div key={d.domain} className="py-3 first:pt-0 last:pb-0">
+                <div className="mb-2 flex flex-wrap items-baseline gap-2">
+                  <FiShield className="h-3.5 w-3.5 text-[#701CC0]" />
+                  <span className="text-sm font-semibold text-[#1E1B2E]">{d.domain}</span>
+                  <span className="text-xs text-[#847FA0]">
+                    {d.accounts.length} mailbox{d.accounts.length === 1 ? "" : "es"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {([["SPF", d.spf], ["DKIM", d.dkim], ["DMARC", d.dmarc]] as const).map(([name, rec]) => (
+                    <div key={name} className="flex items-start gap-2">
+                      <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${STATUS_STYLES[rec.status]}`}>
+                        {name}
+                      </span>
+                      <span className="text-xs leading-snug text-[#6B7280]">{rec.detail}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
-        </section>
+        </Section>
+      ) : null}
 
-        {/* ── Deliverability ───────────────────────────────────────────────── */}
-        {deliverability ? (
-          <section>
-            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#847FA0]">Deliverability</h2>
-            <div className={CARD}>
-              <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-                {[
-                  {
-                    label: "Delivered",
-                    value: deliveryRate === null ? "—" : `${deliveryRate}%`,
-                    sub: `${(deliverability.attempted - deliverability.failed).toLocaleString()} of ${deliverability.attempted.toLocaleString()}`,
-                  },
-                  { label: "Failed", value: deliverability.failed.toLocaleString(), sub: "send errors" },
-                  { label: "Bounces", value: deliverability.bounces.toLocaleString(), sub: "provider-reported" },
-                  { label: "Replies", value: deliverability.replies.toLocaleString(), sub: "on campaigns" },
-                  { label: "Unsubscribes", value: deliverability.unsubscribes.toLocaleString(), sub: "opted out" },
-                ].map((k) => (
-                  <div key={k.label}>
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-[#847FA0]">{k.label}</div>
-                    <div className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-[#1E1B2E]">{k.value}</div>
-                    <div className="text-xs tabular-nums text-[#847FA0]">{k.sub}</div>
-                  </div>
-                ))}
-              </div>
-              {deliverability.topFailReasons.length > 0 ? (
-                <div className="mt-4 border-t border-[#EEE6F7] pt-3">
-                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#847FA0]">Top failure reasons</div>
-                  <div className="flex flex-wrap gap-2">
-                    {deliverability.topFailReasons.map((r) => (
-                      <span key={r.reason} className="rounded-full bg-[#FEF2F2] px-2.5 py-1 text-xs font-medium text-[#B91C1C]">
-                        {r.reason}: {r.count}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              {derived.filteredOpens > 0 ? (
-                <p className="mt-3 text-xs text-[#847FA0]">
-                  {derived.filteredOpens.toLocaleString()} machine pre-fetches (Apple Mail Privacy, security scanners)
-                  were excluded from opens.
-                </p>
-              ) : null}
-            </div>
-          </section>
-        ) : null}
-
-        {/* ── Send timing ──────────────────────────────────────────────────── */}
-        {behaviour && behaviour.sendTimes.length > 0 ? (
-          <section>
-            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#847FA0]">Send timing</h2>
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-              <div className={`${CARD} xl:col-span-2`}>
-                <h3 className="text-sm font-semibold text-[#1E1B2E]">When you send, and what gets opened</h3>
-                <p className="mb-3 text-xs text-[#847FA0]">
-                  Cell shade = send volume · number = open rate. Based on the last{" "}
-                  {behaviour.sampleSize.toLocaleString()} tracked messages, in your local timezone.
-                </p>
-                <div className="overflow-x-auto">
-                  <table className="border-separate border-spacing-[2px]">
-                    <tbody>
-                      {DAY_LABELS.map((label, day) => (
-                        <tr key={label}>
-                          <td className="pr-2 text-right text-[10px] font-medium text-[#847FA0]">{label}</td>
-                          {Array.from({ length: 24 }, (_, hour) => {
-                            const bucket = behaviour.sendTimes.find((b) => b.day === day && b.hour === hour);
-                            const sent = bucket?.sent ?? 0;
-                            const rate = bucket ? pct(bucket.opened, bucket.sent) : 0;
-                            return (
-                              <td
-                                key={hour}
-                                title={
-                                  sent
-                                    ? `${label} ${hour}:00 — ${sent} sent, ${rate}% opened`
-                                    : `${label} ${hour}:00 — no sends`
-                                }
-                                className="h-5 w-5 rounded-[3px] text-center text-[8px] font-semibold leading-5"
-                                style={{
-                                  background: sent
-                                    ? `rgba(112,28,192,${0.12 + (sent / maxBucketSent) * 0.75})`
-                                    : "#F4F2F8",
-                                  color: sent && sent / maxBucketSent > 0.5 ? "#fff" : "#5B5670",
-                                }}
-                              >
-                                {sent && rate > 0 ? rate : ""}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                      <tr>
-                        <td />
-                        {Array.from({ length: 24 }, (_, hour) => (
-                          <td key={hour} className="pt-1 text-center text-[8px] text-[#B0AAC4]">
-                            {hour % 6 === 0 ? hour : ""}
-                          </td>
-                        ))}
+      {/* ── Timing ─────────────────────────────────────────────────────────────────── */}
+      {behaviour && behaviour.sendTimes.length > 0 ? (
+        <Section title="Timing" note={`Based on the last ${behaviour.sampleSize.toLocaleString()} tracked messages, local time`}>
+          <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1.7fr_1fr]">
+            <div>
+              <h3 className="mb-1 text-sm font-medium text-[#4A465C]">Send volume &amp; open rate by hour</h3>
+              <p className="mb-3 text-xs text-[#847FA0]">Shade = volume sent · number = % opened</p>
+              <div className="overflow-x-auto">
+                <table className="border-separate border-spacing-[2px]">
+                  <tbody>
+                    {DAY_LABELS.map((label, day) => (
+                      <tr key={label}>
+                        <td className="pr-2 text-right text-[10px] font-medium text-[#847FA0]">{label}</td>
+                        {Array.from({ length: 24 }, (_, hour) => {
+                          const bucket = behaviour.sendTimes.find((b) => b.day === day && b.hour === hour);
+                          const sent = bucket?.sent ?? 0;
+                          const rate = bucket ? pct(bucket.opened, bucket.sent) : 0;
+                          return (
+                            <td
+                              key={hour}
+                              title={sent ? `${label} ${hour}:00 — ${sent} sent, ${rate}% opened` : `${label} ${hour}:00 — no sends`}
+                              className="h-5 w-5 rounded-[3px] text-center text-[8px] font-semibold leading-5"
+                              style={{
+                                background: sent ? `rgba(112,28,192,${0.1 + (sent / maxBucketSent) * 0.75})` : "#F6F4FA",
+                                color: sent && sent / maxBucketSent > 0.5 ? "#fff" : "#5B5670",
+                              }}
+                            >
+                              {sent && rate > 0 ? rate : ""}
+                            </td>
+                          );
+                        })}
                       </tr>
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                    <tr>
+                      <td />
+                      {Array.from({ length: 24 }, (_, hour) => (
+                        <td key={hour} className="pt-1 text-center text-[8px] text-[#B0AAC4]">
+                          {hour % 6 === 0 ? hour : ""}
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
               </div>
+            </div>
 
-              <div className={CARD}>
-                <h3 className="text-sm font-semibold text-[#1E1B2E]">Best windows</h3>
-                <p className="mb-3 text-xs text-[#847FA0]">Highest open rate (min. 3 sends)</p>
+            <div className="space-y-6">
+              <div>
+                <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Best windows to send</h3>
                 {bestSendTimes.length === 0 ? (
-                  <p className="text-sm text-[#847FA0]">Not enough sends yet to call a best time.</p>
+                  <EmptyNote>Not enough sends yet to call a best time.</EmptyNote>
                 ) : (
                   <ol className="space-y-2">
                     {bestSendTimes.map((b) => (
@@ -539,195 +618,137 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                   </ol>
                 )}
               </div>
-            </div>
-          </section>
-        ) : null}
-
-        {/* ── Domain authentication ────────────────────────────────────────── */}
-        {domainAuth && domainAuth.length > 0 ? (
-          <section>
-            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#847FA0]">
-              Domain authentication
-            </h2>
-            <div className={CARD}>
-              <div className="mb-3 flex items-center gap-2">
-                <FiShield className="h-4 w-4 text-[#701CC0]" />
-                <p className="text-xs text-[#847FA0]">
-                  SPF, DKIM and DMARC are the biggest controllable factor in inbox placement — checked live over DNS.
-                </p>
-              </div>
-              <div className="space-y-3">
-                {domainAuth.map((d) => (
-                  <div key={d.domain} className="rounded-xl border border-[#EEE6F7] p-3">
-                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-sm font-semibold text-[#1E1B2E]">{d.domain}</span>
-                      <span className="text-xs text-[#847FA0]">{d.accounts.length} mailbox{d.accounts.length === 1 ? "" : "es"}</span>
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                      {([
-                        ["SPF", d.spf],
-                        ["DKIM", d.dkim],
-                        ["DMARC", d.dmarc],
-                      ] as const).map(([name, rec]) => (
-                        <div key={name} className="flex items-start gap-2">
-                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_STYLES[rec.status]}`}>
-                            {name}
-                          </span>
-                          <span className="text-xs leading-snug text-[#6B7280]">{rec.detail}</span>
-                        </div>
-                      ))}
-                    </div>
+              <div>
+                <h3 className="mb-3 text-sm font-medium text-[#4A465C]">When recipients open</h3>
+                {!behaviour.openHours.some((h) => h.count > 0) ? (
+                  <EmptyNote>No opens recorded yet.</EmptyNote>
+                ) : (
+                  <div className="flex h-16 items-end gap-[2px]">
+                    {behaviour.openHours.map((h) => {
+                      const peak = Math.max(1, ...behaviour.openHours.map((x) => x.count));
+                      return (
+                        <div
+                          key={h.hour}
+                          title={`${h.hour}:00 — ${h.count} opens`}
+                          className="flex-1 rounded-t-sm bg-[#701CC0]"
+                          style={{ height: `${Math.max(2, (h.count / peak) * 100)}%`, opacity: h.count ? 1 : 0.15 }}
+                        />
+                      );
+                    })}
                   </div>
-                ))}
+                )}
+                <div className="mt-1 flex justify-between text-[9px] text-[#B0AAC4]">
+                  <span>00</span><span>06</span><span>12</span><span>18</span><span>23</span>
+                </div>
               </div>
-            </div>
-          </section>
-        ) : null}
-
-        {/* ── Breakdowns ───────────────────────────────────────────────────── */}
-        <section>
-          <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#847FA0]">Breakdown</h2>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-2">
-            <div className={CARD}>
-              <h3 className="mb-3 text-sm font-semibold text-[#1E1B2E]">Top messages by opens</h3>
-              {derived.topMessages.length === 0 ? (
-                <p className="text-sm text-[#847FA0]">No opened messages yet.</p>
-              ) : (
-                <table className="w-full table-fixed text-sm">
-                  <thead>
-                    <tr className="text-[10.5px] uppercase tracking-wide text-[#847FA0]">
-                      <th className="pb-2 text-left font-semibold">Subject</th>
-                      <th className="w-16 pb-2 text-right font-semibold">Opens</th>
-                      <th className="w-16 pb-2 text-right font-semibold">Clicks</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {derived.topMessages.map((m, i) => (
-                      <tr key={m.messageId || i} className="border-t border-[#EEE6F7]/70">
-                        <td className="max-w-0 truncate py-2 pr-2 text-[#4A465C]">{m.subject || "(No subject)"}</td>
-                        <td className="py-2 text-right font-semibold tabular-nums text-[#1E1B2E]">{m.openCount}</td>
-                        <td className="py-2 text-right tabular-nums text-[#4A465C]">{m.clickCount}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-
-            <div className={CARD}>
-              <h3 className="mb-3 text-sm font-semibold text-[#1E1B2E]">Open rate by recipient provider</h3>
-              {!behaviour || behaviour.recipientDomains.length === 0 ? (
-                <p className="text-sm text-[#847FA0]">No recipient data yet.</p>
-              ) : (
-                <table className="w-full table-fixed text-sm">
-                  <thead>
-                    <tr className="text-[10.5px] uppercase tracking-wide text-[#847FA0]">
-                      <th className="pb-2 text-left font-semibold">Provider</th>
-                      <th className="w-14 pb-2 text-right font-semibold">Sent</th>
-                      <th className="w-20 pb-2 text-right font-semibold">Open rate</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {behaviour.recipientDomains.map((d) => (
-                      <tr key={d.domain} className="border-t border-[#EEE6F7]/70">
-                        <td className="max-w-0 truncate py-2 pr-2 text-[#4A465C]">{d.domain}</td>
-                        <td className="py-2 text-right tabular-nums text-[#1E1B2E]">{d.sent}</td>
-                        <td className="py-2 text-right font-semibold tabular-nums text-[#1E1B2E]">
-                          {pct(d.opened, d.sent)}%
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-
-            <div className={CARD}>
-              <h3 className="mb-3 text-sm font-semibold text-[#1E1B2E]">Most clicked links</h3>
-              {!behaviour || behaviour.topLinks.length === 0 ? (
-                <p className="text-sm text-[#847FA0]">No link clicks recorded yet.</p>
-              ) : (
-                <table className="w-full table-fixed text-sm">
-                  <thead>
-                    <tr className="text-[10.5px] uppercase tracking-wide text-[#847FA0]">
-                      <th className="pb-2 text-left font-semibold">URL</th>
-                      <th className="w-16 pb-2 text-right font-semibold">Clicks</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {behaviour.topLinks.map((l) => (
-                      <tr key={l.url} className="border-t border-[#EEE6F7]/70">
-                        <td className="max-w-0 truncate py-2 pr-2 text-[#4A465C]" title={l.url}>{l.url}</td>
-                        <td className="py-2 text-right font-semibold tabular-nums text-[#1E1B2E]">{l.clicks}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-
-            <div className={CARD}>
-              <h3 className="mb-3 text-sm font-semibold text-[#1E1B2E]">Per-account performance</h3>
-              {derived.perAccount.length === 0 ? (
-                <p className="text-sm text-[#847FA0]">No sent mail yet.</p>
-              ) : (
-                <table className="w-full table-fixed text-sm">
-                  <thead>
-                    <tr className="text-[10.5px] uppercase tracking-wide text-[#847FA0]">
-                      <th className="pb-2 text-left font-semibold">Account</th>
-                      <th className="w-14 pb-2 text-right font-semibold">Sent</th>
-                      <th className="w-16 pb-2 text-right font-semibold">Opens</th>
-                      <th className="w-16 pb-2 text-right font-semibold">Clicks</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {derived.perAccount.map((a) => (
-                      <tr key={a.email} className="border-t border-[#EEE6F7]/70">
-                        <td className="max-w-0 truncate py-2 pr-2 text-[#4A465C]">{a.email}</td>
-                        <td className="py-2 text-right tabular-nums text-[#1E1B2E]">{a.sent}</td>
-                        <td className="py-2 text-right tabular-nums text-[#1E1B2E]">{a.opens}</td>
-                        <td className="py-2 text-right tabular-nums text-[#4A465C]">{a.clicks}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
             </div>
           </div>
-        </section>
+        </Section>
+      ) : null}
 
-        {/* ── Outreach (campaigns/meetings) — supplementary, so it sits last ── */}
-        {hasOutreach && report ? (
-          <section>
-            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#847FA0]">Outreach</h2>
-            <div className={CARD}>
-              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-                {[
-                  { label: "Campaigns", value: String(report.campaigns), sub: `${report.activeCampaigns} active` },
-                  { label: "Contacts", value: report.totalContacts.toLocaleString(), sub: "enrolled" },
-                  { label: "Reply rate", value: `${Math.round(report.replyRate * 100)}%`, sub: "of enrolled" },
-                  { label: "Meetings booked", value: String(report.bookings), sub: `${report.upcomingBookings} upcoming` },
-                ].map((k) => (
-                  <div key={k.label}>
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-[#847FA0]">{k.label}</div>
-                    <div className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-[#1E1B2E]">{k.value}</div>
-                    <div className="text-xs tabular-nums text-[#847FA0]">{k.sub}</div>
-                  </div>
-                ))}
+      {/* ── Content ────────────────────────────────────────────────────────────────── */}
+      <Section title="Content" note="What you sent, and what it earned">
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+          <div>
+            <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Top messages by opens</h3>
+            {derived.topMessages.length === 0 ? (
+              <EmptyNote>No opened messages yet.</EmptyNote>
+            ) : (
+              <FlatTable
+                head={["Subject", "Opens", "Clicks"]}
+                rows={derived.topMessages.map((m, i) => ({
+                  key: m.messageId || String(i),
+                  cells: [m.subject || "(No subject)", m.openCount, m.clickCount],
+                }))}
+              />
+            )}
+          </div>
+          <div>
+            <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Subject length vs open rate</h3>
+            {!behaviour || behaviour.subjectStats.length === 0 ? (
+              <EmptyNote>Not enough data yet.</EmptyNote>
+            ) : (
+              <FlatTable
+                head={["Length", "Sent", "Open rate"]}
+                rows={behaviour.subjectStats.map((b) => ({
+                  key: b.label,
+                  cells: [b.label, b.sent, `${pct(b.opened, b.sent)}%`],
+                }))}
+              />
+            )}
+          </div>
+          <div>
+            <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Most clicked links</h3>
+            {!behaviour || behaviour.topLinks.length === 0 ? (
+              <EmptyNote>No link clicks recorded yet.</EmptyNote>
+            ) : (
+              <FlatTable
+                head={["URL", "Clicks"]}
+                rows={behaviour.topLinks.map((l) => ({ key: l.url, cells: [l.url, l.clicks] }))}
+              />
+            )}
+          </div>
+          <div>
+            <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Open rate by recipient provider</h3>
+            {!behaviour || behaviour.recipientDomains.length === 0 ? (
+              <EmptyNote>No recipient data yet.</EmptyNote>
+            ) : (
+              <FlatTable
+                head={["Provider", "Sent", "Open rate"]}
+                rows={behaviour.recipientDomains.map((d) => ({
+                  key: d.domain,
+                  cells: [d.domain, d.sent, `${pct(d.opened, d.sent)}%`],
+                }))}
+              />
+            )}
+          </div>
+          <div>
+            <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Per-account performance</h3>
+            {derived.perAccount.length === 0 ? (
+              <EmptyNote>No sent mail yet.</EmptyNote>
+            ) : (
+              <FlatTable
+                head={["Account", "Sent", "Opens", "Clicks"]}
+                rows={derived.perAccount.map((a) => ({
+                  key: a.email,
+                  cells: [a.email, a.sent, a.opens, a.clicks],
+                }))}
+              />
+            )}
+          </div>
+        </div>
+      </Section>
+
+      {/* ── Outreach ───────────────────────────────────────────────────────────────── */}
+      {hasOutreach && report ? (
+        <Section title="Outreach" note="Campaigns and meetings">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-5 lg:grid-cols-4">
+            {[
+              { label: "Campaigns", value: String(report.campaigns), sub: `${report.activeCampaigns} active` },
+              { label: "Contacts", value: report.totalContacts.toLocaleString(), sub: "enrolled" },
+              { label: "Reply rate", value: `${Math.round(report.replyRate * 100)}%`, sub: "of enrolled" },
+              { label: "Meetings booked", value: String(report.bookings), sub: `${report.upcomingBookings} upcoming` },
+            ].map((k) => (
+              <div key={k.label}>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[#847FA0]">{k.label}</div>
+                <div className="mt-1 text-xl font-bold tabular-nums tracking-tight text-[#1E1B2E]">{k.value}</div>
+                <div className="text-xs tabular-nums text-[#847FA0]">{k.sub}</div>
               </div>
-              {Object.keys(report.statusMap).length > 0 ? (
-                <div className="mt-4 flex flex-wrap gap-2 border-t border-[#EEE6F7] pt-4">
-                  {Object.entries(report.statusMap).map(([status, count]) => (
-                    <span key={status} className="rounded-full bg-[#F5EFFF] px-2.5 py-1 text-xs font-medium capitalize text-[#701CC0]">
-                      {status.replace(/_/g, " ")}: {count}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
+            ))}
+          </div>
+          {Object.keys(report.statusMap).length > 0 ? (
+            <div className="mt-5 flex flex-wrap gap-2">
+              {Object.entries(report.statusMap).map(([status, count]) => (
+                <span key={status} className="rounded-md bg-[#F5EFFF] px-2 py-1 text-xs font-medium capitalize text-[#701CC0]">
+                  {status.replace(/_/g, " ")}: {count}
+                </span>
+              ))}
             </div>
-          </section>
-        ) : null}
-      </div>
+          ) : null}
+        </Section>
+      ) : null}
+
+      <div className="h-8" />
     </div>
   );
 };

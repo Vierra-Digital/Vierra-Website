@@ -140,6 +140,7 @@ export default withAuth(async (req, res, session) => {
     where: trackedWhere,
     select: {
       created_at: true,
+      subject: true,
       email_tracking_events: {
         where: { event_type: "OPEN" },
         select: { occurred_at: true },
@@ -182,6 +183,40 @@ export default withAuth(async (req, res, session) => {
     domainBuckets.set(domain, bucket);
   }
   const recipientDomains = [...domainBuckets.values()].sort((a, b) => b.sent - a.sent).slice(0, 8);
+
+  // When recipients actually open (their first open, by hour) — distinct from when we send, and
+  // the number you'd schedule against.
+  const openHourCounts = new Array<number>(24).fill(0);
+  for (const r of analysisRows) {
+    const first = r.email_tracking_events[0];
+    if (first) openHourCounts[first.occurred_at.getHours()] += 1;
+  }
+  const openHours = openHourCounts.map((count, hour) => ({ hour, count }));
+
+  // Subject length vs open rate — the cheapest lever on open rate there is.
+  const SUBJECT_BUCKETS = [
+    { label: "≤ 30 chars", max: 30 },
+    { label: "31–50", max: 50 },
+    { label: "51–70", max: 70 },
+    { label: "70+", max: Number.POSITIVE_INFINITY },
+  ];
+  const subjectStats = SUBJECT_BUCKETS.map((b) => ({ label: b.label, sent: 0, opened: 0 }));
+  for (const r of analysisRows) {
+    const len = (r.subject || "").length;
+    if (!len) continue;
+    const idx = SUBJECT_BUCKETS.findIndex((b) => len <= b.max);
+    if (idx < 0) continue;
+    subjectStats[idx].sent += 1;
+    if (r.email_tracking_events.length > 0) subjectStats[idx].opened += 1;
+  }
+
+  // Engagement depth: how many opened messages were opened more than once.
+  const openGroups = await prisma.emailTrackingEvent.groupBy({
+    by: ["outbound_message_id"],
+    where: { event_type: "OPEN", email_outbound_messages: where },
+    _count: { _all: true },
+  });
+  const repeatOpened = openGroups.filter((g) => g._count._all > 1).length;
 
   // Time-to-open: median is the honest summary here — a handful of messages opened weeks later
   // would drag a mean far past what "typical" means.
@@ -249,6 +284,10 @@ export default withAuth(async (req, res, session) => {
       sendTimes: [...sendBuckets.values()],
       topLinks,
       recipientDomains,
+      openHours,
+      subjectStats: subjectStats.filter((b) => b.sent > 0),
+      repeatOpened,
+      openedTotal: openGroups.length,
     },
     /** Most recent messages, for the display tables only — totals above cover every match. */
     messages: rows,
