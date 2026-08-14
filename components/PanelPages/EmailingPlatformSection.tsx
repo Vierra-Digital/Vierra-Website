@@ -23,7 +23,6 @@ import {
   FiFilter,
   FiFileText,
   FiImage,
-  FiInbox,
   FiLink,
   FiPaperclip,
   FiPrinter,
@@ -54,7 +53,12 @@ import PromptModal from "@/components/ui/PromptModal";
 import { scoreTrackerImage } from "@/lib/email/trackerDetection";
 import ComposeRichEditor, { printComposeContent, type ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
 import SignPdfModal from "@/components/email/SignPdfModal";
-import { GLASS_CHROME, GLASS_SURFACE, GLASS_MODAL, GLASS_SCRIM, SHADOW_SM, BRAND_GRADIENT, BRAND_LOGO } from "@/components/email/emailTheme";
+import { getJson } from "@/lib/email/panelApi";
+import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
+import {
+  GLASS_CHROME, GLASS_SURFACE, GLASS_MODAL, GLASS_SCRIM, SHADOW_SM, BRAND_GRADIENT, BRAND_LOGO,
+  ICON_BUTTON, ICON_BUTTON_SOLID, ICON_BUTTON_GHOST, FIELD_LABEL, BUTTON_COMPACT, ALERT,
+} from "@/components/email/emailTheme";
 import {
   PAGE_SIZE,
   CONTACTS_PAGE_SIZE,
@@ -145,10 +149,15 @@ const MailboxLoader: React.FC<{ label?: string }> = ({ label = "Loading messages
 const MailboxEmpty: React.FC = () => (
   <div className="h-full min-h-[320px] flex items-center justify-center px-6">
     <div className="text-center rounded-2xl border border-[#ECEAF1] bg-white px-9 py-11 shadow-[0_10px_40px_-12px_rgba(46,16,80,0.10)]">
-      <div className="w-12 h-12 mx-auto rounded-full bg-[#701CC0]/10 flex items-center justify-center">
-        <FiInbox className="w-6 h-6 text-[#701CC0]" />
+      {/* Gently animated mark: the halo breathes and the envelope drifts, so an empty
+          mailbox still feels alive. Both are motion-safe (static for reduced-motion users). */}
+      <div className="relative w-12 h-12 mx-auto">
+        <span className="absolute inset-0 rounded-full bg-[#701CC0]/10 motion-safe:animate-ping" aria-hidden />
+        <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-[#701CC0]/10">
+          <FiMail className="w-6 h-6 text-[#701CC0] motion-safe:animate-[mailboxFloat_2.6s_ease-in-out_infinite]" />
+        </span>
       </div>
-      <p className="mt-4 text-sm font-semibold text-[#1E1B2E]">No messages here</p>
+      <p className="mt-4 text-sm font-semibold text-[#1E1B2E]">No Emails Found</p>
       <p className="text-xs text-[#847FA0] mt-1">Try another mailbox or refresh this view.</p>
     </div>
   </div>
@@ -157,6 +166,9 @@ const MailboxEmpty: React.FC = () => (
 // Client-side cap on total compose attachment bytes. Kept conservative (below the server/platform
 // request-body limit) so oversized sends fail fast with a clear message instead of an opaque 413.
 const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
+/** How many mailbox views to keep in the message cache (each is up to PAGE_SIZE rows). */
+const MESSAGE_CACHE_LIMIT = 12;
 
 const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   initialSelectedAccounts = [],
@@ -382,6 +394,20 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [providerAccounts, setProviderAccounts] = useState<ProviderAccount[]>([]);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const loadMessagesRequestRef = useRef(0);
+  /**
+   * Per-view message cache (key = the messages query string) powering stale-while-revalidate,
+   * so revisiting a mailbox/page paints instantly instead of spinning. Cleared whenever an action
+   * mutates mail, so a deleted/moved message can never flash back from cache.
+   */
+  const messagesCacheRef = useRef<
+    Map<
+      string,
+      { messages: MessageRow[]; accountErrors: Array<{ accountEmail: string; message: string }>; hasNextPage: boolean }
+    >
+  >(new Map());
+  const invalidateMessagesCache = useCallback(() => {
+    messagesCacheRef.current.clear();
+  }, []);
   const selectedMessageIdRef = useRef("");
   const moveListMenuRef = useRef<HTMLDivElement | null>(null);
   const moveMessageMenuRef = useRef<HTMLDivElement | null>(null);
@@ -622,9 +648,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
   const loadContactTags = useCallback(async () => {
     try {
-      const response = await fetch("/api/contacts/tags");
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) return;
+      const result = await getJson("/api/contacts/tags");
+      if (!result.ok) return;
+      const payload = result.data as Record<string, unknown>;
       setContactsTags(Array.isArray(payload?.tags) ? payload.tags : []);
     } catch {
       setContactsTags([]);
@@ -658,9 +684,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     try {
       const query = new URLSearchParams();
       if (activeAccountForContacts) query.set("accountEmail", activeAccountForContacts);
-      const response = await fetch(`/api/contacts/visibility?${query.toString()}`);
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) return;
+      const result = await getJson(`/api/contacts/visibility?${query.toString()}`);
+      if (!result.ok) return;
+      const payload = result.data as { visibility?: Record<string, unknown> };
       const visibility = payload?.visibility || {};
       setContactsVisibility({
         showPhone: Boolean(visibility.showPhone ?? true),
@@ -1574,11 +1600,23 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     });
     if (activeLabelId) query.set("labelId", activeLabelId);
     if (debouncedSearch) query.set("q", debouncedSearch);
+    const cacheKey = query.toString();
 
-    setMessagesLoading(true);
+    // Stale-while-revalidate: paint the last-known rows for this exact view instantly, then
+    // refresh in the background. Switching mailboxes / paging back used to blank the list and
+    // show a spinner on every visit even though the data was already known.
+    const cached = messagesCacheRef.current.get(cacheKey);
+    if (cached) {
+      setMessages(cached.messages);
+      setAccountErrors(cached.accountErrors);
+      setHasNextPage(cached.hasNextPage);
+      setMessagesLoading(false);
+    } else {
+      setMessagesLoading(true);
+    }
     setMessagesError("");
     try {
-      const response = await fetch(`/api/gmail/messages?${query.toString()}`);
+      const response = await fetch(`/api/gmail/messages?${cacheKey}`);
       const payload = await response.json().catch(() => ({}));
       if (requestId !== loadMessagesRequestRef.current) return;
       if (!response.ok) {
@@ -1586,10 +1624,23 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
       const nextMessages = Array.isArray(payload?.messages) ? payload.messages : [];
       const unreadCount = nextMessages.filter((message: MessageRow) => message.unread).length;
+      const nextAccountErrors = Array.isArray(payload?.accountErrors) ? payload.accountErrors : [];
+      const nextHasNextPage = Boolean(payload?.hasNextPage);
+      // Bounded LRU-ish cache: re-inserting moves the key to the end, and we evict the oldest.
+      messagesCacheRef.current.delete(cacheKey);
+      messagesCacheRef.current.set(cacheKey, {
+        messages: nextMessages,
+        accountErrors: nextAccountErrors,
+        hasNextPage: nextHasNextPage,
+      });
+      if (messagesCacheRef.current.size > MESSAGE_CACHE_LIMIT) {
+        const oldest = messagesCacheRef.current.keys().next().value;
+        if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
+      }
       setModuleUnreadBadges((prev) => ({ ...prev, [mailbox as keyof ModuleUnreadBadgeCounts]: unreadCount }));
       setMessages(nextMessages);
-      setAccountErrors(Array.isArray(payload?.accountErrors) ? payload.accountErrors : []);
-      setHasNextPage(Boolean(payload?.hasNextPage));
+      setAccountErrors(nextAccountErrors);
+      setHasNextPage(nextHasNextPage);
       setSelectedRows([]);
       const activeSelectedMessageId = selectedMessageIdRef.current;
       if (activeSelectedMessageId && !nextMessages.some((message: MessageRow) => message.id === activeSelectedMessageId)) {
@@ -2245,6 +2296,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
       setSelectedRows([]);
       showSentToast("Snoozed");
+      invalidateMessagesCache();
       await Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Failed to snooze.");
@@ -2382,6 +2434,7 @@ ${sourceText}`;
       }
       showSentToast("Message Sent");
       setInlineComposeMode(null);
+      invalidateMessagesCache();
       await Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
       setDetailError("");
       setSelectedMessageDetail(null);
@@ -2783,6 +2836,7 @@ ${sourceText}`;
       setConfidentialOpen(false);
       setRequestReceipt(false);
       if (activeModule === "sent" || activeModule === "drafts") {
+        invalidateMessagesCache();
         await Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
       } else {
         await Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
@@ -3044,6 +3098,14 @@ ${sourceText}`;
     return excluded ? allOptions.filter((option) => option.value !== excluded) : allOptions;
   }, [activeModule]);
 
+  // Empty-list chrome: with nothing to act on, bulk-select and paging are dead controls, so hide
+  // them. Search is the exception — when a query is what emptied the list, hiding the box would
+  // trap the user with no way to clear it, so it stays whenever a term is active.
+  const mailboxListIsEmpty = !messagesLoading && conversationRows.length === 0;
+  const hasActiveSearch = searchTerm.trim().length > 0;
+  const showListSearch = !mailboxListIsEmpty || hasActiveSearch;
+  const showListPaging = !mailboxListIsEmpty;
+
   return (
     <div className={`email-space-bg relative w-full h-full text-[#1E1B2E] flex flex-col overflow-hidden ${panelFont.className}`}>
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
@@ -3087,30 +3149,60 @@ ${sourceText}`;
         @media (prefers-reduced-motion: reduce) {
           .email-stars, .email-stars--2 { animation: none; }
         }
+        /* Empty-mailbox envelope: a slow vertical drift so the state reads as idle, not broken. */
+        @keyframes mailboxFloat {
+          0%, 100% { transform: translateY(-2px); }
+          50% { transform: translateY(2px); }
+        }
+        /* Compose CTA. Vierra purples only — no magenta. Travels continuously in ONE direction:
+           the gradient contains exactly TWO identical cycles across a 200%-wide background, so
+           after shifting by one element width the pattern lines up with where it started and the
+           loop is seamless — no bands, no snap at the wrap. Hover just speeds the same travel up.
+           Animating background-position keeps it GPU-cheap. */
+        .compose-cta {
+          background-image: linear-gradient(
+            100deg,
+            #5E17A8 0%, #701CC0 12.5%, #8B3BEE 25%, #701CC0 37.5%,
+            #5E17A8 50%, #701CC0 62.5%, #8B3BEE 75%, #701CC0 87.5%, #5E17A8 100%
+          );
+          background-size: 200% 100%;
+          animation: composeGradient 6s linear infinite;
+        }
+        /* Matches the site's .audit-glow cadence: 6s idle, 2s on hover. */
+        .compose-cta:hover { animation-duration: 2s; }
+        @keyframes composeGradient {
+          /* 100% -> 0% shifts the oversized background rightwards, so the bands travel
+             LEFT to RIGHT. (0% -> 100% moves the image left, i.e. the wrong way.) */
+          from { background-position: 100% 50%; }
+          to { background-position: 0% 50%; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .compose-cta, .compose-cta:hover { animation: none; }
+        }
       `}</style>
       {step === "gate" ? (
-        <div className="relative z-10 h-full flex items-center justify-center px-6 py-12">
-          <div className="w-full max-w-md text-center">
-            <Image
-              src={BRAND_LOGO.wordmarkLight}
-              alt="Vierra"
-              width={260}
-              height={66}
-              className="mx-auto mb-8 h-16 w-auto"
-              priority
-            />
-            {gmailLoading ? (
-              <div className="flex justify-center py-4">
-                <div className="h-9 w-9 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] motion-safe:animate-spin" />
-              </div>
-            ) : (
-              <>
-                <h1 className="text-xl font-semibold tracking-tight text-white">No Google accounts connected</h1>
-                <p className="mt-2 text-sm text-white/70">Connect Gmail from your account settings, then come back here.</p>
-              </>
-            )}
+        gmailLoading ? (
+          /* While accounts resolve, render the SHARED loading screen verbatim — same component
+             as the login page and the panel's bundle loader, so the logo, sizing and motion are
+             identical all the way through sign-in → panel. */
+          <BrandLoadingScreen />
+        ) : (
+          <div className="relative z-10 h-full flex items-center justify-center px-6 py-12">
+            <div className="w-full max-w-md text-center">
+              <Image
+                src="/assets/vierra-logo-black-3.png"
+                alt="Vierra"
+                width={220}
+                height={64}
+                className="pointer-events-none mx-auto mb-8 h-10 w-auto select-none opacity-95 brightness-0 invert"
+                draggable={false}
+                priority
+              />
+              <h1 className="text-xl font-semibold tracking-tight text-white">No Google accounts connected</h1>
+              <p className="mt-2 text-sm text-white/70">Connect Gmail from your account settings, then come back here.</p>
+            </div>
           </div>
-        </div>
+        )
       ) : (
         <div className="relative z-10 flex-1 w-full overflow-hidden px-4 md:px-6 py-4">
           <div className="w-full max-w-[1700px] mx-auto h-full overflow-hidden">
@@ -3120,12 +3212,15 @@ ${sourceText}`;
                   <div className="flex items-center justify-center pt-3 pb-7">
                     <Image src={BRAND_LOGO.wordmarkDark} alt="Vierra" width={168} height={42} className="h-10 w-auto" priority />
                   </div>
+                  {/* Compose CTA. Hover only brightens — no lift and no shadow swap, which read as
+                      a jumpy drop-shadow. Transitioning `filter` alone also leaves the gradient
+                      keyframes untouched (the old `transition-all` fought them and stuttered). */}
                   <button
                     type="button"
                     onClick={() => {
                       void openNewCompose();
                     }}
-                    className="w-full mb-3 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#701CC0] via-[#8F42FF] to-[#701CC0] animate-gradient px-3 py-2.5 text-sm font-semibold text-white shadow-[0_6px_20px_-6px_rgba(112,28,192,0.6)] transition-all duration-200 hover:shadow-[0_8px_26px_-6px_rgba(112,28,192,0.7)]"
+                    className="compose-cta w-full mb-3 inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-white shadow-[0_3px_12px_-5px_rgba(94,23,168,0.5)] transition-[filter] duration-200 ease-out hover:brightness-[1.08] active:brightness-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#FAFAFB]"
                   >
                     <FiEdit3 className="w-4 h-4" />
                     Compose
@@ -3314,30 +3409,43 @@ ${sourceText}`;
                     <EmailAnalyticsView accounts={selectedAccounts} />
                   ) : viewMode === "list" ? (
                     <>
-                      {activeModule !== "contacts" ? (
+                      {/* With an empty mailbox the whole toolbar is dead weight (nothing to select,
+                          page, count or refresh), so it's hidden entirely — leaving just the empty
+                          state. The exception is an active search: that toolbar must stay so the
+                          query can be cleared, otherwise a no-results search is a dead end. */}
+                      {activeModule !== "contacts" && (!mailboxListIsEmpty || hasActiveSearch) ? (
                         <>
                           <div className="px-4 py-3 border-b border-white/30 flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <input
-                                type="checkbox"
-                                checked={
-                                  filteredMessages.length > 0 &&
-                                  conversationRows.every((message) => selectedRows.includes(rowKey(message)))
-                                }
-                                onChange={toggleSelectAll}
-                                className="h-4 w-4"
-                              />
-                              <div className="text-xs font-medium text-[#6B7280] mr-1">{activeModuleLabel} · {messagesCountLabel}</div>
-                              <button
-                                type="button"
-                                onClick={() => Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()])}
-                                disabled={messagesLoading}
-                                className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
-                                aria-label="Refresh"
-                                title="Refresh"
-                              >
-                                <FiRefreshCw className={`w-4 h-4 ${messagesLoading ? "motion-safe:animate-spin" : ""}`} />
-                              </button>
+                              {showListPaging ? (
+                                <input
+                                  type="checkbox"
+                                  checked={
+                                    filteredMessages.length > 0 &&
+                                    conversationRows.every((message) => selectedRows.includes(rowKey(message)))
+                                  }
+                                  onChange={toggleSelectAll}
+                                  className="h-4 w-4"
+                                />
+                              ) : null}
+                              {showListPaging ? (
+                                <>
+                                  <div className="text-xs font-medium text-[#6B7280] mr-1">{activeModuleLabel} · {messagesCountLabel}</div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      invalidateMessagesCache();
+                                      void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
+                                    }}
+                                    disabled={messagesLoading}
+                                    className={ICON_BUTTON_SOLID}
+                                    aria-label="Refresh"
+                                    title="Refresh"
+                                  >
+                                    <FiRefreshCw className={`w-4 h-4 ${messagesLoading ? "motion-safe:animate-spin" : ""}`} />
+                                  </button>
+                                </>
+                              ) : null}
                               {hasSelectedEmails ? (
                                 <>
                                   {activeModule !== "drafts" ? (
@@ -3346,7 +3454,7 @@ ${sourceText}`;
                                         type="button"
                                         onClick={() => applyAction("markRead")}
                                         disabled={actionLoading}
-                                        className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                        className={ICON_BUTTON_SOLID}
                                         aria-label="Mark As Read"
                                         title="Mark As Read"
                                       >
@@ -3356,7 +3464,7 @@ ${sourceText}`;
                                         type="button"
                                         onClick={() => applyAction("markUnread")}
                                         disabled={actionLoading}
-                                        className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                        className={ICON_BUTTON_SOLID}
                                         title="Mark As Unread"
                                       >
                                         <FiMail className="w-4 h-4" />
@@ -3365,7 +3473,7 @@ ${sourceText}`;
                                         type="button"
                                         onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
                                         disabled={actionLoading}
-                                        className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                        className={ICON_BUTTON_SOLID}
                                         title={activeModule === "archive" ? "Unarchive" : "Archive"}
                                       >
                                         <FiArchive className="w-4 h-4" />
@@ -3375,7 +3483,7 @@ ${sourceText}`;
                                           type="button"
                                           onClick={() => setSnoozeMenuOpen((open) => !open)}
                                           disabled={actionLoading}
-                                          className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                          className={ICON_BUTTON_SOLID}
                                           title="Snooze"
                                           aria-label="Snooze"
                                         >
@@ -3408,7 +3516,7 @@ ${sourceText}`;
                                     type="button"
                                     onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
                                     disabled={actionLoading}
-                                    className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                    className={ICON_BUTTON_SOLID}
                                     title={activeModule === "trash" ? "Delete Permanently" : "Move To Trash"}
                                   >
                                     <FiTrash2 className="w-4 h-4" />
@@ -3441,59 +3549,65 @@ ${sourceText}`;
                                   ) : null}
                                 </>
                               ) : null}
-                              <div className="rounded-lg border border-transparent bg-white px-3 py-1.5 flex items-center gap-2 w-96 max-w-full shadow-sm focus-within:ring-2 focus-within:ring-[#701CC0] transition">
-                                <FiSearch className="w-4 h-4 text-[#6B7280]" />
-                                <input
-                                  value={searchTerm}
-                                  onChange={(e) => setSearchTerm(e.target.value)}
-                                  placeholder="Search"
-                                  className="w-full bg-transparent text-sm text-[#374151] placeholder:text-[#8E93AA] outline-none"
-                                />
-                                {searchTerm.trim() ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setSearchTerm("")}
-                                    className="inline-flex items-center justify-center rounded p-0.5 text-[#9CA3AF] hover:text-[#6B7280] hover:bg-[#F3F4F6]"
-                                    aria-label="Clear Search"
-                                    title="Clear Search"
-                                  >
-                                    <FiX className="w-3.5 h-3.5" />
-                                  </button>
-                                ) : null}
-                              </div>
+                              {showListSearch ? (
+                                <div className="rounded-lg border border-transparent bg-white px-3 py-1.5 flex items-center gap-2 w-96 max-w-full shadow-sm focus-within:ring-2 focus-within:ring-[#701CC0] transition">
+                                  <FiSearch className="w-4 h-4 text-[#6B7280]" />
+                                  <input
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    placeholder="Search"
+                                    className="w-full bg-transparent text-sm text-[#374151] placeholder:text-[#8E93AA] outline-none"
+                                  />
+                                  {searchTerm.trim() ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSearchTerm("")}
+                                      className="inline-flex items-center justify-center rounded p-0.5 text-[#9CA3AF] hover:text-[#6B7280] hover:bg-[#F3F4F6]"
+                                      aria-label="Clear Search"
+                                      title="Clear Search"
+                                    >
+                                      <FiX className="w-3.5 h-3.5" />
+                                    </button>
+                                  ) : null}
+                                </div>
+                              ) : null}
                             </div>
-                            <div className="flex items-center gap-3">
-                              <button
-                                type="button"
-                                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                                disabled={currentPage <= 1 || messagesLoading}
-                                className="rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-1 text-xs text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
-                              >
-                                Prev
-                              </button>
-                              <div className="text-xs text-[#6B7280] min-w-[60px] text-center">
-                                {pageLabel}
+                            {showListPaging ? (
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                                  disabled={currentPage <= 1 || messagesLoading}
+                                  className={BUTTON_COMPACT}
+                                >
+                                  Prev
+                                </button>
+                                <div className="text-xs text-[#6B7280] min-w-[60px] text-center">
+                                  {pageLabel}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setCurrentPage((prev) => prev + 1)}
+                                  disabled={!hasNextPage || messagesLoading}
+                                  className={BUTTON_COMPACT}
+                                >
+                                  Next
+                                </button>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => setCurrentPage((prev) => prev + 1)}
-                                disabled={!hasNextPage || messagesLoading}
-                                className="rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-1 text-xs text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
-                              >
-                                Next
-                              </button>
-                            </div>
+                            ) : null}
                           </div>
 
                         </>
                       ) : null}
 
-                      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-16">
+                      {/* No bottom padding at all: any padding here shows up as dead space below
+                          the final row once a mailbox is scrolled to the end. */}
+                      <div className="flex-1 overflow-y-auto overflow-x-hidden">
                         {messagesError ? (
-                          <div className="m-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{messagesError}</div>
+                          <div className={`m-3 ${ALERT.error}`}>{messagesError}</div>
                         ) : null}
                         {actionError ? (
-                          <div className="m-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{actionError}</div>
+                          <div className={`m-3 ${ALERT.error}`}>{actionError}</div>
                         ) : null}
                         {accountErrors.length > 0 ? (
                           <div className="m-3 space-y-1 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
@@ -3685,7 +3799,7 @@ ${sourceText}`;
                             </div>
                             <div className="flex-1 overflow-auto p-2">
                               {contactsError ? (
-                                <div className="m-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{contactsError}</div>
+                                <div className={`m-3 ${ALERT.error}`}>{contactsError}</div>
                               ) : null}
                               {contactsLoading ? (
                                 <MailboxLoader label="Loading Contacts..." />
@@ -3951,7 +4065,6 @@ ${sourceText}`;
                                 </button>
                               );
                             })}
-                            <div className="h-20" />
                           </div>
                         )}
                       </div>
@@ -3975,7 +4088,7 @@ ${sourceText}`;
                             onClick={() => {
                               void openReplyCompose();
                             }}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             aria-label="Reply"
                             title="Reply"
                           >
@@ -3986,7 +4099,7 @@ ${sourceText}`;
                             onClick={() => {
                               void openReplyAllCompose();
                             }}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             aria-label="Reply All"
                             title="Reply All"
                           >
@@ -3997,7 +4110,7 @@ ${sourceText}`;
                             onClick={() => {
                               void openForwardCompose();
                             }}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             aria-label="Forward"
                             title="Forward"
                           >
@@ -4006,7 +4119,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => applyAction("markUnread")}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             title="Mark As Unread"
                           >
                             <FiMail className="w-4 h-4" />
@@ -4015,7 +4128,7 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => setLabelMenuOpen((open) => !open)}
-                              className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                              className={ICON_BUTTON}
                               title="Label"
                               aria-label="Label"
                             >
@@ -4044,7 +4157,7 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => setMoveMenuOpen((prev) => (prev === "message" ? null : "message"))}
-                              className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                              className={ICON_BUTTON}
                               title="Move To"
                             >
                               <FiMove className="w-4 h-4" />
@@ -4067,7 +4180,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             title={activeModule === "archive" ? "Unarchive" : "Archive"}
                           >
                             <FiArchive className="w-4 h-4" />
@@ -4075,7 +4188,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             title={activeModule === "trash" ? "Delete Permanently" : "Trash"}
                           >
                             <FiTrash2 className="w-4 h-4" />
@@ -4083,7 +4196,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => applyAction(spamActionType)}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             title={spamActionTitle}
                           >
                             <FiAlertCircle className="w-4 h-4" />
@@ -4091,7 +4204,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={blockSelectedSender}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             title={selectedBlockedEntry ? "Unblock Sender" : "Block Sender"}
                           >
                             <FiX className="w-4 h-4" />
@@ -4354,7 +4467,7 @@ ${sourceText}`;
             ) : null}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#374151]">
+                <label className={FIELD_LABEL}>
                   First Name <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -4370,7 +4483,7 @@ ${sourceText}`;
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#374151]">Last Name</label>
+                <label className={FIELD_LABEL}>Last Name</label>
                 <input
                   value={addContactForm.lastName}
                   onChange={(event) => setAddContactForm((prev) => ({ ...prev, lastName: event.target.value }))}
@@ -4379,7 +4492,7 @@ ${sourceText}`;
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-[#374151]">
+                <label className={FIELD_LABEL}>
                   Email <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -4397,7 +4510,7 @@ ${sourceText}`;
                 <p className="md:col-span-2 -mt-1 text-xs text-red-600">Please enter a valid email address.</p>
               ) : null}
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#374151]">Phone</label>
+                <label className={FIELD_LABEL}>Phone</label>
                 <input
                   value={addContactForm.phone}
                   onChange={(event) => setAddContactForm((prev) => ({ ...prev, phone: formatPhoneInput(event.target.value) }))}
@@ -4413,7 +4526,7 @@ ${sourceText}`;
                 <p className="md:col-span-2 -mt-1 text-xs text-red-600">Phone format: (123)-456-7890</p>
               ) : null}
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#374151]">Business</label>
+                <label className={FIELD_LABEL}>Business</label>
                 <input
                   value={addContactForm.business}
                   onChange={(event) => setAddContactForm((prev) => ({ ...prev, business: event.target.value }))}
@@ -4422,7 +4535,7 @@ ${sourceText}`;
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#374151]">Website</label>
+                <label className={FIELD_LABEL}>Website</label>
                 <input
                   value={addContactForm.website}
                   onChange={(event) => setAddContactForm((prev) => ({ ...prev, website: event.target.value }))}
@@ -4438,7 +4551,7 @@ ${sourceText}`;
                 <p className="md:col-span-2 -mt-1 text-xs text-red-600">Please enter a valid website URL.</p>
               ) : null}
               <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-[#374151]">Address</label>
+                <label className={FIELD_LABEL}>Address</label>
                 <input
                   value={addContactForm.address}
                   onChange={(event) => setAddContactForm((prev) => ({ ...prev, address: event.target.value }))}
@@ -4497,7 +4610,7 @@ ${sourceText}`;
 
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1">
+                <label className={FIELD_LABEL}>
                   First Name <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -4513,7 +4626,7 @@ ${sourceText}`;
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1">Last Name</label>
+                <label className={FIELD_LABEL}>Last Name</label>
                 <input
                   type="text"
                   value={editContactForm.lastName}
@@ -4522,7 +4635,7 @@ ${sourceText}`;
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1">
+                <label className={FIELD_LABEL}>
                   Email <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -4540,7 +4653,7 @@ ${sourceText}`;
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1">Phone</label>
+                <label className={FIELD_LABEL}>Phone</label>
                 <input
                   type="text"
                   value={editContactForm.phone}
@@ -4556,7 +4669,7 @@ ${sourceText}`;
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1">Business</label>
+                <label className={FIELD_LABEL}>Business</label>
                 <input
                   type="text"
                   value={editContactForm.business}
@@ -4565,7 +4678,7 @@ ${sourceText}`;
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1">Website</label>
+                <label className={FIELD_LABEL}>Website</label>
                 <input
                   type="text"
                   value={editContactForm.website}
@@ -4579,7 +4692,7 @@ ${sourceText}`;
                 />
               </div>
               <div className="col-span-2">
-                <label className="block text-sm font-medium text-[#374151] mb-1">Address</label>
+                <label className={FIELD_LABEL}>Address</label>
                 <input
                   type="text"
                   value={editContactForm.address}
@@ -5090,7 +5203,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => composeAttachInputRef.current?.click()}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        className={ICON_BUTTON_GHOST}
                         title="Attach files"
                         aria-label="Attach files"
                       >
@@ -5099,7 +5212,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => setSignModalOpen(true)}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        className={ICON_BUTTON_GHOST}
                         title="Request signature"
                         aria-label="Request signature"
                       >
@@ -5140,7 +5253,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => composeEditorRef.current?.promptInsertLink()}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        className={ICON_BUTTON_GHOST}
                         title="Insert link"
                         aria-label="Insert link"
                       >
@@ -5149,7 +5262,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => composeEditorRef.current?.promptInsertImage()}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        className={ICON_BUTTON_GHOST}
                         title="Insert image"
                         aria-label="Insert image"
                       >
@@ -5158,7 +5271,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={handlePrintCompose}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        className={ICON_BUTTON_GHOST}
                         title="Print"
                         aria-label="Print"
                       >
@@ -5167,7 +5280,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => setComposeTemplateMenuOpen((open) => !open)}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        className={ICON_BUTTON_GHOST}
                         title="Load template"
                         aria-label="Load template"
                         aria-expanded={composeTemplateMenuOpen}
@@ -5209,7 +5322,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => setComposeSignatureMenuOpen((open) => !open)}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        className={ICON_BUTTON_GHOST}
                         title="Insert signature"
                         aria-label="Insert signature"
                         aria-expanded={composeSignatureMenuOpen}

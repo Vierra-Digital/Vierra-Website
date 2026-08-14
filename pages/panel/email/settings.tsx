@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import type { GetServerSideProps } from "next";
 import { Geist } from "next/font/google";
-import { GLASS_SURFACE } from "@/components/email/emailTheme";
+import { GLASS_SURFACE, TEXT_MUTED, TEXT_STRONG } from "@/components/email/emailTheme";
 import type { IconType } from "react-icons";
 import {
   FiActivity,
@@ -1247,8 +1247,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               >
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="font-medium text-[#1E1B2E]">Cancellation window</p>
-                    <p className="text-sm text-[#6B7280]">Set to 0 to send immediately with no undo.</p>
+                    <p className={TEXT_STRONG}>Cancellation window</p>
+                    <p className={TEXT_MUTED}>Set to 0 to send immediately with no undo.</p>
                   </div>
                   <select
                     value={undoSendDelay}
@@ -1269,7 +1269,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 icon={FiMail}
               >
                 {connectedAccounts.length === 0 ? (
-                  <p className="text-sm text-[#6B7280]">No connected Google accounts yet.</p>
+                  <p className={TEXT_MUTED}>No connected Google accounts yet.</p>
                 ) : (
                   <ul className="space-y-2">
                     {connectedAccounts.map((account) => {
@@ -1299,7 +1299,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 icon={FiActivity}
               >
                 {connectedAccounts.length === 0 ? (
-                  <p className="text-sm text-[#6B7280]">No connected accounts.</p>
+                  <p className={TEXT_MUTED}>No connected accounts.</p>
                 ) : (
                   <ul className="space-y-2">
                     {connectedAccounts.map((account) => {
@@ -1358,7 +1358,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     </a>
                   </div>
                   {bookingLinks.length === 0 ? (
-                    <p className="text-sm text-[#6B7280]">No booking links yet.</p>
+                    <p className={TEXT_MUTED}>No booking links yet.</p>
                   ) : (
                     <ul className="space-y-2">
                       {bookingLinks.map((l) => {
@@ -1575,7 +1575,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   <div>
                     <p className="mb-2 text-xs font-semibold text-[#4A465C]">Upcoming &amp; recent meetings</p>
                     {bookings.length === 0 ? (
-                      <p className="text-sm text-[#6B7280]">No meetings booked yet.</p>
+                      <p className={TEXT_MUTED}>No meetings booked yet.</p>
                     ) : (
                       <ul className="space-y-2">
                         {bookings.slice(0, 20).map((b) => {
@@ -1694,7 +1694,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 >
                   <div className="space-y-3">
                     {mailboxGrants.length === 0 ? (
-                      <p className="text-sm text-[#6B7280]">No shared-inbox grants yet.</p>
+                      <p className={TEXT_MUTED}>No shared-inbox grants yet.</p>
                     ) : (
                       <ul className="space-y-2">
                         {mailboxGrants.map((g) => {
@@ -1786,8 +1786,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
                     <div>
-                      <p className="font-medium text-[#1E1B2E]">Enable email tracking</p>
-                      <p className="text-sm text-[#6B7280]">Master switch for open and click analytics.</p>
+                      <p className={TEXT_STRONG}>Enable email tracking</p>
+                      <p className={TEXT_MUTED}>Master switch for open and click analytics.</p>
                     </div>
                     <Toggle
                       checked={settings.trackingEnabled}
@@ -1796,8 +1796,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   </div>
                   <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
                     <div>
-                      <p className="font-medium text-[#1E1B2E]">Track opens</p>
-                      <p className="text-sm text-[#6B7280]">Pixel-based open detection.</p>
+                      <p className={TEXT_STRONG}>Track opens</p>
+                      <p className={TEXT_MUTED}>Pixel-based open detection.</p>
                     </div>
                     <Toggle
                       checked={settings.openTrackingEnabled}
@@ -1807,8 +1807,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="font-medium text-[#1E1B2E]">Track link clicks</p>
-                      <p className="text-sm text-[#6B7280]">Wrapped links for click counts.</p>
+                      <p className={TEXT_STRONG}>Track link clicks</p>
+                      <p className={TEXT_MUTED}>Wrapped links for click counts.</p>
                     </div>
                     <Toggle
                       checked={settings.clickTrackingEnabled}
@@ -1826,8 +1826,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               >
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="font-medium text-[#1E1B2E]">Notify on replies to this inbox</p>
-                    <p className="text-sm text-[#6B7280]">
+                    <p className={TEXT_STRONG}>Notify on replies to this inbox</p>
+                    <p className={TEXT_MUTED}>
                       When someone replies to a thread from this inbox, send a Discord notification.
                     </p>
                   </div>
@@ -1845,8 +1845,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               >
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="font-medium text-[#1E1B2E]">Request read receipts by default</p>
-                    <p className="text-sm text-[#6B7280]">
+                    <p className={TEXT_STRONG}>Request read receipts by default</p>
+                    <p className={TEXT_MUTED}>
                       New emails from this inbox start with &ldquo;request receipt&rdquo; on. You can still toggle it off per email.
                     </p>
                   </div>
@@ -1864,8 +1864,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               >
                 <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-5">
                   <div>
-                    <p className="font-medium text-[#1E1B2E]">Enable vacation responder</p>
-                    <p className="text-sm text-[#6B7280]">Sends the message below to incoming mail.</p>
+                    <p className={TEXT_STRONG}>Enable vacation responder</p>
+                    <p className={TEXT_MUTED}>Sends the message below to incoming mail.</p>
                   </div>
                   <Toggle
                     checked={settings.vacationResponderEnabled}
@@ -1937,7 +1937,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               >
                 <div className="space-y-3">
                   {filters.length === 0 ? (
-                    <p className="text-sm text-[#6B7280]">No filters yet.</p>
+                    <p className={TEXT_MUTED}>No filters yet.</p>
                   ) : (
                     <ul className="space-y-2">
                       {filters.map((f) => (
@@ -2130,7 +2130,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               >
                 <div className="space-y-2">
                   {contactTags.length === 0 ? (
-                    <p className="text-sm text-[#6B7280]">No tags yet.</p>
+                    <p className={TEXT_MUTED}>No tags yet.</p>
                   ) : (
                     contactTags.map((tag) => (
                       <div
@@ -2166,8 +2166,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
                     <div>
-                      <p className="font-medium text-[#1E1B2E]">Phone</p>
-                      <p className="text-sm text-[#6B7280]">Show phone field on contact records.</p>
+                      <p className={TEXT_STRONG}>Phone</p>
+                      <p className={TEXT_MUTED}>Show phone field on contact records.</p>
                     </div>
                     <Toggle
                       checked={contactVisibility.showPhone}
@@ -2176,8 +2176,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   </div>
                   <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-4">
                     <div>
-                      <p className="font-medium text-[#1E1B2E]">Business</p>
-                      <p className="text-sm text-[#6B7280]">Show business name field.</p>
+                      <p className={TEXT_STRONG}>Business</p>
+                      <p className={TEXT_MUTED}>Show business name field.</p>
                     </div>
                     <Toggle
                       checked={contactVisibility.showBusiness}
@@ -2186,8 +2186,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   </div>
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="font-medium text-[#1E1B2E]">Website</p>
-                      <p className="text-sm text-[#6B7280]">Show website field.</p>
+                      <p className={TEXT_STRONG}>Website</p>
+                      <p className={TEXT_MUTED}>Show website field.</p>
                     </div>
                     <Toggle
                       checked={contactVisibility.showWebsite}
@@ -2200,7 +2200,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               <SettingsSection title="Blocked senders" description="Messages from these addresses are suppressed." icon={FiSlash}>
                 <div className="space-y-2">
                   {blockedSenders.length === 0 ? (
-                    <p className="text-sm text-[#6B7280]">No blocked senders.</p>
+                    <p className={TEXT_MUTED}>No blocked senders.</p>
                   ) : (
                     blockedSenders.map((sender) => (
                       <div
@@ -2281,7 +2281,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 </button>
                 <div className="mt-6 space-y-2">
                   {providerAccounts.length === 0 ? (
-                    <p className="text-sm text-[#6B7280]">No domain mail accounts configured.</p>
+                    <p className={TEXT_MUTED}>No domain mail accounts configured.</p>
                   ) : (
                     providerAccounts.map((account) => (
                       <div
