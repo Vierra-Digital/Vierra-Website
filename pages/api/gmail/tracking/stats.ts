@@ -146,10 +146,42 @@ export default withAuth(async (req, res, session) => {
         orderBy: { occurred_at: "asc" },
         take: 1,
       },
+      email_outbound_recipients: { where: { recipient_type: "to" }, select: { email: true }, take: 1 },
     },
     orderBy: { created_at: "desc" },
     take: ANALYSIS_SAMPLE_LIMIT,
   });
+
+  // Which link actually earns the clicks. Aggregated in JS so one query covers every event.
+  const clickEvents = await prisma.emailTrackingEvent.findMany({
+    where: { event_type: "CLICK", email_outbound_messages: where },
+    select: { email_tracking_links: { select: { original_url: true } } },
+    take: ANALYSIS_SAMPLE_LIMIT,
+  });
+  const linkCounts = new Map<string, number>();
+  for (const e of clickEvents) {
+    const url = e.email_tracking_links?.original_url;
+    if (!url) continue;
+    linkCounts.set(url, (linkCounts.get(url) ?? 0) + 1);
+  }
+  const topLinks = [...linkCounts.entries()]
+    .map(([url, clicks]) => ({ url, clicks }))
+    .sort((a, b) => b.clicks - a.clicks)
+    .slice(0, 6);
+
+  // Open rate by recipient mail provider — Gmail/Outlook/etc. filter very differently, so this
+  // is where a deliverability problem usually shows up first.
+  const domainBuckets = new Map<string, { domain: string; sent: number; opened: number }>();
+  for (const r of analysisRows) {
+    const email = r.email_outbound_recipients[0]?.email || "";
+    const domain = (email.split("@")[1] || "").toLowerCase();
+    if (!domain) continue;
+    const bucket = domainBuckets.get(domain) || { domain, sent: 0, opened: 0 };
+    bucket.sent += 1;
+    if (r.email_tracking_events.length > 0) bucket.opened += 1;
+    domainBuckets.set(domain, bucket);
+  }
+  const recipientDomains = [...domainBuckets.values()].sort((a, b) => b.sent - a.sent).slice(0, 8);
 
   // Time-to-open: median is the honest summary here — a handful of messages opened weeks later
   // would drag a mean far past what "typical" means.
@@ -215,6 +247,8 @@ export default withAuth(async (req, res, session) => {
       medianTimeToOpenMs,
       sampleSize: analysisRows.length,
       sendTimes: [...sendBuckets.values()],
+      topLinks,
+      recipientDomains,
     },
     /** Most recent messages, for the display tables only — totals above cover every match. */
     messages: rows,

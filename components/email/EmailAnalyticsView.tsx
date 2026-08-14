@@ -40,6 +40,8 @@ type StatsResponse = {
     medianTimeToOpenMs: number | null;
     sampleSize: number;
     sendTimes: { day: number; hour: number; sent: number; opened: number }[];
+    topLinks: { url: string; clicks: number }[];
+    recipientDomains: { domain: string; sent: number; opened: number }[];
   };
   messages: StatMessage[];
   truncated: boolean;
@@ -111,9 +113,9 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
       from.setDate(from.getDate() - rangeDays);
       params.set("from", from.toISOString());
     }
-    // Scope to the mailboxes selected in the panel. This was previously ignored, so the report
-    // always covered every account regardless of the selection.
-    if (accountsKey) params.set("accounts", accountsKey);
+    // NOTE: deliberately NOT scoping to the panel's selected inboxes. outbound.account_id is
+    // nullable, so filtering by it silently drops every message that isn't attributed to an
+    // account row — which reads as "analytics is broken". Report on all of the user's sent mail.
     const qs = params.toString();
     fetch(`/api/gmail/tracking/stats${qs ? `?${qs}` : ""}`, { cache: "no-store" })
       .then((r) => r.json())
@@ -145,6 +147,10 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
               payload?.behaviour?.medianTimeToOpenMs == null ? null : n(payload.behaviour.medianTimeToOpenMs),
             sampleSize: n(payload?.behaviour?.sampleSize),
             sendTimes: Array.isArray(payload?.behaviour?.sendTimes) ? payload.behaviour.sendTimes : [],
+            topLinks: Array.isArray(payload?.behaviour?.topLinks) ? payload.behaviour.topLinks : [],
+            recipientDomains: Array.isArray(payload?.behaviour?.recipientDomains)
+              ? payload.behaviour.recipientDomains
+              : [],
           },
           messages: Array.isArray(payload?.messages) ? payload.messages : [],
           truncated: Boolean(payload?.truncated),
@@ -581,7 +587,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
         {/* ── Breakdowns ───────────────────────────────────────────────────── */}
         <section>
           <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#847FA0]">Breakdown</h2>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 2xl:grid-cols-2">
             <div className={CARD}>
               <h3 className="mb-3 text-sm font-semibold text-[#1E1B2E]">Top messages by opens</h3>
               {derived.topMessages.length === 0 ? (
@@ -601,6 +607,58 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                         <td className="max-w-0 truncate py-2 pr-2 text-[#4A465C]">{m.subject || "(No subject)"}</td>
                         <td className="py-2 text-right font-semibold tabular-nums text-[#1E1B2E]">{m.openCount}</td>
                         <td className="py-2 text-right tabular-nums text-[#4A465C]">{m.clickCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className={CARD}>
+              <h3 className="mb-3 text-sm font-semibold text-[#1E1B2E]">Open rate by recipient provider</h3>
+              {!behaviour || behaviour.recipientDomains.length === 0 ? (
+                <p className="text-sm text-[#847FA0]">No recipient data yet.</p>
+              ) : (
+                <table className="w-full table-fixed text-sm">
+                  <thead>
+                    <tr className="text-[10.5px] uppercase tracking-wide text-[#847FA0]">
+                      <th className="pb-2 text-left font-semibold">Provider</th>
+                      <th className="w-14 pb-2 text-right font-semibold">Sent</th>
+                      <th className="w-20 pb-2 text-right font-semibold">Open rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {behaviour.recipientDomains.map((d) => (
+                      <tr key={d.domain} className="border-t border-[#EEE6F7]/70">
+                        <td className="max-w-0 truncate py-2 pr-2 text-[#4A465C]">{d.domain}</td>
+                        <td className="py-2 text-right tabular-nums text-[#1E1B2E]">{d.sent}</td>
+                        <td className="py-2 text-right font-semibold tabular-nums text-[#1E1B2E]">
+                          {pct(d.opened, d.sent)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className={CARD}>
+              <h3 className="mb-3 text-sm font-semibold text-[#1E1B2E]">Most clicked links</h3>
+              {!behaviour || behaviour.topLinks.length === 0 ? (
+                <p className="text-sm text-[#847FA0]">No link clicks recorded yet.</p>
+              ) : (
+                <table className="w-full table-fixed text-sm">
+                  <thead>
+                    <tr className="text-[10.5px] uppercase tracking-wide text-[#847FA0]">
+                      <th className="pb-2 text-left font-semibold">URL</th>
+                      <th className="w-16 pb-2 text-right font-semibold">Clicks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {behaviour.topLinks.map((l) => (
+                      <tr key={l.url} className="border-t border-[#EEE6F7]/70">
+                        <td className="max-w-0 truncate py-2 pr-2 text-[#4A465C]" title={l.url}>{l.url}</td>
+                        <td className="py-2 text-right font-semibold tabular-nums text-[#1E1B2E]">{l.clicks}</td>
                       </tr>
                     ))}
                   </tbody>

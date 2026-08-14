@@ -53,6 +53,7 @@ import PromptModal from "@/components/ui/PromptModal";
 import { scoreTrackerImage } from "@/lib/email/trackerDetection";
 import ComposeRichEditor, { printComposeContent, type ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
 import SignPdfModal from "@/components/email/SignPdfModal";
+import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
 import { GLASS_CHROME, GLASS_SURFACE, GLASS_MODAL, GLASS_SCRIM, SHADOW_SM, BRAND_GRADIENT, BRAND_LOGO } from "@/components/email/emailTheme";
 import {
   PAGE_SIZE,
@@ -3161,48 +3162,43 @@ ${sourceText}`;
             #5E17A8 50%, #701CC0 62.5%, #8B3BEE 75%, #701CC0 87.5%, #5E17A8 100%
           );
           background-size: 200% 100%;
-          animation: composeGradient 16s linear infinite;
+          animation: composeGradient 6s linear infinite;
         }
-        .compose-cta:hover { animation-duration: 4s; }
+        /* Matches the site's .audit-glow cadence: 6s idle, 2s on hover. */
+        .compose-cta:hover { animation-duration: 2s; }
         @keyframes composeGradient {
-          from { background-position: 0% 50%; }
-          to { background-position: 100% 50%; }
+          /* 100% -> 0% shifts the oversized background rightwards, so the bands travel
+             LEFT to RIGHT. (0% -> 100% moves the image left, i.e. the wrong way.) */
+          from { background-position: 100% 50%; }
+          to { background-position: 0% 50%; }
         }
         @media (prefers-reduced-motion: reduce) {
           .compose-cta, .compose-cta:hover { animation: none; }
         }
       `}</style>
       {step === "gate" ? (
-        <div className="relative z-10 h-full flex items-center justify-center px-6 py-12">
-          <div className="w-full max-w-md text-center">
-            <Image
-              src={BRAND_LOGO.wordmarkLight}
-              alt="Vierra"
-              width={260}
-              height={66}
-              className="mx-auto mb-8 h-16 w-auto"
-              priority
-            />
-            {gmailLoading ? (
-              // Same bouncing-dots motion as the login screen and the panel's bundle loader, so
-              // the whole sign-in → panel sequence reads as one continuous load.
-              <div className="flex items-center justify-center gap-1.5 py-5">
-                {[0, 1, 2].map((i) => (
-                  <span
-                    key={i}
-                    className="h-2 w-2 rounded-full bg-white/70 motion-safe:animate-bounce"
-                    style={{ animationDelay: `${i * 150}ms` }}
-                  />
-                ))}
-              </div>
-            ) : (
-              <>
-                <h1 className="text-xl font-semibold tracking-tight text-white">No Google accounts connected</h1>
-                <p className="mt-2 text-sm text-white/70">Connect Gmail from your account settings, then come back here.</p>
-              </>
-            )}
+        gmailLoading ? (
+          /* While accounts resolve, render the SHARED loading screen verbatim — same component
+             as the login page and the panel's bundle loader, so the logo, sizing and motion are
+             identical all the way through sign-in → panel. */
+          <BrandLoadingScreen />
+        ) : (
+          <div className="relative z-10 h-full flex items-center justify-center px-6 py-12">
+            <div className="w-full max-w-md text-center">
+              <Image
+                src="/assets/vierra-logo-black-3.png"
+                alt="Vierra"
+                width={220}
+                height={64}
+                className="pointer-events-none mx-auto mb-8 h-10 w-auto select-none opacity-95 brightness-0 invert"
+                draggable={false}
+                priority
+              />
+              <h1 className="text-xl font-semibold tracking-tight text-white">No Google accounts connected</h1>
+              <p className="mt-2 text-sm text-white/70">Connect Gmail from your account settings, then come back here.</p>
+            </div>
           </div>
-        </div>
+        )
       ) : (
         <div className="relative z-10 flex-1 w-full overflow-hidden px-4 md:px-6 py-4">
           <div className="w-full max-w-[1700px] mx-auto h-full overflow-hidden">
