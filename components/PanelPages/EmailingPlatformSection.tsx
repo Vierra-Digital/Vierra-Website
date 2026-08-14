@@ -53,8 +53,12 @@ import PromptModal from "@/components/ui/PromptModal";
 import { scoreTrackerImage } from "@/lib/email/trackerDetection";
 import ComposeRichEditor, { printComposeContent, type ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
 import SignPdfModal from "@/components/email/SignPdfModal";
+import { getJson } from "@/lib/email/panelApi";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
-import { GLASS_CHROME, GLASS_SURFACE, GLASS_MODAL, GLASS_SCRIM, SHADOW_SM, BRAND_GRADIENT, BRAND_LOGO } from "@/components/email/emailTheme";
+import {
+  GLASS_CHROME, GLASS_SURFACE, GLASS_MODAL, GLASS_SCRIM, SHADOW_SM, BRAND_GRADIENT, BRAND_LOGO,
+  ICON_BUTTON, ICON_BUTTON_SOLID, ICON_BUTTON_GHOST, FIELD_LABEL, BUTTON_COMPACT, ALERT,
+} from "@/components/email/emailTheme";
 import {
   PAGE_SIZE,
   CONTACTS_PAGE_SIZE,
@@ -644,9 +648,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
   const loadContactTags = useCallback(async () => {
     try {
-      const response = await fetch("/api/contacts/tags");
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) return;
+      const result = await getJson("/api/contacts/tags");
+      if (!result.ok) return;
+      const payload = result.data as Record<string, unknown>;
       setContactsTags(Array.isArray(payload?.tags) ? payload.tags : []);
     } catch {
       setContactsTags([]);
@@ -680,9 +684,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     try {
       const query = new URLSearchParams();
       if (activeAccountForContacts) query.set("accountEmail", activeAccountForContacts);
-      const response = await fetch(`/api/contacts/visibility?${query.toString()}`);
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) return;
+      const result = await getJson(`/api/contacts/visibility?${query.toString()}`);
+      if (!result.ok) return;
+      const payload = result.data as { visibility?: Record<string, unknown> };
       const visibility = payload?.visibility || {};
       setContactsVisibility({
         showPhone: Boolean(visibility.showPhone ?? true),
@@ -3434,7 +3438,7 @@ ${sourceText}`;
                                       void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
                                     }}
                                     disabled={messagesLoading}
-                                    className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                    className={ICON_BUTTON_SOLID}
                                     aria-label="Refresh"
                                     title="Refresh"
                                   >
@@ -3450,7 +3454,7 @@ ${sourceText}`;
                                         type="button"
                                         onClick={() => applyAction("markRead")}
                                         disabled={actionLoading}
-                                        className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                        className={ICON_BUTTON_SOLID}
                                         aria-label="Mark As Read"
                                         title="Mark As Read"
                                       >
@@ -3460,7 +3464,7 @@ ${sourceText}`;
                                         type="button"
                                         onClick={() => applyAction("markUnread")}
                                         disabled={actionLoading}
-                                        className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                        className={ICON_BUTTON_SOLID}
                                         title="Mark As Unread"
                                       >
                                         <FiMail className="w-4 h-4" />
@@ -3469,7 +3473,7 @@ ${sourceText}`;
                                         type="button"
                                         onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
                                         disabled={actionLoading}
-                                        className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                        className={ICON_BUTTON_SOLID}
                                         title={activeModule === "archive" ? "Unarchive" : "Archive"}
                                       >
                                         <FiArchive className="w-4 h-4" />
@@ -3479,7 +3483,7 @@ ${sourceText}`;
                                           type="button"
                                           onClick={() => setSnoozeMenuOpen((open) => !open)}
                                           disabled={actionLoading}
-                                          className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                          className={ICON_BUTTON_SOLID}
                                           title="Snooze"
                                           aria-label="Snooze"
                                         >
@@ -3512,7 +3516,7 @@ ${sourceText}`;
                                     type="button"
                                     onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
                                     disabled={actionLoading}
-                                    className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                    className={ICON_BUTTON_SOLID}
                                     title={activeModule === "trash" ? "Delete Permanently" : "Move To Trash"}
                                   >
                                     <FiTrash2 className="w-4 h-4" />
@@ -3574,7 +3578,7 @@ ${sourceText}`;
                                   type="button"
                                   onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                                   disabled={currentPage <= 1 || messagesLoading}
-                                  className="rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-1 text-xs text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                  className={BUTTON_COMPACT}
                                 >
                                   Prev
                                 </button>
@@ -3585,7 +3589,7 @@ ${sourceText}`;
                                   type="button"
                                   onClick={() => setCurrentPage((prev) => prev + 1)}
                                   disabled={!hasNextPage || messagesLoading}
-                                  className="rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-1 text-xs text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                  className={BUTTON_COMPACT}
                                 >
                                   Next
                                 </button>
@@ -3600,10 +3604,10 @@ ${sourceText}`;
                           the final row once a mailbox is scrolled to the end. */}
                       <div className="flex-1 overflow-y-auto overflow-x-hidden">
                         {messagesError ? (
-                          <div className="m-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{messagesError}</div>
+                          <div className={`m-3 ${ALERT.error}`}>{messagesError}</div>
                         ) : null}
                         {actionError ? (
-                          <div className="m-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{actionError}</div>
+                          <div className={`m-3 ${ALERT.error}`}>{actionError}</div>
                         ) : null}
                         {accountErrors.length > 0 ? (
                           <div className="m-3 space-y-1 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
@@ -3795,7 +3799,7 @@ ${sourceText}`;
                             </div>
                             <div className="flex-1 overflow-auto p-2">
                               {contactsError ? (
-                                <div className="m-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{contactsError}</div>
+                                <div className={`m-3 ${ALERT.error}`}>{contactsError}</div>
                               ) : null}
                               {contactsLoading ? (
                                 <MailboxLoader label="Loading Contacts..." />
@@ -4084,7 +4088,7 @@ ${sourceText}`;
                             onClick={() => {
                               void openReplyCompose();
                             }}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             aria-label="Reply"
                             title="Reply"
                           >
@@ -4095,7 +4099,7 @@ ${sourceText}`;
                             onClick={() => {
                               void openReplyAllCompose();
                             }}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             aria-label="Reply All"
                             title="Reply All"
                           >
@@ -4106,7 +4110,7 @@ ${sourceText}`;
                             onClick={() => {
                               void openForwardCompose();
                             }}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             aria-label="Forward"
                             title="Forward"
                           >
@@ -4115,7 +4119,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => applyAction("markUnread")}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             title="Mark As Unread"
                           >
                             <FiMail className="w-4 h-4" />
@@ -4124,7 +4128,7 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => setLabelMenuOpen((open) => !open)}
-                              className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                              className={ICON_BUTTON}
                               title="Label"
                               aria-label="Label"
                             >
@@ -4153,7 +4157,7 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => setMoveMenuOpen((prev) => (prev === "message" ? null : "message"))}
-                              className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                              className={ICON_BUTTON}
                               title="Move To"
                             >
                               <FiMove className="w-4 h-4" />
@@ -4176,7 +4180,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             title={activeModule === "archive" ? "Unarchive" : "Archive"}
                           >
                             <FiArchive className="w-4 h-4" />
@@ -4184,7 +4188,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             title={activeModule === "trash" ? "Delete Permanently" : "Trash"}
                           >
                             <FiTrash2 className="w-4 h-4" />
@@ -4192,7 +4196,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => applyAction(spamActionType)}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             title={spamActionTitle}
                           >
                             <FiAlertCircle className="w-4 h-4" />
@@ -4200,7 +4204,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={blockSelectedSender}
-                            className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 text-sm hover:bg-[#F9FAFB]"
+                            className={ICON_BUTTON}
                             title={selectedBlockedEntry ? "Unblock Sender" : "Block Sender"}
                           >
                             <FiX className="w-4 h-4" />
@@ -4463,7 +4467,7 @@ ${sourceText}`;
             ) : null}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#374151]">
+                <label className={FIELD_LABEL}>
                   First Name <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -4479,7 +4483,7 @@ ${sourceText}`;
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#374151]">Last Name</label>
+                <label className={FIELD_LABEL}>Last Name</label>
                 <input
                   value={addContactForm.lastName}
                   onChange={(event) => setAddContactForm((prev) => ({ ...prev, lastName: event.target.value }))}
@@ -4488,7 +4492,7 @@ ${sourceText}`;
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-[#374151]">
+                <label className={FIELD_LABEL}>
                   Email <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -4506,7 +4510,7 @@ ${sourceText}`;
                 <p className="md:col-span-2 -mt-1 text-xs text-red-600">Please enter a valid email address.</p>
               ) : null}
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#374151]">Phone</label>
+                <label className={FIELD_LABEL}>Phone</label>
                 <input
                   value={addContactForm.phone}
                   onChange={(event) => setAddContactForm((prev) => ({ ...prev, phone: formatPhoneInput(event.target.value) }))}
@@ -4522,7 +4526,7 @@ ${sourceText}`;
                 <p className="md:col-span-2 -mt-1 text-xs text-red-600">Phone format: (123)-456-7890</p>
               ) : null}
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#374151]">Business</label>
+                <label className={FIELD_LABEL}>Business</label>
                 <input
                   value={addContactForm.business}
                   onChange={(event) => setAddContactForm((prev) => ({ ...prev, business: event.target.value }))}
@@ -4531,7 +4535,7 @@ ${sourceText}`;
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-[#374151]">Website</label>
+                <label className={FIELD_LABEL}>Website</label>
                 <input
                   value={addContactForm.website}
                   onChange={(event) => setAddContactForm((prev) => ({ ...prev, website: event.target.value }))}
@@ -4547,7 +4551,7 @@ ${sourceText}`;
                 <p className="md:col-span-2 -mt-1 text-xs text-red-600">Please enter a valid website URL.</p>
               ) : null}
               <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-[#374151]">Address</label>
+                <label className={FIELD_LABEL}>Address</label>
                 <input
                   value={addContactForm.address}
                   onChange={(event) => setAddContactForm((prev) => ({ ...prev, address: event.target.value }))}
@@ -4606,7 +4610,7 @@ ${sourceText}`;
 
             <div className="grid grid-cols-2 gap-4 mb-6">
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1">
+                <label className={FIELD_LABEL}>
                   First Name <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -4622,7 +4626,7 @@ ${sourceText}`;
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1">Last Name</label>
+                <label className={FIELD_LABEL}>Last Name</label>
                 <input
                   type="text"
                   value={editContactForm.lastName}
@@ -4631,7 +4635,7 @@ ${sourceText}`;
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1">
+                <label className={FIELD_LABEL}>
                   Email <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -4649,7 +4653,7 @@ ${sourceText}`;
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1">Phone</label>
+                <label className={FIELD_LABEL}>Phone</label>
                 <input
                   type="text"
                   value={editContactForm.phone}
@@ -4665,7 +4669,7 @@ ${sourceText}`;
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1">Business</label>
+                <label className={FIELD_LABEL}>Business</label>
                 <input
                   type="text"
                   value={editContactForm.business}
@@ -4674,7 +4678,7 @@ ${sourceText}`;
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1">Website</label>
+                <label className={FIELD_LABEL}>Website</label>
                 <input
                   type="text"
                   value={editContactForm.website}
@@ -4688,7 +4692,7 @@ ${sourceText}`;
                 />
               </div>
               <div className="col-span-2">
-                <label className="block text-sm font-medium text-[#374151] mb-1">Address</label>
+                <label className={FIELD_LABEL}>Address</label>
                 <input
                   type="text"
                   value={editContactForm.address}
@@ -5199,7 +5203,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => composeAttachInputRef.current?.click()}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        className={ICON_BUTTON_GHOST}
                         title="Attach files"
                         aria-label="Attach files"
                       >
@@ -5208,7 +5212,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => setSignModalOpen(true)}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        className={ICON_BUTTON_GHOST}
                         title="Request signature"
                         aria-label="Request signature"
                       >
@@ -5249,7 +5253,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => composeEditorRef.current?.promptInsertLink()}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        className={ICON_BUTTON_GHOST}
                         title="Insert link"
                         aria-label="Insert link"
                       >
@@ -5258,7 +5262,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => composeEditorRef.current?.promptInsertImage()}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        className={ICON_BUTTON_GHOST}
                         title="Insert image"
                         aria-label="Insert image"
                       >
@@ -5267,7 +5271,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={handlePrintCompose}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        className={ICON_BUTTON_GHOST}
                         title="Print"
                         aria-label="Print"
                       >
@@ -5276,7 +5280,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => setComposeTemplateMenuOpen((open) => !open)}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        className={ICON_BUTTON_GHOST}
                         title="Load template"
                         aria-label="Load template"
                         aria-expanded={composeTemplateMenuOpen}
@@ -5318,7 +5322,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => setComposeSignatureMenuOpen((open) => !open)}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                        className={ICON_BUTTON_GHOST}
                         title="Insert signature"
                         aria-label="Insert signature"
                         aria-expanded={composeSignatureMenuOpen}
