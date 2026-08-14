@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr, asQueryStr } from "@/lib/api/parsing";
-import { serializeCampaign, CAMPAIGN_STATUSES } from "@/lib/api/campaigns";
+import { serializeCampaign, CAMPAIGN_STATUSES, SEND_PROVIDERS } from "@/lib/api/campaigns";
 
 export default withAuth(async (req, res, session) => {
   if (req.method === "GET") {
@@ -24,18 +24,56 @@ export default withAuth(async (req, res, session) => {
   if (req.method === "POST") {
     const name = asStr(req.body?.name);
     const accountId = asStr(req.body?.accountId);
-    if (!name || !accountId) {
-      res.status(400).json({ message: "name and accountId are required." });
+    const accountEmail = asStr(req.body?.accountEmail).toLowerCase();
+    if (!name || (!accountId && !accountEmail)) {
+      res.status(400).json({ message: "name and (accountId or accountEmail) are required." });
       return;
     }
 
-    const account = await prisma.emailProviderAccount.findFirst({
-      where: { id: accountId, user_id: session.user.id, company_id: session.companyId },
-      select: { id: true },
-    });
-    if (!account) {
-      res.status(400).json({ message: "accountId must reference one of your connected mailboxes." });
+    const sendProviderRaw = asStr(req.body?.sendProvider);
+    if (sendProviderRaw && !(SEND_PROVIDERS as readonly string[]).includes(sendProviderRaw)) {
+      res.status(400).json({ message: `sendProvider must be one of: ${SEND_PROVIDERS.join(", ")}.` });
       return;
+    }
+    const sendProvider = sendProviderRaw || "internal";
+
+    let resolvedAccountId: string;
+    if (accountId) {
+      const account = await prisma.emailProviderAccount.findFirst({
+        where: { id: accountId, user_id: session.user.id, company_id: session.companyId },
+        select: { id: true, smtp_password_enc: true },
+      });
+      if (!account) {
+        res.status(400).json({ message: "accountId must reference one of your connected mailboxes." });
+        return;
+      }
+      // "internal" campaigns actually SMTP-send through this account — vendor-provider campaigns
+      // (smartlead/brevo) only need it for the account_email identity, so no credential check there.
+      if (sendProvider === "internal" && !account.smtp_password_enc) {
+        res.status(400).json({ message: "That mailbox has no SMTP credentials configured — required for an internal-provider campaign." });
+        return;
+      }
+      resolvedAccountId = account.id;
+    } else {
+      if (sendProvider === "internal") {
+        res.status(400).json({ message: "accountId (a connected mailbox with real SMTP credentials) is required for internal-provider campaigns." });
+        return;
+      }
+      // Identity-only account for a vendor-provider campaign: find-or-create by (user, email) —
+      // no SMTP/IMAP fields needed, the vendor sends the mail. See lib/email/smtp.ts's
+      // requireSmtpCredentials() and prisma/schema.prisma's EmailProviderAccount comment.
+      const existing = await prisma.emailProviderAccount.findFirst({
+        where: { user_id: session.user.id, company_id: session.companyId, account_email: accountEmail },
+        select: { id: true },
+      });
+      resolvedAccountId =
+        existing?.id ??
+        (
+          await prisma.emailProviderAccount.create({
+            data: { company_id: session.companyId, user_id: session.user.id, account_email: accountEmail },
+            select: { id: true },
+          })
+        ).id;
     }
 
     const sendDelaySeconds = Number(req.body?.sendDelaySeconds);
@@ -46,10 +84,11 @@ export default withAuth(async (req, res, session) => {
     const created = await prisma.campaign.create({
       data: {
         company_id: session.companyId,
-        account_id: accountId,
+        account_id: resolvedAccountId,
         created_by: session.user.id,
         name,
         status: "draft",
+        send_provider: sendProvider,
         send_delay_seconds: Number.isFinite(sendDelaySeconds) && sendDelaySeconds >= 30 ? Math.floor(sendDelaySeconds) : 60,
         send_jitter_seconds: Number.isFinite(sendJitterSeconds) && sendJitterSeconds >= 0 ? Math.floor(sendJitterSeconds) : 30,
         daily_send_limit: Number.isFinite(dailySendLimit) && dailySendLimit > 0 ? Math.floor(dailySendLimit) : 50,

@@ -3,6 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr } from "@/lib/api/parsing";
 import { serializeCampaign } from "@/lib/api/campaigns";
+import {
+  createCampaign,
+  setCampaignSequence,
+  attachEmailAccount,
+  updateCampaignStatus,
+  smartleadConfigured,
+  translateMergeTagsForSmartlead,
+} from "@/lib/campaigns/smartlead/client";
+import { brevoConfigured } from "@/lib/campaigns/brevo/client";
 
 function getId(req: NextApiRequest) {
   const raw = req.query.id;
@@ -28,7 +37,7 @@ export default withAuth(async (req, res, session) => {
   const existing = await prisma.campaign.findFirst({
     where: { id, company_id: session.companyId },
     include: {
-      email_provider_accounts: { select: { account_email: true } },
+      email_provider_accounts: { select: { account_email: true, smartlead_email_account_id: true } },
       _count: { select: { campaign_steps: true, campaign_contacts: true } },
     },
   });
@@ -64,6 +73,91 @@ export default withAuth(async (req, res, session) => {
       if (nextStatus === "active" && existing.status === "paused") data.paused_at = null;
       if (nextStatus === "paused") data.paused_at = new Date();
       if (nextStatus === "completed" || nextStatus === "cancelled") data.completed_at = new Date();
+
+      // Smartlead-provider campaigns: mirror the transition into Smartlead before applying it
+      // locally, so local status never claims something Smartlead's side didn't actually do.
+      // See .claude/schema_v2_campaigns_smartlead_integration.md Flow 1. NOTE: the exact
+      // endpoints/payloads this calls (setCampaignSequence, attachEmailAccount,
+      // updateCampaignStatus) are UNVERIFIED against Smartlead's real API — see client.ts.
+      if (existing.send_provider === "smartlead") {
+        if (nextStatus === "active") {
+          if (!smartleadConfigured()) {
+            res.status(400).json({ message: "Smartlead isn't configured (SMARTLEAD_API_KEY missing)." });
+            return;
+          }
+          const smartleadEmailAccountId = existing.email_provider_accounts.smartlead_email_account_id;
+          if (!smartleadEmailAccountId) {
+            res.status(400).json({
+              message:
+                "This campaign's sending mailbox isn't connected to Smartlead yet. Connect it on the Smartlead side first (see design doc §9 — this may be a manual dashboard step), then record its Smartlead email account id before launching.",
+            });
+            return;
+          }
+
+          let smartleadCampaignId = existing.smartlead_campaign_id;
+          if (!smartleadCampaignId) {
+            const created = await createCampaign(existing.name);
+            if (!created.ok) {
+              res.status(502).json({ message: `Failed to create the Smartlead campaign: ${created.message}` });
+              return;
+            }
+            smartleadCampaignId = String(created.data.id);
+
+            const steps = await prisma.campaignStep.findMany({
+              where: { campaign_id: id },
+              orderBy: { step_order: "asc" },
+              include: { email_templates: true },
+            });
+            const sequenceSteps = steps.map((step, index) => ({
+              seq_number: index + 1,
+              subject: translateMergeTagsForSmartlead(step.subject_override || step.email_templates?.subject || ""),
+              email_body: translateMergeTagsForSmartlead(
+                step.body_html_override || step.email_templates?.body_html || ""
+              ),
+              wait_days: step.delay_days,
+            }));
+            const sequenceResult = await setCampaignSequence(smartleadCampaignId, sequenceSteps);
+            if (!sequenceResult.ok) {
+              res.status(502).json({
+                message: `Smartlead campaign was created but the sequence upload failed: ${sequenceResult.message}`,
+              });
+              return;
+            }
+
+            const accountResult = await attachEmailAccount(smartleadCampaignId, smartleadEmailAccountId);
+            if (!accountResult.ok) {
+              res.status(502).json({
+                message: `Smartlead campaign was created but attaching the mailbox failed: ${accountResult.message}`,
+              });
+              return;
+            }
+          }
+          data.smartlead_campaign_id = smartleadCampaignId;
+        } else if (
+          (nextStatus === "paused" || nextStatus === "cancelled" || nextStatus === "completed") &&
+          existing.smartlead_campaign_id
+        ) {
+          const stopResult = await updateCampaignStatus(
+            existing.smartlead_campaign_id,
+            nextStatus === "paused" ? "PAUSED" : "STOPPED"
+          );
+          if (!stopResult.ok) {
+            res.status(502).json({
+              message: `Couldn't ${nextStatus === "paused" ? "pause" : "stop"} the Smartlead campaign: ${stopResult.message}. Local status was not changed.`,
+            });
+            return;
+          }
+        }
+      }
+
+      // Brevo-provider campaigns: unlike Smartlead, there's nothing to mirror on launch (Brevo
+      // is a plain transport, not a system of record), but we still must not flip a campaign to
+      // "active" if BREVO_API_KEY isn't set — otherwise every contact silently fails at send time
+      // in sendQueueTick.ts instead of being blocked upfront.
+      if (existing.send_provider === "brevo" && nextStatus === "active" && !brevoConfigured()) {
+        res.status(400).json({ message: "Brevo isn't configured (BREVO_API_KEY missing)." });
+        return;
+      }
 
       const updated = await prisma.campaign.update({
         where: { id },
@@ -122,6 +216,7 @@ export default withAuth(async (req, res, session) => {
           req.body?.scheduledStartAt !== undefined
             ? (asStr(scheduledStartAtRaw) ? new Date(asStr(scheduledStartAtRaw)) : null)
             : existing.scheduled_start_at,
+        audience_filter: req.body?.audienceFilter !== undefined ? req.body.audienceFilter : existing.audience_filter,
       },
       include: {
         email_provider_accounts: { select: { account_email: true } },

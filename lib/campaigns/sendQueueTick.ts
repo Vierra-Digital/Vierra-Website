@@ -1,9 +1,10 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
 import type { CampaignContact, Prisma } from "@prisma/client";
-import { createSmtpTransport } from "@/lib/email/smtp";
+import { createSmtpTransport, requireSmtpCredentials } from "@/lib/email/smtp";
 import { renderMergeTags } from "@/lib/campaigns/mergeTags";
 import { mergeClickTrackUrls, rewriteTrackedLinksInHtml } from "@/lib/gmail/sendCore";
+import { sendBrevoCampaignEmail } from "@/lib/campaigns/brevo/client";
 
 const DEFAULT_BATCH_SIZE = 20;
 /** How far out to reschedule a contact after a send failure, so a tick doesn't tight-loop on it. */
@@ -19,8 +20,34 @@ const TICK_INTERVAL_SECONDS = 300;
 
 type TickResult = { processed: number; sent: number; failed: number; skipped: number };
 type ContactOutcome = "skipped" | "completed" | "failed" | "sent";
-type ActiveCampaign = Prisma.CampaignGetPayload<{ include: { email_provider_accounts: true } }>;
+type ActiveCampaign = Prisma.CampaignGetPayload<{ include: { email_provider_accounts: { include: { users: true } } } }>;
 type SequenceStep = Prisma.CampaignStepGetPayload<{ include: { email_templates: true } }>;
+/** CAN-SPAM footer/unsubscribe inputs, resolved once per company per tick — see processContact. */
+type SendingCompany = { mailingAddress: string; privacyPolicyUrl: string | null; siteBaseUrl: string };
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/**
+ * CAN-SPAM requires a valid physical postal address and a working unsubscribe mechanism in every
+ * commercial email. Builds the footer block appended to the body and the List-Unsubscribe /
+ * List-Unsubscribe-Post headers (RFC 8058 one-click) pointing at the same link.
+ */
+function buildCanSpamFooter(company: SendingCompany, unsubscribeUrl: string) {
+  const privacyLink = company.privacyPolicyUrl
+    ? ` &middot; <a href="${escapeHtml(company.privacyPolicyUrl)}" style="color:#6b7280;">Privacy Policy</a>`
+    : "";
+  const html =
+    `<div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;font-family:Arial,sans-serif;` +
+    `font-size:12px;line-height:1.5;color:#6b7280;">${escapeHtml(company.mailingAddress)}${privacyLink} &middot; ` +
+    `<a href="${escapeHtml(unsubscribeUrl)}" style="color:#6b7280;">Unsubscribe</a></div>`;
+  const headers = {
+    "List-Unsubscribe": `<${unsubscribeUrl}>`,
+    "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+  };
+  return { html, headers };
+}
 
 /**
  * Process one queued campaign contact: DNC-skip → resolve the next step → send via SMTP →
@@ -31,7 +58,8 @@ type SequenceStep = Prisma.CampaignStepGetPayload<{ include: { email_templates: 
 async function processContact(
   campaign: ActiveCampaign,
   contact: CampaignContact,
-  steps: SequenceStep[]
+  steps: SequenceStep[],
+  company: SendingCompany
 ): Promise<ContactOutcome> {
   const blocked = await prisma.emailBlockedSender.findFirst({
     where: {
@@ -80,8 +108,11 @@ async function processContact(
   // (the /track/open endpoint rolls first opens up into campaign_daily_stats). Only when a real
   // https base URL is configured — otherwise the pixel would be a dead relative URL. The token
   // lives on the outbound record created after a successful send below (no id needed pre-send).
-  const trackingBaseUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "").replace(/\/$/, "");
-  const trackingOn = /^https:\/\//i.test(trackingBaseUrl);
+  // Brevo does its own open/click tracking once a "brevo"-provider campaign's mail leaves through
+  // its API (engagement comes back via the Brevo webhook instead), so this local pixel/link-rewrite
+  // mechanism is skipped for those sends — see .claude/schema_v2_campaigns_brevo_integration.md §4.
+  const trackingBaseUrl = company.siteBaseUrl;
+  const trackingOn = campaign.send_provider !== "brevo";
   const openToken = trackingOn ? randomUUID().replace(/-/g, "") : null;
   // Click tracking: rewrite each link to a tracked redirect. Tokens are generated up-front (like the
   // open token) so the emailTrackingLink rows can be written AFTER a successful send below — no
@@ -102,18 +133,53 @@ async function processContact(
       : htmlWithClicks;
 
   const account = campaign.email_provider_accounts;
-  let sendError: string | null = null;
-  try {
-    const transporter = createSmtpTransport(account);
-    await transporter.sendMail({
-      from: account.account_email,
-      to: contact.contact_email,
-      subject,
-      text: bodyText,
-      html: trackedHtml || undefined,
+
+  // CAN-SPAM footer + List-Unsubscribe header. The unsubscribe token is generated once per
+  // contact and reused across every sequence step (persisted on CampaignContact), so the link
+  // stays valid for the life of the campaign rather than rotating each send.
+  let unsubscribeToken = contact.unsubscribe_token;
+  if (!unsubscribeToken) {
+    unsubscribeToken = randomUUID().replace(/-/g, "");
+    await prisma.campaignContact.update({
+      where: { id: contact.id },
+      data: { unsubscribe_token: unsubscribeToken },
     });
-  } catch (error) {
-    sendError = error instanceof Error ? error.message : "SMTP send failed.";
+  }
+  const unsubscribeUrl = `${company.siteBaseUrl}/api/email/unsubscribe/${unsubscribeToken}`;
+  const { html: footerHtml, headers: canSpamHeaders } = buildCanSpamFooter(company, unsubscribeUrl);
+  const finalHtml = (trackedHtml || bodyHtml) + footerHtml;
+  const finalText = `${bodyText}\n\n${company.mailingAddress}\nUnsubscribe: ${unsubscribeUrl}`;
+
+  let sendError: string | null = null;
+  let brevoMessageId: string | null = null;
+  if (campaign.send_provider === "brevo") {
+    const result = await sendBrevoCampaignEmail({
+      fromEmail: account.account_email,
+      fromName: account.provider_label || account.users.name || undefined,
+      replyTo: account.account_email,
+      toEmail: contact.contact_email,
+      subject,
+      html: finalHtml,
+      text: finalText,
+      tags: [`campaign:${campaign.id}`, `contact:${contact.id}`],
+      headers: canSpamHeaders,
+    });
+    if (result.ok) brevoMessageId = result.messageId;
+    else sendError = result.message;
+  } else {
+    try {
+      const transporter = createSmtpTransport(requireSmtpCredentials(account));
+      await transporter.sendMail({
+        from: account.account_email,
+        to: contact.contact_email,
+        subject,
+        text: finalText,
+        html: finalHtml || undefined,
+        headers: canSpamHeaders,
+      });
+    } catch (error) {
+      sendError = error instanceof Error ? error.message : "SMTP send failed.";
+    }
   }
 
   if (sendError) {
@@ -158,10 +224,11 @@ async function processContact(
       campaign_contact_id: contact.id,
       step_id: stepToSend.id,
       subject,
-      body_html: bodyHtml,
-      body_text: bodyText,
+      body_html: finalHtml,
+      body_text: finalText,
       tracking_enabled: Boolean(openToken),
       open_token: openToken,
+      brevo_message_id: brevoMessageId,
     },
   });
 
@@ -185,8 +252,8 @@ async function processContact(
       status: "sent",
       scheduled_at: contact.next_send_at ?? sentAt,
       rendered_subject: subject,
-      rendered_body_html: bodyHtml,
-      rendered_body_text: bodyText,
+      rendered_body_html: finalHtml,
+      rendered_body_text: finalText,
       outbound_message_id: outbound.id,
       attempted_at: sentAt,
       sent_at: sentAt,
@@ -194,8 +261,8 @@ async function processContact(
     update: {
       status: "sent",
       rendered_subject: subject,
-      rendered_body_html: bodyHtml,
-      rendered_body_text: bodyText,
+      rendered_body_html: finalHtml,
+      rendered_body_text: finalText,
       outbound_message_id: outbound.id,
       attempted_at: sentAt,
       sent_at: sentAt,
@@ -252,17 +319,37 @@ async function processContact(
 /**
  * Send-queue tick: advance every active campaign's due, queued contacts one step, respecting
  * each campaign's daily_send_limit and the batch size. Sends real email via the campaign's
- * connected SMTP mailbox. Invoked per-company by an admin (campaigns/send-queue/tick) and by
- * the cron dispatcher (campaigns/send-queue/dispatch → dispatch-campaign-queue, every 5 min).
- * Outbound messages are created with tracking disabled (no open/click pixel), so
- * campaign_daily_stats.opens/clicks stay 0 until that's layered in.
+ * connected SMTP mailbox, or — for "brevo"-provider campaigns — via the Brevo API, using the
+ * exact same pacing/step logic (only processContact's transport call forks). Invoked per-company
+ * by an admin (campaigns/send-queue/tick) and by the cron dispatcher (campaigns/send-queue/dispatch
+ * → dispatch-campaign-queue, every 5 min).
  */
 export async function runCampaignSendQueueTick(companyId: string, batchSize = DEFAULT_BATCH_SIZE): Promise<TickResult> {
   const result: TickResult = { processed: 0, sent: 0, failed: 0, skipped: 0 };
 
+  // CAN-SPAM requires a valid physical mailing address and a working unsubscribe link in every
+  // commercial email — block this company's entire send queue rather than mailing without either.
+  const companyRow = await prisma.company.findUnique({
+    where: { id: companyId },
+    select: { mailing_address: true, privacy_policy_url: true },
+  });
+  const siteBaseUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "").replace(/\/$/, "");
+  if (!companyRow?.mailing_address || !/^https:\/\//i.test(siteBaseUrl)) return result;
+  const company: SendingCompany = {
+    mailingAddress: companyRow.mailing_address,
+    privacyPolicyUrl: companyRow.privacy_policy_url,
+    siteBaseUrl,
+  };
+
   const activeCampaigns = await prisma.campaign.findMany({
-    where: { company_id: companyId, status: "active" },
-    include: { email_provider_accounts: true },
+    // "smartlead"-provider campaigns are excluded here — Smartlead's own backend owns send
+    // timing/execution for those once leads are pushed (lib/campaigns/audienceSync.ts); this
+    // tick doesn't drive them at all. "brevo"-provider campaigns are NOT excluded — they still
+    // need this loop for pacing/step advancement, only the send call inside processContact forks.
+    // See .claude/schema_v2_campaigns_smartlead_integration.md Flow 3 and
+    // .claude/schema_v2_campaigns_brevo_integration.md §6.
+    where: { company_id: companyId, status: "active", send_provider: { in: ["internal", "brevo"] } },
+    include: { email_provider_accounts: { include: { users: true } } },
   });
 
   for (const campaign of activeCampaigns) {
@@ -334,7 +421,7 @@ export async function runCampaignSendQueueTick(companyId: string, batchSize = DE
       if (claim.count === 0) continue;
       result.processed += 1;
       try {
-        const outcome = await processContact(campaign, contact, steps);
+        const outcome = await processContact(campaign, contact, steps, company);
         if (outcome === "skipped") result.skipped += 1;
         else if (outcome === "failed") result.failed += 1;
         else if (outcome === "sent") result.sent += 1;

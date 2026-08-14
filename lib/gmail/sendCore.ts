@@ -4,7 +4,7 @@ import { sanitizeRichEmailHtml } from "@/lib/email/sanitize";
 import { prisma } from "@/lib/prisma";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { toBase64Url, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
-import { createSmtpTransport } from "@/lib/email/smtp";
+import { createSmtpTransport, requireSmtpCredentials } from "@/lib/email/smtp";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { asStr } from "@/lib/api/parsing";
 
@@ -278,8 +278,8 @@ async function sendViaSmtp(
     notifyTo?: string;
   }
 ): Promise<{ ok: true; messageId: string | null } | SendFailure> {
-  const transporter = createSmtpTransport(account);
   try {
+    const transporter = createSmtpTransport(requireSmtpCredentials(account));
     const info = await transporter.sendMail({
       from: msg.from,
       to: msg.to,
