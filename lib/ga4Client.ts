@@ -6,13 +6,26 @@ export type WebsiteVisitsPoint = {
   visits: number
 }
 
-export const EMPTY_WEEKLY_VISITS: WebsiteVisitsPoint[] = [
-  { week: "Week 1", visits: 0 },
-  { week: "Week 2", visits: 0 },
-  { week: "Week 3", visits: 0 },
-  { week: "Week 4", visits: 0 },
-  { week: "Week 5", visits: 0 },
-]
+/** Days in a given (1-indexed) month, leap-year aware. */
+export function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate()
+}
+
+/**
+ * How many 7-day buckets a month actually spans. A fixed 5 was wrong: February (28 days) only
+ * spans 4, so the chart always rendered an empty phantom "Week 5" for it.
+ */
+export function weeksInMonth(year: number, month: number): number {
+  return Math.ceil(daysInMonth(year, month) / 7)
+}
+
+/** Zeroed series shaped to the month — used when GA4 isn't configured. */
+export function emptyWeeklyVisits(year: number, month: number): WebsiteVisitsPoint[] {
+  return Array.from({ length: weeksInMonth(year, month) }, (_, i) => ({
+    week: `Week ${i + 1}`,
+    visits: 0,
+  }))
+}
 
 export function parseGa4Month(value: string | string[] | undefined) {
   const monthValue = Array.isArray(value) ? value[0] : value
@@ -48,13 +61,16 @@ function monthDateRange(year: number, month: number) {
   return { startDate: fmt(start), endDate: fmt(end) }
 }
 
-function bucketSessionsByWeek(rows: { dimensionValues?: { value?: string | null }[]; metricValues?: { value?: string | null }[] }[]) {
-  const weekBuckets = [0, 0, 0, 0, 0]
+export function bucketSessionsByWeek(
+  rows: { dimensionValues?: { value?: string | null }[]; metricValues?: { value?: string | null }[] }[],
+  weekCount: number
+) {
+  const weekBuckets = new Array<number>(Math.max(1, weekCount)).fill(0)
   for (const row of rows) {
     const dateValue = row.dimensionValues?.[0]?.value || ""
     const day = Number(dateValue.slice(-2))
     if (!day) continue
-    const weekIndex = Math.min(4, Math.floor((day - 1) / 7))
+    const weekIndex = Math.min(weekBuckets.length - 1, Math.floor((day - 1) / 7))
     const sessions = Number(row.metricValues?.[0]?.value || "0")
     if (!Number.isNaN(sessions)) weekBuckets[weekIndex] += sessions
   }
@@ -66,7 +82,7 @@ function bucketSessionsByWeek(rows: { dimensionValues?: { value?: string | null 
 
 export async function fetchWeeklyWebsiteVisits(year: number, month: number): Promise<WebsiteVisitsPoint[]> {
   const auth = getAuth()
-  if (!auth) return EMPTY_WEEKLY_VISITS
+  if (!auth) return emptyWeeklyVisits(year, month)
 
   const propertyId = process.env.GA4_PROPERTY_ID!.trim()
   const { startDate, endDate } = monthDateRange(year, month)
@@ -82,5 +98,5 @@ export async function fetchWeeklyWebsiteVisits(year: number, month: number): Pro
     },
   })
 
-  return bucketSessionsByWeek(report.data.rows || [])
+  return bucketSessionsByWeek(report.data.rows || [], weeksInMonth(year, month))
 }

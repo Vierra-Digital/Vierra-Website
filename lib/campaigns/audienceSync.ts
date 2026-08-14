@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { addLeadsToCampaign, type SmartleadLead } from "@/lib/campaigns/smartlead/client";
+import { mapInBatches } from "@/lib/batch";
 
 type AudienceFilter = {
   tagIds?: string[];
@@ -64,11 +65,16 @@ async function pushPendingLeadsToSmartlead(campaignId: string): Promise<void> {
 
   // Correlate Smartlead's returned lead ids back by email (order isn't guaranteed to match).
   const byEmail = new Map((result.data.leads ?? []).map((l) => [l.email.toLowerCase(), String(l.id)]));
-  for (const p of toPush) {
-    const leadId = byEmail.get(p.contact_email.toLowerCase());
-    if (!leadId) continue; // Smartlead didn't echo this one back — leave smartlead_lead_id null, retried next sync
-    await prisma.campaignContact.update({ where: { id: p.id }, data: { smartlead_lead_id: leadId } });
-  }
+  // Each contact gets a distinct smartlead_lead_id, so these can't collapse to one updateMany.
+  // They're independent writes though — run them with bounded concurrency instead of serially.
+  // Contacts Smartlead didn't echo back are left null (retried next sync).
+  const toRecord = toPush.filter((p) => byEmail.has(p.contact_email.toLowerCase()));
+  await mapInBatches(toRecord, (p) =>
+    prisma.campaignContact.update({
+      where: { id: p.id },
+      data: { smartlead_lead_id: byEmail.get(p.contact_email.toLowerCase())! },
+    })
+  );
 }
 
 /**

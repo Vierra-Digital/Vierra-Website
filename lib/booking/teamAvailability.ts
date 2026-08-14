@@ -51,14 +51,21 @@ function intersectBusyIntervals(lists: BusyInterval[][]): BusyInterval[] {
  */
 export async function getTeamBusyIntersection(companyId: string, rangeStartIso: string, rangeEndIso: string): Promise<BusyInterval[]> {
   const members = await prisma.companyMembership.findMany({ where: { company_id: companyId }, select: { user_id: true } });
-  const perMemberBusy: BusyInterval[][] = [];
-  for (const { user_id } of members) {
-    const email = await findFirstGmailAccountForUser(user_id);
-    if (!email) continue;
-    const token = await getValidGmailAccessToken(user_id, email);
-    if (!token.ok) continue;
-    perMemberBusy.push(await getBusy(token.accessToken, rangeStartIso, rangeEndIso));
-  }
+  // Resolve each member's calendar concurrently — the busy lookups are independent Google API
+  // round-trips, so serializing them made page latency scale with team size. Intersection is
+  // order-independent, so parallel results need no re-ordering. Members with no connected/valid
+  // calendar resolve to null and are dropped (soft-fallback — we can't verify them).
+  const perMemberBusy = (
+    await Promise.all(
+      members.map(async ({ user_id }) => {
+        const email = await findFirstGmailAccountForUser(user_id);
+        if (!email) return null;
+        const token = await getValidGmailAccessToken(user_id, email);
+        if (!token.ok) return null;
+        return getBusy(token.accessToken, rangeStartIso, rangeEndIso);
+      })
+    )
+  ).filter((b): b is BusyInterval[] => b !== null);
   if (perMemberBusy.length === 0) return []; // nobody's calendar is checkable — never block
   return intersectBusyIntervals(perMemberBusy);
 }
@@ -66,21 +73,18 @@ export async function getTeamBusyIntersection(companyId: string, rangeStartIso: 
 /** Company members free at a specific slot (used by claim/auto-assign — a narrower, single-slot version of the above). */
 export async function findFreeCompanyMembers(companyId: string, startIso: string, endIso: string): Promise<string[]> {
   const members = await prisma.companyMembership.findMany({ where: { company_id: companyId }, select: { user_id: true } });
-  const free: string[] = [];
-  for (const { user_id } of members) {
-    const email = await findFirstGmailAccountForUser(user_id);
-    if (!email) {
-      free.push(user_id); // no calendar connected — can't verify, don't exclude (soft-fallback)
-      continue;
-    }
-    const token = await getValidGmailAccessToken(user_id, email);
-    if (!token.ok) {
-      free.push(user_id);
-      continue;
-    }
-    const busy = await getBusy(token.accessToken, startIso, endIso);
-    const overlapsThisSlot = busy.some((b) => new Date(b.start).getTime() < new Date(endIso).getTime() && new Date(b.end).getTime() > new Date(startIso).getTime());
-    if (!overlapsThisSlot) free.push(user_id);
-  }
-  return free;
+  // Check each member's calendar concurrently (independent Google API round-trips). Promise.all
+  // preserves member order, so the returned free-list ordering is unchanged from the serial version.
+  const results = await Promise.all(
+    members.map(async ({ user_id }) => {
+      const email = await findFirstGmailAccountForUser(user_id);
+      if (!email) return user_id; // no calendar connected — can't verify, don't exclude (soft-fallback)
+      const token = await getValidGmailAccessToken(user_id, email);
+      if (!token.ok) return user_id;
+      const busy = await getBusy(token.accessToken, startIso, endIso);
+      const overlapsThisSlot = busy.some((b) => new Date(b.start).getTime() < new Date(endIso).getTime() && new Date(b.end).getTime() > new Date(startIso).getTime());
+      return overlapsThisSlot ? null : user_id;
+    })
+  );
+  return results.filter((u): u is string => u !== null);
 }

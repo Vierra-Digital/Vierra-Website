@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
 import { useRouter } from "next/router";
 import { useSession } from "@/lib/session-client";
+import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 
@@ -188,31 +189,8 @@ const LoginPage = () => {
   };
 
   if (status === "loading" || status === "authenticated") {
-    return (
-      <div className="login-shell flex flex-col items-center justify-center gap-6">
-        <AnimatedBackground />
-        <Image
-          src="/assets/vierra-logo-black-3.png"
-          alt="Vierra"
-          width={220}
-          height={64}
-          className="pointer-events-none relative z-10 h-10 w-auto select-none opacity-95 brightness-0 invert"
-          draggable={false}
-          onDragStart={(e) => e.preventDefault()}
-          priority
-        />
-        <div className="relative z-10 flex items-center gap-1.5">
-          {[0, 1, 2].map((i) => (
-            <span
-              key={i}
-              className="h-2 w-2 rounded-full bg-white/70 animate-bounce"
-              style={{ animationDelay: `${i * 150}ms` }}
-            />
-          ))}
-        </div>
-        <StyleBlock />
-      </div>
-    );
+    // Shared with the email panel's boot loader so the two can never drift apart.
+    return <BrandLoadingScreen />;
   }
 
   return (
