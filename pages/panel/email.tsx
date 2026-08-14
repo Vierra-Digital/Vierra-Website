@@ -1,40 +1,17 @@
 import React from "react";
 import Head from "next/head";
-import Image from "next/image";
 import dynamic from "next/dynamic";
 import type { GetServerSideProps } from "next";
 import { requireSession } from "@/lib/auth";
+import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
 
 const EmailingPlatformSection = dynamic(
   () => import("@/components/PanelPages/EmailingPlatformSection"),
   {
     ssr: false,
-    // The panel is a large client-only bundle; show an instant branded loader over the dark
-    // canvas instead of a blank screen while it downloads + hydrates. Deliberately identical to
-    // the login screen's loading state (white wordmark + bouncing dots) so signing in and
-    // landing on the panel reads as one continuous transition rather than two different apps.
-    loading: () => (
-      <div className="flex h-screen w-full flex-col items-center justify-center gap-6 bg-[#18042a]">
-        <Image
-          src="/assets/vierra-logo-black-3.png"
-          alt="Vierra"
-          width={220}
-          height={64}
-          className="pointer-events-none h-10 w-auto select-none opacity-95 brightness-0 invert"
-          draggable={false}
-          priority
-        />
-        <div className="flex items-center gap-1.5">
-          {[0, 1, 2].map((i) => (
-            <span
-              key={i}
-              className="h-2 w-2 rounded-full bg-white/70 motion-safe:animate-bounce"
-              style={{ animationDelay: `${i * 150}ms` }}
-            />
-          ))}
-        </div>
-      </div>
-    ),
+    // The panel is a large client-only bundle. Render the exact same shared loading screen the
+    // login page uses, so signing in and landing on the panel is one continuous motion.
+    loading: () => <BrandLoadingScreen />,
   }
 );
 

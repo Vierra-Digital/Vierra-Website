@@ -3149,21 +3149,27 @@ ${sourceText}`;
           0%, 100% { transform: translateY(-2px); }
           50% { transform: translateY(2px); }
         }
-        /* Compose CTA. Vierra purples only — no magenta. The stops are close in hue and evenly
-           spaced so there are no visible bands where one colour ends, and the sweep eases back
-           and forth (rather than looping) so there's no seam at the wrap point. Animating
-           background-position keeps it GPU-cheap. */
+        /* Compose CTA. Vierra purples only — no magenta. Travels continuously in ONE direction:
+           the gradient contains exactly TWO identical cycles across a 200%-wide background, so
+           after shifting by one element width the pattern lines up with where it started and the
+           loop is seamless — no bands, no snap at the wrap. Hover just speeds the same travel up.
+           Animating background-position keeps it GPU-cheap. */
         .compose-cta {
-          background-image: linear-gradient(100deg, #5E17A8 0%, #701CC0 35%, #8B3BEE 50%, #701CC0 65%, #5E17A8 100%);
-          background-size: 220% 100%;
-          animation: composeGradient 14s ease-in-out infinite;
+          background-image: linear-gradient(
+            100deg,
+            #5E17A8 0%, #701CC0 12.5%, #8B3BEE 25%, #701CC0 37.5%,
+            #5E17A8 50%, #701CC0 62.5%, #8B3BEE 75%, #701CC0 87.5%, #5E17A8 100%
+          );
+          background-size: 200% 100%;
+          animation: composeGradient 16s linear infinite;
         }
+        .compose-cta:hover { animation-duration: 4s; }
         @keyframes composeGradient {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
+          from { background-position: 0% 50%; }
+          to { background-position: 100% 50%; }
         }
         @media (prefers-reduced-motion: reduce) {
-          .compose-cta { animation: none; background-position: 50% 50%; }
+          .compose-cta, .compose-cta:hover { animation: none; }
         }
       `}</style>
       {step === "gate" ? (
@@ -4059,7 +4065,6 @@ ${sourceText}`;
                                 </button>
                               );
                             })}
-                            <div className="h-20" />
                           </div>
                         )}
                       </div>
