@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { FiEye, FiMousePointer, FiSend, FiTrendingUp } from "react-icons/fi";
+import { FiClock, FiEye, FiMousePointer, FiSend, FiShield } from "react-icons/fi";
 import { GLASS_SURFACE, SHADOW_SM } from "@/components/email/emailTheme";
 
 type StatMessage = {
@@ -36,8 +36,40 @@ type StatsResponse = {
     filteredOpens: number;
   };
   deliverability: Deliverability;
+  behaviour: {
+    medianTimeToOpenMs: number | null;
+    sampleSize: number;
+    sendTimes: { day: number; hour: number; sent: number; opened: number }[];
+  };
   messages: StatMessage[];
   truncated: boolean;
+};
+
+type RecordStatus = "pass" | "warn" | "fail";
+type DomainAuth = {
+  domain: string;
+  accounts: string[];
+  spf: { status: RecordStatus; detail: string };
+  dkim: { status: RecordStatus; detail: string };
+  dmarc: { status: RecordStatus; detail: string; policy: string | null };
+};
+
+/** Compact human duration for time-to-open (e.g. "42m", "3.4h", "2.1d"). */
+const humanDuration = (ms: number): string => {
+  const mins = ms / 60000;
+  if (mins < 1) return `${Math.round(ms / 1000)}s`;
+  if (mins < 60) return `${Math.round(mins)}m`;
+  const hours = mins / 60;
+  if (hours < 48) return `${hours.toFixed(1)}h`;
+  return `${(hours / 24).toFixed(1)}d`;
+};
+
+const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const STATUS_STYLES: Record<RecordStatus, string> = {
+  pass: "bg-[#ECFDF5] text-[#047857]",
+  warn: "bg-[#FFFBEB] text-[#B45309]",
+  fail: "bg-[#FEF2F2] text-[#B91C1C]",
 };
 
 const CARD = `rounded-2xl ${GLASS_SURFACE} ${SHADOW_SM} p-5`;
@@ -66,6 +98,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
     upcomingBookings: number;
   };
   const [report, setReport] = useState<ReportingSummary | null>(null);
+  const [domainAuth, setDomainAuth] = useState<DomainAuth[] | null>(null);
   const accountsKey = accounts.join(",");
 
   useEffect(() => {
@@ -107,6 +140,12 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
               ? payload.deliverability.topFailReasons
               : [],
           },
+          behaviour: {
+            medianTimeToOpenMs:
+              payload?.behaviour?.medianTimeToOpenMs == null ? null : n(payload.behaviour.medianTimeToOpenMs),
+            sampleSize: n(payload?.behaviour?.sampleSize),
+            sendTimes: Array.isArray(payload?.behaviour?.sendTimes) ? payload.behaviour.sendTimes : [],
+          },
           messages: Array.isArray(payload?.messages) ? payload.messages : [],
           truncated: Boolean(payload?.truncated),
         });
@@ -121,6 +160,22 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
       cancelled = true;
     };
   }, [accountsKey, rangeDays]);
+
+  // Domain authentication is DNS-derived and independent of the date range, so it loads once.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/email/domain-auth", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && Array.isArray(d?.domains)) setDomainAuth(d.domains);
+      })
+      .catch(() => {
+        /* posture check is supplementary */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -208,6 +263,15 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
   }
 
   const deliverability = data?.deliverability;
+  const behaviour = data?.behaviour;
+  // Peak send windows, ranked by open rate. Only buckets with enough sends to mean anything —
+  // a single send that happened to be opened is not a "best time".
+  const bestSendTimes = [...(behaviour?.sendTimes ?? [])]
+    .filter((b) => b.sent >= 3)
+    .map((b) => ({ ...b, rate: pct(b.opened, b.sent) }))
+    .sort((a, b) => b.rate - a.rate || b.sent - a.sent)
+    .slice(0, 5);
+  const maxBucketSent = Math.max(1, ...(behaviour?.sendTimes ?? []).map((b) => b.sent));
   const deliveryRate = deliverability && deliverability.attempted > 0
     ? pct(deliverability.attempted - deliverability.failed, deliverability.attempted)
     : null;
@@ -216,7 +280,12 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
     { label: "Sent", value: derived.sent.toLocaleString(), icon: <FiSend className="w-4 h-4" /> },
     { label: "Open rate", value: `${derived.openRate}%`, sub: `${derived.opens.toLocaleString()} opens`, icon: <FiEye className="w-4 h-4" /> },
     { label: "Click rate", value: `${derived.clickRate}%`, sub: `${derived.clicks.toLocaleString()} clicks`, icon: <FiMousePointer className="w-4 h-4" /> },
-    { label: "Tracked", value: derived.tracked.toLocaleString(), sub: "with tracking on", icon: <FiTrendingUp className="w-4 h-4" /> },
+    {
+      label: "Time to open",
+      value: behaviour?.medianTimeToOpenMs == null ? "—" : humanDuration(behaviour.medianTimeToOpenMs),
+      sub: behaviour?.medianTimeToOpenMs == null ? "no opens yet" : "median, send → first open",
+      icon: <FiClock className="w-4 h-4" />,
+    },
   ];
 
   const hasOutreach = Boolean(report && (report.campaigns > 0 || report.totalContacts > 0 || report.bookings > 0));
@@ -250,6 +319,14 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
       </div>
 
       <div className="space-y-6 p-5">
+        {/* An all-zero report is indistinguishable from a broken one, so say which it is. */}
+        {derived.sent === 0 ? (
+          <div className="rounded-xl border border-[#EBEAF0] bg-[#FAFAFB] px-4 py-3 text-sm text-[#6B7280]">
+            No sent mail in this range{accountsKey ? " for the selected inbox(es)" : ""}. Try a wider range —
+            analytics only covers mail sent from the panel, and open/click rates need tracking enabled at send time.
+          </div>
+        ) : null}
+
         {/* ── Headline metrics ─────────────────────────────────────────────── */}
         <section>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -335,7 +412,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
         </section>
 
         {/* ── Deliverability ───────────────────────────────────────────────── */}
-        {deliverability && (deliverability.attempted > 0 || deliverability.bounces > 0 || deliverability.replies > 0) ? (
+        {deliverability ? (
           <section>
             <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#847FA0]">Deliverability</h2>
             <div className={CARD}>
@@ -376,6 +453,127 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                   were excluded from opens.
                 </p>
               ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        {/* ── Send timing ──────────────────────────────────────────────────── */}
+        {behaviour && behaviour.sendTimes.length > 0 ? (
+          <section>
+            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#847FA0]">Send timing</h2>
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+              <div className={`${CARD} xl:col-span-2`}>
+                <h3 className="text-sm font-semibold text-[#1E1B2E]">When you send, and what gets opened</h3>
+                <p className="mb-3 text-xs text-[#847FA0]">
+                  Cell shade = send volume · number = open rate. Based on the last{" "}
+                  {behaviour.sampleSize.toLocaleString()} tracked messages, in your local timezone.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="border-separate border-spacing-[2px]">
+                    <tbody>
+                      {DAY_LABELS.map((label, day) => (
+                        <tr key={label}>
+                          <td className="pr-2 text-right text-[10px] font-medium text-[#847FA0]">{label}</td>
+                          {Array.from({ length: 24 }, (_, hour) => {
+                            const bucket = behaviour.sendTimes.find((b) => b.day === day && b.hour === hour);
+                            const sent = bucket?.sent ?? 0;
+                            const rate = bucket ? pct(bucket.opened, bucket.sent) : 0;
+                            return (
+                              <td
+                                key={hour}
+                                title={
+                                  sent
+                                    ? `${label} ${hour}:00 — ${sent} sent, ${rate}% opened`
+                                    : `${label} ${hour}:00 — no sends`
+                                }
+                                className="h-5 w-5 rounded-[3px] text-center text-[8px] font-semibold leading-5"
+                                style={{
+                                  background: sent
+                                    ? `rgba(112,28,192,${0.12 + (sent / maxBucketSent) * 0.75})`
+                                    : "#F4F2F8",
+                                  color: sent && sent / maxBucketSent > 0.5 ? "#fff" : "#5B5670",
+                                }}
+                              >
+                                {sent && rate > 0 ? rate : ""}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                      <tr>
+                        <td />
+                        {Array.from({ length: 24 }, (_, hour) => (
+                          <td key={hour} className="pt-1 text-center text-[8px] text-[#B0AAC4]">
+                            {hour % 6 === 0 ? hour : ""}
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className={CARD}>
+                <h3 className="text-sm font-semibold text-[#1E1B2E]">Best windows</h3>
+                <p className="mb-3 text-xs text-[#847FA0]">Highest open rate (min. 3 sends)</p>
+                {bestSendTimes.length === 0 ? (
+                  <p className="text-sm text-[#847FA0]">Not enough sends yet to call a best time.</p>
+                ) : (
+                  <ol className="space-y-2">
+                    {bestSendTimes.map((b) => (
+                      <li key={`${b.day}-${b.hour}`} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="text-[#4A465C]">
+                          {DAY_LABELS[b.day]} {String(b.hour).padStart(2, "0")}:00
+                        </span>
+                        <span className="tabular-nums text-[#847FA0]">
+                          <b className="font-semibold text-[#1E1B2E]">{b.rate}%</b> · {b.sent} sent
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {/* ── Domain authentication ────────────────────────────────────────── */}
+        {domainAuth && domainAuth.length > 0 ? (
+          <section>
+            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#847FA0]">
+              Domain authentication
+            </h2>
+            <div className={CARD}>
+              <div className="mb-3 flex items-center gap-2">
+                <FiShield className="h-4 w-4 text-[#701CC0]" />
+                <p className="text-xs text-[#847FA0]">
+                  SPF, DKIM and DMARC are the biggest controllable factor in inbox placement — checked live over DNS.
+                </p>
+              </div>
+              <div className="space-y-3">
+                {domainAuth.map((d) => (
+                  <div key={d.domain} className="rounded-xl border border-[#EEE6F7] p-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-[#1E1B2E]">{d.domain}</span>
+                      <span className="text-xs text-[#847FA0]">{d.accounts.length} mailbox{d.accounts.length === 1 ? "" : "es"}</span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      {([
+                        ["SPF", d.spf],
+                        ["DKIM", d.dkim],
+                        ["DMARC", d.dmarc],
+                      ] as const).map(([name, rec]) => (
+                        <div key={name} className="flex items-start gap-2">
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_STYLES[rec.status]}`}>
+                            {name}
+                          </span>
+                          <span className="text-xs leading-snug text-[#6B7280]">{rec.detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
         ) : null}

@@ -6,6 +6,8 @@ import { asQueryStr } from "@/lib/api/parsing";
 
 /** Rows returned for the display tables. Totals are aggregated separately, over ALL matches. */
 const TABLE_ROW_LIMIT = 200;
+/** Wider sample used only for the behavioural cuts (time-to-open, send-time performance). */
+const ANALYSIS_SAMPLE_LIMIT = 2000;
 
 export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
@@ -132,6 +134,49 @@ export default withAuth(async (req, res, session) => {
     }),
   ]);
 
+  // Wider, leaner sample for the behavioural cuts (time-to-open, send-time performance). Kept
+  // separate from the display rows so those stay small while these stay statistically useful.
+  const analysisRows = await prisma.emailOutboundMessage.findMany({
+    where: trackedWhere,
+    select: {
+      created_at: true,
+      email_tracking_events: {
+        where: { event_type: "OPEN" },
+        select: { occurred_at: true },
+        orderBy: { occurred_at: "asc" },
+        take: 1,
+      },
+    },
+    orderBy: { created_at: "desc" },
+    take: ANALYSIS_SAMPLE_LIMIT,
+  });
+
+  // Time-to-open: median is the honest summary here — a handful of messages opened weeks later
+  // would drag a mean far past what "typical" means.
+  const openDelaysMs = analysisRows
+    .map((r) => {
+      const first = r.email_tracking_events[0];
+      return first ? first.occurred_at.getTime() - r.created_at.getTime() : null;
+    })
+    .filter((v): v is number => v !== null && v >= 0)
+    .sort((a, b) => a - b);
+  const medianTimeToOpenMs = openDelaysMs.length
+    ? openDelaysMs[Math.floor(openDelaysMs.length / 2)]
+    : null;
+
+  // Send-time performance: for each (weekday, hour) bucket, how many were sent and how many got
+  // opened — i.e. when is it actually worth sending, not just when do we happen to send.
+  const sendBuckets = new Map<string, { day: number; hour: number; sent: number; opened: number }>();
+  for (const r of analysisRows) {
+    const day = r.created_at.getDay();
+    const hour = r.created_at.getHours();
+    const key = `${day}-${hour}`;
+    const bucket = sendBuckets.get(key) || { day, hour, sent: 0, opened: 0 };
+    bucket.sent += 1;
+    if (r.email_tracking_events.length > 0) bucket.opened += 1;
+    sendBuckets.set(key, bucket);
+  }
+
   const uniqueAccountIds = [...new Set(messages.map((m) => m.account_id).filter((id): id is string => !!id))];
   const accountMap = new Map<string, string>();
   if (uniqueAccountIds.length > 0) {
@@ -165,6 +210,11 @@ export default withAuth(async (req, res, session) => {
       unsubscribes: dailyTotals._sum.unsubscribes ?? 0,
       replies: dailyTotals._sum.replies ?? 0,
       topFailReasons: failReasonGroups.map((g) => ({ reason: g.fail_reason ?? "unknown", count: g._count._all })),
+    },
+    behaviour: {
+      medianTimeToOpenMs,
+      sampleSize: analysisRows.length,
+      sendTimes: [...sendBuckets.values()],
     },
     /** Most recent messages, for the display tables only — totals above cover every match. */
     messages: rows,
