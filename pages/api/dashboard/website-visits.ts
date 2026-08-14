@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import {
-  EMPTY_WEEKLY_VISITS,
+  emptyWeeklyVisits,
   fetchWeeklyWebsiteVisits,
   isGa4Configured,
   parseGa4Month,
@@ -27,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (!isGa4Configured()) {
-      res.status(200).json({ configured: false, points: EMPTY_WEEKLY_VISITS })
+      res.status(200).json({ configured: false, points: emptyWeeklyVisits(parsedMonth.year, parsedMonth.month) })
       return
     }
 
