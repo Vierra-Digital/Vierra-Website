@@ -235,18 +235,23 @@ export async function maybeReplyIntelligence(msg: InboundMessage): Promise<Reply
 
   // Scope to campaigns sent FROM the mailbox that received this reply — replies come back to
   // the sending address, so this is the same account. Without it, a prospect email shared
-  // across two tenants' campaigns would flip whichever contact sorts first (wrong tenant).
+  // across two tenants' campaigns would flip whichever contact sorts first (wrong tenant). A
+  // missing accountId (no EmailProviderAccount row for this mailbox — e.g. an alternate connect
+  // path) previously dropped the scope filter entirely rather than failing closed, which let a
+  // reply match the most-recently-enrolled contact with that email ACROSS EVERY TENANT. Fail
+  // closed instead: no resolvable account means no reliable scope, so match nothing.
   const accountId = await resolveAccountId(msg.userId, msg.accountEmail);
+  if (!accountId) return null;
   const contact = await prisma.campaignContact.findFirst({
     where: {
       contact_email: msg.fromEmail,
       // Canonical QUEUE_STATUSES (lib/api/campaigns.ts) is queued|sending|sent|failed|skipped|
-      // completed|paused — "unsubscribed"/"bounced" here previously were never-valid values that
-      // this filter could never actually match (bounces land in "failed", unsubscribes/DNC in
-      // "skipped"). Fixed to the real terminal-ish states so this only matches contacts still
-      // eligible for a reply to affect.
-      queue_status: { notIn: ["paused", "completed", "skipped", "failed"] },
-      ...(accountId ? { campaigns: { account_id: accountId } } : {}),
+      // completed|paused. "completed" is deliberately NOT excluded here — sendQueueTick.ts sets it
+      // as soon as a contact's last sequence step goes out, which is exactly when most real replies
+      // arrive (after reading the full sequence, or the one email in a single-step campaign).
+      // Excluding it meant most replies never matched a campaign contact at all.
+      queue_status: { notIn: ["paused", "skipped", "failed"] },
+      campaigns: { account_id: accountId },
     },
     orderBy: { enrolled_at: "desc" },
   });
@@ -280,6 +285,23 @@ export async function maybeReplyIntelligence(msg: InboundMessage): Promise<Reply
   }
 
   const fromStatus = contact.lead_status;
+  // An out-of-office-flavored reply ("no_response") must not erase a status that already carries
+  // real signal — isAutomatedSender() only checks headers, so a genuine human reply whose body
+  // just reads like an OOO note (e.g. "swamped this week, will follow up Monday" sent from a
+  // normal inbox) can reach here after the contact was already classified positive_response,
+  // meeting_booked, etc. Downgrading that back to no_response would silently discard the prior
+  // signal. Keep the existing status in that case instead of overwriting it.
+  const STICKY_STATUSES = new Set([
+    "positive_response",
+    "positive_response_closed",
+    "meeting_booked",
+    "not_interested",
+    "remove_contact",
+    "bad_timing",
+  ]);
+  if (leadStatus === "no_response" && STICKY_STATUSES.has(fromStatus)) {
+    leadStatus = fromStatus;
+  }
   const now = new Date();
   await prisma.campaignContact.update({
     where: { id: contact.id },

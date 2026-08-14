@@ -94,17 +94,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // De-dupe on Smartlead's retry-identifying header — the same event can arrive more than once.
-  const requestId = String(req.headers["x-request-id"] || "");
-  if (requestId) {
-    try {
-      await prisma.smartleadWebhookEvent.create({
-        data: { smartlead_request_id: requestId, event_type: payload.event_type || "unknown" },
-      });
-    } catch {
-      // Unique violation = already processed this exact event; ack and stop, don't double-apply.
-      res.status(200).json({ ok: true, duplicate: true });
-      return;
-    }
+  // The header name itself is UNVERIFIED against Smartlead's real API (see file-top comment); if
+  // it turns out not to be sent at all, this whole block used to be silently skipped — no dedupe,
+  // no warning — so any webhook retry (network hiccup, Smartlead's own non-200 retry policy) would
+  // double-apply an EMAIL_REPLY/EMAIL_BOUNCED/LEAD_UNSUBSCRIBED event (duplicate LeadStatusEvent,
+  // double-incremented daily stat, duplicate Discord ping). Fall back to a content hash so retries
+  // are still caught even without a request-id header — a byte-identical retried body hashes the
+  // same, while two independent events differing in any field (timestamp, id, etc.) don't collide.
+  const requestId = String(req.headers["x-request-id"] || "") || `bodyhash:${crypto.createHash("sha256").update(rawBody).digest("hex")}`;
+  try {
+    await prisma.smartleadWebhookEvent.create({
+      data: { smartlead_request_id: requestId, event_type: payload.event_type || "unknown" },
+    });
+  } catch {
+    // Unique violation = already processed this exact event; ack and stop, don't double-apply.
+    res.status(200).json({ ok: true, duplicate: true });
+    return;
   }
 
   // Process BEFORE acking, not after — on a serverless host (this app deploys via Netlify
@@ -176,7 +181,22 @@ async function processEvent(payload: SmartleadWebhookPayload): Promise<void> {
         }).catch(() => {}); // best-effort — a resolved-but-stale step shouldn't block the stat bump below
       }
 
-      await prisma.campaignContact.update({ where: { id: contact.id }, data: { last_sent_at: sentAt } });
+      // Smartlead runs the sequence on its own side, so unlike sendQueueTick.ts we can't reliably
+      // tell here whether this was the LAST step (would need sequence-length bookkeeping we don't
+      // have against an unverified payload shape) — so this never claims "completed". But it must
+      // move off "queued" (set once by audienceSync.ts and never touched again for Smartlead
+      // contacts), or every Smartlead-managed contact reads as permanently pending in any UI/
+      // analytics that groups by queue_status. Only advance from "queued" — a reply/bounce/
+      // unsubscribe event that raced ahead of this one (paused/failed/skipped) must not be
+      // clobbered back to "sent".
+      await prisma.campaignContact.updateMany({
+        where: { id: contact.id, queue_status: "queued" },
+        data: { last_sent_at: sentAt, queue_status: "sent" },
+      });
+      await prisma.campaignContact.updateMany({
+        where: { id: contact.id, queue_status: { not: "queued" } },
+        data: { last_sent_at: sentAt },
+      });
       await upsertDailyStat(campaign.id, "emails_sent");
       break;
     }

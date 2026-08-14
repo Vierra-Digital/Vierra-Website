@@ -105,3 +105,74 @@ export async function notifyCampaignReply(n: CampaignReplyNotification): Promise
     ],
   });
 }
+
+/** Deep link into the panel for a given campaign/contact — same shape used by every notifier here. */
+function panelUrl(path: string): string | undefined {
+  const base = (process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "").replace(/\/$/, "");
+  return base ? `${base}${path}` : undefined;
+}
+
+export type MeetingBookedNotification = {
+  contactEmail: string;
+  contactName?: string | null;
+  campaignId: string;
+  campaignName: string;
+  contactId: string;
+};
+
+/**
+ * Shared meeting-booked embed, used by both the automatic booking-confirmation paths
+ * (lib/campaigns/meetingBooked.ts) and the manual re-categorization PATCH
+ * (pages/api/campaigns/[id]/contacts/[contactId].ts), so the notification looks the same
+ * regardless of which path triggered it. Reuses the same green used for a positive
+ * lead_status in notifyCampaignReply.
+ */
+export async function notifyMeetingBooked(n: MeetingBookedNotification): Promise<void> {
+  await notifyDiscordEmbed({
+    author: { name: `📅 Meeting booked — ${n.contactName || n.contactEmail}`.slice(0, 240) },
+    title: n.contactEmail,
+    url: panelUrl(`/panel/email?campaign=${n.campaignId}&contact=${n.contactId}`),
+    color: LEAD_STATUS_DISCORD_COLOR.meeting_booked,
+    fields: [{ name: "Campaign", value: n.campaignName, inline: true }],
+  });
+}
+
+export type CampaignCompletedNotification = {
+  campaignId: string;
+  campaignName: string;
+  sentCount: number;
+  contactCount: number;
+};
+
+/** Campaign-completed embed, used by the campaign status PATCH's active -> completed transition. */
+export async function notifyCampaignCompleted(n: CampaignCompletedNotification): Promise<void> {
+  await notifyDiscordEmbed({
+    author: { name: `✅ Campaign completed — ${n.campaignName}`.slice(0, 240) },
+    url: panelUrl(`/panel/email?campaign=${n.campaignId}&tab=analytics`),
+    description: `${n.sentCount} sent to ${n.contactCount} contacts`,
+    color: DEFAULT_REPLY_COLOR,
+  });
+}
+
+export type SignalNotification = {
+  contactEmail: string;
+  campaignName?: string | null;
+  /** "click": a tracked-link click advanced the contact to positive_response.
+   *  "enrolled": the same contact was auto-enrolled into a signal nurture sequence. */
+  kind: "click" | "enrolled";
+  subject?: string | null;
+};
+
+/** Shared signals-engine embed (lib/signals/processSignals.ts) for both the high-intent-click and auto-enroll events. */
+export async function notifySignal(n: SignalNotification): Promise<void> {
+  const isClick = n.kind === "click";
+  await notifyDiscordEmbed({
+    author: {
+      name: (isClick ? `🔥 High-intent signal — ${n.contactEmail}` : `➕ Auto-enrolled — ${n.contactEmail}`).slice(0, 240),
+    },
+    title: isClick ? n.subject || undefined : undefined,
+    description: isClick ? "Clicked a tracked link — marked as a positive response." : "Enrolled into the signal nurture sequence.",
+    color: isClick ? LEAD_STATUS_DISCORD_COLOR.positive_response : DEFAULT_REPLY_COLOR,
+    fields: n.campaignName ? [{ name: "Campaign", value: n.campaignName, inline: true }] : undefined,
+  });
+}

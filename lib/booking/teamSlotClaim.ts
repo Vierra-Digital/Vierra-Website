@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { computeSlots, DEFAULT_AVAILABILITY, type Availability } from "@/lib/booking/slots";
 import { getTeamBusyIntersection } from "@/lib/booking/teamAvailability";
 import { sendEmailCore, escapeHtml } from "@/lib/gmail/sendCore";
+import { markCampaignContactMeetingBooked } from "@/lib/campaigns/meetingBooked";
 
 const CLAIM_WINDOW_MS = 12 * 60 * 60 * 1000;
 
@@ -83,9 +84,7 @@ export async function handleTeamSlotClaim(
   }
 
   if (campaignContactId) {
-    await prisma.campaignContact
-      .updateMany({ where: { id: campaignContactId, lead_status: "no_response" }, data: { lead_status: "follow_up" } })
-      .catch(() => {});
+    await markCampaignContactMeetingBooked(campaignContactId, "booking_link_confirmed");
   }
 
   const when = start.toLocaleString("en-US", { dateStyle: "full", timeStyle: "short", timeZone: link.timezone || "UTC" });

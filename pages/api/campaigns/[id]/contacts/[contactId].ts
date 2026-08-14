@@ -9,7 +9,7 @@ import {
   REMOVE_CONTACT_STATUS,
 } from "@/lib/api/campaigns";
 import { addToDnc } from "@/lib/campaigns/dnc";
-import { notifyDiscord, discordConfigured } from "@/lib/notify/discord";
+import { notifyMeetingBooked, discordConfigured } from "@/lib/notify/discord";
 
 function getIds(req: NextApiRequest) {
   const campaignRaw = req.query.id;
@@ -145,13 +145,14 @@ export default withAuth(async (req, res, session) => {
     // .claude/schema_v2_campaigns_discord_notifications.md §4.
     if (leadStatus === "meeting_booked" && existing.lead_status !== "meeting_booked" && discordConfigured()) {
       const campaignRow = await prisma.campaign.findUnique({ where: { id: campaignId }, select: { name: true } });
-      const base = (process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "").replace(/\/$/, "");
       const contactName = [existing.contact_first_name, existing.contact_last_name].filter(Boolean).join(" ");
-      await notifyDiscord(
-        `📅 **Meeting booked** — ${contactName || existing.contact_email} (${existing.contact_email})\n` +
-          `**Campaign:** ${campaignRow?.name ?? "(unknown)"}` +
-          (base ? `\n${base}/panel/email?campaign=${campaignId}&contact=${contactId}` : "")
-      );
+      await notifyMeetingBooked({
+        contactEmail: existing.contact_email,
+        contactName: contactName || null,
+        campaignId,
+        campaignName: campaignRow?.name ?? "(unknown)",
+        contactId,
+      });
     }
 
     res.status(200).json({ contact: serializeCampaignContact(updated) });
