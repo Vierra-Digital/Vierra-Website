@@ -5,6 +5,7 @@ import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { asStr } from "@/lib/api/parsing";
+import { mapInBatches } from "@/lib/batch";
 
 export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
@@ -80,10 +81,12 @@ export default withAuth(async (req, res, session) => {
     }
   }
 
-  let upserted = 0;
-  for (const person of responseData.contacts) {
-    if (!person.email) continue;
-    await prisma.contact.upsert({
+  // A full sync can return thousands of contacts; upsert them with bounded concurrency instead of
+  // one serial round-trip each. Upserts on distinct (user, account, email) keys are independent and
+  // idempotent, so order doesn't matter.
+  const toUpsert = responseData.contacts.filter((p): p is typeof p & { email: string } => Boolean(p.email));
+  await mapInBatches(toUpsert, (person) =>
+    prisma.contact.upsert({
       where: {
         user_id_account_id_email: {
           user_id: userId,
@@ -116,9 +119,9 @@ export default withAuth(async (req, res, session) => {
         gmail_resource_name: person.resourceName || null,
         gmail_etag: person.etag || null,
       },
-    });
-    upserted += 1;
-  }
+    })
+  );
+  const upserted = toUpsert.length;
 
   await prisma.gmailContactSyncState.upsert({
     where: {
