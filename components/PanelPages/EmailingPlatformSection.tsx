@@ -23,7 +23,6 @@ import {
   FiFilter,
   FiFileText,
   FiImage,
-  FiInbox,
   FiLink,
   FiPaperclip,
   FiPrinter,
@@ -145,10 +144,15 @@ const MailboxLoader: React.FC<{ label?: string }> = ({ label = "Loading messages
 const MailboxEmpty: React.FC = () => (
   <div className="h-full min-h-[320px] flex items-center justify-center px-6">
     <div className="text-center rounded-2xl border border-[#ECEAF1] bg-white px-9 py-11 shadow-[0_10px_40px_-12px_rgba(46,16,80,0.10)]">
-      <div className="w-12 h-12 mx-auto rounded-full bg-[#701CC0]/10 flex items-center justify-center">
-        <FiInbox className="w-6 h-6 text-[#701CC0]" />
+      {/* Gently animated mark: the halo breathes and the envelope drifts, so an empty
+          mailbox still feels alive. Both are motion-safe (static for reduced-motion users). */}
+      <div className="relative w-12 h-12 mx-auto">
+        <span className="absolute inset-0 rounded-full bg-[#701CC0]/10 motion-safe:animate-ping" aria-hidden />
+        <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-[#701CC0]/10">
+          <FiMail className="w-6 h-6 text-[#701CC0] motion-safe:animate-[mailboxFloat_2.6s_ease-in-out_infinite]" />
+        </span>
       </div>
-      <p className="mt-4 text-sm font-semibold text-[#1E1B2E]">No messages here</p>
+      <p className="mt-4 text-sm font-semibold text-[#1E1B2E]">No Emails Found</p>
       <p className="text-xs text-[#847FA0] mt-1">Try another mailbox or refresh this view.</p>
     </div>
   </div>
@@ -157,6 +161,9 @@ const MailboxEmpty: React.FC = () => (
 // Client-side cap on total compose attachment bytes. Kept conservative (below the server/platform
 // request-body limit) so oversized sends fail fast with a clear message instead of an opaque 413.
 const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
+/** How many mailbox views to keep in the message cache (each is up to PAGE_SIZE rows). */
+const MESSAGE_CACHE_LIMIT = 12;
 
 const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   initialSelectedAccounts = [],
@@ -382,6 +389,20 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [providerAccounts, setProviderAccounts] = useState<ProviderAccount[]>([]);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const loadMessagesRequestRef = useRef(0);
+  /**
+   * Per-view message cache (key = the messages query string) powering stale-while-revalidate,
+   * so revisiting a mailbox/page paints instantly instead of spinning. Cleared whenever an action
+   * mutates mail, so a deleted/moved message can never flash back from cache.
+   */
+  const messagesCacheRef = useRef<
+    Map<
+      string,
+      { messages: MessageRow[]; accountErrors: Array<{ accountEmail: string; message: string }>; hasNextPage: boolean }
+    >
+  >(new Map());
+  const invalidateMessagesCache = useCallback(() => {
+    messagesCacheRef.current.clear();
+  }, []);
   const selectedMessageIdRef = useRef("");
   const moveListMenuRef = useRef<HTMLDivElement | null>(null);
   const moveMessageMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1574,11 +1595,23 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     });
     if (activeLabelId) query.set("labelId", activeLabelId);
     if (debouncedSearch) query.set("q", debouncedSearch);
+    const cacheKey = query.toString();
 
-    setMessagesLoading(true);
+    // Stale-while-revalidate: paint the last-known rows for this exact view instantly, then
+    // refresh in the background. Switching mailboxes / paging back used to blank the list and
+    // show a spinner on every visit even though the data was already known.
+    const cached = messagesCacheRef.current.get(cacheKey);
+    if (cached) {
+      setMessages(cached.messages);
+      setAccountErrors(cached.accountErrors);
+      setHasNextPage(cached.hasNextPage);
+      setMessagesLoading(false);
+    } else {
+      setMessagesLoading(true);
+    }
     setMessagesError("");
     try {
-      const response = await fetch(`/api/gmail/messages?${query.toString()}`);
+      const response = await fetch(`/api/gmail/messages?${cacheKey}`);
       const payload = await response.json().catch(() => ({}));
       if (requestId !== loadMessagesRequestRef.current) return;
       if (!response.ok) {
@@ -1586,10 +1619,23 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
       const nextMessages = Array.isArray(payload?.messages) ? payload.messages : [];
       const unreadCount = nextMessages.filter((message: MessageRow) => message.unread).length;
+      const nextAccountErrors = Array.isArray(payload?.accountErrors) ? payload.accountErrors : [];
+      const nextHasNextPage = Boolean(payload?.hasNextPage);
+      // Bounded LRU-ish cache: re-inserting moves the key to the end, and we evict the oldest.
+      messagesCacheRef.current.delete(cacheKey);
+      messagesCacheRef.current.set(cacheKey, {
+        messages: nextMessages,
+        accountErrors: nextAccountErrors,
+        hasNextPage: nextHasNextPage,
+      });
+      if (messagesCacheRef.current.size > MESSAGE_CACHE_LIMIT) {
+        const oldest = messagesCacheRef.current.keys().next().value;
+        if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
+      }
       setModuleUnreadBadges((prev) => ({ ...prev, [mailbox as keyof ModuleUnreadBadgeCounts]: unreadCount }));
       setMessages(nextMessages);
-      setAccountErrors(Array.isArray(payload?.accountErrors) ? payload.accountErrors : []);
-      setHasNextPage(Boolean(payload?.hasNextPage));
+      setAccountErrors(nextAccountErrors);
+      setHasNextPage(nextHasNextPage);
       setSelectedRows([]);
       const activeSelectedMessageId = selectedMessageIdRef.current;
       if (activeSelectedMessageId && !nextMessages.some((message: MessageRow) => message.id === activeSelectedMessageId)) {
@@ -2245,6 +2291,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
       setSelectedRows([]);
       showSentToast("Snoozed");
+      invalidateMessagesCache();
       await Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Failed to snooze.");
@@ -2382,6 +2429,7 @@ ${sourceText}`;
       }
       showSentToast("Message Sent");
       setInlineComposeMode(null);
+      invalidateMessagesCache();
       await Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
       setDetailError("");
       setSelectedMessageDetail(null);
@@ -2783,6 +2831,7 @@ ${sourceText}`;
       setConfidentialOpen(false);
       setRequestReceipt(false);
       if (activeModule === "sent" || activeModule === "drafts") {
+        invalidateMessagesCache();
         await Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
       } else {
         await Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
@@ -3044,6 +3093,14 @@ ${sourceText}`;
     return excluded ? allOptions.filter((option) => option.value !== excluded) : allOptions;
   }, [activeModule]);
 
+  // Empty-list chrome: with nothing to act on, bulk-select and paging are dead controls, so hide
+  // them. Search is the exception — when a query is what emptied the list, hiding the box would
+  // trap the user with no way to clear it, so it stays whenever a term is active.
+  const mailboxListIsEmpty = !messagesLoading && conversationRows.length === 0;
+  const hasActiveSearch = searchTerm.trim().length > 0;
+  const showListSearch = !mailboxListIsEmpty || hasActiveSearch;
+  const showListPaging = !mailboxListIsEmpty;
+
   return (
     <div className={`email-space-bg relative w-full h-full text-[#1E1B2E] flex flex-col overflow-hidden ${panelFont.className}`}>
       <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
@@ -3087,6 +3144,25 @@ ${sourceText}`;
         @media (prefers-reduced-motion: reduce) {
           .email-stars, .email-stars--2 { animation: none; }
         }
+        /* Empty-mailbox envelope: a slow vertical drift so the state reads as idle, not broken. */
+        @keyframes mailboxFloat {
+          0%, 100% { transform: translateY(-2px); }
+          50% { transform: translateY(2px); }
+        }
+        /* Compose CTA: the brand gradient sweeps slowly across an oversized background.
+           Animating background-position (not the gradient itself) keeps it GPU-cheap. */
+        .compose-cta {
+          background-image: linear-gradient(110deg, #701CC0 0%, #8F42FF 25%, #C42B9F 50%, #8F42FF 75%, #701CC0 100%);
+          background-size: 300% 100%;
+          background-position: 0% 50%;
+          animation: composeGradient 9s linear infinite;
+        }
+        @keyframes composeGradient {
+          to { background-position: -300% 50%; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .compose-cta { animation: none; }
+        }
       `}</style>
       {step === "gate" ? (
         <div className="relative z-10 h-full flex items-center justify-center px-6 py-12">
@@ -3120,12 +3196,15 @@ ${sourceText}`;
                   <div className="flex items-center justify-center pt-3 pb-7">
                     <Image src={BRAND_LOGO.wordmarkDark} alt="Vierra" width={168} height={42} className="h-10 w-auto" priority />
                   </div>
+                  {/* Compose CTA. `transition-all` previously animated background-position too,
+                      fighting the gradient keyframes and making hover stutter — so only the
+                      properties that actually change on hover (shadow + lift) transition. */}
                   <button
                     type="button"
                     onClick={() => {
                       void openNewCompose();
                     }}
-                    className="w-full mb-3 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#701CC0] via-[#8F42FF] to-[#701CC0] animate-gradient px-3 py-2.5 text-sm font-semibold text-white shadow-[0_6px_20px_-6px_rgba(112,28,192,0.6)] transition-all duration-200 hover:shadow-[0_8px_26px_-6px_rgba(112,28,192,0.7)]"
+                    className="compose-cta group w-full mb-3 inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-white shadow-[0_6px_20px_-6px_rgba(112,28,192,0.6)] transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_28px_-6px_rgba(112,28,192,0.75)] active:translate-y-0 active:shadow-[0_4px_14px_-6px_rgba(112,28,192,0.6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#701CC0]"
                   >
                     <FiEdit3 className="w-4 h-4" />
                     Compose
@@ -3318,19 +3397,24 @@ ${sourceText}`;
                         <>
                           <div className="px-4 py-3 border-b border-white/30 flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <input
-                                type="checkbox"
-                                checked={
-                                  filteredMessages.length > 0 &&
-                                  conversationRows.every((message) => selectedRows.includes(rowKey(message)))
-                                }
-                                onChange={toggleSelectAll}
-                                className="h-4 w-4"
-                              />
+                              {showListPaging ? (
+                                <input
+                                  type="checkbox"
+                                  checked={
+                                    filteredMessages.length > 0 &&
+                                    conversationRows.every((message) => selectedRows.includes(rowKey(message)))
+                                  }
+                                  onChange={toggleSelectAll}
+                                  className="h-4 w-4"
+                                />
+                              ) : null}
                               <div className="text-xs font-medium text-[#6B7280] mr-1">{activeModuleLabel} · {messagesCountLabel}</div>
                               <button
                                 type="button"
-                                onClick={() => Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()])}
+                                onClick={() => {
+                                  invalidateMessagesCache();
+                                  void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
+                                }}
                                 disabled={messagesLoading}
                                 className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
                                 aria-label="Refresh"
@@ -3441,54 +3525,60 @@ ${sourceText}`;
                                   ) : null}
                                 </>
                               ) : null}
-                              <div className="rounded-lg border border-transparent bg-white px-3 py-1.5 flex items-center gap-2 w-96 max-w-full shadow-sm focus-within:ring-2 focus-within:ring-[#701CC0] transition">
-                                <FiSearch className="w-4 h-4 text-[#6B7280]" />
-                                <input
-                                  value={searchTerm}
-                                  onChange={(e) => setSearchTerm(e.target.value)}
-                                  placeholder="Search"
-                                  className="w-full bg-transparent text-sm text-[#374151] placeholder:text-[#8E93AA] outline-none"
-                                />
-                                {searchTerm.trim() ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setSearchTerm("")}
-                                    className="inline-flex items-center justify-center rounded p-0.5 text-[#9CA3AF] hover:text-[#6B7280] hover:bg-[#F3F4F6]"
-                                    aria-label="Clear Search"
-                                    title="Clear Search"
-                                  >
-                                    <FiX className="w-3.5 h-3.5" />
-                                  </button>
-                                ) : null}
-                              </div>
+                              {showListSearch ? (
+                                <div className="rounded-lg border border-transparent bg-white px-3 py-1.5 flex items-center gap-2 w-96 max-w-full shadow-sm focus-within:ring-2 focus-within:ring-[#701CC0] transition">
+                                  <FiSearch className="w-4 h-4 text-[#6B7280]" />
+                                  <input
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    placeholder="Search"
+                                    className="w-full bg-transparent text-sm text-[#374151] placeholder:text-[#8E93AA] outline-none"
+                                  />
+                                  {searchTerm.trim() ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSearchTerm("")}
+                                      className="inline-flex items-center justify-center rounded p-0.5 text-[#9CA3AF] hover:text-[#6B7280] hover:bg-[#F3F4F6]"
+                                      aria-label="Clear Search"
+                                      title="Clear Search"
+                                    >
+                                      <FiX className="w-3.5 h-3.5" />
+                                    </button>
+                                  ) : null}
+                                </div>
+                              ) : null}
                             </div>
-                            <div className="flex items-center gap-3">
-                              <button
-                                type="button"
-                                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                                disabled={currentPage <= 1 || messagesLoading}
-                                className="rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-1 text-xs text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
-                              >
-                                Prev
-                              </button>
-                              <div className="text-xs text-[#6B7280] min-w-[60px] text-center">
-                                {pageLabel}
+                            {showListPaging ? (
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                                  disabled={currentPage <= 1 || messagesLoading}
+                                  className="rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-1 text-xs text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                >
+                                  Prev
+                                </button>
+                                <div className="text-xs text-[#6B7280] min-w-[60px] text-center">
+                                  {pageLabel}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setCurrentPage((prev) => prev + 1)}
+                                  disabled={!hasNextPage || messagesLoading}
+                                  className="rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-1 text-xs text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                >
+                                  Next
+                                </button>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => setCurrentPage((prev) => prev + 1)}
-                                disabled={!hasNextPage || messagesLoading}
-                                className="rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-1 text-xs text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
-                              >
-                                Next
-                              </button>
-                            </div>
+                            ) : null}
                           </div>
 
                         </>
                       ) : null}
 
-                      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-16">
+                      {/* No large bottom padding: pb-16 left an empty white slab below the last
+                          row once you scrolled to the end of a mailbox. */}
+                      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-1">
                         {messagesError ? (
                           <div className="m-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{messagesError}</div>
                         ) : null}

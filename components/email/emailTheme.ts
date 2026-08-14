@@ -28,8 +28,13 @@ export const BRAND_GRADIENT = "linear-gradient(120deg,#7A17C5 0%,#A620AE 52%,#C4
 /** Chrome surface (side rail) — a hair off-white so it reads as chrome vs. the content. */
 export const GLASS_CHROME = "bg-[#FAFAFB] border border-[#EBEAF0]";
 
-/** Content surface (list, reader, cards) — pure white. */
-export const GLASS_SURFACE = "bg-white border border-[#EBEAF0]";
+/**
+ * Content surface (list, reader, cards) — very slightly translucent so the starfield canvas
+ * reads through as a faint tint, with a backdrop blur so dense mail stays crisp. Kept at 92%
+ * (not lower) deliberately: the effective background stays near-white, so body text holds
+ * comfortably above WCAG AA contrast.
+ */
+export const GLASS_SURFACE = "bg-white/[0.92] backdrop-blur-xl border border-[#EBEAF0]";
 
 /** Modal/dialog surface — solid white, clearly elevated so dialogs read as "on top". */
 export const GLASS_MODAL =

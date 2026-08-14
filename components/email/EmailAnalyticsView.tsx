@@ -171,12 +171,15 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
     { label: "Tracked", value: derived.tracked.toLocaleString(), sub: "with tracking on", icon: <FiTrendingUp className="w-4 h-4" /> },
   ];
 
+  const hasOutreach = Boolean(report && (report.campaigns > 0 || report.totalContacts > 0 || report.bookings > 0));
+
   return (
-    <div className="h-full overflow-y-auto p-5">
-      <div className="flex items-center justify-between gap-3 mb-5">
-        <div>
-          <h1 className="text-[22px] font-semibold tracking-tight text-[#1E1B2E]">Email Analytics</h1>
-          <p className="text-xs text-[#847FA0] mt-0.5">Outbound performance — measures mail you send, not mail you receive.</p>
+    <div className="h-full overflow-y-auto">
+      {/* Sticky header so the range selector stays reachable while scrolling the report. */}
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[#EBEAF0] bg-white/85 px-5 py-3.5 backdrop-blur-md">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold tracking-tight text-[#1E1B2E]">Email Analytics</h1>
+          <p className="truncate text-xs text-[#847FA0]">Outbound performance — mail you send, not mail you receive.</p>
         </div>
         <div className="flex shrink-0 items-center gap-1 rounded-lg border border-[#EBEAF0] bg-white p-0.5">
           {[
@@ -198,169 +201,182 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
         </div>
       </div>
 
-      {/* KPI row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        {kpis.map((k) => (
-          <div key={k.label} className={CARD}>
-            <div className="flex items-center gap-2 text-[#847FA0]">
-              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[#701CC0]/10 text-[#701CC0]">{k.icon}</span>
-              <span className="text-[11px] font-semibold uppercase tracking-wide">{k.label}</span>
-            </div>
-            <div className="mt-3 text-3xl font-bold tracking-tight text-[#1E1B2E] tabular-nums">{k.value}</div>
-            {k.sub ? <div className="text-xs text-[#847FA0] mt-1 tabular-nums">{k.sub}</div> : null}
-          </div>
-        ))}
-      </div>
-
-      {/* Outreach reporting — campaigns + meetings (supplementary to open/click tracking) */}
-      {report && (report.campaigns > 0 || report.totalContacts > 0 || report.bookings > 0) ? (
-        <div className={`${CARD} mb-4`}>
-          <h3 className="text-sm font-semibold text-[#1E1B2E] mb-3">Outreach reporting</h3>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            {[
-              { label: "Campaigns", value: String(report.campaigns), sub: `${report.activeCampaigns} active` },
-              { label: "Contacts", value: report.totalContacts.toLocaleString(), sub: "enrolled" },
-              { label: "Reply rate", value: `${Math.round(report.replyRate * 100)}%`, sub: "of enrolled" },
-              { label: "Meetings booked", value: String(report.bookings), sub: `${report.upcomingBookings} upcoming` },
-            ].map((k) => (
-              <div key={k.label}>
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-[#847FA0]">{k.label}</div>
-                <div className="mt-1 text-2xl font-bold tracking-tight text-[#1E1B2E] tabular-nums">{k.value}</div>
-                <div className="text-xs text-[#847FA0] tabular-nums">{k.sub}</div>
+      <div className="space-y-6 p-5">
+        {/* ── Headline metrics ─────────────────────────────────────────────── */}
+        <section>
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            {kpis.map((k) => (
+              <div key={k.label} className={CARD}>
+                <div className="flex items-center gap-2 text-[#847FA0]">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10 text-[#701CC0]">{k.icon}</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide">{k.label}</span>
+                </div>
+                <div className="mt-3 text-3xl font-bold tabular-nums tracking-tight text-[#1E1B2E]">{k.value}</div>
+                <div className="mt-1 min-h-[1rem] text-xs tabular-nums text-[#847FA0]">{k.sub ?? ""}</div>
               </div>
             ))}
           </div>
-          {Object.keys(report.statusMap).length > 0 ? (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {Object.entries(report.statusMap).map(([status, count]) => (
-                <span key={status} className="rounded-full bg-[#F5EFFF] px-2.5 py-1 text-xs font-medium text-[#701CC0]">
-                  {status.replace(/_/g, " ")}: {count}
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+        </section>
 
-      {/* Engagement funnel */}
-      <div className={`${CARD} mb-4`}>
-        <div className="flex items-baseline justify-between">
-          <h3 className="text-sm font-semibold text-[#1E1B2E]">Engagement funnel</h3>
-          <span className="text-xs text-[#847FA0]">Click-to-open rate <b className="text-[#1E1B2E] tabular-nums">{derived.ctor}%</b></span>
-        </div>
-        <p className="text-xs text-[#847FA0] mb-4">Of {derived.tracked.toLocaleString()} tracked messages</p>
-        <div className="space-y-3">
-          {[
-            { label: "Sent", value: derived.tracked, w: 100, color: "#701CC0" },
-            { label: "Opened", value: derived.openedMessages, w: derived.openRate, color: "#9333EA" },
-            { label: "Clicked", value: derived.clickedMessages, w: derived.clickRate, color: "#C42B9F" },
-          ].map((s) => (
-            <div key={s.label} className="flex items-center gap-3">
-              <span className="w-16 text-xs font-medium text-[#4A465C]">{s.label}</span>
-              <div className="flex-1 h-6 rounded-lg bg-[#F3EEFB] overflow-hidden">
-                <div
-                  className="h-full rounded-lg flex items-center justify-end pr-2 text-[11px] font-semibold text-white tabular-nums"
-                  style={{ width: `${Math.max(s.w, 6)}%`, background: s.color }}
-                >
-                  {s.value.toLocaleString()}
+        {/* ── Engagement: the trend chart leads, funnel sits beside it ──────── */}
+        <section>
+          <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#847FA0]">Engagement</h2>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <div className={`${CARD} xl:col-span-2`}>
+              <h3 className="text-sm font-semibold text-[#1E1B2E]">Opens &amp; clicks over time</h3>
+              <p className="mb-3 text-xs text-[#847FA0]">
+                By send date · most recent {derived.series.length} days with activity
+              </p>
+              {derived.series.length === 0 ? (
+                <div className="flex h-[240px] items-center justify-center text-sm text-[#847FA0]">No tracking activity yet.</div>
+              ) : (
+                <div className="h-[240px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={derived.series} margin={{ top: 8, right: 8, bottom: 0, left: -18 }}>
+                      <defs>
+                        <linearGradient id="gOpens" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#701CC0" stopOpacity={0.28} />
+                          <stop offset="100%" stopColor="#701CC0" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="gClicks" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#C42B9F" stopOpacity={0.2} />
+                          <stop offset="100%" stopColor="#C42B9F" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#EFEBF7" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#847FA0" }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: "#847FA0" }} tickLine={false} axisLine={false} allowDecimals={false} width={32} />
+                      <Tooltip
+                        contentStyle={{ borderRadius: 12, border: "1px solid #EAE5F4", fontSize: 12, boxShadow: "0 8px 24px -10px rgba(46,16,80,0.3)" }}
+                      />
+                      <Area type="monotone" dataKey="opens" name="Opens" stroke="#701CC0" strokeWidth={2} fill="url(#gOpens)" />
+                      <Area type="monotone" dataKey="clicks" name="Clicks" stroke="#C42B9F" strokeWidth={2} fill="url(#gClicks)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 </div>
-              </div>
-              <span className="w-10 text-right text-xs font-semibold text-[#4A465C] tabular-nums">{s.w}%</span>
+              )}
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* Trend */}
-      <div className={`${CARD} mb-4`}>
-        <h3 className="text-sm font-semibold text-[#1E1B2E]">Opens &amp; clicks over time</h3>
-        <p className="text-xs text-[#847FA0] mb-3">By send date · most recent {derived.series.length} days with activity</p>
-        {derived.series.length === 0 ? (
-          <div className="h-[200px] flex items-center justify-center text-sm text-[#847FA0]">No tracking activity yet.</div>
-        ) : (
-          <div className="h-[220px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={derived.series} margin={{ top: 8, right: 8, bottom: 0, left: -18 }}>
-                <defs>
-                  <linearGradient id="gOpens" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#701CC0" stopOpacity={0.28} />
-                    <stop offset="100%" stopColor="#701CC0" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="gClicks" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#C42B9F" stopOpacity={0.2} />
-                    <stop offset="100%" stopColor="#C42B9F" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#EFEBF7" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#847FA0" }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "#847FA0" }} tickLine={false} axisLine={false} allowDecimals={false} width={32} />
-                <Tooltip
-                  contentStyle={{ borderRadius: 12, border: "1px solid #EAE5F4", fontSize: 12, boxShadow: "0 8px 24px -10px rgba(46,16,80,0.3)" }}
-                />
-                <Area type="monotone" dataKey="opens" name="Opens" stroke="#701CC0" strokeWidth={2} fill="url(#gOpens)" />
-                <Area type="monotone" dataKey="clicks" name="Clicks" stroke="#C42B9F" strokeWidth={2} fill="url(#gClicks)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            <div className={CARD}>
+              <h3 className="text-sm font-semibold text-[#1E1B2E]">Funnel</h3>
+              <p className="mb-4 text-xs text-[#847FA0]">Of {derived.tracked.toLocaleString()} tracked messages</p>
+              <div className="space-y-3">
+                {[
+                  { label: "Sent", value: derived.tracked, w: 100, color: "#701CC0" },
+                  { label: "Opened", value: derived.openedMessages, w: derived.openRate, color: "#9333EA" },
+                  { label: "Clicked", value: derived.clickedMessages, w: derived.clickRate, color: "#C42B9F" },
+                ].map((s) => (
+                  <div key={s.label}>
+                    <div className="mb-1 flex items-baseline justify-between text-xs">
+                      <span className="font-medium text-[#4A465C]">{s.label}</span>
+                      <span className="tabular-nums text-[#847FA0]">
+                        <b className="font-semibold text-[#1E1B2E]">{s.value.toLocaleString()}</b> · {s.w}%
+                      </span>
+                    </div>
+                    <div className="h-2.5 overflow-hidden rounded-full bg-[#F3EEFB]">
+                      <div className="h-full rounded-full" style={{ width: `${Math.max(s.w, 2)}%`, background: s.color }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 border-t border-[#EEE6F7] pt-3 text-xs text-[#847FA0]">
+                Click-to-open rate <b className="tabular-nums text-[#1E1B2E]">{derived.ctor}%</b>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+        </section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Top messages */}
-        <div className={CARD}>
-          <h3 className="text-sm font-semibold text-[#1E1B2E] mb-3">Top messages by opens</h3>
-          {derived.topMessages.length === 0 ? (
-            <p className="text-sm text-[#847FA0]">No opened messages yet.</p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-[10.5px] uppercase tracking-wide text-[#847FA0]">
-                  <th className="text-left font-semibold pb-2">Subject</th>
-                  <th className="text-right font-semibold pb-2">Opens</th>
-                  <th className="text-right font-semibold pb-2">Clicks</th>
-                </tr>
-              </thead>
-              <tbody>
-                {derived.topMessages.map((m, i) => (
-                  <tr key={m.messageId || i} className="border-t border-[#EEE6F7]/70">
-                    <td className="py-2 pr-2 text-[#4A465C] truncate max-w-[220px]">{m.subject || "(No subject)"}</td>
-                    <td className="py-2 text-right font-semibold text-[#1E1B2E] tabular-nums">{m.openCount}</td>
-                    <td className="py-2 text-right text-[#4A465C] tabular-nums">{m.clickCount}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+        {/* ── Breakdowns ───────────────────────────────────────────────────── */}
+        <section>
+          <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#847FA0]">Breakdown</h2>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className={CARD}>
+              <h3 className="mb-3 text-sm font-semibold text-[#1E1B2E]">Top messages by opens</h3>
+              {derived.topMessages.length === 0 ? (
+                <p className="text-sm text-[#847FA0]">No opened messages yet.</p>
+              ) : (
+                <table className="w-full table-fixed text-sm">
+                  <thead>
+                    <tr className="text-[10.5px] uppercase tracking-wide text-[#847FA0]">
+                      <th className="pb-2 text-left font-semibold">Subject</th>
+                      <th className="w-16 pb-2 text-right font-semibold">Opens</th>
+                      <th className="w-16 pb-2 text-right font-semibold">Clicks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {derived.topMessages.map((m, i) => (
+                      <tr key={m.messageId || i} className="border-t border-[#EEE6F7]/70">
+                        <td className="max-w-0 truncate py-2 pr-2 text-[#4A465C]">{m.subject || "(No subject)"}</td>
+                        <td className="py-2 text-right font-semibold tabular-nums text-[#1E1B2E]">{m.openCount}</td>
+                        <td className="py-2 text-right tabular-nums text-[#4A465C]">{m.clickCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
 
-        {/* Per-account */}
-        <div className={CARD}>
-          <h3 className="text-sm font-semibold text-[#1E1B2E] mb-3">Per-account performance</h3>
-          {derived.perAccount.length === 0 ? (
-            <p className="text-sm text-[#847FA0]">No sent mail yet.</p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-[10.5px] uppercase tracking-wide text-[#847FA0]">
-                  <th className="text-left font-semibold pb-2">Account</th>
-                  <th className="text-right font-semibold pb-2">Sent</th>
-                  <th className="text-right font-semibold pb-2">Opens</th>
-                  <th className="text-right font-semibold pb-2">Clicks</th>
-                </tr>
-              </thead>
-              <tbody>
-                {derived.perAccount.map((a) => (
-                  <tr key={a.email} className="border-t border-[#EEE6F7]/70">
-                    <td className="py-2 pr-2 text-[#4A465C] truncate max-w-[180px]">{a.email}</td>
-                    <td className="py-2 text-right text-[#1E1B2E] tabular-nums">{a.sent}</td>
-                    <td className="py-2 text-right text-[#1E1B2E] tabular-nums">{a.opens}</td>
-                    <td className="py-2 text-right text-[#4A465C] tabular-nums">{a.clicks}</td>
-                  </tr>
+            <div className={CARD}>
+              <h3 className="mb-3 text-sm font-semibold text-[#1E1B2E]">Per-account performance</h3>
+              {derived.perAccount.length === 0 ? (
+                <p className="text-sm text-[#847FA0]">No sent mail yet.</p>
+              ) : (
+                <table className="w-full table-fixed text-sm">
+                  <thead>
+                    <tr className="text-[10.5px] uppercase tracking-wide text-[#847FA0]">
+                      <th className="pb-2 text-left font-semibold">Account</th>
+                      <th className="w-14 pb-2 text-right font-semibold">Sent</th>
+                      <th className="w-16 pb-2 text-right font-semibold">Opens</th>
+                      <th className="w-16 pb-2 text-right font-semibold">Clicks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {derived.perAccount.map((a) => (
+                      <tr key={a.email} className="border-t border-[#EEE6F7]/70">
+                        <td className="max-w-0 truncate py-2 pr-2 text-[#4A465C]">{a.email}</td>
+                        <td className="py-2 text-right tabular-nums text-[#1E1B2E]">{a.sent}</td>
+                        <td className="py-2 text-right tabular-nums text-[#1E1B2E]">{a.opens}</td>
+                        <td className="py-2 text-right tabular-nums text-[#4A465C]">{a.clicks}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Outreach (campaigns/meetings) — supplementary, so it sits last ── */}
+        {hasOutreach && report ? (
+          <section>
+            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#847FA0]">Outreach</h2>
+            <div className={CARD}>
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                {[
+                  { label: "Campaigns", value: String(report.campaigns), sub: `${report.activeCampaigns} active` },
+                  { label: "Contacts", value: report.totalContacts.toLocaleString(), sub: "enrolled" },
+                  { label: "Reply rate", value: `${Math.round(report.replyRate * 100)}%`, sub: "of enrolled" },
+                  { label: "Meetings booked", value: String(report.bookings), sub: `${report.upcomingBookings} upcoming` },
+                ].map((k) => (
+                  <div key={k.label}>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-[#847FA0]">{k.label}</div>
+                    <div className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-[#1E1B2E]">{k.value}</div>
+                    <div className="text-xs tabular-nums text-[#847FA0]">{k.sub}</div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+              </div>
+              {Object.keys(report.statusMap).length > 0 ? (
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-[#EEE6F7] pt-4">
+                  {Object.entries(report.statusMap).map(([status, count]) => (
+                    <span key={status} className="rounded-full bg-[#F5EFFF] px-2.5 py-1 text-xs font-medium capitalize text-[#701CC0]">
+                      {status.replace(/_/g, " ")}: {count}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
       </div>
     </div>
   );
