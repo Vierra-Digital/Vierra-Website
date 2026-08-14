@@ -4,26 +4,35 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import type { GetServerSideProps } from "next";
 import { requireSession } from "@/lib/auth";
-import { BRAND_LOGO } from "@/components/email/emailTheme";
 
 const EmailingPlatformSection = dynamic(
   () => import("@/components/PanelPages/EmailingPlatformSection"),
   {
     ssr: false,
     // The panel is a large client-only bundle; show an instant branded loader over the dark
-    // canvas instead of a blank screen while it downloads + hydrates. The wordmark is the
-    // WHITE variant so it reads against the dark (#18042a) canvas.
+    // canvas instead of a blank screen while it downloads + hydrates. Deliberately identical to
+    // the login screen's loading state (white wordmark + bouncing dots) so signing in and
+    // landing on the panel reads as one continuous transition rather than two different apps.
     loading: () => (
       <div className="flex h-screen w-full flex-col items-center justify-center gap-6 bg-[#18042a]">
         <Image
-          src={BRAND_LOGO.wordmarkLight}
+          src="/assets/vierra-logo-black-3.png"
           alt="Vierra"
-          width={260}
-          height={66}
-          className="h-14 w-auto motion-safe:animate-pulse"
+          width={220}
+          height={64}
+          className="pointer-events-none h-10 w-auto select-none opacity-95 brightness-0 invert"
+          draggable={false}
           priority
         />
-        <div className="h-10 w-10 rounded-full border-4 border-white/20 border-t-white/80 motion-safe:animate-spin" />
+        <div className="flex items-center gap-1.5">
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className="h-2 w-2 rounded-full bg-white/70 motion-safe:animate-bounce"
+              style={{ animationDelay: `${i * 150}ms` }}
+            />
+          ))}
+        </div>
       </div>
     ),
   }

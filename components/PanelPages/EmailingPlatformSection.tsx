@@ -3149,19 +3149,21 @@ ${sourceText}`;
           0%, 100% { transform: translateY(-2px); }
           50% { transform: translateY(2px); }
         }
-        /* Compose CTA: the brand gradient sweeps slowly across an oversized background.
-           Animating background-position (not the gradient itself) keeps it GPU-cheap. */
+        /* Compose CTA. Vierra purples only — no magenta. The stops are close in hue and evenly
+           spaced so there are no visible bands where one colour ends, and the sweep eases back
+           and forth (rather than looping) so there's no seam at the wrap point. Animating
+           background-position keeps it GPU-cheap. */
         .compose-cta {
-          background-image: linear-gradient(110deg, #701CC0 0%, #8F42FF 25%, #C42B9F 50%, #8F42FF 75%, #701CC0 100%);
-          background-size: 300% 100%;
-          background-position: 0% 50%;
-          animation: composeGradient 9s linear infinite;
+          background-image: linear-gradient(100deg, #5E17A8 0%, #701CC0 35%, #8B3BEE 50%, #701CC0 65%, #5E17A8 100%);
+          background-size: 220% 100%;
+          animation: composeGradient 14s ease-in-out infinite;
         }
         @keyframes composeGradient {
-          to { background-position: -300% 50%; }
+          0%, 100% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
         }
         @media (prefers-reduced-motion: reduce) {
-          .compose-cta { animation: none; }
+          .compose-cta { animation: none; background-position: 50% 50%; }
         }
       `}</style>
       {step === "gate" ? (
@@ -3176,8 +3178,16 @@ ${sourceText}`;
               priority
             />
             {gmailLoading ? (
-              <div className="flex justify-center py-4">
-                <div className="h-9 w-9 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] motion-safe:animate-spin" />
+              // Same bouncing-dots motion as the login screen and the panel's bundle loader, so
+              // the whole sign-in → panel sequence reads as one continuous load.
+              <div className="flex items-center justify-center gap-1.5 py-5">
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    className="h-2 w-2 rounded-full bg-white/70 motion-safe:animate-bounce"
+                    style={{ animationDelay: `${i * 150}ms` }}
+                  />
+                ))}
               </div>
             ) : (
               <>
@@ -3196,15 +3206,15 @@ ${sourceText}`;
                   <div className="flex items-center justify-center pt-3 pb-7">
                     <Image src={BRAND_LOGO.wordmarkDark} alt="Vierra" width={168} height={42} className="h-10 w-auto" priority />
                   </div>
-                  {/* Compose CTA. `transition-all` previously animated background-position too,
-                      fighting the gradient keyframes and making hover stutter — so only the
-                      properties that actually change on hover (shadow + lift) transition. */}
+                  {/* Compose CTA. Hover only brightens — no lift and no shadow swap, which read as
+                      a jumpy drop-shadow. Transitioning `filter` alone also leaves the gradient
+                      keyframes untouched (the old `transition-all` fought them and stuttered). */}
                   <button
                     type="button"
                     onClick={() => {
                       void openNewCompose();
                     }}
-                    className="compose-cta group w-full mb-3 inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-white shadow-[0_6px_20px_-6px_rgba(112,28,192,0.6)] transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_10px_28px_-6px_rgba(112,28,192,0.75)] active:translate-y-0 active:shadow-[0_4px_14px_-6px_rgba(112,28,192,0.6)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#701CC0]"
+                    className="compose-cta w-full mb-3 inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-white shadow-[0_3px_12px_-5px_rgba(94,23,168,0.5)] transition-[filter] duration-200 ease-out hover:brightness-[1.08] active:brightness-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#FAFAFB]"
                   >
                     <FiEdit3 className="w-4 h-4" />
                     Compose
@@ -3393,7 +3403,11 @@ ${sourceText}`;
                     <EmailAnalyticsView accounts={selectedAccounts} />
                   ) : viewMode === "list" ? (
                     <>
-                      {activeModule !== "contacts" ? (
+                      {/* With an empty mailbox the whole toolbar is dead weight (nothing to select,
+                          page, count or refresh), so it's hidden entirely — leaving just the empty
+                          state. The exception is an active search: that toolbar must stay so the
+                          query can be cleared, otherwise a no-results search is a dead end. */}
+                      {activeModule !== "contacts" && (!mailboxListIsEmpty || hasActiveSearch) ? (
                         <>
                           <div className="px-4 py-3 border-b border-white/30 flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2 flex-wrap">
@@ -3408,20 +3422,24 @@ ${sourceText}`;
                                   className="h-4 w-4"
                                 />
                               ) : null}
-                              <div className="text-xs font-medium text-[#6B7280] mr-1">{activeModuleLabel} · {messagesCountLabel}</div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  invalidateMessagesCache();
-                                  void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
-                                }}
-                                disabled={messagesLoading}
-                                className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
-                                aria-label="Refresh"
-                                title="Refresh"
-                              >
-                                <FiRefreshCw className={`w-4 h-4 ${messagesLoading ? "motion-safe:animate-spin" : ""}`} />
-                              </button>
+                              {showListPaging ? (
+                                <>
+                                  <div className="text-xs font-medium text-[#6B7280] mr-1">{activeModuleLabel} · {messagesCountLabel}</div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      invalidateMessagesCache();
+                                      void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
+                                    }}
+                                    disabled={messagesLoading}
+                                    className="p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50"
+                                    aria-label="Refresh"
+                                    title="Refresh"
+                                  >
+                                    <FiRefreshCw className={`w-4 h-4 ${messagesLoading ? "motion-safe:animate-spin" : ""}`} />
+                                  </button>
+                                </>
+                              ) : null}
                               {hasSelectedEmails ? (
                                 <>
                                   {activeModule !== "drafts" ? (
@@ -3576,9 +3594,9 @@ ${sourceText}`;
                         </>
                       ) : null}
 
-                      {/* No large bottom padding: pb-16 left an empty white slab below the last
-                          row once you scrolled to the end of a mailbox. */}
-                      <div className="flex-1 overflow-y-auto overflow-x-hidden pb-1">
+                      {/* No bottom padding at all: any padding here shows up as dead space below
+                          the final row once a mailbox is scrolled to the end. */}
+                      <div className="flex-1 overflow-y-auto overflow-x-hidden">
                         {messagesError ? (
                           <div className="m-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{messagesError}</div>
                         ) : null}

@@ -29,12 +29,12 @@ export const BRAND_GRADIENT = "linear-gradient(120deg,#7A17C5 0%,#A620AE 52%,#C4
 export const GLASS_CHROME = "bg-[#FAFAFB] border border-[#EBEAF0]";
 
 /**
- * Content surface (list, reader, cards) — very slightly translucent so the starfield canvas
- * reads through as a faint tint, with a backdrop blur so dense mail stays crisp. Kept at 92%
- * (not lower) deliberately: the effective background stays near-white, so body text holds
- * comfortably above WCAG AA contrast.
+ * Content surface (list, reader, cards) — frosted rather than solid, so the starfield canvas
+ * reads through. The backdrop blur diffuses the stars into a soft glow instead of speckling
+ * behind text. At 85% over the #18042a canvas the effective background still resolves near
+ * #DCDCDD, keeping body copy (#1E1B2E) around 11:1 — far above WCAG AA.
  */
-export const GLASS_SURFACE = "bg-white/[0.92] backdrop-blur-xl border border-[#EBEAF0]";
+export const GLASS_SURFACE = "bg-white/85 backdrop-blur-2xl border border-white/60";
 
 /** Modal/dialog surface — solid white, clearly elevated so dialogs read as "on top". */
 export const GLASS_MODAL =

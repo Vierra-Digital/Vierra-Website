@@ -15,9 +15,29 @@ type StatMessage = {
   clickCount: number;
 };
 
+type Deliverability = {
+  attempted: number;
+  failed: number;
+  bounces: number;
+  unsubscribes: number;
+  replies: number;
+  topFailReasons: { reason: string; count: number }[];
+};
+
 type StatsResponse = {
-  totals: { trackedMessages: number; opens: number; clicks: number };
+  /** Real aggregates over every matching message — not derived from the capped `messages` rows. */
+  totals: {
+    sent: number;
+    trackedMessages: number;
+    opens: number;
+    clicks: number;
+    openedMessages: number;
+    clickedMessages: number;
+    filteredOpens: number;
+  };
+  deliverability: Deliverability;
   messages: StatMessage[];
+  truncated: boolean;
 };
 
 const CARD = `rounded-2xl ${GLASS_SURFACE} ${SHADOW_SM} p-5`;
@@ -58,18 +78,37 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
       from.setDate(from.getDate() - rangeDays);
       params.set("from", from.toISOString());
     }
+    // Scope to the mailboxes selected in the panel. This was previously ignored, so the report
+    // always covered every account regardless of the selection.
+    if (accountsKey) params.set("accounts", accountsKey);
     const qs = params.toString();
     fetch(`/api/gmail/tracking/stats${qs ? `?${qs}` : ""}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((payload) => {
         if (cancelled) return;
+        const n = (v: unknown) => Number(v || 0);
         setData({
           totals: {
-            trackedMessages: Number(payload?.totals?.trackedMessages || 0),
-            opens: Number(payload?.totals?.opens || 0),
-            clicks: Number(payload?.totals?.clicks || 0),
+            sent: n(payload?.totals?.sent),
+            trackedMessages: n(payload?.totals?.trackedMessages),
+            opens: n(payload?.totals?.opens),
+            clicks: n(payload?.totals?.clicks),
+            openedMessages: n(payload?.totals?.openedMessages),
+            clickedMessages: n(payload?.totals?.clickedMessages),
+            filteredOpens: n(payload?.totals?.filteredOpens),
+          },
+          deliverability: {
+            attempted: n(payload?.deliverability?.attempted),
+            failed: n(payload?.deliverability?.failed),
+            bounces: n(payload?.deliverability?.bounces),
+            unsubscribes: n(payload?.deliverability?.unsubscribes),
+            replies: n(payload?.deliverability?.replies),
+            topFailReasons: Array.isArray(payload?.deliverability?.topFailReasons)
+              ? payload.deliverability.topFailReasons
+              : [],
           },
           messages: Array.isArray(payload?.messages) ? payload.messages : [],
+          truncated: Boolean(payload?.truncated),
         });
       })
       .catch(() => {
@@ -100,9 +139,12 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
 
   const derived = useMemo(() => {
     const messages = data?.messages ?? [];
-    const tracked = messages.filter((m) => m.trackingEnabled);
-    const openedMessages = tracked.filter((m) => m.openCount > 0).length;
-    const clickedMessages = tracked.filter((m) => m.clickCount > 0).length;
+    // Headline counts come from the server's aggregates (every matching message). The `messages`
+    // array is only the most recent page, used for the charts and breakdown tables.
+    const sent = data?.totals.sent ?? 0;
+    const trackedCount = data?.totals.trackedMessages ?? 0;
+    const openedMessages = data?.totals.openedMessages ?? 0;
+    const clickedMessages = data?.totals.clickedMessages ?? 0;
 
     // Daily buckets by send date, preserving chronological order.
     const buckets = new Map<string, { label: string; opens: number; clicks: number; ts: number }>();
@@ -137,14 +179,15 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
       .slice(0, 6);
 
     return {
-      sent: messages.length,
-      tracked: tracked.length,
+      sent,
+      tracked: trackedCount,
       opens: data?.totals.opens ?? 0,
       clicks: data?.totals.clicks ?? 0,
+      filteredOpens: data?.totals.filteredOpens ?? 0,
       openedMessages,
       clickedMessages,
-      openRate: pct(openedMessages, tracked.length),
-      clickRate: pct(clickedMessages, tracked.length),
+      openRate: pct(openedMessages, trackedCount),
+      clickRate: pct(clickedMessages, trackedCount),
       ctor: pct(clickedMessages, openedMessages),
       series,
       topMessages,
@@ -164,8 +207,13 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
     return <div className="m-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>;
   }
 
+  const deliverability = data?.deliverability;
+  const deliveryRate = deliverability && deliverability.attempted > 0
+    ? pct(deliverability.attempted - deliverability.failed, deliverability.attempted)
+    : null;
+
   const kpis = [
-    { label: "Sent (recent)", value: derived.sent.toLocaleString(), icon: <FiSend className="w-4 h-4" /> },
+    { label: "Sent", value: derived.sent.toLocaleString(), icon: <FiSend className="w-4 h-4" /> },
     { label: "Open rate", value: `${derived.openRate}%`, sub: `${derived.opens.toLocaleString()} opens`, icon: <FiEye className="w-4 h-4" /> },
     { label: "Click rate", value: `${derived.clickRate}%`, sub: `${derived.clicks.toLocaleString()} clicks`, icon: <FiMousePointer className="w-4 h-4" /> },
     { label: "Tracked", value: derived.tracked.toLocaleString(), sub: "with tracking on", icon: <FiTrendingUp className="w-4 h-4" /> },
@@ -285,6 +333,52 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
             </div>
           </div>
         </section>
+
+        {/* ── Deliverability ───────────────────────────────────────────────── */}
+        {deliverability && (deliverability.attempted > 0 || deliverability.bounces > 0 || deliverability.replies > 0) ? (
+          <section>
+            <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[#847FA0]">Deliverability</h2>
+            <div className={CARD}>
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+                {[
+                  {
+                    label: "Delivered",
+                    value: deliveryRate === null ? "—" : `${deliveryRate}%`,
+                    sub: `${(deliverability.attempted - deliverability.failed).toLocaleString()} of ${deliverability.attempted.toLocaleString()}`,
+                  },
+                  { label: "Failed", value: deliverability.failed.toLocaleString(), sub: "send errors" },
+                  { label: "Bounces", value: deliverability.bounces.toLocaleString(), sub: "provider-reported" },
+                  { label: "Replies", value: deliverability.replies.toLocaleString(), sub: "on campaigns" },
+                  { label: "Unsubscribes", value: deliverability.unsubscribes.toLocaleString(), sub: "opted out" },
+                ].map((k) => (
+                  <div key={k.label}>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-[#847FA0]">{k.label}</div>
+                    <div className="mt-1 text-2xl font-bold tabular-nums tracking-tight text-[#1E1B2E]">{k.value}</div>
+                    <div className="text-xs tabular-nums text-[#847FA0]">{k.sub}</div>
+                  </div>
+                ))}
+              </div>
+              {deliverability.topFailReasons.length > 0 ? (
+                <div className="mt-4 border-t border-[#EEE6F7] pt-3">
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#847FA0]">Top failure reasons</div>
+                  <div className="flex flex-wrap gap-2">
+                    {deliverability.topFailReasons.map((r) => (
+                      <span key={r.reason} className="rounded-full bg-[#FEF2F2] px-2.5 py-1 text-xs font-medium text-[#B91C1C]">
+                        {r.reason}: {r.count}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {derived.filteredOpens > 0 ? (
+                <p className="mt-3 text-xs text-[#847FA0]">
+                  {derived.filteredOpens.toLocaleString()} machine pre-fetches (Apple Mail Privacy, security scanners)
+                  were excluded from opens.
+                </p>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
 
         {/* ── Breakdowns ───────────────────────────────────────────────────── */}
         <section>
