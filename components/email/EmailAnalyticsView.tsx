@@ -91,17 +91,39 @@ const dayKey = (iso: string) => {
  * a hairline band per section, a small-caps label, and whitespace.
  */
 const Section: React.FC<{ title: string; note?: string; children: React.ReactNode }> = ({ title, note, children }) => (
-  <section className="border-b border-[#EDEAF3] px-6 py-7">
-    <div className="mb-5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wider text-[#1E1B2E]">{title}</h2>
-      {note ? <span className="text-xs text-[#847FA0]">{note}</span> : null}
-    </div>
+  <section className="border-b border-[#E7E3EF] px-7 py-8">
+    <header className="mb-5">
+      <h2 className="text-[15px] font-semibold tracking-tight text-[#1E1B2E]">{title}</h2>
+      {note ? <p className="mt-0.5 text-[13px] text-[#7B7691]">{note}</p> : null}
+    </header>
     {children}
   </section>
 );
 
+/**
+ * Light containment for a block of data. A faint tinted ground + generous padding groups the
+ * content and gives the eye an edge to follow — without the border+shadow "card" chrome that
+ * made the earlier version feel cluttered when repeated a dozen times.
+ */
+const Panel: React.FC<{ title?: string; note?: string; className?: string; children: React.ReactNode }> = ({
+  title,
+  note,
+  className = "",
+  children,
+}) => (
+  <div className={`rounded-xl bg-[#FBFAFD] p-4 ${className}`}>
+    {title ? (
+      <div className="mb-3">
+        <h3 className="text-[13px] font-semibold text-[#2A2540]">{title}</h3>
+        {note ? <p className="mt-0.5 text-xs text-[#7B7691]">{note}</p> : null}
+      </div>
+    ) : null}
+    {children}
+  </div>
+);
+
 const EmptyNote: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <p className="text-sm text-[#A9A3BC]">{children}</p>
+  <p className="text-[13px] text-[#7B7691]">{children}</p>
 );
 
 const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
@@ -113,11 +135,11 @@ const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
 
 /** Borderless table: hairline row rules only, first column truncates, rest are right-aligned. */
 const FlatTable: React.FC<{ head: string[]; rows: { key: string; cells: (string | number)[] }[] }> = ({ head, rows }) => (
-  <table className="w-full table-fixed text-sm">
+  <table className="w-full table-fixed text-[13px]">
     <thead>
-      <tr className="text-[10.5px] uppercase tracking-wide text-[#847FA0]">
+      <tr className="text-[11px] uppercase tracking-wide text-[#7B7691]">
         {head.map((h, i) => (
-          <th key={h} className={i === 0 ? "pb-2 text-left font-semibold" : "w-20 pb-2 text-right font-semibold"}>
+          <th key={h} className={i === 0 ? "pb-2.5 text-left font-semibold" : "w-[84px] pb-2.5 text-right font-semibold"}>
             {h}
           </th>
         ))}
@@ -125,15 +147,15 @@ const FlatTable: React.FC<{ head: string[]; rows: { key: string; cells: (string 
     </thead>
     <tbody>
       {rows.map((row) => (
-        <tr key={row.key} className="border-t border-[#F2EFF8]">
+        <tr key={row.key} className="border-t border-[#EDEAF3] transition-colors hover:bg-white">
           {row.cells.map((cell, i) => (
             <td
               key={i}
               title={i === 0 ? String(cell) : undefined}
               className={
                 i === 0
-                  ? "max-w-0 truncate py-2 pr-2 text-[#4A465C]"
-                  : "py-2 text-right font-medium tabular-nums text-[#1E1B2E]"
+                  ? "max-w-0 truncate py-2.5 pr-3 text-[#3C3752]"
+                  : "py-2.5 text-right font-semibold tabular-nums text-[#1E1B2E]"
               }
             >
               {cell}
@@ -366,7 +388,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
       <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[#EDEAF3] bg-white/90 px-6 py-3.5 backdrop-blur-md">
         <div className="min-w-0">
           <h1 className="text-base font-semibold tracking-tight text-[#1E1B2E]">Email Analytics</h1>
-          <p className="truncate text-xs text-[#847FA0]">Outbound performance — mail you send, not mail you receive.</p>
+          <p className="truncate text-[13px] text-[#7B7691]">Outbound performance — mail you send, not mail you receive.</p>
         </div>
         <div className="flex shrink-0 items-center gap-0.5 rounded-lg bg-[#F4F2F8] p-0.5">
           {[
@@ -396,17 +418,17 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
       ) : null}
 
       {/* ── Headline metrics: one flat strip, divided by hairlines, no boxes ───────── */}
-      <div className="grid grid-cols-2 divide-x divide-[#EDEAF3] border-b border-[#EDEAF3] lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-px border-b border-[#E7E3EF] bg-[#E7E3EF] lg:grid-cols-4">
         {kpis.map((k) => (
-          <div key={k.label} className="px-6 py-5">
-            <div className="flex items-center gap-1.5 text-[#847FA0]">
+          <div key={k.label} className="bg-white px-7 py-6">
+            <div className="flex items-center gap-1.5 text-[#7B7691]">
               {k.icon}
               <span className="text-[11px] font-semibold uppercase tracking-wide">{k.label}</span>
             </div>
-            <div className="mt-2 text-[28px] font-bold leading-none tabular-nums tracking-tight text-[#1E1B2E]">
+            <div className="mt-2.5 text-[32px] font-bold leading-none tabular-nums tracking-tight text-[#1E1B2E]">
               {k.value}
             </div>
-            <div className="mt-1.5 min-h-[1rem] text-xs tabular-nums text-[#847FA0]">{k.sub ?? ""}</div>
+            <div className="mt-2 min-h-[1rem] text-[13px] tabular-nums text-[#7B7691]">{k.sub ?? ""}</div>
           </div>
         ))}
       </div>
@@ -414,8 +436,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
       {/* Each Section is a hairline-separated band — hierarchy from type + space, not borders. */}
       <Section title="Engagement" note={`${derived.tracked.toLocaleString()} tracked messages`}>
         <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1.7fr_1fr]">
-          <div>
-            <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Opens &amp; clicks over time</h3>
+          <Panel title="Opens &amp; clicks over time">
             {derived.series.length === 0 ? (
               <EmptyNote>No tracking activity yet.</EmptyNote>
             ) : (
@@ -442,11 +463,10 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                 </ResponsiveContainer>
               </div>
             )}
-          </div>
+          </Panel>
 
-          <div>
-            <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Funnel</h3>
-            <div className="space-y-3.5">
+          <Panel title="Funnel">
+            <div className="space-y-4">
               {[
                 { label: "Sent", value: derived.tracked, w: 100, color: "#5E17A8" },
                 { label: "Opened", value: derived.openedMessages, w: derived.openRate, color: "#701CC0" },
@@ -459,13 +479,13 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                       <b className="font-semibold text-[#1E1B2E]">{s.value.toLocaleString()}</b> · {s.w}%
                     </span>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-[#F2EFF8]">
+                  <div className="h-2.5 overflow-hidden rounded-full bg-[#EAE4F4]">
                     <div className="h-full rounded-full" style={{ width: `${Math.max(s.w, 2)}%`, background: s.color }} />
                   </div>
                 </div>
               ))}
             </div>
-            <dl className="mt-5 space-y-2 text-xs">
+            <dl className="mt-5 space-y-2.5 text-[13px]">
               <Stat label="Click-to-open rate" value={`${derived.ctor}%`} />
               <Stat
                 label="Opened more than once"
@@ -477,7 +497,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
               />
               <Stat label="Total opens / clicks" value={`${derived.opens.toLocaleString()} / ${derived.clicks.toLocaleString()}`} />
             </dl>
-          </div>
+          </Panel>
         </div>
       </Section>
 
@@ -516,7 +536,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
             </div>
           ) : null}
           {derived.filteredOpens > 0 ? (
-            <p className="mt-4 text-xs text-[#847FA0]">
+            <p className="mt-4 text-[13px] text-[#7B7691]">
               {derived.filteredOpens.toLocaleString()} machine pre-fetches (Apple Mail Privacy, security scanners) excluded from opens.
             </p>
           ) : null}
@@ -532,7 +552,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                 <div className="mb-2 flex flex-wrap items-baseline gap-2">
                   <FiShield className="h-3.5 w-3.5 text-[#701CC0]" />
                   <span className="text-sm font-semibold text-[#1E1B2E]">{d.domain}</span>
-                  <span className="text-xs text-[#847FA0]">
+                  <span className="text-[13px] text-[#7B7691]">
                     {d.accounts.length} mailbox{d.accounts.length === 1 ? "" : "es"}
                   </span>
                 </div>
@@ -556,15 +576,13 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
       {behaviour && behaviour.sendTimes.length > 0 ? (
         <Section title="Timing" note={`Based on the last ${behaviour.sampleSize.toLocaleString()} tracked messages, local time`}>
           <div className="grid grid-cols-1 gap-8 xl:grid-cols-[1.7fr_1fr]">
-            <div>
-              <h3 className="mb-1 text-sm font-medium text-[#4A465C]">Send volume &amp; open rate by hour</h3>
-              <p className="mb-3 text-xs text-[#847FA0]">Shade = volume sent · number = % opened</p>
+            <Panel title="Send volume &amp; open rate by hour" note="Shade = volume sent · number = % opened">
               <div className="overflow-x-auto">
                 <table className="border-separate border-spacing-[2px]">
                   <tbody>
                     {DAY_LABELS.map((label, day) => (
                       <tr key={label}>
-                        <td className="pr-2 text-right text-[10px] font-medium text-[#847FA0]">{label}</td>
+                        <td className="pr-2.5 text-right text-[11px] font-medium text-[#5B5670]">{label}</td>
                         {Array.from({ length: 24 }, (_, hour) => {
                           const bucket = behaviour.sendTimes.find((b) => b.day === day && b.hour === hour);
                           const sent = bucket?.sent ?? 0;
@@ -573,7 +591,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                             <td
                               key={hour}
                               title={sent ? `${label} ${hour}:00 — ${sent} sent, ${rate}% opened` : `${label} ${hour}:00 — no sends`}
-                              className="h-5 w-5 rounded-[3px] text-center text-[8px] font-semibold leading-5"
+                              className="h-6 w-6 rounded text-center text-[10px] font-semibold leading-6"
                               style={{
                                 background: sent ? `rgba(112,28,192,${0.1 + (sent / maxBucketSent) * 0.75})` : "#F6F4FA",
                                 color: sent && sent / maxBucketSent > 0.5 ? "#fff" : "#5B5670",
@@ -588,7 +606,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                     <tr>
                       <td />
                       {Array.from({ length: 24 }, (_, hour) => (
-                        <td key={hour} className="pt-1 text-center text-[8px] text-[#B0AAC4]">
+                        <td key={hour} className="pt-1.5 text-center text-[10px] text-[#9A94AF]">
                           {hour % 6 === 0 ? hour : ""}
                         </td>
                       ))}
@@ -596,11 +614,10 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </Panel>
 
-            <div className="space-y-6">
-              <div>
-                <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Best windows to send</h3>
+            <div className="space-y-4">
+              <Panel title="Best windows to send">
                 {bestSendTimes.length === 0 ? (
                   <EmptyNote>Not enough sends yet to call a best time.</EmptyNote>
                 ) : (
@@ -617,9 +634,8 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                     ))}
                   </ol>
                 )}
-              </div>
-              <div>
-                <h3 className="mb-3 text-sm font-medium text-[#4A465C]">When recipients open</h3>
+              </Panel>
+              <Panel title="When recipients open">
                 {!behaviour.openHours.some((h) => h.count > 0) ? (
                   <EmptyNote>No opens recorded yet.</EmptyNote>
                 ) : (
@@ -637,10 +653,10 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                     })}
                   </div>
                 )}
-                <div className="mt-1 flex justify-between text-[9px] text-[#B0AAC4]">
+                <div className="mt-1.5 flex justify-between text-[10px] text-[#9A94AF]">
                   <span>00</span><span>06</span><span>12</span><span>18</span><span>23</span>
                 </div>
-              </div>
+              </Panel>
             </div>
           </div>
         </Section>
@@ -649,8 +665,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
       {/* ── Content ────────────────────────────────────────────────────────────────── */}
       <Section title="Content" note="What you sent, and what it earned">
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-          <div>
-            <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Top messages by opens</h3>
+          <Panel title="Top messages by opens">
             {derived.topMessages.length === 0 ? (
               <EmptyNote>No opened messages yet.</EmptyNote>
             ) : (
@@ -662,9 +677,8 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                 }))}
               />
             )}
-          </div>
-          <div>
-            <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Subject length vs open rate</h3>
+          </Panel>
+          <Panel title="Subject length vs open rate">
             {!behaviour || behaviour.subjectStats.length === 0 ? (
               <EmptyNote>Not enough data yet.</EmptyNote>
             ) : (
@@ -676,9 +690,8 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                 }))}
               />
             )}
-          </div>
-          <div>
-            <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Most clicked links</h3>
+          </Panel>
+          <Panel title="Most clicked links">
             {!behaviour || behaviour.topLinks.length === 0 ? (
               <EmptyNote>No link clicks recorded yet.</EmptyNote>
             ) : (
@@ -687,9 +700,8 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                 rows={behaviour.topLinks.map((l) => ({ key: l.url, cells: [l.url, l.clicks] }))}
               />
             )}
-          </div>
-          <div>
-            <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Open rate by recipient provider</h3>
+          </Panel>
+          <Panel title="Open rate by recipient provider">
             {!behaviour || behaviour.recipientDomains.length === 0 ? (
               <EmptyNote>No recipient data yet.</EmptyNote>
             ) : (
@@ -701,9 +713,8 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                 }))}
               />
             )}
-          </div>
-          <div>
-            <h3 className="mb-3 text-sm font-medium text-[#4A465C]">Per-account performance</h3>
+          </Panel>
+          <Panel title="Per-account performance">
             {derived.perAccount.length === 0 ? (
               <EmptyNote>No sent mail yet.</EmptyNote>
             ) : (
@@ -715,7 +726,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                 }))}
               />
             )}
-          </div>
+          </Panel>
         </div>
       </Section>
 
