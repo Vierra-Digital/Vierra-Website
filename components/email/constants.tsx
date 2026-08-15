@@ -50,6 +50,26 @@ export const MODULES: Array<{ key: ModuleKey; label: string; icon: React.ReactNo
   { key: "trash", label: "Trash", icon: <FiTrash2 className="w-4 h-4" /> },
 ];
 
+/**
+ * Apply a user's custom sidebar order to a module list.
+ *
+ * Keys the user has never ordered (e.g. a module added in a later release) fall to
+ * the end in their original MODULES order rather than disappearing or jumping to
+ * the front, so the sidebar stays stable as the module set evolves.
+ */
+export function orderModules<T extends { key: ModuleKey }>(items: T[], order: string[]): T[] {
+  if (!order?.length) return items;
+  const rank = new Map(order.map((key, index) => [key, index]));
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const ra = rank.get(a.item.key) ?? Number.MAX_SAFE_INTEGER;
+      const rb = rank.get(b.item.key) ?? Number.MAX_SAFE_INTEGER;
+      return ra === rb ? a.index - b.index : ra - rb;
+    })
+    .map(({ item }) => item);
+}
+
 export const BADGE_MODULES = new Set<ModuleKey>(["inbox", "sent", "drafts", "archive", "spam"]);
 export const BADGE_MAILBOXES: Array<"inbox" | "sent" | "drafts" | "archive" | "spam" | "trash"> = [
   "inbox",
