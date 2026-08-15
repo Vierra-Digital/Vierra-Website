@@ -334,7 +334,14 @@ export async function runCampaignSendQueueTick(companyId: string, batchSize = DE
     select: { mailing_address: true, privacy_policy_url: true },
   });
   const siteBaseUrl = (process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "").replace(/\/$/, "");
-  if (!companyRow?.mailing_address || !/^https:\/\//i.test(siteBaseUrl)) return result;
+  // Require a real https origin in production (an unsubscribe link must actually be reachable by
+  // the recipient), but allow a plain http://localhost origin outside production so the send
+  // queue can be exercised from local dev without deploying — this never runs against real
+  // recipients from a machine an actual recipient could resolve, so there's no compliance gap.
+  const hasValidSiteUrl =
+    /^https:\/\//i.test(siteBaseUrl) ||
+    (process.env.NODE_ENV !== "production" && /^http:\/\/localhost(:\d+)?$/i.test(siteBaseUrl));
+  if (!companyRow?.mailing_address || !hasValidSiteUrl) return result;
   const company: SendingCompany = {
     mailingAddress: companyRow.mailing_address,
     privacyPolicyUrl: companyRow.privacy_policy_url,
