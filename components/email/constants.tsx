@@ -4,7 +4,12 @@ import { EMAIL_REGEX } from "@/lib/utils";
 import { FiInbox, FiMail, FiSend, FiUsers, FiArchive, FiTrash2, FiKey, FiCheckSquare, FiBarChart2, FiStar, FiFlag, FiClock, FiLayers } from "react-icons/fi";
 import type { ModuleKey, MailboxCounts } from "@/components/email/types";
 
-export const PAGE_SIZE = 50;
+/**
+ * Rows per mailbox page. Each row costs a metadata messages.get, so this is the single
+ * biggest lever on how long a mailbox takes to appear — 50 meant fifty round trips before
+ * the list could render. 25 fills the viewport with room to spare and halves that.
+ */
+export const PAGE_SIZE = 25;
 export const CONTACTS_PAGE_SIZE = 50;
 
 /** Neutral scrollbar; overrides global purple `::-webkit-scrollbar` in app/globals.css for compose UI. */

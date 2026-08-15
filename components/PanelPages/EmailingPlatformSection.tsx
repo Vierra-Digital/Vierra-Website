@@ -4055,9 +4055,9 @@ ${sourceText}`;
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
+                                    onClick={() => applyAction(activeModule === "trash" || activeModule === "spam" ? "deletePermanently" : "trash")}
                                     className={`${ICON_BUTTON_SOLID} email-tip`}
-                                    data-tip={activeModule === "trash" ? "Delete Permanently" : "Move To Trash"}
+                                    data-tip={activeModule === "trash" || activeModule === "spam" ? "Delete Permanently" : "Move To Trash"}
                                   >
                                     <FiTrash2 className="w-4 h-4" />
                                   </button>
@@ -4912,7 +4912,7 @@ ${sourceText}`;
                           </button>
                           <button
                             type="button"
-                            onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
+                            onClick={() => applyAction(activeModule === "trash" || activeModule === "spam" ? "deletePermanently" : "trash")}
                             className={ICON_BUTTON}
                             title={activeModule === "trash" ? "Delete Permanently" : "Trash"}
                           >
