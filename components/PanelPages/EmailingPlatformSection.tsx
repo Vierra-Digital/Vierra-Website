@@ -2341,7 +2341,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
           })
           .filter(Boolean) as MessageRow[]
       );
-      if (action !== "markRead" && action !== "markUnread") setSelectedRows([]);
+      if (action !== "markRead" && action !== "markUnread") {
+        setSelectedRows([]);
+        // The destination mailbox's cached page is now out of date.
+        invalidateMessagesCache();
+      }
       try {
         if (
           composeDraftRows.length > 0 &&
@@ -2448,7 +2452,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         setActionLoading(false);
       }
     },
-    [activeModule, loadMailboxCounts, loadUnreadBadges, rowKey, selectedMessageRows, selectedRows]
+    [activeModule, invalidateMessagesCache, loadMailboxCounts, loadUnreadBadges, rowKey, selectedMessageRows, selectedRows]
   );
 
 
@@ -2561,8 +2565,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       const keys = new Set(rows.map((message) => rowKey(message)));
       setMessages((prev) => prev.filter((message) => !keys.has(rowKey(message))));
       setSelectedRows((prev) => prev.filter((key) => !keys.has(key)));
+      // The destination mailbox's cached page predates this move; drop the cache so
+      // switching to it fetches a list that actually contains the message.
+      invalidateMessagesCache();
     },
-    [rowKey]
+    [rowKey, invalidateMessagesCache]
   );
 
   /* ── Drag & drop ──────────────────────────────────────────────────────────────
@@ -4029,9 +4036,9 @@ ${sourceText}`;
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => applyAction(activeModule === "trash" || activeModule === "spam" ? "deletePermanently" : "trash")}
+                                    onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
                                     className={`${ICON_BUTTON_SOLID} email-tip`}
-                                    data-tip={activeModule === "trash" || activeModule === "spam" ? "Delete Permanently" : "Move To Trash"}
+                                    data-tip={activeModule === "trash" ? "Delete Permanently" : "Move To Trash"}
                                   >
                                     <FiTrash2 className="w-4 h-4" />
                                   </button>
@@ -4886,7 +4893,7 @@ ${sourceText}`;
                           </button>
                           <button
                             type="button"
-                            onClick={() => applyAction(activeModule === "trash" || activeModule === "spam" ? "deletePermanently" : "trash")}
+                            onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
                             className={ICON_BUTTON}
                             title={activeModule === "trash" ? "Delete Permanently" : "Trash"}
                           >

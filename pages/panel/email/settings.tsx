@@ -1387,28 +1387,27 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         <title>Vierra | Email Settings</title>
       </Head>
       <div className={`email-shell relative min-h-screen ${pageFont.className}`}>
-        <header className="email-toolbar sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 px-5">
-          <Link
-            href={backToEmailHref}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-[#C6C0DA] transition-colors hover:border-[#B98CFF]/50 hover:text-white"
-          >
-            <FiArrowLeft className="h-4 w-4 shrink-0" />
-            Back to inbox
-          </Link>
-          <span className="hidden h-6 w-px bg-white/10 sm:block" />
-          <Link href="/panel" className="hidden items-center sm:inline-flex" aria-label="Admin panel">
+        <header className="email-toolbar sticky top-0 z-30 flex h-14 shrink-0 items-center px-5">
+          <Link href="/panel" className="inline-flex items-center" aria-label="Admin panel">
             <Image
               src="/assets/vierra-logo-black-3.png"
               alt="Vierra"
               width={110}
               height={32}
-              className="h-auto w-[110px] brightness-0 invert"
+              className="h-auto w-[104px] brightness-0 invert"
               priority
             />
           </Link>
         </header>
 
         <main className="mx-auto max-w-6xl px-5 py-8 lg:px-8 lg:py-10">
+          <Link
+            href={backToEmailHref}
+            className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-[#C6C0DA] transition-colors hover:text-white lg:hidden"
+          >
+            <FiArrowLeft className="h-4 w-4 shrink-0" />
+            Back to inbox
+          </Link>
           <div className="mb-8">
             <div className="mb-2 flex items-center gap-2">
               <div className="rounded-lg bg-[#701CC0]/10 p-1.5">
@@ -1493,7 +1492,14 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               </div>
 
               <div className="lg:grid lg:grid-cols-[236px_minmax(0,1fr)] lg:gap-10">
-                <aside className="mb-6 hidden lg:sticky lg:top-24 lg:mb-0 lg:block lg:self-start">
+                <aside className="mb-6 hidden lg:sticky lg:top-20 lg:mb-0 lg:block lg:self-start">
+                  <Link
+                    href={backToEmailHref}
+                    className="mb-5 inline-flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#C6C0DA] transition-colors hover:bg-white/5 hover:text-white"
+                  >
+                    <FiArrowLeft className="h-4 w-4 shrink-0" />
+                    Back to inbox
+                  </Link>
                   <SettingsNav filter={settingsFilter} />
                 </aside>
 
