@@ -1,9 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import Modal from "@/components/ui/Modal";
 
 /**
  * A styled replacement for window.prompt — one or more fields in an apparent modal dialog.
  * Supports plain text, a longer textarea, and a color input (with a swatch), so it covers
  * label/signature/template names, link URLs, tag name+color, and AI intents in one component.
+ *
+ * Styled to match the marketing site's dialogs (shared Modal shell, rounded-2xl card, gradient
+ * primary action) so panel dialogs and site dialogs read as one product.
  */
 export type PromptField = {
   name: string;
@@ -22,7 +26,11 @@ type PromptModalProps = {
   fields: PromptField[];
   confirmLabel?: string;
   cancelLabel?: string;
+  /** Shown on the confirm button while `busy`. Defaults to "Working...". */
+  busyLabel?: string;
   busy?: boolean;
+  /** Render on the email panel's dark surface instead of the default light card. */
+  dark?: boolean;
   onCancel: () => void;
   onSubmit: (values: Record<string, string>) => void;
 };
@@ -34,7 +42,9 @@ const PromptModal: React.FC<PromptModalProps> = ({
   fields,
   confirmLabel = "Save",
   cancelLabel = "Cancel",
+  busyLabel = "Working...",
   busy = false,
+  dark = false,
   onCancel,
   onSubmit,
 }) => {
@@ -75,18 +85,20 @@ const PromptModal: React.FC<PromptModalProps> = ({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#14101E]/55"
-      onClick={() => {
-        if (!busy) onCancel();
-      }}
+    <Modal
+      onClose={onCancel}
+      zIndexClass="z-[200]"
+      /* Matches ConfirmActionModal (the admin panel's dialog baseline) — a neutral dim,
+         not a brand-tinted one, so every panel dialog shares one backdrop. */
+      backdropClassName="bg-black/50 backdrop-blur-sm"
+      cardClassName={`rounded-lg shadow-xl p-6 max-w-md w-full mx-4 ${dark ? "email-dialog-dark" : "bg-white"}`}
+      closeOnBackdrop={!busy}
+      closeOnEscape={!busy}
+      label={title}
     >
-      <div
-        className="w-full max-w-sm rounded-2xl bg-white border border-[#EBEAF0] shadow-[0_28px_70px_-24px_rgba(20,16,40,0.45)] p-6"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <h3 className="text-lg font-semibold tracking-tight text-[#1E1B2E]">{title}</h3>
-        {description ? <p className="mt-1 text-sm text-[#6B7280]">{description}</p> : null}
+      <div>
+        <h3 className="text-xl font-semibold text-[#111827]">{title}</h3>
+        {description ? <p className="mt-1.5 text-sm text-[#6B7280]">{description}</p> : null}
 
         <div className="mt-4 space-y-4">
           {fields.map((field, index) => (
@@ -140,12 +152,13 @@ const PromptModal: React.FC<PromptModalProps> = ({
           ))}
         </div>
 
-        <div className="mt-6 flex justify-end gap-3">
+        {/* Same button shapes/sizes as ConfirmActionModal so dialogs don't each scale differently. */}
+        <div className="mt-6 flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="rounded-lg border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#374151] transition hover:bg-gray-50 disabled:opacity-50"
+            className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-50 ${dark ? "border-white/12 text-[#C9C4DC] hover:bg-white/5" : "border-[#E5E7EB] text-[#374151] hover:bg-gray-50"}`}
           >
             {cancelLabel}
           </button>
@@ -153,13 +166,13 @@ const PromptModal: React.FC<PromptModalProps> = ({
             type="button"
             onClick={submit}
             disabled={busy || missingRequired}
-            className="rounded-lg bg-[#701CC0] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#5f17a5] disabled:opacity-50"
+            className="px-4 py-2 rounded-lg text-white text-sm font-medium bg-[#701CC0] hover:bg-[#5f17a5] disabled:opacity-50"
           >
-            {busy ? "Working..." : confirmLabel}
+            {busy ? busyLabel : confirmLabel}
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
 
