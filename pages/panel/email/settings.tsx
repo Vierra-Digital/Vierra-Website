@@ -51,6 +51,28 @@ const TEMPLATE_PREVIEW_VARS = {
   email: "alex@acme.co",
 };
 
+/**
+ * Campaign sends build the actual HTML email from body_html alone (body_text is only the
+ * plaintext/CAN-SPAM-footer fallback) — an empty body_html means an empty campaign email body
+ * even when body_text has content. This dialog only exposes one textarea, so derive body_html
+ * from it: escape, autolink bare URLs (so a pasted meeting link stays clickable), and preserve
+ * line breaks.
+ */
+function textToHtml(text: string): string {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+  return escaped
+    .replace(
+      /(https?:\/\/[^\s<>"']+)/g,
+      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+    )
+    .replace(/\n/g, "<br>");
+}
+
 const pageFont = Geist({ subsets: ["latin"] });
 
 function Toggle({
@@ -1139,13 +1161,22 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     if (!activeAccountEmail) return;
     setPromptConfig({
       title: "New template",
-      fields: [{ name: "name", label: "Template name", required: true, maxLength: 120 }],
+      fields: [
+        { name: "name", label: "Template name", required: true, maxLength: 120 },
+        { name: "subject", label: "Subject", placeholder: "e.g. Quick question, {{firstName|there}}" },
+        {
+          name: "bodyText",
+          label: "Body",
+          type: "textarea",
+          placeholder: "Hi {{firstName|there}}, {Hi|Hey|Hello}...",
+        },
+      ],
       confirmLabel: "Create template",
-      onSubmit: async ({ name }) => {
+      onSubmit: async ({ name, subject, bodyText }) => {
         await fetch("/api/gmail/templates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accountEmail: activeAccountEmail, name, subject: "", bodyText: "" }),
+          body: JSON.stringify({ accountEmail: activeAccountEmail, name, subject, bodyText, bodyHtml: textToHtml(bodyText) }),
         });
         await loadAccountData(activeAccountEmail);
       },
@@ -1159,6 +1190,26 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       body: JSON.stringify({ id }),
     });
     await loadAccountData(activeAccountEmail);
+  };
+
+  const editTemplate = (template: TemplateRow) => {
+    setPromptConfig({
+      title: "Edit template",
+      fields: [
+        { name: "name", label: "Template name", required: true, defaultValue: template.name, maxLength: 120 },
+        { name: "subject", label: "Subject", defaultValue: template.subject || "" },
+        { name: "bodyText", label: "Body", type: "textarea", defaultValue: template.bodyText || "" },
+      ],
+      confirmLabel: "Save template",
+      onSubmit: async ({ name, subject, bodyText }) => {
+        await fetch("/api/gmail/templates", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: template.id, name: name || template.name, subject, bodyText, bodyHtml: textToHtml(bodyText) }),
+        });
+        await loadAccountData(activeAccountEmail);
+      },
+    });
   };
 
   const createTag = () => {
@@ -2484,6 +2535,13 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                                 {showPreview ? "Hide preview" : "Preview"}
                               </button>
                             ) : null}
+                            <button
+                              type="button"
+                              onClick={() => editTemplate(row)}
+                              className="text-sm font-medium text-[#374151] hover:text-[#701CC0]"
+                            >
+                              Edit
+                            </button>
                             <button type="button" onClick={() => deleteTemplate(row.id)} className="text-sm font-medium text-red-600 hover:underline">
                               Remove
                             </button>
