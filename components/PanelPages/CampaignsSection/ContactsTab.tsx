@@ -91,7 +91,7 @@ const ContactsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
         placeholder="Search contacts…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="w-full md:w-80 mb-4 text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+        className="w-full md:w-80 mb-4 text-sm text-[#111827] border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
       />
 
       {loading ? (
@@ -262,7 +262,7 @@ const ContactDetailPanel: React.FC<{
         <select
           value={leadStatus}
           onChange={(e) => setLeadStatus(e.target.value)}
-          className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+          className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
         >
           {LEAD_STATUS_ORDER.map((s) => (
             <option key={s} value={s}>{LEAD_STATUS_LABELS[s]}</option>
@@ -276,7 +276,7 @@ const ContactDetailPanel: React.FC<{
           value={note}
           onChange={(e) => setNote(e.target.value)}
           rows={2}
-          className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+          className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
           placeholder="Why the status changed…"
         />
       </div>
