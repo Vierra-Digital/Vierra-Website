@@ -443,6 +443,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   }, []);
   const selectedMessageIdRef = useRef("");
   const moveListMenuRef = useRef<HTMLDivElement | null>(null);
+  const snoozeMenuRef = useRef<HTMLDivElement | null>(null);
+  const [snoozeMenuOpen, setSnoozeMenuOpen] = useState(false);
   const moveMessageMenuRef = useRef<HTMLDivElement | null>(null);
   const contactFilterMenuRef = useRef<HTMLDivElement | null>(null);
   const inlineComposeRef = useRef<HTMLDivElement | null>(null);
@@ -1817,6 +1819,30 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     };
   }, [moveMenuOpen]);
 
+  // Snooze behaves like Move To: clicking anywhere outside dismisses it.
+  useEffect(() => {
+    if (!snoozeMenuOpen) return;
+    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
+      const targetNode = event.target as Node | null;
+      if (!targetNode) return;
+      if (snoozeMenuRef.current?.contains(targetNode)) return;
+      setSnoozeMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+    };
+  }, [snoozeMenuOpen]);
+
+  // Any change of context (mailbox, label, opening a message, paging) closes open menus —
+  // they used to survive navigation and hang over the new view.
+  useEffect(() => {
+    setMoveMenuOpen(null);
+    setSnoozeMenuOpen(false);
+  }, [activeModule, activeLabelId, viewMode, selectedMessageId, currentPage]);
+
   useEffect(() => {
     if (!contactFilterOpen) return;
     const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
@@ -2279,6 +2305,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         | "moveToInbox"
         | "moveToSpam"
         | "moveToTrash"
+        | "unspam"
     ) => {
       const composeDraftRows = selectedMessageRows.filter((message) => Boolean(message.isComposeDraft && message.draftKey));
       const selectedComposeDraftKeys = new Set(composeDraftRows.map((message) => rowKey(message)));
@@ -2288,8 +2315,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         messageId: message.id,
       }));
       if (items.length === 0 && composeDraftRows.length === 0) return;
-      if (actionInFlightRef.current) return;
-      actionInFlightRef.current = true;
+      const isReadToggle = action === "markRead" || action === "markUnread";
+      if (!isReadToggle && actionInFlightRef.current) return;
+      if (!isReadToggle) actionInFlightRef.current = true;
 
       setActionError("");
       // Optimistic pass: mutate the list immediately so the click lands instantly. The
@@ -2308,6 +2336,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             if (action === "deletePermanently") return null;
             if (action === "untrash" || action === "moveToInbox") return activeModule === "inbox" ? message : null;
             if (action === "moveToSpam") return activeModule === "spam" ? message : null;
+            if (action === "unspam") return activeModule === "spam" ? null : message;
             return message;
           })
           .filter(Boolean) as MessageRow[]
@@ -2415,14 +2444,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "Action failed.");
       } finally {
-        actionInFlightRef.current = false;
+        if (!isReadToggle) actionInFlightRef.current = false;
         setActionLoading(false);
       }
     },
     [activeModule, loadMailboxCounts, loadUnreadBadges, rowKey, selectedMessageRows, selectedRows]
   );
 
-  const [snoozeMenuOpen, setSnoozeMenuOpen] = useState(false);
 
   // Snooze the selected messages until a preset time; the inbound cron re-surfaces them.
   const snoozeSelected = async (preset: "later" | "tomorrow" | "nextweek") => {
@@ -2618,15 +2646,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
           if (!applied) return;
           // Same as "Move to → label": tag it, then take it out of the Inbox.
           if (activeModule === "inbox") await runAction("archive");
-          const label = labels.find((entry) => entry.id === labelId);
-          showSentToast(`Moved to "${label?.name || "label"}"`);
         } else {
           const action = MESSAGE_DROP_ACTIONS[destination];
           if (!action) return;
           const response = await runAction(action);
           if (!response.ok) return;
-          const target = MODULES.find((item) => item.key === destination);
-          showSentToast(`Moved ${rows.length === 1 ? "message" : `${rows.length} messages`} to ${target?.label || destination}`);
         }
         // Update in place — the moved rows just leave the list. No mailbox re-fetch.
         removeRowsLocally(rows);
@@ -2639,11 +2663,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       MESSAGE_DROP_ACTIONS,
       activeModule,
       applyLabelToSelection,
-      labels,
       loadMailboxCounts,
       loadUnreadBadges,
       removeRowsLocally,
-      showSentToast,
     ]
   );
 
@@ -2683,8 +2705,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
       const moved = await applyLabelToSelection(labelId, rows);
       if (moved) {
-        const label = labels.find((entry) => entry.id === labelId);
-        showSentToast(`Moved to "${label?.name || "label"}"`);
         // Filing under a label means leaving the Inbox; archive quietly, then drop the rows
         // from the list in place rather than re-fetching the whole mailbox.
         if (activeModule === "inbox") await archiveRowsQuietly(rows);
@@ -3991,15 +4011,27 @@ ${sourceText}`;
                                   >
                                     <MdRefresh className={`h-[18px] w-[18px] ${messagesLoading ? "motion-safe:animate-spin" : ""}`} />
                                   </button>
+                                  {/* Spam-only: restore to the inbox and tell Gmail it isn't spam. */}
+                                  {activeModule === "spam" && hasSelectedEmails ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => applyAction("unspam")}
+                                      className={`${ICON_BUTTON_SOLID} email-tip`}
+                                      aria-label="Mark As Not Spam"
+                                      data-tip="Mark As Not Spam"
+                                    >
+                                      <FiShield className="h-4 w-4" />
+                                    </button>
+                                  ) : null}
                                 </>
                               ) : null}
                               {hasSelectedEmails ? (
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
+                                    onClick={() => applyAction(activeModule === "trash" || activeModule === "spam" ? "deletePermanently" : "trash")}
                                     className={`${ICON_BUTTON_SOLID} email-tip`}
-                                    data-tip={activeModule === "trash" ? "Delete Permanently" : "Move To Trash"}
+                                    data-tip={activeModule === "trash" || activeModule === "spam" ? "Delete Permanently" : "Move To Trash"}
                                   >
                                     <FiTrash2 className="w-4 h-4" />
                                   </button>
@@ -4086,7 +4118,7 @@ ${sourceText}`;
                                       >
                                         <FiArchive className="w-4 h-4" />
                                       </button>
-                                      <div className="relative">
+                                      <div ref={snoozeMenuRef} className="relative">
                                         <button
                                           type="button"
                                           onClick={() => setSnoozeMenuOpen((open) => !open)}
@@ -4854,7 +4886,7 @@ ${sourceText}`;
                           </button>
                           <button
                             type="button"
-                            onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
+                            onClick={() => applyAction(activeModule === "trash" || activeModule === "spam" ? "deletePermanently" : "trash")}
                             className={ICON_BUTTON}
                             title={activeModule === "trash" ? "Delete Permanently" : "Trash"}
                           >
