@@ -1572,6 +1572,22 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) return [mailbox, 0] as const;
           const rows: MessageRow[] = Array.isArray(payload?.messages) ? payload.messages : [];
+          // This fetch already pulled the full first page for every standard mailbox — warm
+          // loadMessages's cache with it (identical query shape for a plain tab switch: page
+          // resets to 1, search/label are cleared) so the FIRST visit to that tab also paints
+          // instantly instead of showing the loading spinner. No extra network requests; this
+          // data was previously fetched here just to count unread and then discarded.
+          const cacheKey = query.toString();
+          messagesCacheRef.current.delete(cacheKey);
+          messagesCacheRef.current.set(cacheKey, {
+            messages: rows,
+            accountErrors: Array.isArray(payload?.accountErrors) ? payload.accountErrors : [],
+            hasNextPage: Boolean(payload?.hasNextPage),
+          });
+          if (messagesCacheRef.current.size > MESSAGE_CACHE_LIMIT) {
+            const oldest = messagesCacheRef.current.keys().next().value;
+            if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
+          }
           return [mailbox, rows.filter((row) => row.unread).length] as const;
         })
       );
