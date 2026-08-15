@@ -531,17 +531,13 @@ input[type="search"]::-ms-clear:hover {
 /* Left rail. Translucent over the shell's brand glow (glassmorphic), separated from
    the content by a single hairline instead of a floating card with a ridge. */
 .email-shell .email-rail {
-  background: linear-gradient(180deg, rgba(30, 22, 48, 0.72) 0%, rgba(18, 13, 30, 0.72) 100%);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  background: linear-gradient(180deg, #211935 0%, #171021 100%);
   border-right: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 /* Mail content sits flush against the rail — no border, no radius, no shadow. */
 .email-shell .email-content {
-  background: rgba(35, 26, 54, 0.82);
-  backdrop-filter: blur(14px) saturate(130%);
-  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  background: #231A36;
 }
 
 /* The rail's own controls shouldn't paint opaque light boxes over the glass. */
@@ -766,9 +762,7 @@ input[type="search"]::-ms-clear:hover {
 
 /* Same surface as the rail, so the header reads as one continuous chrome band. */
 .email-shell .email-toolbar {
-  background: rgba(30, 22, 48, 0.72);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  background: #211935;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
