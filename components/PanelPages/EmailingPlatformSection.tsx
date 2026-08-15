@@ -4780,17 +4780,43 @@ ${sourceText}`;
                               <FiMove className="w-4 h-4" />
                             </button>
                             {moveMenuOpen === "message" ? (
-                              <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 min-w-[160px] overflow-hidden rounded-lg shadow-lg">
-                                {moveToOptions.map((option) => (
-                                  <button
-                                    key={`message-move-${option.value}`}
-                                    type="button"
-                                    onClick={() => handleMoveToChange(option.value)}
-                                    className="email-menu-item w-full px-3 py-2 text-left text-sm"
-                                  >
-                                    {option.label}
-                                  </button>
-                                ))}
+                              <div className="email-menu absolute right-0 top-[calc(100%+4px)] z-20 min-w-[168px] overflow-hidden rounded-lg py-1 shadow-xl">
+                                {moveToOptions
+                                  .filter((option) => !option.value.startsWith("label:"))
+                                  .map((option) => (
+                                    <button
+                                      key={`message-move-${option.value}`}
+                                      type="button"
+                                      onClick={() => handleMoveToChange(option.value)}
+                                      className="email-menu-item flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px]"
+                                    >
+                                      {option.value === "inbox" ? <FiInbox className="h-3.5 w-3.5 shrink-0" /> : null}
+                                      {option.value === "archive" ? <FiArchive className="h-3.5 w-3.5 shrink-0" /> : null}
+                                      {option.value === "spam" ? <FiSlash className="h-3.5 w-3.5 shrink-0" /> : null}
+                                      {option.value === "trash" ? <FiTrash2 className="h-3.5 w-3.5 shrink-0" /> : null}
+                                      <span className="truncate">{option.label}</span>
+                                    </button>
+                                  ))}
+                                {moveToOptions.some((option) => option.value.startsWith("label:")) ? (
+                                  <>
+                                    <div className="my-1 border-t border-white/[0.07]" />
+                                    <div className="max-h-48 overflow-y-auto">
+                                      {moveToOptions
+                                        .filter((option) => option.value.startsWith("label:"))
+                                        .map((option) => (
+                                          <button
+                                            key={`message-move-${option.value}`}
+                                            type="button"
+                                            onClick={() => handleMoveToChange(option.value)}
+                                            className="email-menu-item flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px]"
+                                          >
+                                            <FiTag className="h-3.5 w-3.5 shrink-0" />
+                                            <span className="truncate">{option.label}</span>
+                                          </button>
+                                        ))}
+                                    </div>
+                                  </>
+                                ) : null}
                               </div>
                             ) : null}
                           </div>
