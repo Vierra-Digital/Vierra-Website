@@ -47,6 +47,28 @@ const TEMPLATE_PREVIEW_VARS = {
   email: "alex@acme.co",
 };
 
+/**
+ * Campaign sends build the actual HTML email from body_html alone (body_text is only the
+ * plaintext/CAN-SPAM-footer fallback) — an empty body_html means an empty campaign email body
+ * even when body_text has content. This dialog only exposes one textarea, so derive body_html
+ * from it: escape, autolink bare URLs (so a pasted meeting link stays clickable), and preserve
+ * line breaks.
+ */
+function textToHtml(text: string): string {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+  return escaped
+    .replace(
+      /(https?:\/\/[^\s<>"']+)/g,
+      '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+    )
+    .replace(/\n/g, "<br>");
+}
+
 const pageFont = Geist({ subsets: ["latin"] });
 
 function Toggle({
@@ -1027,7 +1049,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         await fetch("/api/gmail/templates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accountEmail: activeAccountEmail, name, subject, bodyText }),
+          body: JSON.stringify({ accountEmail: activeAccountEmail, name, subject, bodyText, bodyHtml: textToHtml(bodyText) }),
         });
         await loadAccountData(activeAccountEmail);
       },
@@ -1056,7 +1078,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         await fetch("/api/gmail/templates", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: template.id, name: name || template.name, subject, bodyText }),
+          body: JSON.stringify({ id: template.id, name: name || template.name, subject, bodyText, bodyHtml: textToHtml(bodyText) }),
         });
         await loadAccountData(activeAccountEmail);
       },
