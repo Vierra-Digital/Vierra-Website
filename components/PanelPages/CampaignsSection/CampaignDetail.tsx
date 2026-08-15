@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { FiArrowLeft, FiRefreshCw } from "react-icons/fi";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import type { Campaign } from "../CampaignsSection";
 import ContactsTab from "./ContactsTab";
 import AnalyticsTab from "./AnalyticsTab";
@@ -34,6 +35,9 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
   const [tab, setTab] = useState<Tab>("Overview");
   const [busy, setBusy] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,6 +112,25 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
     }
   };
 
+  const deleteCampaign = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload?.message || "Failed to delete campaign.");
+      }
+      setConfirmDelete(false);
+      onBack();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Failed to delete campaign.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const syncAudience = async () => {
     setBusy(true);
     setSyncMessage("");
@@ -177,6 +200,18 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
               <button onClick={syncAudience} disabled={busy} className="px-3 py-2 rounded-lg border border-[#E5E7EB] text-sm font-medium text-[#374151] hover:bg-gray-50 disabled:opacity-50">
                 Sync Audience
               </button>
+              {campaign.status === "draft" && (
+                <button
+                  onClick={() => {
+                    setDeleteError("");
+                    setConfirmDelete(true);
+                  }}
+                  disabled={busy}
+                  className="px-3 py-2 rounded-lg border border-red-200 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              )}
             </div>
           </div>
 
@@ -262,6 +297,24 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
           {tab === "Analytics" && <AnalyticsTab campaignId={campaignId} />}
         </div>
       </div>
+
+      <ConfirmActionModal
+        isOpen={confirmDelete}
+        title="Delete campaign?"
+        message={
+          <>
+            {`Permanently delete "${campaign.name}"? This can't be undone.`}
+            {deleteError ? <span className="mt-2 block text-red-600">{deleteError}</span> : null}
+          </>
+        }
+        confirmLabel={deleting ? "Deleting…" : "Delete"}
+        onConfirm={deleteCampaign}
+        onCancel={() => {
+          if (deleting) return;
+          setConfirmDelete(false);
+          setDeleteError("");
+        }}
+      />
     </div>
   );
 };

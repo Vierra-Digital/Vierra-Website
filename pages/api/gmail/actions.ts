@@ -127,15 +127,27 @@ export default withAuth(async (req, res, session) => {
       : { ok: false as const };
     tokenMap.set(accountEmail, tokenResult.ok ? tokenResult.accessToken : null);
   }
-  // Resolve accountEmail -> account_id for outbound message cleanup
+  // Resolve accountEmail -> account_id for outbound message cleanup. Scoped to the mailbox
+  // OWNER's user_id (from ownerMap above), not the requester's — for a shared/delegated inbox
+  // the EmailProviderAccount row (and the EmailOutboundMessage rows it's cleaned up against
+  // below) belongs to the owner, not whichever delegate happened to click delete. Scoping this
+  // to `userId` meant a delegate's permanent delete of another user's granted mailbox would
+  // never match here, silently leaving orphaned outbound/tracking rows behind.
   const accountIdMap = new Map<string, string | null>();
+  const accountOwnerIdMap = new Map<string, string>();
   if (uniqueAccounts.length > 0) {
+    const ownerClauses = uniqueAccounts
+      .map((accountEmail) => {
+        const ownerUserId = ownerMap.get(accountEmail) || userId;
+        return { user_id: ownerUserId, account_email: accountEmail };
+      });
     const providerAccounts = await prisma.emailProviderAccount.findMany({
-      where: { user_id: userId, account_email: { in: uniqueAccounts } },
-      select: { id: true, account_email: true },
+      where: { OR: ownerClauses },
+      select: { id: true, account_email: true, user_id: true },
     });
     for (const pa of providerAccounts) {
       accountIdMap.set(pa.account_email.toLowerCase(), pa.id);
+      accountOwnerIdMap.set(pa.account_email.toLowerCase(), pa.user_id);
     }
   }
 
@@ -185,14 +197,14 @@ export default withAuth(async (req, res, session) => {
     if (successfulItems.length > 0) {
       await prisma.emailOutboundMessage.deleteMany({
         where: {
-          user_id: userId,
           OR: successfulItems
             .map((item) => {
               const accountId = accountIdMap.get(item.accountEmail.toLowerCase());
-              if (!accountId) return null;
-              return { account_id: accountId, gmail_message_id: item.messageId };
+              const ownerUserId = accountOwnerIdMap.get(item.accountEmail.toLowerCase());
+              if (!accountId || !ownerUserId) return null;
+              return { account_id: accountId, gmail_message_id: item.messageId, user_id: ownerUserId };
             })
-            .filter((c): c is { account_id: string; gmail_message_id: string } => c !== null),
+            .filter((c): c is { account_id: string; gmail_message_id: string; user_id: string } => c !== null),
         },
       });
     }
