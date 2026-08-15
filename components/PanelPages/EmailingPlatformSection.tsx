@@ -51,8 +51,8 @@ import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import PromptModal from "@/components/ui/PromptModal";
 import { scoreTrackerImage } from "@/lib/email/trackerDetection";
-import ComposeRichEditor, { printComposeContent, type ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
-import SignPdfModal from "@/components/email/SignPdfModal";
+import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
+import { printComposeContent } from "@/components/email/printCompose";
 import { getJson } from "@/lib/email/panelApi";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
 import {
@@ -131,6 +131,23 @@ const CampaignsView = dynamic(() => import("@/components/PanelPages/CampaignsSec
     </div>
   ),
 });
+
+// Lazy-load the compose editor (~13 @tiptap/* packages — a real chunk of the panel's Script
+// Evaluation time) so it's fetched/parsed/evaluated only when the user actually opens
+// compose/reply, not on every inbox load. printComposeContent is a plain window.print() helper
+// with no TipTap dependency, split into its own module (components/email/printCompose.ts) so
+// importing it here doesn't drag the editor bundle back in as a side effect.
+const ComposeRichEditor = dynamic(() => import("@/components/email/ComposeRichEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full min-h-[200px] flex items-center justify-center">
+      <div className="w-8 h-8 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] motion-safe:animate-spin" />
+    </div>
+  ),
+});
+
+// Lazy-load the PDF sign modal — only needed for the rare "sign this attachment" action.
+const SignPdfModal = dynamic(() => import("@/components/email/SignPdfModal"), { ssr: false });
 type EmailingPlatformSectionProps = {
   initialSelectedAccounts?: string[];
   /** Gmail thread id to auto-open (the whole conversation) once the inbox loads — deep link, e.g. from a Discord alert. */
