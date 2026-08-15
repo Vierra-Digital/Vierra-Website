@@ -487,11 +487,6 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [switchingAccount, setSwitchingAccount] = useState(false);
   const activeAccountEmail = selectedAccountEmail || primaryAccountEmail;
 
-  const roleLabel = useMemo(() => {
-    const r = (userRole || "").trim();
-    if (!r) return "";
-    return r.charAt(0).toUpperCase() + r.slice(1).toLowerCase();
-  }, [userRole]);
 
   const backToEmailHref = useMemo(() => {
     const connected = connectedAccounts.map((account) => account.email).filter(Boolean);
@@ -1238,9 +1233,10 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         const primary = await loadAccounts().catch(() => "");
         if (cancelled) return;
         setSelectedAccountEmail(primary);
-        // Only the account-scoped settings gate the shell — they're what the first
-        // screenful actually renders.
-        if (primary) await loadAccountData(primary).catch(() => {});
+        // Nothing else gates the shell. loadAccountData is seven more requests (several of
+        // them Gmail round trips); awaiting it here is what kept the page on "Loading
+        // settings…" long after there was something to show. Sections populate as it lands.
+        if (primary) void loadAccountData(primary).catch(() => {});
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -1385,124 +1381,85 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       <Head>
         <title>Vierra | Email Settings</title>
       </Head>
-      <div className={`email-shell relative min-h-screen ${pageFont.className}`}>
-        <header className="email-toolbar sticky top-0 z-30 flex h-14 shrink-0 items-center px-5">
-          <Link href="/panel" className="inline-flex items-center" aria-label="Admin panel">
+      <div className={`email-shell flex h-screen flex-col overflow-hidden ${pageFont.className}`}>
+        <header className="email-toolbar flex h-14 shrink-0 items-center gap-4 px-5">
+          <Link href="/panel" className="inline-flex shrink-0 items-center" aria-label="Admin panel">
             <Image
               src="/assets/vierra-logo-black-3.png"
               alt="Vierra"
               width={110}
               height={32}
-              className="h-auto w-[104px] brightness-0 invert"
+              className="h-auto w-[96px] brightness-0 invert"
               priority
             />
           </Link>
+          <span className="h-6 w-px shrink-0 bg-white/10" />
+          <h1 className="shrink-0 text-[15px] font-semibold tracking-tight text-[#1E1B2E]">Email settings</h1>
+          {connectedAccounts.length > 1 ? (
+            <div className="ml-auto flex min-w-0 items-center gap-2">
+              {switchingAccount ? <span className="shrink-0 text-xs text-[#9CA3AF]">Loading…</span> : null}
+              <label htmlFor="settings-account" className="shrink-0 text-xs text-[#847FA0]">
+                Editing
+              </label>
+              <select
+                id="settings-account"
+                value={activeAccountEmail}
+                onChange={(event) => handleSelectAccount(event.target.value)}
+                disabled={switchingAccount}
+                className="max-w-[220px] truncate rounded-lg px-2.5 py-1.5 text-[13px] font-medium disabled:opacity-60"
+              >
+                {connectedAccounts.map((account) => (
+                  <option key={account.email} value={account.email}>
+                    {account.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
         </header>
 
-        <main className="mx-auto max-w-6xl px-5 py-8 lg:px-8 lg:py-10">
-          <Link
-            href={backToEmailHref}
-            className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-[#C6C0DA] transition-colors hover:text-white lg:hidden"
-          >
-            <FiArrowLeft className="h-4 w-4 shrink-0" />
-            Back to inbox
-          </Link>
-          <div className="mb-8">
-            <div className="mb-2 flex items-center gap-2">
-              <div className="rounded-lg bg-[#701CC0]/10 p-1.5">
-                <FiMail className="h-5 w-5 text-[#701CC0]" />
-              </div>
-              <h1 className="text-xl font-semibold tracking-tight text-[#1E1B2E] lg:text-2xl">Email settings</h1>
-            </div>
-            <p className="max-w-2xl text-[13px] leading-relaxed text-[#6B7280]">
-              {roleLabel ? (
-                <>
-                  <span className="font-medium text-[#374151]">{roleLabel} account.</span>{" "}
-                </>
-              ) : null}
-              Signatures, templates, the vacation responder, and contact field visibility apply to the inbox selected below.
-              Email tracking applies to all your connected inboxes.
-            </p>
-            {connectedAccounts.length === 0 ? (
-              <p className="mt-3 text-sm text-amber-800">
-                No connected Gmail accounts. Connect Gmail from the email panel to enable mailbox-specific options.
-              </p>
-            ) : null}
-            {connectedAccounts.length > 1 ? (
-              <div className="mt-4 flex flex-col gap-3 rounded-xl border border-white/[0.07] bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <label
-                    htmlFor="settings-account"
-                    className="block text-xs font-semibold uppercase tracking-wide text-[#847FA0]"
-                  >
-                    Editing settings for
-                  </label>
-                  <p className="mt-1 text-xs text-[#9A93AE]">
-                    Switch inbox to edit its signatures, templates, vacation responder, and contact visibility.
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {switchingAccount ? <span className="text-xs text-[#9CA3AF]">Loading…</span> : null}
-                  <select
-                    id="settings-account"
-                    value={activeAccountEmail}
-                    onChange={(event) => handleSelectAccount(event.target.value)}
-                    disabled={switchingAccount || loading}
-                    className="max-w-[240px] truncate rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm font-medium text-[#1E1B2E] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {connectedAccounts.map((account) => (
-                      <option key={account.email} value={account.email}>
-                        {account.email}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            ) : null}
-          </div>
-
+        <main className="flex min-h-0 flex-1 overflow-hidden">
           {loading ? (
-            <div className="rounded-xl border border-white/[0.07] bg-white p-8 text-center text-sm text-[#6B7280]">
-              Loading settings…
-            </div>
+            <div className="flex flex-1 items-center justify-center text-sm text-[#6B7280]">Loading settings…</div>
           ) : (
             <SettingsFilterContext.Provider value={settingsFilter}>
-              <div className="mb-5">
-                <div className="relative">
-                  <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
-                  <input
-                    value={settingsFilter}
-                    onChange={(event) => setSettingsFilter(event.target.value)}
-                    placeholder="Filter settings…"
-                    aria-label="Filter settings"
-                    className="w-full rounded-xl border border-[#E5E7EB] bg-white py-2.5 pl-9 pr-9 text-sm text-[#1E1B2E] placeholder-[#9CA3AF] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
-                  />
-                  {settingsFilter ? (
-                    <button
-                      type="button"
-                      onClick={() => setSettingsFilter("")}
-                      aria-label="Clear filter"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-[#9CA3AF] hover:bg-[#F3F4F6] hover:text-[#6B7280]"
-                    >
-                      <FiX className="h-4 w-4" />
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-
-              <div className="lg:grid lg:grid-cols-[236px_minmax(0,1fr)] lg:gap-10">
-                <aside className="mb-6 hidden lg:sticky lg:top-20 lg:mb-0 lg:block lg:self-start">
+              <aside className="hidden w-[248px] shrink-0 flex-col overflow-hidden border-r border-white/[0.07] lg:flex">
+                <div className="shrink-0 px-3 pb-2 pt-3">
                   <Link
                     href={backToEmailHref}
-                    className="mb-5 inline-flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[#C6C0DA] transition-colors hover:bg-white/5 hover:text-white"
+                    className="mb-3 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium text-[#C6C0DA] transition-colors hover:bg-white/5 hover:text-white"
                   >
                     <FiArrowLeft className="h-4 w-4 shrink-0" />
                     Back to inbox
                   </Link>
+                  <div className="relative">
+                    <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                    <input
+                      value={settingsFilter}
+                      onChange={(event) => setSettingsFilter(event.target.value)}
+                      placeholder="Filter settings…"
+                      aria-label="Filter settings"
+                      className="w-full rounded-lg py-2 pl-9 pr-8 text-[13px]"
+                    />
+                    {settingsFilter ? (
+                      <button
+                        type="button"
+                        onClick={() => setSettingsFilter("")}
+                        aria-label="Clear filter"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-[#9CA3AF] hover:text-white"
+                      >
+                        <FiX className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
                   <SettingsNav filter={settingsFilter} />
-                </aside>
+                </div>
+              </aside>
 
-                <div className="space-y-6">
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="mx-auto max-w-3xl space-y-5 px-5 py-6 lg:px-8 lg:py-8">
                   {settingsFilter.trim() &&
                   !SETTINGS_NAV.some((group) =>
                     group.items.some((item) => item.toLowerCase().includes(settingsFilter.trim().toLowerCase()))
