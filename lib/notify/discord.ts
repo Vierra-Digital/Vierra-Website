@@ -154,6 +154,22 @@ export async function notifyCampaignCompleted(n: CampaignCompletedNotification):
   });
 }
 
+export type CampaignLaunchedNotification = {
+  campaignId: string;
+  campaignName: string;
+  contactCount: number;
+};
+
+/** Campaign-launched embed, used by the campaign status PATCH's draft -> active transition (symmetric with notifyCampaignCompleted). */
+export async function notifyCampaignLaunched(n: CampaignLaunchedNotification): Promise<void> {
+  await notifyDiscordEmbed({
+    author: { name: `🚀 Campaign launched — ${n.campaignName}`.slice(0, 240) },
+    url: panelUrl(`/panel/email?campaign=${n.campaignId}`),
+    description: `${n.contactCount} contact${n.contactCount === 1 ? "" : "s"} enrolled`,
+    color: LEAD_STATUS_DISCORD_COLOR.positive_response,
+  });
+}
+
 export type SignalNotification = {
   contactEmail: string;
   campaignName?: string | null;

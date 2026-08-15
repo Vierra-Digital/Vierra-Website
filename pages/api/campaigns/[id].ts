@@ -12,7 +12,7 @@ import {
   translateMergeTagsForSmartlead,
 } from "@/lib/campaigns/smartlead/client";
 import { brevoConfigured } from "@/lib/campaigns/brevo/client";
-import { notifyCampaignCompleted, discordConfigured } from "@/lib/notify/discord";
+import { notifyCampaignCompleted, notifyCampaignLaunched, discordConfigured } from "@/lib/notify/discord";
 
 function getId(req: NextApiRequest) {
   const raw = req.query.id;
@@ -201,6 +201,14 @@ export default withAuth(async (req, res, session) => {
           prisma.campaignContact.count({ where: { campaign_id: id } }),
         ]);
         await notifyCampaignCompleted({ campaignId: id, campaignName: existing.name, sentCount, contactCount });
+      }
+
+      // Symmetric with the completed notification above. Gated on the true draft -> active
+      // transition (matches the started_at-setting condition earlier) so resuming a paused
+      // campaign back to "active" doesn't re-fire this as if it were a fresh launch.
+      if (nextStatus === "active" && existing.status === "draft" && discordConfigured()) {
+        const contactCount = await prisma.campaignContact.count({ where: { campaign_id: id } });
+        await notifyCampaignLaunched({ campaignId: id, campaignName: existing.name, contactCount });
       }
 
       res.status(200).json({ campaign: serializeCampaign(updated) });
