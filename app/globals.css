@@ -880,11 +880,13 @@ input[type="search"]::-ms-clear:hover {
    that read as a two-tone double outline), one surface colour, and full-width rows so
    there is no rounded-inside-rounded nesting. */
 .email-shell .email-menu {
-  background: #1E1730;
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  /* No border at all. Any visible stroke on a dark surface reads as an extra edge next to
+     the card's own contrast — depth comes from the surface step and the shadow instead. */
+  background: #241C38;
+  border: 0;
   border-radius: 8px;
   padding: 4px 0;
-  box-shadow: 0 12px 28px -12px rgba(0, 0, 0, 0.75);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.85);
   overflow: hidden;
 }
 .email-shell .email-menu-item {
