@@ -876,31 +876,30 @@ input[type="search"]::-ms-clear:hover {
 
 /* Dropdown menus in the panel (Move To, Snooze). No vertical gutter — the container's
    surface peeking above the first item and below the last read as odd coloured bands. */
-/* Dropdown menus: a small floating card with inset, rounded rows — the hover fills the
-   row's own shape rather than painting edge-to-edge across the card. */
+/* Dropdown menus. Deliberately plain: ONE hairline border (no second shadow ring —
+   that read as a two-tone double outline), one surface colour, and full-width rows so
+   there is no rounded-inside-rounded nesting. */
 .email-shell .email-menu {
-  background: rgba(28, 21, 42, 0.97);
-  backdrop-filter: blur(12px) saturate(140%);
-  -webkit-backdrop-filter: blur(12px) saturate(140%);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 12px;
-  padding: 4px;
-  box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(0, 0, 0, 0.35);
+  background: #1E1730;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 8px;
+  padding: 4px 0;
+  box-shadow: 0 12px 28px -12px rgba(0, 0, 0, 0.75);
+  overflow: hidden;
 }
 .email-shell .email-menu-item {
   color: #CFC9E0;
   background: transparent;
-  border-radius: 7px;
+  border-radius: 0;
   transition: background-color .12s ease, color .12s ease;
 }
 .email-shell .email-menu-item:hover {
-  background: rgba(143, 66, 255, 0.26);
+  background: rgba(143, 66, 255, 0.24);
   color: #FFFFFF;
 }
-/* Divider spans the card's inner width, not its padding. */
 .email-shell .email-menu .email-menu-divider {
   height: 1px;
-  margin: 4px 6px;
+  margin: 4px 0;
   background: rgba(255, 255, 255, 0.08);
 }
 
