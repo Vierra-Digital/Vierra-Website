@@ -1386,29 +1386,29 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       <Head>
         <title>Vierra | Email Settings</title>
       </Head>
-      <div className={`relative min-h-screen bg-[#F3F4F6] ${pageFont.className}`}>
-        <header className="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-5">
+      <div className={`email-shell relative min-h-screen ${pageFont.className}`}>
+        <header className="email-toolbar sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 px-5">
           <Link
             href={backToEmailHref}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-[#374151] transition-colors hover:border-[#701CC0]/40 hover:text-[#701CC0]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-[#C6C0DA] transition-colors hover:border-[#B98CFF]/50 hover:text-white"
           >
             <FiArrowLeft className="h-4 w-4 shrink-0" />
             Back to inbox
           </Link>
-          <span className="hidden h-6 w-px bg-gray-200 sm:block" />
+          <span className="hidden h-6 w-px bg-white/10 sm:block" />
           <Link href="/panel" className="hidden items-center sm:inline-flex" aria-label="Admin panel">
             <Image
               src="/assets/vierra-logo-black-3.png"
               alt="Vierra"
               width={110}
               height={32}
-              className="h-auto w-[110px]"
+              className="h-auto w-[110px] brightness-0 invert"
               priority
             />
           </Link>
         </header>
 
-        <main className="mx-auto max-w-4xl px-5 py-8 lg:px-8 lg:py-10">
+        <main className="mx-auto max-w-6xl px-5 py-8 lg:px-8 lg:py-10">
           <div className="mb-8">
             <div className="mb-2 flex items-center gap-2">
               <div className="rounded-lg bg-[#701CC0]/10 p-1.5">
@@ -1431,7 +1431,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               </p>
             ) : null}
             {connectedAccounts.length > 1 ? (
-              <div className="mt-4 flex flex-col gap-3 rounded-xl border border-[#ECEAF1] bg-white p-4 shadow-[0_2px_12px_-4px_rgba(46,16,80,0.14)] sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-4 flex flex-col gap-3 rounded-xl border border-white/[0.07] bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <label
                     htmlFor="settings-account"
@@ -1464,7 +1464,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
           </div>
 
           {loading ? (
-            <div className="rounded-xl border border-gray-100 bg-white p-8 text-center text-sm text-[#6B7280] shadow-sm">
+            <div className="rounded-xl border border-white/[0.07] bg-white p-8 text-center text-sm text-[#6B7280]">
               Loading settings…
             </div>
           ) : (
@@ -1492,8 +1492,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 </div>
               </div>
 
-              <div className="lg:grid lg:grid-cols-[212px_minmax(0,1fr)] lg:gap-8">
-                <aside className="mb-6 hidden lg:sticky lg:top-6 lg:mb-0 lg:block lg:self-start">
+              <div className="lg:grid lg:grid-cols-[236px_minmax(0,1fr)] lg:gap-10">
+                <aside className="mb-6 hidden lg:sticky lg:top-24 lg:mb-0 lg:block lg:self-start">
                   <SettingsNav filter={settingsFilter} />
                 </aside>
 
@@ -1502,7 +1502,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   !SETTINGS_NAV.some((group) =>
                     group.items.some((item) => item.toLowerCase().includes(settingsFilter.trim().toLowerCase()))
                   ) ? (
-                    <p className="rounded-xl border border-[#E5E7EB] bg-white p-8 text-center text-sm text-[#6B7280]">
+                    <p className="rounded-xl border border-white/[0.07] bg-white p-8 text-center text-sm text-[#6B7280]">
                       No settings match “{settingsFilter.trim()}”.
                     </p>
                   ) : null}

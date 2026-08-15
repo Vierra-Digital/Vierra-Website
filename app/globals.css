@@ -931,3 +931,49 @@ input[type="search"]::-ms-clear:hover {
 
 /* The white sheet the message sits on: roomier and less boxy. */
 .email-shell .email-body-card { padding: 22px 26px; }
+
+/* ── Email settings page ───────────────────────────────────────────────────────
+   Shares the panel's shell, so the surface remap above already handles cards,
+   text and borders. These fill the gaps that are specific to this page. */
+
+/* Section cards read as panels on the dark canvas, not floating white sheets. */
+.email-shell section[id] {
+  background: #231A36;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: none;
+}
+
+/* Section nav: quiet by default, brand-lit for the section you're in. */
+.email-shell nav[aria-label="Settings sections"] a {
+  color: #A8A2C0;
+  border-radius: 7px;
+}
+.email-shell nav[aria-label="Settings sections"] a:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #FFFFFF;
+}
+.email-shell nav[aria-label="Settings sections"] a[aria-current="true"],
+.email-shell nav[aria-label="Settings sections"] a[data-active="true"] {
+  background: rgba(143, 66, 255, 0.2);
+  color: #FFFFFF;
+}
+
+/* Inputs, selects and the filter box sit on the dark surface. */
+.email-shell main input,
+.email-shell main select,
+.email-shell main textarea {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #F1EEFA;
+}
+.email-shell main input::placeholder,
+.email-shell main textarea::placeholder { color: #6F6889; }
+
+/* Sticky save bar. */
+.email-shell main .sticky.bottom-4 {
+  background: #241C38;
+  border-color: rgba(185, 140, 255, 0.35);
+}
+
+/* Dividers between rows inside a section. */
+.email-shell main .divide-gray-100 > * + * { border-color: rgba(255, 255, 255, 0.07); }
