@@ -16,6 +16,7 @@ import {
   FiLock,
   FiChevronsRight,
   FiCornerUpLeft,
+  FiCornerUpRight,
   FiDownload,
   FiCalendar,
   FiEdit3,
@@ -32,6 +33,10 @@ import {
   FiMove,
   FiPlus,
   FiRefreshCw,
+  FiChevronLeft,
+  FiInbox,
+  FiSlash,
+  FiChevronRight,
   FiSearch,
   FiSend,
   FiSettings,
@@ -50,14 +55,15 @@ import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import PromptModal from "@/components/ui/PromptModal";
+import { MdRefresh } from "react-icons/md";
 import { scoreTrackerImage } from "@/lib/email/trackerDetection";
 import ComposeRichEditor, { printComposeContent, type ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
 import SignPdfModal from "@/components/email/SignPdfModal";
 import { getJson } from "@/lib/email/panelApi";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
 import {
-  GLASS_CHROME, GLASS_SURFACE, GLASS_MODAL, GLASS_SCRIM, SHADOW_SM, BRAND_GRADIENT, BRAND_LOGO,
-  ICON_BUTTON, ICON_BUTTON_SOLID, ICON_BUTTON_GHOST, FIELD_LABEL, BUTTON_COMPACT, ALERT,
+  BRAND_GRADIENT, BRAND_LOGO,
+  ICON_BUTTON, ICON_BUTTON_SOLID, ICON_BUTTON_GHOST, FIELD_LABEL, ALERT,
 } from "@/components/email/emailTheme";
 import {
   PAGE_SIZE,
@@ -66,6 +72,7 @@ import {
   validateRecipientCsv,
   EMPTY_COUNTS,
   MODULES,
+  orderModules,
   BADGE_MODULES,
   BADGE_MAILBOXES,
 } from "@/components/email/constants";
@@ -179,6 +186,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [step, setStep] = useState<"gate" | "client">(initialSelectedAccounts.length > 0 ? "client" : "gate");
   const [activeModule, setActiveModule] = useState<ModuleKey>("inbox");
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
+  /** User's custom sidebar order (module keys). Empty = fall back to MODULES order. */
+  const [moduleOrder, setModuleOrder] = useState<string[]>([]);
+  /** Ids already sent for scanning, so a page never re-scans rows it has seen. */
+  const scannedIdsRef = useRef<Set<string>>(new Set());
+  /** messageId → tracker verdict. Filled in just after the list paints (see the scan effect). */
+  const [messageTrackers, setMessageTrackers] = useState<
+    Record<string, { tracked: boolean; count: number; vendors: string[]; hasAttachment?: boolean }>
+  >({});
   const [gmailAccounts, setGmailAccounts] = useState<GmailAccountConnection[]>([]);
   const [gmailLoading, setGmailLoading] = useState(false);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>(initialSelectedAccounts);
@@ -262,7 +277,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [newLabelModalOpen, setNewLabelModalOpen] = useState(false);
   const [newLabelName, setNewLabelName] = useState("");
   const [creatingLabel, setCreatingLabel] = useState(false);
+  /** Guards double-fires without greying the toolbar out for the whole round trip. */
+  const actionInFlightRef = useRef(false);
   const [labelToDelete, setLabelToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [labelToRename, setLabelToRename] = useState<{ id: string; name: string } | null>(null);
+  const [renamingLabel, setRenamingLabel] = useState(false);
   const [deletingLabel, setDeletingLabel] = useState(false);
   const [artemisPromptOpen, setArtemisPromptOpen] = useState(false);
   const [saveTemplateName, setSaveTemplateName] = useState("");
@@ -499,7 +518,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     fetch("/api/gmail/nav-layout")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!cancelled && d && Array.isArray(d.hiddenModules)) setHiddenModules(d.hiddenModules);
+        if (cancelled || !d) return;
+        if (Array.isArray(d.hiddenModules)) setHiddenModules(d.hiddenModules);
+        if (Array.isArray(d.moduleOrder)) setModuleOrder(d.moduleOrder);
       })
       .catch(() => {});
     return () => {
@@ -565,6 +586,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   }, [messages, rowKey, selectedRows, selectedMessage]);
 
   const hasSelectedEmails = selectedRows.length > 0;
+  /** Any unread in the selection (all-unread or mixed) → offer "Mark As Read".
+      Only when every selected email is already read do we offer "Mark As Unread". */
+  const selectionHasUnread =
+    selectedMessageRows.length > 0 && selectedMessageRows.some((message) => message.unread);
   const emptyAddContactForm = {
     firstName: "",
     lastName: "",
@@ -1133,11 +1158,15 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         date.getFullYear() === now.getFullYear() &&
         date.getMonth() === now.getMonth() &&
         date.getDate() === now.getDate();
-      // Gmail-style: today shows the time, older mail shows the date.
+      // Gmail-style: today -> time, this year -> "Mar 4", anything older -> 03/04/2024
+      // (the month/day always belong to that message's own year).
       if (isToday) {
         return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
       }
-      return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      if (date.getFullYear() === now.getFullYear()) {
+        return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+      }
+      return date.toLocaleDateString(undefined, { year: "numeric", month: "2-digit", day: "2-digit" });
     }
     return rawDate || "";
   };
@@ -1793,6 +1822,34 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     }
   }, [messages, initialOpenThreadId]);
 
+  // Opening an unread email marks it read the moment it opens: locally first (so going back
+  // shows it read immediately) and on Gmail in the background. Keyed by id so it fires once.
+  const markedReadRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!selectedMessage || viewMode !== "message") return;
+    if (!selectedMessage.unread || selectedMessage.isComposeDraft) return;
+    const key = `${selectedMessage.accountEmail}::${selectedMessage.id}`;
+    if (markedReadRef.current.has(key)) return;
+    markedReadRef.current.add(key);
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === selectedMessage.id && m.accountEmail === selectedMessage.accountEmail
+          ? { ...m, unread: false }
+          : m
+      )
+    );
+    void fetch("/api/gmail/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "markRead",
+        items: [{ accountEmail: selectedMessage.accountEmail, messageId: selectedMessage.id }],
+      }),
+    })
+      .then(() => Promise.all([loadMailboxCounts(), loadUnreadBadges()]))
+      .catch(() => null);
+  }, [selectedMessage, viewMode, loadMailboxCounts, loadUnreadBadges]);
+
   useEffect(() => {
     if (!selectedMessage || viewMode !== "message") return;
     const loadDetail = async () => {
@@ -1835,7 +1892,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
     };
     loadDetail();
-  }, [selectedMessage, viewMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMessage?.id, selectedMessage?.accountEmail, viewMode]);
 
   useEffect(() => {
     setInlineComposeMode(null);
@@ -2150,10 +2208,31 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         messageId: message.id,
       }));
       if (items.length === 0 && composeDraftRows.length === 0) return;
-      if (actionLoading) return;
+      if (actionInFlightRef.current) return;
+      actionInFlightRef.current = true;
 
-      setActionLoading(true);
       setActionError("");
+      // Optimistic pass: mutate the list immediately so the click lands instantly. The
+      // authoritative pass below reconciles once Gmail answers. (Previously every action
+      // awaited the round trip AND greyed the toolbar out for its duration.)
+      const optimisticKeys = new Set(selectedRows);
+      setMessages((prev) =>
+        prev
+          .map((message) => {
+            const key = rowKey(message);
+            if (!optimisticKeys.has(key)) return message;
+            if (action === "markRead") return { ...message, unread: false };
+            if (action === "markUnread") return { ...message, unread: true };
+            if (action === "archive") return activeModule === "archive" ? message : null;
+            if (action === "trash" || action === "moveToTrash") return activeModule === "trash" ? message : null;
+            if (action === "deletePermanently") return null;
+            if (action === "untrash" || action === "moveToInbox") return activeModule === "inbox" ? message : null;
+            if (action === "moveToSpam") return activeModule === "spam" ? message : null;
+            return message;
+          })
+          .filter(Boolean) as MessageRow[]
+      );
+      if (action !== "markRead" && action !== "markUnread") setSelectedRows([]);
       try {
         if (
           composeDraftRows.length > 0 &&
@@ -2256,10 +2335,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "Action failed.");
       } finally {
+        actionInFlightRef.current = false;
         setActionLoading(false);
       }
     },
-    [actionLoading, activeModule, loadMailboxCounts, loadUnreadBadges, rowKey, selectedMessageRows, selectedRows]
+    [activeModule, loadMailboxCounts, loadUnreadBadges, rowKey, selectedMessageRows, selectedRows]
   );
 
   const [snoozeMenuOpen, setSnoozeMenuOpen] = useState(false);
@@ -2294,10 +2374,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
           body: JSON.stringify({ accountEmail, items, snoozeUntil: until.toISOString() }),
         });
       }
-      setSelectedRows([]);
+      // Snoozed mail leaves the mailbox — remove it in place and let the authoritative
+      // refresh happen in the background rather than blocking the click on it.
+      removeRowsLocally(rows);
       showSentToast("Snoozed");
       invalidateMessagesCache();
-      await Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
+      void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Failed to snooze.");
     } finally {
@@ -2305,13 +2387,253 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     }
   };
 
+  /**
+   * Apply a label to every selected message. Used by "Move to → <label>" and by dropping
+   * a message onto a label in the sidebar. Returns true when at least one message moved.
+   */
+  const applyLabelToSelection = useCallback(
+    async (labelId: string, rows: MessageRow[]) => {
+      const gmailRows = rows.filter((message) => !message.isComposeDraft);
+      if (gmailRows.length === 0) return false;
+      // Send the NAME as well as the id: label ids are per-account, so for messages in a second
+      // mailbox the server resolves (or creates) the same-named label there instead of failing.
+      const labelName = labels.find((entry) => entry.id === labelId)?.name || "";
+      let lastError = "";
+      const results = await Promise.all(
+        gmailRows.map(async (message) => {
+          try {
+            const response = await fetch("/api/gmail/apply-label", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                accountEmail: message.accountEmail,
+                messageId: message.id,
+                labelId,
+                labelName,
+              }),
+            });
+            if (response.ok) return true;
+            const payload = await response.json().catch(() => null);
+            lastError = payload?.message || `Label update failed (${response.status})`;
+            return false;
+          } catch {
+            lastError = "Label update failed — network error.";
+            return false;
+          }
+        })
+      );
+      // Surface WHY rather than doing nothing: a silent no-op here reads as "moving to a
+      // label doesn't work" with nothing to act on.
+      if (!results.some(Boolean) && lastError) setActionError(lastError);
+      return results.some(Boolean);
+    },
+    [labels]
+  );
+
+  /**
+   * Archive rows without touching selection state or reloading the list. Items carry their own
+   * accountEmail, so a mixed-mailbox selection is handled in ONE request (the actions endpoint
+   * resolves a token per account) instead of only acting on the primary inbox.
+   */
+  const archiveRowsQuietly = useCallback(async (rows: MessageRow[]) => {
+    const items = rows
+      .filter((message) => !message.isComposeDraft)
+      .map((message) => ({ accountEmail: message.accountEmail, messageId: message.id }));
+    if (items.length === 0) return;
+    await fetch("/api/gmail/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "archive", items }),
+    }).catch(() => null);
+  }, []);
+
+  /** Drop rows out of the current list immediately — a move shouldn't re-fetch the mailbox. */
+  const removeRowsLocally = useCallback(
+    (rows: MessageRow[]) => {
+      const keys = new Set(rows.map((message) => rowKey(message)));
+      setMessages((prev) => prev.filter((message) => !keys.has(rowKey(message))));
+      setSelectedRows((prev) => prev.filter((key) => !keys.has(key)));
+    },
+    [rowKey]
+  );
+
+  /* ── Drag & drop ──────────────────────────────────────────────────────────────
+     Two gestures share one set of drop targets (the sidebar):
+       • drag a nav item onto another nav item  → reorder the sidebar
+       • drag message rows onto a mailbox/label → move those messages there
+     Native HTML5 DnD, so there's no extra dependency and keyboard/arrow controls in
+     Settings remain the accessible path to the same reordering. */
+  const [draggingModuleKey, setDraggingModuleKey] = useState<string | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
+  const [isDraggingMessages, setIsDraggingMessages] = useState(false);
+  const draggedMessagesRef = useRef<MessageRow[]>([]);
+
+  /** Persist a sidebar order. Always the FULL module list so hidden items keep their slot. */
+  const persistModuleOrder = useCallback(async (nextOrder: string[]) => {
+    setModuleOrder(nextOrder);
+    try {
+      await fetch("/api/gmail/nav-layout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moduleOrder: nextOrder }),
+      });
+    } catch {
+      /* keep the optimistic order — it re-syncs on the next load */
+    }
+  }, []);
+
+  /** Reorder by dropping one nav item onto another (insert-before semantics). */
+  const reorderModuleByDrop = useCallback(
+    (sourceKey: string, targetKey: string) => {
+      if (!sourceKey || sourceKey === targetKey) return;
+      const full = orderModules(MODULES, moduleOrder).map((item) => item.key as string);
+      const from = full.indexOf(sourceKey);
+      const to = full.indexOf(targetKey);
+      if (from < 0 || to < 0) return;
+      const next = [...full];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      void persistModuleOrder(next);
+    },
+    [moduleOrder, persistModuleOrder]
+  );
+
+  /** Send a module to the very top of the sidebar (the top landing strip). */
+  const moveModuleToTop = useCallback(
+    (sourceKey: string) => {
+      const full = orderModules(MODULES, moduleOrder).map((item) => item.key as string);
+      const from = full.indexOf(sourceKey);
+      if (from <= 0) return;
+      const next = [...full];
+      const [moved] = next.splice(from, 1);
+      next.unshift(moved);
+      void persistModuleOrder(next);
+    },
+    [moduleOrder, persistModuleOrder]
+  );
+
+  /** Mailbox destinations a message can be dropped onto. */
+  const MESSAGE_DROP_ACTIONS: Record<string, "moveToInbox" | "moveToSpam" | "moveToTrash" | "archive"> = useMemo(
+    () => ({ inbox: "moveToInbox", spam: "moveToSpam", trash: "moveToTrash", archive: "archive" }),
+    []
+  );
+
+  /** Drop the dragged messages onto a mailbox module or a label. */
+  const dropMessagesOn = useCallback(
+    async (destination: string) => {
+      const rows = draggedMessagesRef.current.filter((message) => !message.isComposeDraft);
+      draggedMessagesRef.current = [];
+      if (rows.length === 0) return;
+      const items = rows.map((message) => ({ accountEmail: message.accountEmail, messageId: message.id }));
+      const runAction = (action: string) =>
+        fetch("/api/gmail/actions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, items }),
+        });
+      try {
+        if (destination.startsWith("label:")) {
+          const labelId = destination.slice("label:".length);
+          const applied = await applyLabelToSelection(labelId, rows);
+          if (!applied) return;
+          // Same as "Move to → label": tag it, then take it out of the Inbox.
+          if (activeModule === "inbox") await runAction("archive");
+          const label = labels.find((entry) => entry.id === labelId);
+          showSentToast(`Moved to "${label?.name || "label"}"`);
+        } else {
+          const action = MESSAGE_DROP_ACTIONS[destination];
+          if (!action) return;
+          const response = await runAction(action);
+          if (!response.ok) return;
+          const target = MODULES.find((item) => item.key === destination);
+          showSentToast(`Moved ${rows.length === 1 ? "message" : `${rows.length} messages`} to ${target?.label || destination}`);
+        }
+        // Update in place — the moved rows just leave the list. No mailbox re-fetch.
+        removeRowsLocally(rows);
+        void Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
+      } catch {
+        /* transient — the list refresh below/next poll reconciles */
+      }
+    },
+    [
+      MESSAGE_DROP_ACTIONS,
+      activeModule,
+      applyLabelToSelection,
+      labels,
+      loadMailboxCounts,
+      loadUnreadBadges,
+      removeRowsLocally,
+      showSentToast,
+    ]
+  );
+
+  /** Start dragging a row: drag the whole selection when the row is part of it. */
+  const startMessageDrag = useCallback(
+    (event: React.DragEvent, message: MessageRow) => {
+      const key = rowKey(message);
+      const dragging = selectedRows.includes(key) ? selectedMessageRows : [message];
+      draggedMessagesRef.current = dragging;
+      setIsDraggingMessages(true);
+      event.dataTransfer.effectAllowed = "move";
+      // Firefox requires data to be set for the drag to start at all.
+      event.dataTransfer.setData("text/plain", dragging.map((m) => m.id).join(","));
+    },
+    [rowKey, selectedMessageRows, selectedRows]
+  );
+
+  const endMessageDrag = useCallback(() => {
+    setIsDraggingMessages(false);
+    setDropTargetKey(null);
+    draggedMessagesRef.current = [];
+  }, []);
+
   const handleMoveToChange = async (value: string) => {
     if (!value) return;
-    if (value === "inbox") await applyAction("moveToInbox");
-    if (value === "spam") await applyAction("moveToSpam");
-    if (value === "trash") await applyAction("moveToTrash");
-    if (value === "archive") await applyAction("archive");
+    if (value.startsWith("label:")) {
+      // Gmail semantics for "move to a label": apply the label, then take it out of the
+      // Inbox so it actually leaves the current view instead of just being tagged.
+      const labelId = value.slice("label:".length);
+      const rows = [...selectedMessageRows];
+      setMoveMenuOpen(null);
+      setActionError("");
+      if (rows.length === 0) {
+        // Nothing is checked and no message is open — say so instead of no-opping.
+        setActionError("Select a message first, then choose where to move it.");
+        return;
+      }
+      const moved = await applyLabelToSelection(labelId, rows);
+      if (moved) {
+        const label = labels.find((entry) => entry.id === labelId);
+        showSentToast(`Moved to "${label?.name || "label"}"`);
+        // Filing under a label means leaving the Inbox; archive quietly, then drop the rows
+        // from the list in place rather than re-fetching the whole mailbox.
+        if (activeModule === "inbox") await archiveRowsQuietly(rows);
+        removeRowsLocally(rows);
+        if (viewMode === "message") setViewMode("list");
+        void Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
+      }
+      return;
+    }
+    // Mailbox destinations: close the menu, drop the rows from the list right away, and let
+    // Gmail catch up in the background. Waiting on the round trip is what made this feel slow.
+    const action =
+      value === "inbox" ? "moveToInbox" : value === "spam" ? "moveToSpam" : value === "trash" ? "moveToTrash" : "archive";
+    const rows = [...selectedMessageRows];
     setMoveMenuOpen(null);
+    if (rows.length === 0) return;
+    const items = rows
+      .filter((message) => !message.isComposeDraft)
+      .map((message) => ({ accountEmail: message.accountEmail, messageId: message.id }));
+    removeRowsLocally(rows);
+    if (viewMode === "message") setViewMode("list");
+    if (items.length === 0) return;
+    void fetch("/api/gmail/actions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, items }),
+    })
+      .then(() => Promise.all([loadMailboxCounts(), loadUnreadBadges()]))
+      .catch(() => setActionError("Failed to move the message."));
   };
 
   const openReplyCompose = () => {
@@ -2435,7 +2757,7 @@ ${sourceText}`;
       showSentToast("Message Sent");
       setInlineComposeMode(null);
       invalidateMessagesCache();
-      await Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
+      void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
       setDetailError("");
       setSelectedMessageDetail(null);
     } catch (error) {
@@ -2591,9 +2913,10 @@ ${sourceText}`;
     setNewLabelModalOpen(true);
   };
 
-  const submitNewLabel = async () => {
+  /** `rawName` comes straight from the dialog — state hasn't flushed yet when it submits. */
+  const submitNewLabel = async (rawName?: string) => {
     const primary = selectedAccounts[0];
-    const name = newLabelName.trim();
+    const name = (rawName ?? newLabelName).trim();
     if (!primary || !name || creatingLabel) return;
     setCreatingLabel(true);
     try {
@@ -2612,6 +2935,34 @@ ${sourceText}`;
     }
   };
 
+  /** Rename a label — PATCHes Gmail so the change is real, not just local. */
+  const renameLabel = async (labelId: string, nextName: string) => {
+    const primary = selectedAccounts[0];
+    const trimmed = nextName.trim();
+    if (!primary || !trimmed || renamingLabel) return;
+    setRenamingLabel(true);
+    setActionError("");
+    try {
+      const response = await fetch("/api/gmail/labels", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountEmail: primary, id: labelId, name: trimmed }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        setActionError(payload?.message || "Failed to rename the label in Gmail.");
+      } else {
+        if (activeLabelId === labelId) setActiveLabelName(trimmed);
+        await loadLabels();
+      }
+    } catch {
+      setActionError("Failed to rename the label in Gmail.");
+    } finally {
+      setRenamingLabel(false);
+      setLabelToRename(null);
+    }
+  };
+
   const deleteLabel = (label: { id: string; name: string }) => {
     if (!selectedAccounts[0]) return;
     setLabelToDelete(label);
@@ -2622,18 +2973,22 @@ ${sourceText}`;
     if (!primary || !labelToDelete || deletingLabel) return;
     setDeletingLabel(true);
     try {
-      await fetch("/api/gmail/labels", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountEmail: primary, id: labelToDelete.id }),
-      });
-      if (activeLabelId === labelToDelete.id) {
+      // Query params, not a DELETE body — and check the result, so a Gmail-side failure
+      // surfaces instead of the label silently reappearing on the next load.
+      const response = await fetch(
+        `/api/gmail/labels?accountEmail=${encodeURIComponent(primary)}&id=${encodeURIComponent(labelToDelete.id)}`,
+        { method: "DELETE" }
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        setActionError(payload?.message || "Failed to delete the label in Gmail.");
+      } else if (activeLabelId === labelToDelete.id) {
         setActiveLabelId("");
         setActiveLabelName("");
       }
       await loadLabels();
     } catch {
-      /* ignore */
+      setActionError("Failed to delete the label in Gmail.");
     } finally {
       setDeletingLabel(false);
       setLabelToDelete(null);
@@ -2837,9 +3192,9 @@ ${sourceText}`;
       setRequestReceipt(false);
       if (activeModule === "sent" || activeModule === "drafts") {
         invalidateMessagesCache();
-        await Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
+        void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
       } else {
-        await Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
+        void Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
       }
     } catch (error) {
       setComposeError(error instanceof Error ? error.message : "Failed to send email.");
@@ -3055,11 +3410,11 @@ ${sourceText}`;
     printComposeContent(composeSubject || "(No Subject)", html);
   };
 
-  const messagesCountLabel = `${filteredMessages.length} Messages`;
+  const messagesCountLabel = `${filteredMessages.length} Emails`;
   const activeModuleLabel = activeLabelId
     ? activeLabelName
     : MODULES.find((item) => item.key === activeModule)?.label || "Mailbox";
-  const pageLabel = `Page ${currentPage}`;
+  const pageLabel = hasNextPage ? `Page ${currentPage}` : `Page ${currentPage} / ${currentPage}`;
   const composeFromOptions = Array.from(
     new Set([
       ...(selectedAccounts.length > 0 ? selectedAccounts : connectedAccounts.map((entry) => entry.email)),
@@ -3082,7 +3437,7 @@ ${sourceText}`;
   const spamActionType = activeModule === "spam" ? "moveToInbox" : "moveToSpam";
 
   const moveToOptions = useMemo(() => {
-    const allOptions: Array<{ value: "inbox" | "archive" | "spam" | "trash"; label: string }> = [
+    const allOptions: Array<{ value: string; label: string }> = [
       { value: "inbox", label: "Inbox" },
       { value: "archive", label: "Archive" },
       { value: "spam", label: "Spam" },
@@ -3095,90 +3450,97 @@ ${sourceText}`;
       trash: "trash",
     };
     const excluded = activeAsDestination[activeModule];
-    return excluded ? allOptions.filter((option) => option.value !== excluded) : allOptions;
-  }, [activeModule]);
+    const mailboxes = excluded ? allOptions.filter((option) => option.value !== excluded) : allOptions;
+    // The user's own labels are valid move destinations too — prefixed so the handler can
+    // tell them apart from the built-in mailboxes, and the label you're already viewing is
+    // dropped since "move here" would be a no-op.
+    const labelOptions = labels
+      .filter((label) => label.id !== activeLabelId)
+      .map((label) => ({ value: `label:${label.id}`, label: label.name }));
+    return [...mailboxes, ...labelOptions];
+  }, [activeModule, labels, activeLabelId]);
 
   // Empty-list chrome: with nothing to act on, bulk-select and paging are dead controls, so hide
   // them. Search is the exception — when a query is what emptied the list, hiding the box would
   // trap the user with no way to clear it, so it stays whenever a term is active.
+  // Tracker dots. The list itself is fetched without bodies (metadata only) so it paints fast,
+  // so the beacon scan runs right after in one batched request per account and fills the dots in.
+  // Verdicts are cached by message id, so paging back and forth doesn't re-scan.
+  useEffect(() => {
+    if (messagesLoading) return;
+    // De-dupe against a ref, not state: keying off `messageTrackers` meant every batch of
+    // results re-ran this effect for every other row on screen.
+    const pending = conversationRows.filter(
+      (message) => !message.isComposeDraft && message.id && !scannedIdsRef.current.has(message.id)
+    );
+    pending.forEach((message) => scannedIdsRef.current.add(message.id));
+    if (pending.length === 0) return;
+    const byAccount = new Map<string, string[]>();
+    for (const message of pending) {
+      if (!message.accountEmail) continue;
+      const list = byAccount.get(message.accountEmail) || [];
+      list.push(message.id);
+      byAccount.set(message.accountEmail, list);
+    }
+    let cancelled = false;
+    (async () => {
+      for (const [accountEmail, messageIds] of byAccount) {
+        try {
+          const response = await fetch("/api/gmail/tracker-scan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accountEmail, messageIds }),
+          });
+          if (!response.ok || cancelled) continue;
+          const payload = await response.json().catch(() => null);
+          const trackers = payload?.trackers;
+          if (!trackers || cancelled) continue;
+          setMessageTrackers((prev) => ({ ...prev, ...trackers }));
+        } catch {
+          /* a failed scan just leaves those rows dot-less */
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationRows, messagesLoading]);
+
+  /** The rail's mailbox rows: visible modules in the user's saved order. */
+  const navItems = useMemo(
+    () =>
+      orderModules(
+        MODULES.filter((item) => item.key === "inbox" || !hiddenModules.includes(item.key)),
+        moduleOrder
+      ),
+    [hiddenModules, moduleOrder]
+  );
+
+  // The toolbar stays fully populated on an empty mailbox — an empty Inbox should still show
+  // its count, refresh, search and paging, exactly like a full one. Only select-all is
+  // disabled, since there is genuinely nothing to select.
   const mailboxListIsEmpty = !messagesLoading && conversationRows.length === 0;
-  const hasActiveSearch = searchTerm.trim().length > 0;
-  const showListSearch = !mailboxListIsEmpty || hasActiveSearch;
-  const showListPaging = !mailboxListIsEmpty;
+  const showListSearch = true;
+  const showListPaging = true;
 
   return (
-    <div className={`email-space-bg relative w-full h-full text-[#1E1B2E] flex flex-col overflow-hidden ${panelFont.className}`}>
-      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-        <div className="email-stars" aria-hidden />
-        <div className="email-stars email-stars--2" aria-hidden />
-        <div className="email-vignette" aria-hidden />
-      </div>
+    <div className={`email-shell relative w-full h-full text-[#1E1B2E] flex flex-col overflow-hidden ${panelFont.className}`}>
       <style jsx global>{`
-        .email-space-bg { background: #18042a; }
-        .email-stars {
-          position: absolute;
-          inset: -10%;
-          z-index: 0;
-          pointer-events: none;
-          background-image:
-            radial-gradient(1.5px 1.5px at 25px 35px, rgba(255,255,255,0.9), transparent),
-            radial-gradient(1.5px 1.5px at 120px 80px, rgba(255,255,255,0.7), transparent),
-            radial-gradient(1px 1px at 70px 160px, rgba(255,255,255,0.8), transparent),
-            radial-gradient(1px 1px at 180px 50px, rgba(255,255,255,0.6), transparent),
-            radial-gradient(1.5px 1.5px at 200px 140px, rgba(255,255,255,0.85), transparent),
-            radial-gradient(1px 1px at 40px 110px, rgba(255,255,255,0.5), transparent);
-          background-repeat: repeat;
-          background-size: 220px 220px;
-          opacity: 0.8;
-          animation: email-stars-drift 20s linear infinite;
-        }
-        .email-stars--2 {
-          background-size: 440px 440px;
-          opacity: 0.5;
-          animation: email-stars-drift-2 34s linear infinite;
-        }
-        @keyframes email-stars-drift { to { background-position: 220px 220px; } }
-        @keyframes email-stars-drift-2 { to { background-position: 440px 440px; } }
-        .email-vignette {
-          position: absolute;
-          inset: 0;
-          z-index: 0;
-          pointer-events: none;
-          background: radial-gradient(120% 120% at 50% 25%, transparent 52%, rgba(8,1,18,0.6) 100%);
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .email-stars, .email-stars--2 { animation: none; }
+        /* App shell — a flat, modern dark canvas (no animated starfield). One soft
+           brand glow off the top edge keeps it from reading as a plain black box,
+           and it costs nothing to paint since it never moves. */
+        .email-shell {
+          background:
+            radial-gradient(115% 70% at 50% -12%, rgba(112, 28, 192, 0.28) 0%, rgba(112, 28, 192, 0.06) 45%, transparent 72%),
+            #0C0715;
         }
         /* Empty-mailbox envelope: a slow vertical drift so the state reads as idle, not broken. */
         @keyframes mailboxFloat {
           0%, 100% { transform: translateY(-2px); }
           50% { transform: translateY(2px); }
         }
-        /* Compose CTA. Vierra purples only — no magenta. Travels continuously in ONE direction:
-           the gradient contains exactly TWO identical cycles across a 200%-wide background, so
-           after shifting by one element width the pattern lines up with where it started and the
-           loop is seamless — no bands, no snap at the wrap. Hover just speeds the same travel up.
-           Animating background-position keeps it GPU-cheap. */
-        .compose-cta {
-          background-image: linear-gradient(
-            100deg,
-            #5E17A8 0%, #701CC0 12.5%, #8B3BEE 25%, #701CC0 37.5%,
-            #5E17A8 50%, #701CC0 62.5%, #8B3BEE 75%, #701CC0 87.5%, #5E17A8 100%
-          );
-          background-size: 200% 100%;
-          animation: composeGradient 6s linear infinite;
-        }
-        /* Matches the site's .audit-glow cadence: 6s idle, 2s on hover. */
-        .compose-cta:hover { animation-duration: 2s; }
-        @keyframes composeGradient {
-          /* 100% -> 0% shifts the oversized background rightwards, so the bands travel
-             LEFT to RIGHT. (0% -> 100% moves the image left, i.e. the wrong way.) */
-          from { background-position: 100% 50%; }
-          to { background-position: 0% 50%; }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .compose-cta, .compose-cta:hover { animation: none; }
-        }
+        /* Compose shares Ask Artemis's drifting radial wash — defined in globals.css so the
+           containment (position/overflow) and the ::before layer live together. */
       `}</style>
       {step === "gate" ? (
         gmailLoading ? (
@@ -3204,13 +3566,28 @@ ${sourceText}`;
           </div>
         )
       ) : (
-        <div className="relative z-10 flex-1 w-full overflow-hidden px-4 md:px-6 py-4">
-          <div className="w-full max-w-[1700px] mx-auto h-full overflow-hidden">
+        <div className="relative z-10 flex-1 w-full min-h-0 overflow-hidden">
+          <div className="w-full h-full min-h-0 overflow-hidden">
             {(
-              <div className="grid grid-cols-[248px_minmax(720px,1fr)] gap-5 h-full overflow-hidden">
-                <div className={`rounded-xl ${GLASS_CHROME} ${SHADOW_SM} p-3 h-full overflow-hidden flex flex-col`}>
-                  <div className="flex items-center justify-center pt-3 pb-7">
-                    <Image src={BRAND_LOGO.wordmarkDark} alt="Vierra" width={168} height={42} className="h-10 w-auto" priority />
+              /* One continuous surface: no gap, no card ridges — the rail and the content are
+                 divided by a single hairline, the way a mail client reads as one system.
+                 `minmax(0,1fr)` (never a 720px floor) lets the content column actually shrink
+                 instead of pushing the grid off-screen; the rail collapses to icons below `md`. */
+              <div className="grid h-full min-h-0 grid-cols-[64px_minmax(0,1fr)] overflow-hidden md:grid-cols-[236px_minmax(0,1fr)] xl:grid-cols-[268px_minmax(0,1fr)]">
+                <div className="email-rail flex h-full min-h-0 flex-col overflow-hidden px-2 py-3 md:px-3">
+                  {/* Brand — centered in the rail, white wordmark on the dark glass. */}
+                  <div className="flex items-center justify-center px-1 pb-5 pt-2 md:pb-6 md:pt-3">
+                    {/* `wordmarkLight` is byte-identical to the dark asset, so it never rendered
+                        white. Force it the same way the shared loading screen does. */}
+                    <Image
+                      src={BRAND_LOGO.wordmarkLoader}
+                      alt="Vierra"
+                      width={200}
+                      height={50}
+                      className="hidden h-11 w-auto brightness-0 invert md:block"
+                      priority
+                    />
+                    <Image src={BRAND_LOGO.mark} alt="Vierra" width={36} height={36} className="h-8 w-auto md:hidden" priority />
                   </div>
                   {/* Compose CTA. Hover only brightens — no lift and no shadow swap, which read as
                       a jumpy drop-shadow. Transitioning `filter` alone also leaves the gradient
@@ -3220,20 +3597,79 @@ ${sourceText}`;
                     onClick={() => {
                       void openNewCompose();
                     }}
-                    className="compose-cta w-full mb-3 inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold text-white shadow-[0_3px_12px_-5px_rgba(94,23,168,0.5)] transition-[filter] duration-200 ease-out hover:brightness-[1.08] active:brightness-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#FAFAFB]"
+                    className="compose-cta mb-4 inline-flex w-full items-center justify-center gap-2 rounded-md px-2 py-3 text-sm font-medium text-white shadow-[0_6px_20px_-8px_rgba(94,23,168,0.9)] transition-[filter] duration-200 ease-out hover:brightness-[1.08] active:brightness-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 md:px-3.5"
                   >
-                    <FiEdit3 className="w-4 h-4" />
-                    Compose
+                    <FiEdit3 className="w-4 h-4 shrink-0" />
+                    <span className="hidden md:inline">Compose</span>
                   </button>
 
                   <div className="space-y-0.5 flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
-                    {MODULES.filter((item) => item.key === "inbox" || !hiddenModules.includes(item.key)).map((item) => (
+                    {/* Landing strip for the very top of the list. Only live while a nav item is
+                        being dragged; without it the topmost slot is unreachable, because the
+                        pointer sits in the gap ABOVE the first row rather than on it. */}
+                    {draggingModuleKey ? (
+                      <div
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                          setDropTargetKey("__top__");
+                        }}
+                        onDragLeave={() => setDropTargetKey((key) => (key === "__top__" ? null : key))}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          setDropTargetKey(null);
+                          if (draggingModuleKey) moveModuleToTop(draggingModuleKey);
+                          setDraggingModuleKey(null);
+                        }}
+                        className={`relative -mt-1 h-3 rounded ${
+                          dropTargetKey === "__top__"
+                            ? "after:pointer-events-none after:absolute after:inset-x-0 after:top-1/2 after:h-[2px] after:-translate-y-1/2 after:rounded-full after:bg-[#8F42FF] after:content-['']"
+                            : ""
+                        }`}
+                      />
+                    ) : null}
+                    {navItems.map((item) => (
                       (() => {
                         const count = moduleCount(item.key);
+                        const isActive = activeModule === item.key && !activeLabelId;
+                        const isLastNavItem = navItems[navItems.length - 1]?.key === item.key;
                         return (
                       <button
                         key={item.key}
                         type="button"
+                        title={item.label}
+                        /* Drag the item itself to reorder; drop messages on it to move them. */
+                        draggable={!isDraggingMessages}
+                        onDragStart={(event) => {
+                          setDraggingModuleKey(item.key);
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData("text/plain", item.key);
+                        }}
+                        onDragEnd={() => {
+                          setDraggingModuleKey(null);
+                          setDropTargetKey(null);
+                        }}
+                        onDragOver={(event) => {
+                          const canDrop = isDraggingMessages
+                            ? Boolean(MESSAGE_DROP_ACTIONS[item.key])
+                            : Boolean(draggingModuleKey);
+                          if (!canDrop) return;
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                          setDropTargetKey(item.key);
+                        }}
+                        onDragLeave={() => setDropTargetKey((key) => (key === item.key ? null : key))}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          setDropTargetKey(null);
+                          if (isDraggingMessages) {
+                            void dropMessagesOn(item.key);
+                            endMessageDrag();
+                            return;
+                          }
+                          if (draggingModuleKey) reorderModuleByDrop(draggingModuleKey, item.key);
+                          setDraggingModuleKey(null);
+                        }}
                         onClick={() => {
                           setActiveModule(item.key);
                           setActiveLabelId("");
@@ -3241,20 +3677,36 @@ ${sourceText}`;
                           setSearchTerm("");
                           setSelectedRows([]);
                         }}
-                        className={`group relative w-full rounded-lg pl-3 pr-2 py-2 text-[13px] text-left flex items-center justify-between gap-2 transition-colors ${
-                          activeModule === item.key && !activeLabelId
-                            ? "bg-[#F4F1FA] text-[#241245] font-semibold before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[3px] before:rounded-r-full before:bg-[#701CC0] before:content-['']"
-                            : "text-[#5B5670] font-medium hover:bg-[#F6F5F8] hover:text-[#2A2540]"
+                        className={`group relative w-full rounded-xl py-2 text-[13px] text-left flex items-center gap-2 transition-colors justify-center md:justify-between px-2 md:pl-3 md:pr-2 ${
+                          draggingModuleKey === item.key ? "email-nav-dragging" : ""
+                        } ${
+                          /* Reordering shows an insertion LINE at the edge the item will land on.
+                             Dropping on the LAST row shows the line BELOW it, so the bottom slot
+                             (after Trash) is reachable; every other row shows it above. */
+                          dropTargetKey === item.key && draggingModuleKey
+                            ? isLastNavItem
+                              ? "after:pointer-events-none after:absolute after:inset-x-0 after:-bottom-[3px] after:h-[2px] after:rounded-full after:bg-[#8F42FF] after:content-['']"
+                              : "after:pointer-events-none after:absolute after:inset-x-0 after:-top-[3px] after:h-[2px] after:rounded-full after:bg-[#8F42FF] after:content-['']"
+                            : ""
+                        } ${
+                          dropTargetKey === item.key && isDraggingMessages
+                            ? "bg-[#701CC0]/15 text-[#EDEBF5]"
+                            : ""
+                        } ${
+                          /* Active row: soft brand wash + a short, fully-rounded tick on the left. */
+                          isActive
+                            ? "email-nav-active font-semibold"
+                            : "font-medium hover:bg-[#F6F5F8]"
                         }`}
                       >
                         <span className="inline-flex items-center gap-2.5 min-w-0">
-                          {item.icon}
-                          <span className="truncate">{item.label}</span>
+                          <span className={isActive ? "text-[#701CC0]" : ""}>{item.icon}</span>
+                          <span className="hidden truncate md:inline">{item.label}</span>
                         </span>
                         {count > 0 ? (
                           <span
-                            className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${
-                              activeModule === item.key && !activeLabelId ? "bg-[#701CC0]/12 text-[#5B21B6]" : "text-[#9A94AD]"
+                            className={`hidden shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold tabular-nums md:inline ${
+                              isActive ? "bg-[#701CC0]/12 text-[#5B21B6]" : "text-[#9A94AD]"
                             }`}
                           >
                             {count}
@@ -3264,11 +3716,24 @@ ${sourceText}`;
                         );
                       })()
                     ))}
+                    <Link
+                      href="/panel/email/settings"
+                      title="Settings"
+                      className="mt-0.5 flex w-full items-center justify-center gap-2.5 rounded-lg px-2 py-2 text-[13px] font-medium transition-colors hover:bg-[#F6F5F8] md:justify-start md:px-3"
+                    >
+                      <FiSettings className="w-4 h-4 shrink-0 text-[#847FA0]" />
+                      <span className="hidden md:inline">Settings</span>
+                    </Link>
                     {labels.length > 0 ? (
                       <>
-                        <div className="mt-2 flex items-center justify-between px-3 pb-1">
-                          <span className="text-[10.5px] font-semibold uppercase tracking-wide text-[#847FA0]">Labels</span>
-                          <button type="button" onClick={createLabel} title="New label" aria-label="New label" className="text-[#847FA0] hover:text-[#701CC0]">
+                        {/* Clear break from the mailbox list above (Trash), then the header sits
+                            tight to its own labels so the group reads as one block.
+                            NOTE: this must be PADDING, not margin — the parent's `space-y-0.5`
+                            sets margin-top on every child with higher specificity, which silently
+                            ate the margin here before. */}
+                        <div className="flex items-center justify-center gap-1 px-2 pb-1 pt-4 md:justify-between md:px-3">
+                          <span className="hidden text-[10.5px] font-semibold uppercase tracking-wide text-[#847FA0] md:inline">Labels</span>
+                          <button type="button" onClick={createLabel} title="New Label" aria-label="New Label" className="text-[#847FA0] hover:text-[#701CC0]">
                             <FiPlus className="w-3.5 h-3.5" />
                           </button>
                         </div>
@@ -3276,20 +3741,48 @@ ${sourceText}`;
                           <div
                             key={label.id}
                             onClick={() => openLabel(label)}
+                            /* Drop messages here to file them under this label. */
+                            onDragOver={(event) => {
+                              if (!isDraggingMessages) return;
+                              event.preventDefault();
+                              event.dataTransfer.dropEffect = "move";
+                              setDropTargetKey(`label:${label.id}`);
+                            }}
+                            onDragLeave={() =>
+                              setDropTargetKey((key) => (key === `label:${label.id}` ? null : key))
+                            }
+                            onDrop={(event) => {
+                              if (!isDraggingMessages) return;
+                              event.preventDefault();
+                              setDropTargetKey(null);
+                              void dropMessagesOn(`label:${label.id}`);
+                              endMessageDrag();
+                            }}
                             className={`group/label relative w-full cursor-pointer rounded-lg px-3 py-2 text-[13px] flex items-center gap-2.5 transition-colors ${
+                              dropTargetKey === `label:${label.id}` ? "bg-[#701CC0]/15 text-[#EDEBF5]" : ""
+                            } ${
                               activeLabelId === label.id
                                 ? "bg-[#F4F1FA] text-[#241245] font-semibold before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-4 before:w-[3px] before:rounded-r-full before:bg-[#701CC0] before:content-['']"
                                 : "text-[#5B5670] font-medium hover:bg-[#F6F5F8] hover:text-[#2A2540]"
                             }`}
                           >
                             <FiTag className="w-4 h-4 shrink-0" style={{ color: activeLabelId === label.id ? "#701CC0" : "#847FA0" }} />
-                            <span className="flex-1 truncate">{label.name}</span>
+                            <span className="hidden flex-1 truncate md:inline">{label.name}</span>
+                            <button
+                              type="button"
+                              onClick={(event) => { event.stopPropagation(); setLabelToRename(label); }}
+                              title="Rename label"
+                              aria-label={`Rename label ${label.name}`}
+                              className="hidden text-[#B9B3CC] opacity-0 transition-opacity hover:text-[#B98CFF] group-hover/label:opacity-100 md:block"
+                            >
+                              <FiEdit3 className="w-3.5 h-3.5" />
+                            </button>
                             <button
                               type="button"
                               onClick={(event) => { event.stopPropagation(); void deleteLabel(label); }}
                               title="Delete label"
                               aria-label={`Delete label ${label.name}`}
-                              className="text-[#B9B3CC] opacity-0 transition-opacity hover:text-[#DC2626] group-hover/label:opacity-100"
+                              className="hidden text-[#B9B3CC] opacity-0 transition-opacity hover:text-[#DC2626] group-hover/label:opacity-100 md:block"
                             >
                               <FiX className="w-3.5 h-3.5" />
                             </button>
@@ -3300,24 +3793,46 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={createLabel}
-                        className="mt-2 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium text-[#847FA0] transition-colors hover:bg-[#F6F5F8] hover:text-[#2A2540]"
+                        title="New Label"
+                        /* Padding, not margin — see the note on the Labels header above. */
+                        className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] font-medium text-[#847FA0] transition-colors hover:bg-[#F6F5F8] hover:text-[#2A2540] md:justify-start md:px-3"
                       >
-                        <FiPlus className="h-4 w-4" /> New label
+                        <FiPlus className="h-4 w-4 shrink-0" />
+                        <span className="hidden md:inline">New Label</span>
                       </button>
                     )}
                   </div>
-                  <div className="mt-2 pt-2 border-t border-[#EEECF3]">
-                    <Link
-                      href="/panel/email/settings"
-                      className="w-full rounded-lg px-3 py-2 text-[13px] font-medium flex items-center gap-2.5 transition-colors text-[#5B5670] hover:bg-[#F6F5F8] hover:text-[#2A2540]"
+                  {/* Ask Artemis sits at the foot of the rail behind a divider; Settings lives
+                      with the mailbox rows (directly under Trash) rather than down here. */}
+                  <div className="mt-2 shrink-0 border-t border-white/[0.07] pt-3">
+                    <div
+                      aria-hidden
+                      className="email-artemis flex w-full flex-col items-center justify-center gap-1.5 rounded-xl px-2 py-4 text-[13px] font-medium md:items-start md:px-3.5"
                     >
-                      <FiSettings className="w-4 h-4 text-[#847FA0]" />
-                      <span>Settings</span>
-                    </Link>
+                      <span className="relative z-10 flex items-center gap-2">
+                        <svg
+                          className="email-artemis-bolt h-4 w-4 shrink-0"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden
+                        >
+                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                        </svg>
+                        <span className="hidden md:inline">Ask Artemis</span>
+                      </span>
+                      <span className="relative z-10 hidden text-[11px] font-normal leading-4 text-[#8F88A8] md:block">
+                        Draft, summarize or reply with AI.
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className={`rounded-xl ${GLASS_SURFACE} ${SHADOW_SM} h-full overflow-hidden flex flex-col`}>
+                {/* Flush with the rail — no card, no ridge. One continuous mail surface. */}
+                <div className="email-content flex h-full min-h-0 flex-col overflow-hidden">
                   {activeModule === "campaigns" ? (
                     <div className="h-full overflow-y-auto">
                       <CampaignsView />
@@ -3409,13 +3924,12 @@ ${sourceText}`;
                     <EmailAnalyticsView accounts={selectedAccounts} />
                   ) : viewMode === "list" ? (
                     <>
-                      {/* With an empty mailbox the whole toolbar is dead weight (nothing to select,
-                          page, count or refresh), so it's hidden entirely — leaving just the empty
-                          state. The exception is an active search: that toolbar must stay so the
-                          query can be cleared, otherwise a no-results search is a dead end. */}
-                      {activeModule !== "contacts" && (!mailboxListIsEmpty || hasActiveSearch) ? (
+                      {/* The toolbar is always present for a mailbox — an empty result must not
+                          make the count/refresh/search/paging vanish. (Clearing the last search
+                          character used to unmount the whole bar mid-type.) */}
+                      {activeModule !== "contacts" ? (
                         <>
-                          <div className="px-4 py-3 border-b border-white/30 flex items-center justify-between gap-3">
+                          <div className="email-toolbar flex items-center justify-between gap-3 px-4 py-2.5">
                             <div className="flex items-center gap-2 flex-wrap">
                               {showListPaging ? (
                                 <input
@@ -3425,7 +3939,8 @@ ${sourceText}`;
                                     conversationRows.every((message) => selectedRows.includes(rowKey(message)))
                                   }
                                   onChange={toggleSelectAll}
-                                  className="h-4 w-4"
+                                  disabled={mailboxListIsEmpty}
+                                  className="email-check h-4 w-4 shrink-0 disabled:opacity-40"
                                 />
                               ) : null}
                               {showListPaging ? (
@@ -3438,43 +3953,105 @@ ${sourceText}`;
                                       void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
                                     }}
                                     disabled={messagesLoading}
-                                    className={ICON_BUTTON_SOLID}
+                                    className={`${ICON_BUTTON_SOLID} email-tip`}
                                     aria-label="Refresh"
-                                    title="Refresh"
+                                    data-tip="Refresh"
                                   >
-                                    <FiRefreshCw className={`w-4 h-4 ${messagesLoading ? "motion-safe:animate-spin" : ""}`} />
+                                    <MdRefresh className={`h-[18px] w-[18px] ${messagesLoading ? "motion-safe:animate-spin" : ""}`} />
                                   </button>
                                 </>
                               ) : null}
                               {hasSelectedEmails ? (
                                 <>
+                                  <button
+                                    type="button"
+                                    onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
+                                    className={`${ICON_BUTTON_SOLID} email-tip`}
+                                    data-tip={activeModule === "trash" ? "Delete Permanently" : "Move To Trash"}
+                                  >
+                                    <FiTrash2 className="w-4 h-4" />
+                                  </button>
+                                  {activeModule !== "drafts" ? (
+                                    <>
+                                      {/* One adaptive control: offer "Mark As Read" only when every
+                                          selected email is unread; otherwise (all read, or a mix)
+                                          offer "Mark As Unread". */}
+                                      <button
+                                        type="button"
+                                        onClick={() => applyAction(selectionHasUnread ? "markRead" : "markUnread")}
+                                        className={`${ICON_BUTTON_SOLID} email-tip`}
+                                        aria-label={selectionHasUnread ? "Mark As Read" : "Mark As Unread"}
+                                        data-tip={selectionHasUnread ? "Mark As Read" : "Mark As Unread"}
+                                      >
+                                        {selectionHasUnread ? (
+                                          <FiCheckSquare className="w-4 h-4" />
+                                        ) : (
+                                          <FiMail className="w-4 h-4" />
+                                        )}
+                                      </button>
+                                    </>
+                                  ) : null}
+                                  {activeModule !== "drafts" ? (
+                                    <div ref={moveListMenuRef} className="relative">
+                                      <button
+                                        type="button"
+                                        onClick={() => setMoveMenuOpen((prev) => (prev === "list" ? null : "list"))}
+                                        className={`${ICON_BUTTON_SOLID} email-tip`}
+                                        aria-label="Move To"
+                                        data-tip="Move To"
+                                      >
+                                        <FiMove className="w-4 h-4" />
+                                      </button>
+                                      {moveMenuOpen === "list" ? (
+                                        <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 min-w-[210px] overflow-hidden rounded-xl shadow-2xl">
+                                          <div className="email-menu-heading">Move to</div>
+                                          {moveToOptions
+                                            .filter((option) => !option.value.startsWith("label:"))
+                                            .map((option) => (
+                                              <button
+                                                key={`list-move-${option.value}`}
+                                                type="button"
+                                                onClick={() => handleMoveToChange(option.value)}
+                                                className="email-menu-item flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm"
+                                              >
+                                                {option.value === "inbox" ? <FiInbox className="h-4 w-4 shrink-0" /> : null}
+                                                {option.value === "archive" ? <FiArchive className="h-4 w-4 shrink-0" /> : null}
+                                                {option.value === "spam" ? <FiSlash className="h-4 w-4 shrink-0" /> : null}
+                                                {option.value === "trash" ? <FiTrash2 className="h-4 w-4 shrink-0" /> : null}
+                                                <span className="truncate">{option.label}</span>
+                                              </button>
+                                            ))}
+                                          {moveToOptions.some((option) => option.value.startsWith("label:")) ? (
+                                            <>
+                                              <div className="email-menu-heading border-t border-white/[0.07]">Labels</div>
+                                              <div className="max-h-56 overflow-y-auto">
+                                                {moveToOptions
+                                                  .filter((option) => option.value.startsWith("label:"))
+                                                  .map((option) => (
+                                                    <button
+                                                      key={`list-move-${option.value}`}
+                                                      type="button"
+                                                      onClick={() => handleMoveToChange(option.value)}
+                                                      className="email-menu-item flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm"
+                                                    >
+                                                      <FiTag className="h-4 w-4 shrink-0" />
+                                                      <span className="truncate">{option.label}</span>
+                                                    </button>
+                                                  ))}
+                                              </div>
+                                            </>
+                                          ) : null}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  ) : null}
                                   {activeModule !== "drafts" ? (
                                     <>
                                       <button
                                         type="button"
-                                        onClick={() => applyAction("markRead")}
-                                        disabled={actionLoading}
-                                        className={ICON_BUTTON_SOLID}
-                                        aria-label="Mark As Read"
-                                        title="Mark As Read"
-                                      >
-                                        <FiCheckSquare className="w-4 h-4" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => applyAction("markUnread")}
-                                        disabled={actionLoading}
-                                        className={ICON_BUTTON_SOLID}
-                                        title="Mark As Unread"
-                                      >
-                                        <FiMail className="w-4 h-4" />
-                                      </button>
-                                      <button
-                                        type="button"
                                         onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                                        disabled={actionLoading}
-                                        className={ICON_BUTTON_SOLID}
-                                        title={activeModule === "archive" ? "Unarchive" : "Archive"}
+                                        className={`${ICON_BUTTON_SOLID} email-tip`}
+                                        data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
                                       >
                                         <FiArchive className="w-4 h-4" />
                                       </button>
@@ -3482,15 +4059,14 @@ ${sourceText}`;
                                         <button
                                           type="button"
                                           onClick={() => setSnoozeMenuOpen((open) => !open)}
-                                          disabled={actionLoading}
-                                          className={ICON_BUTTON_SOLID}
-                                          title="Snooze"
+                                          className={`${ICON_BUTTON_SOLID} email-tip`}
+                                          data-tip="Snooze"
                                           aria-label="Snooze"
                                         >
                                           <FiClock className="w-4 h-4" />
                                         </button>
                                         {snoozeMenuOpen ? (
-                                          <div className="absolute z-[130] mt-1 w-44 overflow-hidden rounded-lg border border-[#EAE5F4] bg-white py-1 shadow-lg">
+                                          <div className="email-menu absolute z-[130] mt-1 w-44 overflow-hidden rounded-lg shadow-lg">
                                             {(
                                               [
                                                 ["later", "Later today"],
@@ -3502,7 +4078,7 @@ ${sourceText}`;
                                                 key={preset}
                                                 type="button"
                                                 onClick={() => snoozeSelected(preset)}
-                                                className="block w-full px-3 py-2 text-left text-sm text-[#1E1B2E] hover:bg-[#F5EFFF]"
+                                                className="email-menu-item block w-full px-3 py-2 text-left text-sm"
                                               >
                                                 {label}
                                               </button>
@@ -3512,51 +4088,16 @@ ${sourceText}`;
                                       </div>
                                     </>
                                   ) : null}
-                                  <button
-                                    type="button"
-                                    onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
-                                    disabled={actionLoading}
-                                    className={ICON_BUTTON_SOLID}
-                                    title={activeModule === "trash" ? "Delete Permanently" : "Move To Trash"}
-                                  >
-                                    <FiTrash2 className="w-4 h-4" />
-                                  </button>
-                                  {activeModule !== "drafts" ? (
-                                    <div ref={moveListMenuRef} className="relative">
-                                      <button
-                                        type="button"
-                                        onClick={() => setMoveMenuOpen((prev) => (prev === "list" ? null : "list"))}
-                                        className="inline-flex items-center justify-center rounded-lg border border-[#E5E7EB] p-2 bg-white text-[#374151] hover:bg-[#F9FAFB]"
-                                        title="Move To"
-                                      >
-                                        <FiMove className="w-4 h-4" />
-                                      </button>
-                                      {moveMenuOpen === "list" ? (
-                                        <div className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[140px] rounded-lg border border-[#E5E7EB] bg-white shadow-lg py-1">
-                                          {moveToOptions.map((option) => (
-                                            <button
-                                              key={`list-move-${option.value}`}
-                                              type="button"
-                                              onClick={() => handleMoveToChange(option.value)}
-                                              className="w-full px-3 py-1.5 text-left text-sm text-[#374151] hover:bg-[#F3F4F6]"
-                                            >
-                                              {option.label}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  ) : null}
                                 </>
                               ) : null}
                               {showListSearch ? (
-                                <div className="rounded-lg border border-transparent bg-white px-3 py-1.5 flex items-center gap-2 w-96 max-w-full shadow-sm focus-within:ring-2 focus-within:ring-[#701CC0] transition">
+                                <div className="email-search flex w-96 max-w-full items-center gap-2 rounded-lg px-3 py-1.5 transition">
                                   <FiSearch className="w-4 h-4 text-[#6B7280]" />
                                   <input
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     placeholder="Search"
-                                    className="w-full bg-transparent text-sm text-[#374151] placeholder:text-[#8E93AA] outline-none"
+                                    className="w-full border-0 bg-transparent text-sm text-[#D6D1E6] placeholder:text-[#6F6889] shadow-none outline-none focus:ring-0"
                                   />
                                   {searchTerm.trim() ? (
                                     <button
@@ -3573,25 +4114,29 @@ ${sourceText}`;
                               ) : null}
                             </div>
                             {showListPaging ? (
-                              <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-1">
                                 <button
                                   type="button"
                                   onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                                   disabled={currentPage <= 1 || messagesLoading}
-                                  className={BUTTON_COMPACT}
+                                  className="email-pager"
+                                  aria-label="Previous page"
+                                  title="Previous page"
                                 >
-                                  Prev
+                                  <FiChevronLeft className="h-4 w-4" />
                                 </button>
-                                <div className="text-xs text-[#6B7280] min-w-[60px] text-center">
+                                <span className="min-w-[70px] px-1 text-center text-[11px] tabular-nums text-[#8F88A8]">
                                   {pageLabel}
-                                </div>
+                                </span>
                                 <button
                                   type="button"
                                   onClick={() => setCurrentPage((prev) => prev + 1)}
                                   disabled={!hasNextPage || messagesLoading}
-                                  className={BUTTON_COMPACT}
+                                  className="email-pager"
+                                  aria-label="Next page"
+                                  title="Next page"
                                 >
-                                  Next
+                                  <FiChevronRight className="h-4 w-4" />
                                 </button>
                               </div>
                             ) : null}
@@ -3958,7 +4503,7 @@ ${sourceText}`;
                         ) : conversationRows.length === 0 ? (
                           <MailboxEmpty />
                         ) : (
-                          <div className="divide-y divide-[#EEE6F7]/70">
+                          <div>
                             {conversationRows.map((message) => {
                               const key = rowKey(message);
                               const senderOrTo = activeModule === "sent" ? message.to || "-" : message.from || "-";
@@ -3974,14 +4519,21 @@ ${sourceText}`;
                               const clickCount = Number(message.trackingClickCount || 0);
                               const trackingAge = formatTrackingAge(message.trackingLastOpenedAt);
                               const totalOpenWindow = formatDuration(Number(message.trackingTotalOpenWindowMs || 0));
-                              const trackingReportTooltip = openCount > 0
-                                ? `Opened By Recipient: Yes\nOpens: ${openCount}\nLast Opened: ${trackingAge}\nTotal Tracked: ${totalOpenWindow}\nLink Clicks: ${clickCount}`
-                                : `Opened By Recipient: No\nOpens: 0\nTotal Tracked: 0s\nLink Clicks: ${clickCount}`;
                               const isSelected = selectedRows.includes(key);
+                              const incomingTracker = messageTrackers[message.id];
+                              const outboundTip =
+                                openCount > 0
+                                  ? `Opened by recipient · ${openCount} open${openCount === 1 ? "" : "s"} · last ${trackingAge} · tracked ${totalOpenWindow} · ${clickCount} click${clickCount === 1 ? "" : "s"}`
+                                  : `Tracked — not yet opened · ${clickCount} click${clickCount === 1 ? "" : "s"}`;
                               return (
                                 <button
                                   key={key}
                                   type="button"
+                                  /* Drag onto a sidebar mailbox or label to move it there.
+                                     Compose drafts live only locally, so they aren't draggable. */
+                                  draggable={!message.isComposeDraft}
+                                  onDragStart={(event) => startMessageDrag(event, message)}
+                                  onDragEnd={endMessageDrag}
                                   onClick={() => {
                                     if (message.isComposeDraft) {
                                       openComposeDraftFromRow(message);
@@ -3991,76 +4543,123 @@ ${sourceText}`;
                                     setViewMode("message");
                                     setDetailError("");
                                   }}
-                                  className={`group w-full text-left px-4 py-3 flex items-center gap-2.5 transition hover:bg-[#701CC0]/[0.06] ${
-                                    isSelected ? "bg-[#701CC0]/10" : message.unread ? "bg-[#701CC0]/[0.035]" : ""
-                                  }`}
+                                  /* Row = fixed gutter · sender · subject+snippet · time.
+                                     Colors are explicit here (not inherited from a global remap)
+                                     so read/unread hierarchy is legible on the dark surface. */
+                                  className={`email-row group grid w-full grid-cols-[auto_minmax(0,13rem)_minmax(0,1fr)_auto] items-center gap-x-3 px-4 py-2.5 text-left transition-colors ${
+                                    isSelected ? "is-selected" : ""
+                                  } ${message.unread ? "is-unread" : ""}`}
                                 >
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedRows.includes(key)}
-                                    onClick={(event) => event.stopPropagation()}
-                                    onChange={() => toggleRowSelection(message)}
-                                    className={`h-4 w-4 shrink-0 accent-[#701CC0] transition-opacity ${
-                                      isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                    }`}
-                                  />
-                                  <span
-                                    role="button"
-                                    tabIndex={0}
-                                    onClick={(e) => { e.stopPropagation(); void toggleStar(message); }}
-                                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); void toggleStar(message); } }}
-                                    aria-label={message.starred ? "Unstar" : "Star"}
-                                    title={message.starred ? "Starred" : "Star"}
-                                    className={`shrink-0 cursor-pointer transition-opacity ${message.starred ? "text-[#F5A623] opacity-100" : "text-[#B9B3CC] opacity-0 group-hover:opacity-100 focus:opacity-100"}`}
-                                  >
-                                    <FiStar className={`w-4 h-4 ${message.starred ? "fill-[#F5A623]" : ""}`} aria-hidden />
-                                  </span>
-                                  {message.tracked ? (
+                                  {/* Gutter — always-visible controls, fixed width so every row
+                                      starts its sender text on the same x. */}
+                                  <span className="flex shrink-0 items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedRows.includes(key)}
+                                      onClick={(event) => event.stopPropagation()}
+                                      onChange={() => toggleRowSelection(message)}
+                                      className="email-check h-4 w-4 shrink-0"
+                                    />
                                     <span
-                                      className="inline-flex items-center shrink-0"
-                                      title={trackingReportTooltip}
-                                      aria-label={openCount > 0 ? "Opened by recipient" : "Tracked — not yet opened"}
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={(e) => { e.stopPropagation(); void toggleStar(message); }}
+                                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); void toggleStar(message); } }}
+                                      aria-label={message.starred ? "Unstar" : "Star"}
+                                      title={message.starred ? "Starred" : "Star"}
+                                      className={`shrink-0 cursor-pointer transition-colors ${message.starred ? "text-[#F5A623]" : "text-[#5E5877] hover:text-[#B98CFF]"}`}
                                     >
-                                      <span className={`w-2 h-2 rounded-full ${openCount > 0 ? "bg-[#22C55E]" : "bg-[#9CA3AF]"}`} />
+                                      <FiStar className={`h-4 w-4 ${message.starred ? "fill-[#F5A623]" : ""}`} aria-hidden />
                                     </span>
-                                  ) : null}
+                                    {/* ONE status slot, same 16px box as the checkbox and star so the
+                                        pitch is uniform. (There used to be a second, usually-empty
+                                        slot here for outbound tracking — its width plus the flex gap
+                                        was the phantom space between the star and this dot.)
+                                        Outbound tracking wins on sent mail; otherwise it reports an
+                                        incoming beacon. */}
+                                    <span
+                                      className={`flex w-4 shrink-0 items-center justify-center ${
+                                        message.tracked || incomingTracker?.tracked ? "email-tip" : ""
+                                      }`}
+                                      data-tip={
+                                        message.tracked && incomingTracker?.tracked
+                                          ? `${outboundTip} · Incoming tracker: ${incomingTracker.vendors.length ? incomingTracker.vendors.join(", ") : `${incomingTracker.count} beacon${incomingTracker.count === 1 ? "" : "s"}`}`
+                                          : message.tracked
+                                            ? outboundTip
+                                            : incomingTracker?.tracked
+                                              ? `Email tracked · ${incomingTracker.vendors.length ? incomingTracker.vendors.join(", ") : `${incomingTracker.count} beacon${incomingTracker.count === 1 ? "" : "s"}`}`
+                                              : undefined
+                                      }
+                                      aria-label={
+                                        message.tracked
+                                          ? openCount > 0
+                                            ? "Opened by recipient"
+                                            : "Tracked, not yet opened"
+                                          : incomingTracker?.tracked
+                                            ? "Email tracked"
+                                            : undefined
+                                      }
+                                    >
+                                      {message.tracked ? (
+                                        <span className={`h-1.5 w-1.5 rounded-full ${openCount > 0 ? "bg-[#22C55E]" : "bg-[#6F6889]"}`} />
+                                      ) : incomingTracker?.tracked ? (
+                                        <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E]" />
+                                      ) : null}
+                                    </span>
+                                  </span>
+
+                                  {/* Sender */}
                                   <span
-                                    className={`w-52 shrink-0 truncate text-sm text-[#1E1B2E] ${
-                                      message.unread ? "font-bold" : "font-normal"
+                                    className={`min-w-0 truncate text-[13px] ${
+                                      message.unread ? "font-semibold text-white" : "font-normal text-[#A8A2C0]"
                                     }`}
                                   >
                                     {message.isComposeDraft ? (
                                       <>
-                                        <span className="text-[#F87171] font-medium mr-1">(Draft)</span>
+                                        <span className="mr-1 font-medium text-[#F87171]">(Draft)</span>
                                         {draftSenderLabel ? <span>{draftSenderLabel}</span> : null}
                                       </>
                                     ) : (
                                       senderOrTo
                                     )}
                                   </span>
-                                  {message.threadCount && message.threadCount > 1 ? (
-                                    <span
-                                      className="shrink-0 text-[11px] font-semibold text-[#701CC0] tabular-nums"
-                                      title={`${message.threadCount} messages in this conversation`}
-                                    >
-                                      {message.threadCount}
-                                    </span>
-                                  ) : null}
-                                  <span className="min-w-0 truncate text-sm text-[#1E1B2E]">
-                                    <span className={message.unread ? "font-bold" : "font-medium"}>
-                                      {message.subject || "(No Subject)"}
-                                    </span>
-                                    <span className="font-normal text-[#6B7280]">
-                                      {" "}
-                                      - {message.snippet || "No preview available."}
+
+                                  {/* Subject leads, snippet trails in a quieter tone. */}
+                                  <span className="flex min-w-0 items-center gap-2">
+                                    {message.threadCount && message.threadCount > 1 ? (
+                                      <span
+                                        className="email-tip flex shrink-0 items-center text-[#8F88A8]"
+                                        data-tip={`${message.threadCount} messages in this conversation`}
+                                        aria-label={`${message.threadCount} messages in this conversation`}
+                                      >
+                                        <FiCornerUpRight className="h-3.5 w-3.5" aria-hidden />
+                                      </span>
+                                    ) : null}
+                                    <span className="min-w-0 truncate text-[13px]">
+                                      <span className={message.unread ? "font-semibold text-white" : "font-normal text-[#CFC9E0]"}>
+                                        {message.subject || "(No Subject)"}
+                                      </span>
+                                      <span className="font-normal text-[#7E7897]">
+                                        {"  "}
+                                        {message.snippet || "No preview available."}
+                                      </span>
                                     </span>
                                   </span>
+
+                                  {/* Attachment marker + time */}
+                                  <span className="flex shrink-0 items-center justify-end gap-1.5">
+                                    {incomingTracker?.hasAttachment ? (
+                                      <span className="email-tip flex items-center text-[#8F88A8]" data-tip="Has attachment" aria-label="Has attachment">
+                                        <FiPaperclip className="h-3.5 w-3.5" aria-hidden />
+                                      </span>
+                                    ) : null}
                                   <span
-                                    className={`ml-auto w-24 shrink-0 text-right text-xs text-[#6B7280] ${
-                                      message.unread ? "font-semibold" : "font-normal"
+                                    className={`shrink-0 pl-2 text-right text-[11px] tabular-nums ${
+                                      message.unread ? "font-medium text-[#C6C0DA]" : "font-normal text-[#7E7897]"
                                     }`}
                                   >
                                     {formatDate(message.timestamp, message.date)}
+                                  </span>
                                   </span>
                                 </button>
                               );
@@ -4163,13 +4762,13 @@ ${sourceText}`;
                               <FiMove className="w-4 h-4" />
                             </button>
                             {moveMenuOpen === "message" ? (
-                              <div className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[140px] rounded-lg border border-[#E5E7EB] bg-white shadow-lg py-1">
+                              <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 min-w-[160px] overflow-hidden rounded-lg shadow-lg">
                                 {moveToOptions.map((option) => (
                                   <button
                                     key={`message-move-${option.value}`}
                                     type="button"
                                     onClick={() => handleMoveToChange(option.value)}
-                                    className="w-full px-3 py-1.5 text-left text-sm text-[#374151] hover:bg-[#F3F4F6]"
+                                    className="email-menu-item w-full px-3 py-2 text-left text-sm"
                                   >
                                     {option.label}
                                   </button>
@@ -4213,7 +4812,7 @@ ${sourceText}`;
                       </div>
 
                       {selectedMessage ? (
-                        <div className="flex-1 overflow-y-auto px-6 py-5">
+                        <div className="flex-1 overflow-y-auto px-6 pb-0 pt-5">
                           <h2 className="text-[22px] font-semibold tracking-tight text-[#1E1B2E]">{selectedMessage.subject || "(No Subject)"}</h2>
                           <div className="mt-4 flex items-start gap-3">
                             {selectedMessageDetail?.senderPhotoUrl ? (
@@ -4265,8 +4864,11 @@ ${sourceText}`;
                               <p className="text-sm text-red-600">{detailError}</p>
                             ) : (
                               <div className="space-y-4">
+                                {/* `email-body-card` keeps the sender's own HTML on a light surface —
+                                    that markup is authored for white backgrounds, so the panel's
+                                    dark theme deliberately stops at this boundary. */}
                                 {threadMessages.map((threadMessage, index) => (
-                                  <div key={`${threadMessage.id || index}`} className="rounded-2xl border border-white/70 bg-white/70 p-5">
+                                  <div key={`${threadMessage.id || index}`} className="email-body-card rounded-2xl border border-white/70 bg-white/70 p-5">
                                     {threadMessage.bodyHtml ? (
                                       <div
                                         className="text-sm text-[#374151] leading-6"
@@ -5164,7 +5766,7 @@ ${sourceText}`;
                         <FiZap className="h-3.5 w-3.5" aria-hidden /> Rewrite
                       </button>
                       {artemisRewriteOpen ? (
-                        <div className="absolute bottom-full left-0 z-[130] mb-1 w-44 overflow-hidden rounded-lg border border-[#EAE5F4] bg-white py-1 shadow-lg">
+                        <div className="email-menu absolute bottom-full left-0 z-[130] mb-1 w-44 overflow-hidden rounded-lg shadow-lg">
                           {([
                             ["shorten", "Make shorter"],
                             ["expand", "Expand"],
@@ -5176,7 +5778,7 @@ ${sourceText}`;
                               key={mode}
                               type="button"
                               onClick={() => handleArtemisRewrite(mode)}
-                              className="block w-full px-3 py-2 text-left text-sm text-[#1E1B2E] hover:bg-[#F5EFFF]"
+                              className="email-menu-item block w-full px-3 py-2 text-left text-sm"
                             >
                               {label}
                             </button>
@@ -5576,66 +6178,54 @@ ${sourceText}`;
       />
       <ConfirmActionModal
         isOpen={Boolean(labelToDelete)}
-        title="Delete label"
+        title="Delete Label"
         message={
           <>
-            Delete label{" "}
-            <span className="font-semibold text-[#1E1B2E]">{labelToDelete?.name || "this label"}</span>? Messages keep their content.
+            Are you sure you want to delete{" "}
+            <span className="font-semibold text-[#1E1B2E]">{labelToDelete?.name || "this label"}</span>? Messages keep
+            their content.
           </>
         }
-        confirmLabel={deletingLabel ? "Deleting..." : "Delete label"}
+        confirmLabel={deletingLabel ? "Deleting..." : "Delete Label"}
+        dark
         onCancel={() => {
           if (deletingLabel) return;
           setLabelToDelete(null);
         }}
         onConfirm={() => void confirmDeleteLabel()}
       />
-      {newLabelModalOpen ? (
-        <div
-          className={`fixed inset-0 z-[120] flex items-center justify-center p-4 ${GLASS_SCRIM}`}
-          onClick={() => {
-            if (!creatingLabel) setNewLabelModalOpen(false);
-          }}
-        >
-          <div
-            className={`w-full max-w-sm rounded-2xl ${GLASS_MODAL} p-6`}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h3 className="text-lg font-semibold tracking-tight text-[#1E1B2E]">New label</h3>
-            <p className="mt-1 text-sm text-[#6B7280]">Create a label to organize this mailbox.</p>
-            <input
-              autoFocus
-              value={newLabelName}
-              onChange={(event) => setNewLabelName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void submitNewLabel();
-                if (event.key === "Escape" && !creatingLabel) setNewLabelModalOpen(false);
-              }}
-              placeholder="Label name"
-              maxLength={100}
-              className="mt-4 w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm text-[#1E1B2E] outline-none transition focus:border-[#701CC0] focus:ring-2 focus:ring-[#701CC0]/20"
-            />
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setNewLabelModalOpen(false)}
-                disabled={creatingLabel}
-                className="rounded-lg border border-[#E5E7EB] px-4 py-2 text-sm font-medium text-[#374151] transition hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void submitNewLabel()}
-                disabled={!newLabelName.trim() || creatingLabel}
-                className="rounded-lg bg-[#701CC0] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#5f17a5] disabled:opacity-50"
-              >
-                {creatingLabel ? "Creating..." : "Create label"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {/* Shares the panel-wide PromptModal so it matches the site's dialog styling. */}
+      <PromptModal
+        open={Boolean(labelToRename)}
+        title="Rename Label"
+        fields={[{ name: "name", placeholder: "Label Name", required: true, maxLength: 100, defaultValue: labelToRename?.name || "" }]}
+        confirmLabel="Save"
+        busyLabel="Saving..."
+        dark
+        busy={renamingLabel}
+        onCancel={() => {
+          if (!renamingLabel) setLabelToRename(null);
+        }}
+        onSubmit={(values) => {
+          if (labelToRename) void renameLabel(labelToRename.id, values.name);
+        }}
+      />
+      <PromptModal
+        open={newLabelModalOpen}
+        title="New Label"
+        fields={[{ name: "name", placeholder: "Label Name", required: true, maxLength: 100 }]}
+        confirmLabel="Create Label"
+        busyLabel="Creating..."
+        dark
+        busy={creatingLabel}
+        onCancel={() => {
+          if (!creatingLabel) setNewLabelModalOpen(false);
+        }}
+        onSubmit={(values) => {
+          setNewLabelName(values.name);
+          void submitNewLabel(values.name);
+        }}
+      />
       <PromptModal
         open={artemisPromptOpen}
         title="Draft with Artemis"
