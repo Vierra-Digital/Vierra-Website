@@ -269,7 +269,7 @@ function SettingsNav({ filter }: { filter: string }) {
     <nav aria-label="Settings sections" className="space-y-5">
       {groups.map((group) => (
         <div key={group.group}>
-          <div className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#9A94AF]">
+          <div className="mb-1.5 px-2.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[#7E7897]">
             {group.group}
           </div>
           <ul className="space-y-0.5">
@@ -280,6 +280,7 @@ function SettingsNav({ filter }: { filter: string }) {
                 <li key={item}>
                   <a
                     href={`#${id}`}
+                    aria-current={isActive ? "true" : undefined}
                     onClick={(event) => {
                       // Smooth-scroll without pushing a history entry per click.
                       const target = document.getElementById(id);
@@ -288,10 +289,8 @@ function SettingsNav({ filter }: { filter: string }) {
                       target.scrollIntoView({ behavior: "smooth", block: "start" });
                       setActiveId(id);
                     }}
-                    className={`block truncate rounded-lg px-2 py-1.5 text-[13px] transition-colors ${
-                      isActive
-                        ? "bg-[#701CC0]/10 font-semibold text-[#701CC0]"
-                        : "text-[#5B5670] hover:bg-[#F4F2F8] hover:text-[#2A2540]"
+                    className={`block truncate rounded-lg px-2.5 py-[7px] text-[13px] transition-colors ${
+                      isActive ? "font-semibold" : "font-normal"
                     }`}
                   >
                     {item}
@@ -1413,9 +1412,9 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               <div className="rounded-lg bg-[#701CC0]/10 p-1.5">
                 <FiMail className="h-5 w-5 text-[#701CC0]" />
               </div>
-              <h1 className="text-2xl font-semibold tracking-tight text-[#1E1B2E] lg:text-3xl">Email settings</h1>
+              <h1 className="text-xl font-semibold tracking-tight text-[#1E1B2E] lg:text-2xl">Email settings</h1>
             </div>
-            <p className="text-sm leading-relaxed text-[#6B7280]">
+            <p className="max-w-2xl text-[13px] leading-relaxed text-[#6B7280]">
               {roleLabel ? (
                 <>
                   <span className="font-medium text-[#374151]">{roleLabel} account.</span>{" "}

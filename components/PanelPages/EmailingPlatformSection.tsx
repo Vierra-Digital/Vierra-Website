@@ -296,6 +296,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [creatingLabel, setCreatingLabel] = useState(false);
   /** Guards double-fires without greying the toolbar out for the whole round trip. */
   const actionInFlightRef = useRef(false);
+  /** Set below; lets applyAction re-sync after a partial failure without a cyclic dep. */
+  const loadMessagesRef = useRef<() => void>(() => {});
   const [labelToDelete, setLabelToDelete] = useState<{ id: string; name: string } | null>(null);
   const [labelToRename, setLabelToRename] = useState<{ id: string; name: string } | null>(null);
   const [renamingLabel, setRenamingLabel] = useState(false);
@@ -1723,6 +1725,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   }, [activeModule, activeLabelId, canLoadMessages, currentPage, debouncedSearch, selectedAccounts, step]);
 
   useEffect(() => {
+    loadMessagesRef.current = () => void loadMessages();
+  }, [loadMessages]);
+
+  useEffect(() => {
     loadMessages();
   }, [loadMessages]);
 
@@ -2323,7 +2329,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       // Optimistic pass: mutate the list immediately so the click lands instantly. The
       // authoritative pass below reconciles once Gmail answers. (Previously every action
       // awaited the round trip AND greyed the toolbar out for its duration.)
-      const optimisticKeys = new Set(selectedRows);
+      const optimisticKeys = new Set(selectedMessageRows.map((message) => rowKey(message)));
       setMessages((prev) =>
         prev
           .map((message) => {
@@ -2378,6 +2384,19 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             throw new Error(payload?.message || "Action failed.");
           }
           results = Array.isArray(payload?.results) ? payload.results : [];
+          // Surface per-message refusals. Previously a 207 passed silently while the rows had
+          // already been removed optimistically, so a failed action looked like it worked.
+          const failures = results.filter((result: any) => result && result.ok === false);
+          if (failures.length > 0) {
+            const reason = String(failures[0]?.error || "Gmail refused the action.");
+            setActionError(
+              failures.length === items.length
+                ? reason
+                : `${failures.length} of ${items.length} messages failed: ${reason}`
+            );
+            invalidateMessagesCache();
+            loadMessagesRef.current();
+          }
         }
         const successfulKeys = new Set(
           results
