@@ -4019,7 +4019,7 @@ ${sourceText}`;
                                         <FiMove className="w-4 h-4" />
                                       </button>
                                       {moveMenuOpen === "list" ? (
-                                        <div className="email-menu absolute right-0 top-[calc(100%+4px)] z-20 min-w-[168px] overflow-hidden rounded-lg py-1 shadow-xl">
+                                        <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 min-w-[164px]">
                                           {moveToOptions
                                             .filter((option) => !option.value.startsWith("label:"))
                                             .map((option) => (
@@ -4027,7 +4027,7 @@ ${sourceText}`;
                                                 key={`list-move-${option.value}`}
                                                 type="button"
                                                 onClick={() => handleMoveToChange(option.value)}
-                                                className="email-menu-item flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px]"
+                                                className="email-menu-item flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[12.5px] font-medium"
                                               >
                                                 {option.value === "inbox" ? <FiInbox className="h-3.5 w-3.5 shrink-0" /> : null}
                                                 {option.value === "archive" ? <FiArchive className="h-3.5 w-3.5 shrink-0" /> : null}
@@ -4038,7 +4038,7 @@ ${sourceText}`;
                                             ))}
                                           {moveToOptions.some((option) => option.value.startsWith("label:")) ? (
                                             <>
-                                              <div className="my-1 border-t border-white/[0.07]" />
+                                              <div className="email-menu-divider" />
                                               <div className="max-h-48 overflow-y-auto">
                                                 {moveToOptions
                                                   .filter((option) => option.value.startsWith("label:"))
@@ -4047,7 +4047,7 @@ ${sourceText}`;
                                                       key={`list-move-${option.value}`}
                                                       type="button"
                                                       onClick={() => handleMoveToChange(option.value)}
-                                                      className="email-menu-item flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px]"
+                                                      className="email-menu-item flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[12.5px] font-medium"
                                                     >
                                                       <FiTag className="h-3.5 w-3.5 shrink-0" />
                                                       <span className="truncate">{option.label}</span>
@@ -4081,7 +4081,7 @@ ${sourceText}`;
                                           <FiClock className="w-4 h-4" />
                                         </button>
                                         {snoozeMenuOpen ? (
-                                          <div className="email-menu absolute z-[130] mt-1 w-44 overflow-hidden rounded-lg shadow-lg">
+                                          <div className="email-menu absolute z-[130] mt-1.5 w-44">
                                             {(
                                               [
                                                 ["later", "Later today"],
@@ -4093,7 +4093,7 @@ ${sourceText}`;
                                                 key={preset}
                                                 type="button"
                                                 onClick={() => snoozeSelected(preset)}
-                                                className="email-menu-item block w-full px-3 py-2 text-left text-sm"
+                                                className="email-menu-item block w-full px-2.5 py-[7px] text-left text-[12.5px] font-medium"
                                               >
                                                 {label}
                                               </button>
@@ -4780,7 +4780,7 @@ ${sourceText}`;
                               <FiMove className="w-4 h-4" />
                             </button>
                             {moveMenuOpen === "message" ? (
-                              <div className="email-menu absolute right-0 top-[calc(100%+4px)] z-20 min-w-[168px] overflow-hidden rounded-lg py-1 shadow-xl">
+                              <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 min-w-[164px]">
                                 {moveToOptions
                                   .filter((option) => !option.value.startsWith("label:"))
                                   .map((option) => (
@@ -4788,7 +4788,7 @@ ${sourceText}`;
                                       key={`message-move-${option.value}`}
                                       type="button"
                                       onClick={() => handleMoveToChange(option.value)}
-                                      className="email-menu-item flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px]"
+                                      className="email-menu-item flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[12.5px] font-medium"
                                     >
                                       {option.value === "inbox" ? <FiInbox className="h-3.5 w-3.5 shrink-0" /> : null}
                                       {option.value === "archive" ? <FiArchive className="h-3.5 w-3.5 shrink-0" /> : null}
@@ -4799,7 +4799,7 @@ ${sourceText}`;
                                   ))}
                                 {moveToOptions.some((option) => option.value.startsWith("label:")) ? (
                                   <>
-                                    <div className="my-1 border-t border-white/[0.07]" />
+                                    <div className="email-menu-divider" />
                                     <div className="max-h-48 overflow-y-auto">
                                       {moveToOptions
                                         .filter((option) => option.value.startsWith("label:"))
@@ -4808,7 +4808,7 @@ ${sourceText}`;
                                             key={`message-move-${option.value}`}
                                             type="button"
                                             onClick={() => handleMoveToChange(option.value)}
-                                            className="email-menu-item flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px]"
+                                            className="email-menu-item flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[12.5px] font-medium"
                                           >
                                             <FiTag className="h-3.5 w-3.5 shrink-0" />
                                             <span className="truncate">{option.label}</span>
@@ -5800,7 +5800,7 @@ ${sourceText}`;
                         <FiZap className="h-3.5 w-3.5" aria-hidden /> Rewrite
                       </button>
                       {artemisRewriteOpen ? (
-                        <div className="email-menu absolute bottom-full left-0 z-[130] mb-1 w-44 overflow-hidden rounded-lg shadow-lg">
+                        <div className="email-menu absolute bottom-full left-0 z-[130] mb-1.5 w-44">
                           {([
                             ["shorten", "Make shorter"],
                             ["expand", "Expand"],
@@ -5812,7 +5812,7 @@ ${sourceText}`;
                               key={mode}
                               type="button"
                               onClick={() => handleArtemisRewrite(mode)}
-                              className="email-menu-item block w-full px-3 py-2 text-left text-sm"
+                              className="email-menu-item block w-full px-2.5 py-[7px] text-left text-[12.5px] font-medium"
                             >
                               {label}
                             </button>

@@ -876,19 +876,32 @@ input[type="search"]::-ms-clear:hover {
 
 /* Dropdown menus in the panel (Move To, Snooze). No vertical gutter — the container's
    surface peeking above the first item and below the last read as odd coloured bands. */
+/* Dropdown menus: a small floating card with inset, rounded rows — the hover fills the
+   row's own shape rather than painting edge-to-edge across the card. */
 .email-shell .email-menu {
-  background: #1B1428;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  padding: 0;
+  background: rgba(28, 21, 42, 0.97);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 12px;
+  padding: 4px;
+  box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(0, 0, 0, 0.35);
 }
 .email-shell .email-menu-item {
-  color: #C6C0DA;
+  color: #CFC9E0;
   background: transparent;
+  border-radius: 7px;
   transition: background-color .12s ease, color .12s ease;
 }
 .email-shell .email-menu-item:hover {
-  background: rgba(143, 66, 255, 0.22);
+  background: rgba(143, 66, 255, 0.26);
   color: #FFFFFF;
+}
+/* Divider spans the card's inner width, not its padding. */
+.email-shell .email-menu .email-menu-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 /* Section heading inside panel dropdowns. */
