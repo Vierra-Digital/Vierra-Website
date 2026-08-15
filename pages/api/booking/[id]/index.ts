@@ -11,6 +11,7 @@ import { getValidMsTeamsAccessTokenForUser } from "@/lib/msteams/tokens";
 import { createZoomMeeting } from "@/lib/calendar/zoomMeetings";
 import { createTeamsMeeting } from "@/lib/calendar/msTeamsMeetings";
 import { handleTeamSlotClaim } from "@/lib/booking/teamSlotClaim";
+import { markCampaignContactMeetingBooked } from "@/lib/campaigns/meetingBooked";
 
 // Anti-abuse throttle for the public (unauthenticated) booking endpoint. Keyed off the bookings
 // table (no new infra) — since only a successful booking creates a row, this directly caps the
@@ -216,13 +217,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 
-  // Best-effort: attribute this booking to a campaign contact and bump NoResponse -> FollowUp,
-  // same signal the old click-tracked landing page used ("they showed interest"). Never blocks
-  // the booking itself — a bad/stale ref shouldn't break confirmation.
+  // Best-effort: attribute this booking to a campaign contact and tag it meeting_booked (fires
+  // the same Discord notification as manually re-categorizing the contact). Never blocks the
+  // booking itself — a bad/stale ref shouldn't break confirmation.
   if (campaignContactId) {
-    await prisma.campaignContact
-      .updateMany({ where: { id: campaignContactId, lead_status: "no_response" }, data: { lead_status: "follow_up" } })
-      .catch(() => {});
+    await markCampaignContactMeetingBooked(campaignContactId, "booking_link_confirmed");
   }
 
   // Confirmation email to the invitee (with an .ics so it works even without a Calendar event).

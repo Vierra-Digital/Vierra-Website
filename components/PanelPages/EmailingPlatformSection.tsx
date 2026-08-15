@@ -57,8 +57,8 @@ import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import PromptModal from "@/components/ui/PromptModal";
 import { MdRefresh } from "react-icons/md";
 import { scoreTrackerImage } from "@/lib/email/trackerDetection";
-import ComposeRichEditor, { printComposeContent, type ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
-import SignPdfModal from "@/components/email/SignPdfModal";
+import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
+import { printComposeContent } from "@/components/email/printCompose";
 import { getJson } from "@/lib/email/panelApi";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
 import {
@@ -138,6 +138,23 @@ const CampaignsView = dynamic(() => import("@/components/PanelPages/CampaignsSec
     </div>
   ),
 });
+
+// Lazy-load the compose editor (~13 @tiptap/* packages — a real chunk of the panel's Script
+// Evaluation time) so it's fetched/parsed/evaluated only when the user actually opens
+// compose/reply, not on every inbox load. printComposeContent is a plain window.print() helper
+// with no TipTap dependency, split into its own module (components/email/printCompose.ts) so
+// importing it here doesn't drag the editor bundle back in as a side effect.
+const ComposeRichEditor = dynamic(() => import("@/components/email/ComposeRichEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full min-h-[200px] flex items-center justify-center">
+      <div className="w-8 h-8 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] motion-safe:animate-spin" />
+    </div>
+  ),
+});
+
+// Lazy-load the PDF sign modal — only needed for the rare "sign this attachment" action.
+const SignPdfModal = dynamic(() => import("@/components/email/SignPdfModal"), { ssr: false });
 type EmailingPlatformSectionProps = {
   initialSelectedAccounts?: string[];
   /** Gmail thread id to auto-open (the whole conversation) once the inbox loads — deep link, e.g. from a Discord alert. */
@@ -1584,6 +1601,22 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
           const payload = await response.json().catch(() => ({}));
           if (!response.ok) return [mailbox, 0] as const;
           const rows: MessageRow[] = Array.isArray(payload?.messages) ? payload.messages : [];
+          // This fetch already pulled the full first page for every standard mailbox — warm
+          // loadMessages's cache with it (identical query shape for a plain tab switch: page
+          // resets to 1, search/label are cleared) so the FIRST visit to that tab also paints
+          // instantly instead of showing the loading spinner. No extra network requests; this
+          // data was previously fetched here just to count unread and then discarded.
+          const cacheKey = query.toString();
+          messagesCacheRef.current.delete(cacheKey);
+          messagesCacheRef.current.set(cacheKey, {
+            messages: rows,
+            accountErrors: Array.isArray(payload?.accountErrors) ? payload.accountErrors : [],
+            hasNextPage: Boolean(payload?.hasNextPage),
+          });
+          if (messagesCacheRef.current.size > MESSAGE_CACHE_LIMIT) {
+            const oldest = messagesCacheRef.current.keys().next().value;
+            if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
+          }
           return [mailbox, rows.filter((row) => row.unread).length] as const;
         })
       );

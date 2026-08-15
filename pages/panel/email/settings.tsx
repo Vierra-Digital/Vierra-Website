@@ -18,10 +18,13 @@ import {
   FiFileText,
   FiFilter,
   FiMail,
+  FiMapPin,
   FiServer,
+  FiSearch,
   FiSlash,
   FiTag,
   FiUsers,
+  FiX,
   FiZap,
 } from "react-icons/fi";
 import { requireSession } from "@/lib/auth";
@@ -79,6 +82,17 @@ function Toggle({
   );
 }
 
+/** Stable anchor id for a section, derived from its title so call sites need no extra prop. */
+function sectionSlug(title: string) {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+/**
+ * Live filter text for the settings page. Held in context so the 19 sections don't each need a
+ * prop threaded through them — a section simply hides itself when it doesn't match.
+ */
+const SettingsFilterContext = React.createContext("");
+
 function SettingsSection({
   title,
   description,
@@ -92,8 +106,14 @@ function SettingsSection({
   right?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const filter = React.useContext(SettingsFilterContext).trim().toLowerCase();
+  if (filter && !`${title} ${description ?? ""}`.toLowerCase().includes(filter)) return null;
   return (
-    <section className={`rounded-xl ${GLASS_SURFACE} p-6 shadow-[0_2px_12px_-4px_rgba(46,16,80,0.14)] ${pageFont.className}`}>
+    <section
+      id={sectionSlug(title)}
+      // scroll-mt clears the sticky header when jumped to from the nav.
+      className={`scroll-mt-24 rounded-xl ${GLASS_SURFACE} p-6 shadow-[0_2px_12px_-4px_rgba(46,16,80,0.14)] ${pageFont.className}`}
+    >
       <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -202,7 +222,92 @@ type PageProps = {
   userRole: string;
 };
 
+/**
+ * Grouped in-page navigation. Nineteen sections stacked in one column meant hunting by scroll;
+ * this gives the page a table of contents, tracks which section you're in, and doubles as the
+ * target list for the filter box.
+ */
+const SETTINGS_NAV: { group: string; items: string[] }[] = [
+  { group: "Mailbox", items: ["Inbox layout", "Undo send", "Meeting booking"] },
+  { group: "Accounts & delivery", items: ["Accounts", "Shared inboxes", "Deliverability", "Domain mail (SMTP / IMAP / POP)"] },
+  { group: "Tracking", items: ["Email tracking", "Read receipts", "Reply notifications"] },
+  { group: "Automation", items: ["Vacation responder", "Artemis AI", "Filters & rules"] },
+  { group: "Content", items: ["Signatures", "Templates"] },
+  { group: "Contacts", items: ["Contact tags", "Contact field visibility", "Blocked senders"] },
+];
+
+function SettingsNav({ filter }: { filter: string }) {
+  const [activeId, setActiveId] = React.useState("");
+  const query = filter.trim().toLowerCase();
+
+  // Scroll-spy: the topmost section intersecting the viewport wins, so the nav reflects where
+  // you actually are rather than the last thing clicked.
+  React.useEffect(() => {
+    const sections = Array.from(document.querySelectorAll<HTMLElement>("section[id]"));
+    if (sections.length === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setActiveId(visible[0].target.id);
+      },
+      { rootMargin: "-96px 0px -60% 0px" }
+    );
+    sections.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [query]);
+
+  const groups = SETTINGS_NAV.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => !query || item.toLowerCase().includes(query)),
+  })).filter((group) => group.items.length > 0);
+
+  if (groups.length === 0) return null;
+
+  return (
+    <nav aria-label="Settings sections" className="space-y-5">
+      {groups.map((group) => (
+        <div key={group.group}>
+          <div className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#9A94AF]">
+            {group.group}
+          </div>
+          <ul className="space-y-0.5">
+            {group.items.map((item) => {
+              const id = sectionSlug(item);
+              const isActive = activeId === id;
+              return (
+                <li key={item}>
+                  <a
+                    href={`#${id}`}
+                    onClick={(event) => {
+                      // Smooth-scroll without pushing a history entry per click.
+                      const target = document.getElementById(id);
+                      if (!target) return;
+                      event.preventDefault();
+                      target.scrollIntoView({ behavior: "smooth", block: "start" });
+                      setActiveId(id);
+                    }}
+                    className={`block truncate rounded-lg px-2 py-1.5 text-[13px] transition-colors ${
+                      isActive
+                        ? "bg-[#701CC0]/10 font-semibold text-[#701CC0]"
+                        : "text-[#5B5670] hover:bg-[#F4F2F8] hover:text-[#2A2540]"
+                    }`}
+                  >
+                    {item}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </nav>
+  );
+}
+
 const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
+  const [settingsFilter, setSettingsFilter] = useState("");
   const [accounts, setAccounts] = useState<GmailAccount[]>([]);
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [signatures, setSignatures] = useState<SignatureRow[]>([]);
@@ -218,6 +323,10 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   });
   const [providerAccounts, setProviderAccounts] = useState<EmailProviderAccount[]>([]);
   const [blockedSenders, setBlockedSenders] = useState<BlockedSender[]>([]);
+  const [companyMailingAddress, setCompanyMailingAddress] = useState("");
+  const [companyPrivacyPolicyUrl, setCompanyPrivacyPolicyUrl] = useState("");
+  const [companySettingsSaving, setCompanySettingsSaving] = useState(false);
+  const [companySettingsStatus, setCompanySettingsStatus] = useState("");
   /** Baseline for tracking / vacation / contact visibility — updated after load and successful save. */
   const [savedSettings, setSavedSettings] = useState<Settings | null>(null);
   const [savedContactVisibility, setSavedContactVisibility] = useState<ContactVisibility | null>(null);
@@ -704,6 +813,41 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   }, [isAdmin]);
 
+  const loadCompanySettings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/company/settings");
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setCompanyMailingAddress(data?.mailingAddress || "");
+        setCompanyPrivacyPolicyUrl(data?.privacyPolicyUrl || "");
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const saveCompanySettings = async () => {
+    if (companySettingsSaving) return;
+    setCompanySettingsSaving(true);
+    setCompanySettingsStatus("");
+    try {
+      const res = await fetch("/api/company/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mailingAddress: companyMailingAddress,
+          privacyPolicyUrl: companyPrivacyPolicyUrl,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to save.");
+      setCompanySettingsStatus("Saved.");
+    } catch {
+      setCompanySettingsStatus("Failed to save — try again.");
+    } finally {
+      setCompanySettingsSaving(false);
+    }
+  };
+
   const createGrant = async () => {
     if (grantBusy || !newGrant.granteeUserId || !newGrant.accountEmail) return;
     setGrantBusy(true);
@@ -1070,16 +1214,13 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   }, []);
 
-  // Single orchestrated initial load. Fires the account-independent fetches immediately (in
-  // parallel with the accounts lookup), awaits everything, then drops the loading gate ONCE — so
-  // the page paints a single time with all sections populated instead of each fetch resolving at
-  // a different time and popping its section in (the old "choppy" load).
+  // Initial load. The account-independent fetches start immediately but are NOT awaited:
+  // waiting on the slowest of a dozen endpoints (bookings, org queue, mailbox grants,
+  // filters, company settings…) is what left this page sitting on "Loading settings…".
+  // Each section fills in as its data lands; only the account-scoped data gates the shell.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      // Slow, section-local data (bookings, org queue, mailbox grants, filters…) must NOT
-      // gate first paint — waiting on the slowest of a dozen endpoints is what made this
-      // page feel broken. Kick them off un-awaited; each section fills in as it lands.
       void Promise.allSettled([
         loadFilters(),
         loadAccountPrefs(),
@@ -1089,6 +1230,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         loadAiPrefs(),
         loadNavLayout(),
         loadMailboxGrants(),
+        loadCompanySettings(),
       ]);
       try {
         // loadAccounts is the one loader without its own try/catch; guard it so a failed
@@ -1326,7 +1468,44 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               Loading settings…
             </div>
           ) : (
-            <div className="space-y-6">
+            <SettingsFilterContext.Provider value={settingsFilter}>
+              <div className="mb-5">
+                <div className="relative">
+                  <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                  <input
+                    value={settingsFilter}
+                    onChange={(event) => setSettingsFilter(event.target.value)}
+                    placeholder="Filter settings…"
+                    aria-label="Filter settings"
+                    className="w-full rounded-xl border border-[#E5E7EB] bg-white py-2.5 pl-9 pr-9 text-sm text-[#1E1B2E] placeholder-[#9CA3AF] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                  />
+                  {settingsFilter ? (
+                    <button
+                      type="button"
+                      onClick={() => setSettingsFilter("")}
+                      aria-label="Clear filter"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-[#9CA3AF] hover:bg-[#F3F4F6] hover:text-[#6B7280]"
+                    >
+                      <FiX className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="lg:grid lg:grid-cols-[212px_minmax(0,1fr)] lg:gap-8">
+                <aside className="mb-6 hidden lg:sticky lg:top-6 lg:mb-0 lg:block lg:self-start">
+                  <SettingsNav filter={settingsFilter} />
+                </aside>
+
+                <div className="space-y-6">
+                  {settingsFilter.trim() &&
+                  !SETTINGS_NAV.some((group) =>
+                    group.items.some((item) => item.toLowerCase().includes(settingsFilter.trim().toLowerCase()))
+                  ) ? (
+                    <p className="rounded-xl border border-[#E5E7EB] bg-white p-8 text-center text-sm text-[#6B7280]">
+                      No settings match “{settingsFilter.trim()}”.
+                    </p>
+                  ) : null}
               <SettingsSection
                 title="Inbox layout"
                 description="Choose which items show in the email panel's left sidebar, and use the arrows to put them in the order you want. Inbox is always shown. Syncs across your devices."
@@ -1513,6 +1692,41 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     })}
                   </ul>
                 )}
+              </SettingsSection>
+
+              <SettingsSection
+                title="Campaign sending (CAN-SPAM)"
+                description="Every commercial campaign email must include a real physical mailing address by law. Until this is set, campaigns for this company cannot send at all — the send queue silently skips them."
+                icon={FiMapPin}
+              >
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-[#374151]">Mailing address</label>
+                    <textarea
+                      value={companyMailingAddress}
+                      onChange={(e) => setCompanyMailingAddress(e.target.value)}
+                      rows={2}
+                      className={fieldClass}
+                      placeholder="123 Main St, Suite 100, San Francisco, CA 94105"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-[#374151]">Privacy policy URL (optional)</label>
+                    <input
+                      type="text"
+                      value={companyPrivacyPolicyUrl}
+                      onChange={(e) => setCompanyPrivacyPolicyUrl(e.target.value)}
+                      className={fieldClass}
+                      placeholder="https://example.com/privacy"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button onClick={saveCompanySettings} disabled={companySettingsSaving} className={btnPrimary}>
+                      {companySettingsSaving ? "Saving…" : "Save"}
+                    </button>
+                    {companySettingsStatus ? <span className={TEXT_MUTED}>{companySettingsStatus}</span> : null}
+                  </div>
+                </div>
               </SettingsSection>
 
               <SettingsSection
@@ -2506,7 +2720,9 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   ) : null}
                 </div>
               ) : null}
-            </div>
+                </div>
+              </div>
+            </SettingsFilterContext.Provider>
           )}
         </main>
       </div>
