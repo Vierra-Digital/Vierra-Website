@@ -912,3 +912,22 @@ input[type="search"]::-ms-clear:hover {
   color: #F1EEFA;
 }
 .email-dialog-dark .text-\[\#6B7280\] { color: #A29CBB; }
+
+/* Rendered message body. The sender's HTML keeps its own styling; these are guardrails so
+   long URLs, oversized media and cramped spacing don't break the reader. */
+.email-shell .email-body { max-width: 74ch; word-break: break-word; overflow-wrap: anywhere; }
+.email-shell .email-body img { max-width: 100%; height: auto; }
+.email-shell .email-body a { color: #5B21B6; text-decoration: underline; text-underline-offset: 2px; }
+.email-shell .email-body p { margin: 0 0 0.85em; }
+.email-shell .email-body > *:last-child { margin-bottom: 0; }
+.email-shell .email-body blockquote {
+  margin: 0.85em 0;
+  padding-left: 12px;
+  border-left: 2px solid #E3DEEE;
+  color: #6B7280;
+}
+.email-shell .email-body table { max-width: 100%; }
+.email-shell .email-body pre { white-space: pre-wrap; overflow-x: auto; }
+
+/* The white sheet the message sits on: roomier and less boxy. */
+.email-shell .email-body-card { padding: 22px 26px; }

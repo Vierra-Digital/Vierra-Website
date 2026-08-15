@@ -330,8 +330,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const undoSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [artemisDrafting, setArtemisDrafting] = useState(false);
-  const [artemisSummary, setArtemisSummary] = useState("");
-  const [artemisSummaryLoading, setArtemisSummaryLoading] = useState(false);
   const [artemisRewriteOpen, setArtemisRewriteOpen] = useState(false);
   const [composeError, setComposeError] = useState("");
   const [composeSuccess, setComposeSuccess] = useState("");
@@ -1857,6 +1855,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // Opening an unread email marks it read the moment it opens: locally first (so going back
   // shows it read immediately) and on Gmail in the background. Keyed by id so it fires once.
   const markedReadRef = useRef<Set<string>>(new Set());
+  /** accountEmail::id -> detail payload, so reopening a message is instant. */
+  const detailCacheRef = useRef<Map<string, MessageDetail>>(new Map());
+  const detailInFlightRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!selectedMessage || viewMode !== "message") return;
     if (!selectedMessage.unread || selectedMessage.isComposeDraft) return;
@@ -1882,8 +1883,53 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       .catch(() => null);
   }, [selectedMessage, viewMode, loadMailboxCounts, loadUnreadBadges]);
 
+  /** Fetch a message's detail into the cache. Shared by the reader and hover prefetch. */
+  const fetchDetailInto = useCallback(async (accountEmail: string, messageId: string) => {
+    const key = `${accountEmail}::${messageId}`;
+    if (detailCacheRef.current.has(key) || detailInFlightRef.current.has(key)) return;
+    detailInFlightRef.current.add(key);
+    try {
+      const query = new URLSearchParams({ accountEmail, messageId });
+      const response = await fetch(`/api/gmail/message-detail?${query.toString()}`);
+      if (!response.ok) return;
+      const payload = await response.json().catch(() => null);
+      if (!payload) return;
+      detailCacheRef.current.set(key, {
+        bodyHtml: typeof payload?.bodyHtml === "string" ? payload.bodyHtml : "",
+        bodyText: typeof payload?.bodyText === "string" ? payload.bodyText : "",
+        fromRaw: payload?.fromRaw,
+        toRaw: payload?.toRaw,
+        subject: payload?.subject,
+        replyTo: payload?.replyTo,
+        date: payload?.date,
+        timestamp: payload?.timestamp,
+        messageIdHeader: payload?.messageIdHeader,
+        references: payload?.references,
+        senderPhotoUrl: typeof payload?.senderPhotoUrl === "string" ? payload.senderPhotoUrl : "",
+        threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
+        trackers:
+          payload?.trackers && typeof payload.trackers.count === "number"
+            ? { count: payload.trackers.count, vendors: Array.isArray(payload.trackers.vendors) ? payload.trackers.vendors : [] }
+            : undefined,
+      } as MessageDetail);
+    } catch {
+      /* prefetch is best-effort */
+    } finally {
+      detailInFlightRef.current.delete(key);
+    }
+  }, []);
+
   useEffect(() => {
     if (!selectedMessage || viewMode !== "message") return;
+    // Cached from a previous open or a hover prefetch — render immediately, no spinner.
+    const cacheKey = `${selectedMessage.accountEmail}::${selectedMessage.id}`;
+    const cached = detailCacheRef.current.get(cacheKey);
+    if (cached) {
+      setSelectedMessageDetail(cached);
+      setDetailLoading(false);
+      setDetailError("");
+      return;
+    }
     const loadDetail = async () => {
       setDetailLoading(true);
       setDetailError("");
@@ -1897,7 +1943,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         if (!response.ok) {
           throw new Error(payload?.message || "Failed to load message detail.");
         }
-        setSelectedMessageDetail({
+        const detail = {
           bodyHtml: typeof payload?.bodyHtml === "string" ? payload.bodyHtml : "",
           bodyText: typeof payload?.bodyText === "string" ? payload.bodyText : "",
           fromRaw: typeof payload?.fromRaw === "string" ? payload.fromRaw : selectedMessage.fromRaw,
@@ -1915,7 +1961,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             payload?.trackers && typeof payload.trackers.count === "number"
               ? { count: payload.trackers.count, vendors: Array.isArray(payload.trackers.vendors) ? payload.trackers.vendors : [] }
               : undefined,
-        });
+        };
+        detailCacheRef.current.set(`${selectedMessage.accountEmail}::${selectedMessage.id}`, detail as MessageDetail);
+        setSelectedMessageDetail(detail);
       } catch (error) {
         setDetailError(error instanceof Error ? error.message : "Failed to load message detail.");
         setSelectedMessageDetail(null);
@@ -3068,38 +3116,6 @@ ${sourceText}`;
       setComposeError(error instanceof Error ? error.message : "Artemis error.");
     } finally {
       setArtemisDrafting(false);
-    }
-  };
-
-  const buildThreadContext = () =>
-    threadMessages
-      .map((message) => {
-        const who = parseMailboxAddress(message.fromRaw || "").name || message.fromRaw || "Unknown";
-        const body = (message.bodyText || message.snippet || "").trim();
-        return `From: ${who}\n${body}`;
-      })
-      .join("\n\n---\n\n")
-      .slice(0, 12000);
-
-  const handleArtemisSummarize = async () => {
-    if (artemisSummaryLoading) return;
-    const thread = buildThreadContext();
-    if (!thread) return;
-    setArtemisSummaryLoading(true);
-    setArtemisSummary("");
-    try {
-      const response = await fetch("/api/ai/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ thread }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.message || "Couldn't summarize.");
-      setArtemisSummary(String(payload?.text || "").trim());
-    } catch (error) {
-      setArtemisSummary(`⚠ ${error instanceof Error ? error.message : "Error"}`);
-    } finally {
-      setArtemisSummaryLoading(false);
     }
   };
 
@@ -4549,6 +4565,14 @@ ${sourceText}`;
                                   draggable={!message.isComposeDraft}
                                   onDragStart={(event) => startMessageDrag(event, message)}
                                   onDragEnd={endMessageDrag}
+                                  /* Warm the reader while the pointer is on the row, so opening
+                                     it is usually a cache hit rather than a fresh round trip. */
+                                  onMouseEnter={() => {
+                                    if (!message.isComposeDraft) void fetchDetailInto(message.accountEmail, message.id);
+                                  }}
+                                  onFocus={() => {
+                                    if (!message.isComposeDraft) void fetchDetailInto(message.accountEmail, message.id);
+                                  }}
                                   onClick={() => {
                                     if (message.isComposeDraft) {
                                       openComposeDraftFromRow(message);
@@ -4915,43 +4939,16 @@ ${sourceText}`;
                                   <div key={`${threadMessage.id || index}`} className="email-body-card rounded-2xl border border-white/70 bg-white/70 p-5">
                                     {threadMessage.bodyHtml ? (
                                       <div
-                                        className="text-sm text-[#374151] leading-6"
+                                        className="email-body text-[14px] leading-[1.65] text-[#2C313A]"
                                         dangerouslySetInnerHTML={{ __html: sanitizeHtml(threadMessage.bodyHtml) }}
                                       />
                                     ) : (
-                                      <div className="text-sm text-[#374151] whitespace-pre-wrap leading-6">
+                                      <div className="email-body whitespace-pre-wrap text-[14px] leading-[1.65] text-[#2C313A]">
                                         {threadMessage.bodyText || threadMessage.snippet || "No message content available."}
                                       </div>
                                     )}
                                   </div>
                                 ))}
-
-                                {!inlineComposeMode ? (
-                                  <div className="mt-4 rounded-2xl border border-[#701CC0]/20 bg-gradient-to-br from-[#701CC0]/[0.07] to-[#C42B9F]/[0.05] p-4">
-                                    <div className="mb-2 flex items-center gap-2">
-                                      <span
-                                        className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-white"
-                                        style={{ backgroundImage: BRAND_GRADIENT }}
-                                      >
-                                        <FiZap className="h-3.5 w-3.5" aria-hidden />
-                                      </span>
-                                      <b className="text-[13px] text-[#1E1B2E]">Artemis</b>
-                                      <button
-                                        type="button"
-                                        onClick={handleArtemisSummarize}
-                                        disabled={artemisSummaryLoading}
-                                        className="ml-auto text-[12px] font-semibold text-[#701CC0] hover:underline disabled:opacity-50"
-                                      >
-                                        {artemisSummaryLoading ? "Summarizing…" : "Summarize thread"}
-                                      </button>
-                                    </div>
-                                    {artemisSummary ? (
-                                      <div className="mb-3 whitespace-pre-wrap rounded-xl border border-white/70 bg-white/70 p-3 text-[12.5px] leading-relaxed text-[#4A465C]">
-                                        {artemisSummary}
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                ) : null}
 
                                 {inlineComposeMode ? (
                                   <div ref={inlineComposeRef} className="pt-3">
