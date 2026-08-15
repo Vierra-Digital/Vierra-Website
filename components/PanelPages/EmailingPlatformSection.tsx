@@ -6190,8 +6190,8 @@ ${sourceText}`;
         message={
           <>
             Are you sure you want to delete{" "}
-            <span className="font-semibold text-[#1E1B2E]">{labelToDelete?.name || "this label"}</span>? Messages keep
-            their content.
+            <span className="font-semibold text-white">{labelToDelete?.name || "this label"}</span>? Messages keep their
+            content.
           </>
         }
         confirmLabel={deletingLabel ? "Deleting..." : "Delete Label"}

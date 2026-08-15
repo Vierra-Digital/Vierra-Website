@@ -902,3 +902,10 @@ input[type="search"]::-ms-clear:hover {
 }
 .email-shell .email-menu-item svg { color: #8F88A8; }
 .email-shell .email-menu-item:hover svg { color: #FFFFFF; }
+
+.email-dialog-dark .text-\[\#1E1B2E\],
+.email-dialog-dark .text-\[\#111827\],
+.email-dialog-dark .text-\[\#374151\] {
+  color: #F1EEFA;
+}
+.email-dialog-dark .text-\[\#6B7280\] { color: #A29CBB; }
