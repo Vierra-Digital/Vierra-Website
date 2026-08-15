@@ -44,7 +44,18 @@ export default withAuth(async (req, res, session) => {
     const { start: currentMonthStart, end: currentMonthEnd } = getUtcMonthRange(now)
     const { start: previousMonthStart, end: previousMonthEnd } = getPreviousUtcMonthRange(now)
 
-    const [clientsLifetime, currentMonthClients, previousMonthClients, meetingsAgg] = await Promise.all([
+    const [
+      clientsLifetime,
+      currentMonthClients,
+      previousMonthClients,
+      meetingsAgg,
+      campaignsLifetime,
+      currentMonthCampaigns,
+      previousMonthCampaigns,
+      leadsLifetime,
+      currentMonthLeads,
+      previousMonthLeads,
+    ] = await Promise.all([
       prisma.client.count({ where: { company_id: companyId } }),
       prisma.client.count({
         where: {
@@ -69,6 +80,44 @@ export default withAuth(async (req, res, session) => {
         where: { user_id: userId },
         _sum: { meetings_set: true },
       }),
+      prisma.campaign.count({ where: { company_id: companyId } }),
+      prisma.campaign.count({
+        where: {
+          company_id: companyId,
+          created_at: {
+            gte: currentMonthStart,
+            lt: currentMonthEnd,
+          },
+        },
+      }),
+      prisma.campaign.count({
+        where: {
+          company_id: companyId,
+          created_at: {
+            gte: previousMonthStart,
+            lt: previousMonthEnd,
+          },
+        },
+      }),
+      prisma.campaignContact.count({ where: { campaigns: { company_id: companyId } } }),
+      prisma.campaignContact.count({
+        where: {
+          campaigns: { company_id: companyId },
+          enrolled_at: {
+            gte: currentMonthStart,
+            lt: currentMonthEnd,
+          },
+        },
+      }),
+      prisma.campaignContact.count({
+        where: {
+          campaigns: { company_id: companyId },
+          enrolled_at: {
+            gte: previousMonthStart,
+            lt: previousMonthEnd,
+          },
+        },
+      }),
     ])
 
     const currentYear = now.getUTCFullYear()
@@ -85,6 +134,8 @@ export default withAuth(async (req, res, session) => {
 
     const clientsGrowth = calculateGrowth(currentMonthClients, previousMonthClients)
     const meetingsGrowth = calculateGrowth(currentMonthMeetings, previousMonthMeetings)
+    const campaignsGrowth = calculateGrowth(currentMonthCampaigns, previousMonthCampaigns)
+    const leadsGrowth = calculateGrowth(currentMonthLeads, previousMonthLeads)
 
     const stats: StatCard[] = [
       {
@@ -108,20 +159,20 @@ export default withAuth(async (req, res, session) => {
       {
         key: "campaigns",
         label: "Campaigns",
-        lifetimeValue: 0,
-        currentMonthValue: 0,
-        previousMonthValue: 0,
-        growthPercent: 0,
-        growthDirection: "flat",
+        lifetimeValue: campaignsLifetime,
+        currentMonthValue: currentMonthCampaigns,
+        previousMonthValue: previousMonthCampaigns,
+        growthPercent: campaignsGrowth,
+        growthDirection: getGrowthDirection(currentMonthCampaigns, previousMonthCampaigns),
       },
       {
         key: "leadsGenerated",
         label: "Leads Generated",
-        lifetimeValue: 0,
-        currentMonthValue: 0,
-        previousMonthValue: 0,
-        growthPercent: 0,
-        growthDirection: "flat",
+        lifetimeValue: leadsLifetime,
+        currentMonthValue: currentMonthLeads,
+        previousMonthValue: previousMonthLeads,
+        growthPercent: leadsGrowth,
+        growthDirection: getGrowthDirection(currentMonthLeads, previousMonthLeads),
       },
     ]
 
