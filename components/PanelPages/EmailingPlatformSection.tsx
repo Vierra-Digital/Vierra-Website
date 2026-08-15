@@ -332,7 +332,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [artemisDrafting, setArtemisDrafting] = useState(false);
   const [artemisSummary, setArtemisSummary] = useState("");
   const [artemisSummaryLoading, setArtemisSummaryLoading] = useState(false);
-  const [artemisReplyLoading, setArtemisReplyLoading] = useState(false);
   const [artemisRewriteOpen, setArtemisRewriteOpen] = useState(false);
   const [composeError, setComposeError] = useState("");
   const [composeSuccess, setComposeSuccess] = useState("");
@@ -3104,28 +3103,6 @@ ${sourceText}`;
     }
   };
 
-  const handleArtemisReplyDraft = async () => {
-    if (!selectedMessage || artemisReplyLoading) return;
-    const thread = buildThreadContext();
-    setArtemisReplyLoading(true);
-    try {
-      const response = await fetch("/api/ai/reply", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ thread, tone: getArtemisTone() }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.message || "Couldn't draft reply.");
-      const text = String(payload?.text || "").trim();
-      openReplyCompose();
-      if (text) setInlineComposeIntroText(text);
-    } catch (error) {
-      setArtemisSummary(`⚠ ${error instanceof Error ? error.message : "Error"}`);
-    } finally {
-      setArtemisReplyLoading(false);
-    }
-  };
-
   const handleArtemisRewrite = async (mode: string) => {
     setArtemisRewriteOpen(false);
     const current = (composeBody || "").trim();
@@ -4939,16 +4916,6 @@ ${sourceText}`;
                                         {artemisSummary}
                                       </div>
                                     ) : null}
-                                    <button
-                                      type="button"
-                                      onClick={handleArtemisReplyDraft}
-                                      disabled={artemisReplyLoading}
-                                      className="inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-[13px] font-semibold text-white transition disabled:opacity-50"
-                                      style={{ backgroundImage: BRAND_GRADIENT }}
-                                    >
-                                      <FiZap className="h-4 w-4" aria-hidden />
-                                      {artemisReplyLoading ? "Drafting reply…" : "Draft reply with Artemis"}
-                                    </button>
                                   </div>
                                 ) : null}
 
