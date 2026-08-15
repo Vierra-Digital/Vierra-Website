@@ -4055,9 +4055,9 @@ ${sourceText}`;
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => applyAction(activeModule === "trash" || activeModule === "spam" ? "deletePermanently" : "trash")}
+                                    onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
                                     className={`${ICON_BUTTON_SOLID} email-tip`}
-                                    data-tip={activeModule === "trash" || activeModule === "spam" ? "Delete Permanently" : "Move To Trash"}
+                                    data-tip={activeModule === "trash" ? "Delete Permanently" : "Move To Trash"}
                                   >
                                     <FiTrash2 className="w-4 h-4" />
                                   </button>
@@ -4912,7 +4912,7 @@ ${sourceText}`;
                           </button>
                           <button
                             type="button"
-                            onClick={() => applyAction(activeModule === "trash" || activeModule === "spam" ? "deletePermanently" : "trash")}
+                            onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
                             className={ICON_BUTTON}
                             title={activeModule === "trash" ? "Delete Permanently" : "Trash"}
                           >
@@ -5442,7 +5442,7 @@ ${sourceText}`;
         >
           <div
             onClick={(event) => event.stopPropagation()}
-            className={`flex flex-col overflow-hidden bg-white shadow-[0_24px_60px_-18px_rgba(46,16,80,0.5)] border border-white/70 ring-1 ring-black/5 ${
+            className={`compose-hud flex flex-col overflow-hidden bg-white shadow-[0_24px_60px_-18px_rgba(46,16,80,0.5)] ${
               composeExpanded
                 ? "h-[75vh] w-[75vw] max-h-[75vh] max-w-[75vw] rounded-2xl"
                 : "fixed bottom-6 right-6 z-[120] w-[min(100vw-1.5rem,572px)] max-h-[min(92vh,760px)] rounded-2xl"
@@ -5450,7 +5450,7 @@ ${sourceText}`;
             role="dialog"
             aria-label={composeThreadId ? "Reply composer" : "New message composer"}
           >
-            <div style={{ backgroundImage: BRAND_GRADIENT }} className="flex shrink-0 cursor-default items-center justify-between gap-2 px-4 py-3">
+            <div className="compose-hud-header flex shrink-0 cursor-default items-center justify-between gap-2 px-4 py-2.5">
               <p className="min-w-0 flex-1 truncate pr-2 text-sm font-semibold text-white">
                 {composeThreadId ? "Reply" : "New message"}
               </p>
