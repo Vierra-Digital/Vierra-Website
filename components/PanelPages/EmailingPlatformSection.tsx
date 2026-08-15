@@ -296,6 +296,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [creatingLabel, setCreatingLabel] = useState(false);
   /** Guards double-fires without greying the toolbar out for the whole round trip. */
   const actionInFlightRef = useRef(false);
+  /** Set below; lets applyAction re-sync after a partial failure without a cyclic dep. */
+  const loadMessagesRef = useRef<() => void>(() => {});
   const [labelToDelete, setLabelToDelete] = useState<{ id: string; name: string } | null>(null);
   const [labelToRename, setLabelToRename] = useState<{ id: string; name: string } | null>(null);
   const [renamingLabel, setRenamingLabel] = useState(false);
@@ -330,8 +332,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const undoSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [artemisDrafting, setArtemisDrafting] = useState(false);
-  const [artemisSummary, setArtemisSummary] = useState("");
-  const [artemisSummaryLoading, setArtemisSummaryLoading] = useState(false);
   const [artemisRewriteOpen, setArtemisRewriteOpen] = useState(false);
   const [composeError, setComposeError] = useState("");
   const [composeSuccess, setComposeSuccess] = useState("");
@@ -445,6 +445,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   }, []);
   const selectedMessageIdRef = useRef("");
   const moveListMenuRef = useRef<HTMLDivElement | null>(null);
+  const snoozeMenuRef = useRef<HTMLDivElement | null>(null);
+  const [snoozeMenuOpen, setSnoozeMenuOpen] = useState(false);
   const moveMessageMenuRef = useRef<HTMLDivElement | null>(null);
   const contactFilterMenuRef = useRef<HTMLDivElement | null>(null);
   const inlineComposeRef = useRef<HTMLDivElement | null>(null);
@@ -1723,6 +1725,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   }, [activeModule, activeLabelId, canLoadMessages, currentPage, debouncedSearch, selectedAccounts, step]);
 
   useEffect(() => {
+    loadMessagesRef.current = () => void loadMessages();
+  }, [loadMessages]);
+
+  useEffect(() => {
     loadMessages();
   }, [loadMessages]);
 
@@ -1819,6 +1825,30 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     };
   }, [moveMenuOpen]);
 
+  // Snooze behaves like Move To: clicking anywhere outside dismisses it.
+  useEffect(() => {
+    if (!snoozeMenuOpen) return;
+    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
+      const targetNode = event.target as Node | null;
+      if (!targetNode) return;
+      if (snoozeMenuRef.current?.contains(targetNode)) return;
+      setSnoozeMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+    };
+  }, [snoozeMenuOpen]);
+
+  // Any change of context (mailbox, label, opening a message, paging) closes open menus —
+  // they used to survive navigation and hang over the new view.
+  useEffect(() => {
+    setMoveMenuOpen(null);
+    setSnoozeMenuOpen(false);
+  }, [activeModule, activeLabelId, viewMode, selectedMessageId, currentPage]);
+
   useEffect(() => {
     if (!contactFilterOpen) return;
     const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
@@ -1857,6 +1887,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // Opening an unread email marks it read the moment it opens: locally first (so going back
   // shows it read immediately) and on Gmail in the background. Keyed by id so it fires once.
   const markedReadRef = useRef<Set<string>>(new Set());
+  /** accountEmail::id -> detail payload, so reopening a message is instant. */
+  const detailCacheRef = useRef<Map<string, MessageDetail>>(new Map());
+  const detailInFlightRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!selectedMessage || viewMode !== "message") return;
     if (!selectedMessage.unread || selectedMessage.isComposeDraft) return;
@@ -1882,8 +1915,53 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       .catch(() => null);
   }, [selectedMessage, viewMode, loadMailboxCounts, loadUnreadBadges]);
 
+  /** Fetch a message's detail into the cache. Shared by the reader and hover prefetch. */
+  const fetchDetailInto = useCallback(async (accountEmail: string, messageId: string) => {
+    const key = `${accountEmail}::${messageId}`;
+    if (detailCacheRef.current.has(key) || detailInFlightRef.current.has(key)) return;
+    detailInFlightRef.current.add(key);
+    try {
+      const query = new URLSearchParams({ accountEmail, messageId });
+      const response = await fetch(`/api/gmail/message-detail?${query.toString()}`);
+      if (!response.ok) return;
+      const payload = await response.json().catch(() => null);
+      if (!payload) return;
+      detailCacheRef.current.set(key, {
+        bodyHtml: typeof payload?.bodyHtml === "string" ? payload.bodyHtml : "",
+        bodyText: typeof payload?.bodyText === "string" ? payload.bodyText : "",
+        fromRaw: payload?.fromRaw,
+        toRaw: payload?.toRaw,
+        subject: payload?.subject,
+        replyTo: payload?.replyTo,
+        date: payload?.date,
+        timestamp: payload?.timestamp,
+        messageIdHeader: payload?.messageIdHeader,
+        references: payload?.references,
+        senderPhotoUrl: typeof payload?.senderPhotoUrl === "string" ? payload.senderPhotoUrl : "",
+        threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
+        trackers:
+          payload?.trackers && typeof payload.trackers.count === "number"
+            ? { count: payload.trackers.count, vendors: Array.isArray(payload.trackers.vendors) ? payload.trackers.vendors : [] }
+            : undefined,
+      } as MessageDetail);
+    } catch {
+      /* prefetch is best-effort */
+    } finally {
+      detailInFlightRef.current.delete(key);
+    }
+  }, []);
+
   useEffect(() => {
     if (!selectedMessage || viewMode !== "message") return;
+    // Cached from a previous open or a hover prefetch — render immediately, no spinner.
+    const cacheKey = `${selectedMessage.accountEmail}::${selectedMessage.id}`;
+    const cached = detailCacheRef.current.get(cacheKey);
+    if (cached) {
+      setSelectedMessageDetail(cached);
+      setDetailLoading(false);
+      setDetailError("");
+      return;
+    }
     const loadDetail = async () => {
       setDetailLoading(true);
       setDetailError("");
@@ -1897,7 +1975,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         if (!response.ok) {
           throw new Error(payload?.message || "Failed to load message detail.");
         }
-        setSelectedMessageDetail({
+        const detail = {
           bodyHtml: typeof payload?.bodyHtml === "string" ? payload.bodyHtml : "",
           bodyText: typeof payload?.bodyText === "string" ? payload.bodyText : "",
           fromRaw: typeof payload?.fromRaw === "string" ? payload.fromRaw : selectedMessage.fromRaw,
@@ -1915,7 +1993,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             payload?.trackers && typeof payload.trackers.count === "number"
               ? { count: payload.trackers.count, vendors: Array.isArray(payload.trackers.vendors) ? payload.trackers.vendors : [] }
               : undefined,
-        });
+        };
+        detailCacheRef.current.set(`${selectedMessage.accountEmail}::${selectedMessage.id}`, detail as MessageDetail);
+        setSelectedMessageDetail(detail);
       } catch (error) {
         setDetailError(error instanceof Error ? error.message : "Failed to load message detail.");
         setSelectedMessageDetail(null);
@@ -2231,6 +2311,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         | "moveToInbox"
         | "moveToSpam"
         | "moveToTrash"
+        | "unspam"
     ) => {
       const composeDraftRows = selectedMessageRows.filter((message) => Boolean(message.isComposeDraft && message.draftKey));
       const selectedComposeDraftKeys = new Set(composeDraftRows.map((message) => rowKey(message)));
@@ -2240,14 +2321,15 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         messageId: message.id,
       }));
       if (items.length === 0 && composeDraftRows.length === 0) return;
-      if (actionInFlightRef.current) return;
-      actionInFlightRef.current = true;
+      const isReadToggle = action === "markRead" || action === "markUnread";
+      if (!isReadToggle && actionInFlightRef.current) return;
+      if (!isReadToggle) actionInFlightRef.current = true;
 
       setActionError("");
       // Optimistic pass: mutate the list immediately so the click lands instantly. The
       // authoritative pass below reconciles once Gmail answers. (Previously every action
       // awaited the round trip AND greyed the toolbar out for its duration.)
-      const optimisticKeys = new Set(selectedRows);
+      const optimisticKeys = new Set(selectedMessageRows.map((message) => rowKey(message)));
       setMessages((prev) =>
         prev
           .map((message) => {
@@ -2260,11 +2342,16 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             if (action === "deletePermanently") return null;
             if (action === "untrash" || action === "moveToInbox") return activeModule === "inbox" ? message : null;
             if (action === "moveToSpam") return activeModule === "spam" ? message : null;
+            if (action === "unspam") return activeModule === "spam" ? null : message;
             return message;
           })
           .filter(Boolean) as MessageRow[]
       );
-      if (action !== "markRead" && action !== "markUnread") setSelectedRows([]);
+      if (action !== "markRead" && action !== "markUnread") {
+        setSelectedRows([]);
+        // The destination mailbox's cached page is now out of date.
+        invalidateMessagesCache();
+      }
       try {
         if (
           composeDraftRows.length > 0 &&
@@ -2297,6 +2384,19 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             throw new Error(payload?.message || "Action failed.");
           }
           results = Array.isArray(payload?.results) ? payload.results : [];
+          // Surface per-message refusals. Previously a 207 passed silently while the rows had
+          // already been removed optimistically, so a failed action looked like it worked.
+          const failures = results.filter((result: any) => result && result.ok === false);
+          if (failures.length > 0) {
+            const reason = String(failures[0]?.error || "Gmail refused the action.");
+            setActionError(
+              failures.length === items.length
+                ? reason
+                : `${failures.length} of ${items.length} messages failed: ${reason}`
+            );
+            invalidateMessagesCache();
+            loadMessagesRef.current();
+          }
         }
         const successfulKeys = new Set(
           results
@@ -2367,14 +2467,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "Action failed.");
       } finally {
-        actionInFlightRef.current = false;
+        if (!isReadToggle) actionInFlightRef.current = false;
         setActionLoading(false);
       }
     },
-    [activeModule, loadMailboxCounts, loadUnreadBadges, rowKey, selectedMessageRows, selectedRows]
+    [activeModule, invalidateMessagesCache, loadMailboxCounts, loadUnreadBadges, rowKey, selectedMessageRows, selectedRows]
   );
 
-  const [snoozeMenuOpen, setSnoozeMenuOpen] = useState(false);
 
   // Snooze the selected messages until a preset time; the inbound cron re-surfaces them.
   const snoozeSelected = async (preset: "later" | "tomorrow" | "nextweek") => {
@@ -2485,8 +2584,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       const keys = new Set(rows.map((message) => rowKey(message)));
       setMessages((prev) => prev.filter((message) => !keys.has(rowKey(message))));
       setSelectedRows((prev) => prev.filter((key) => !keys.has(key)));
+      // The destination mailbox's cached page predates this move; drop the cache so
+      // switching to it fetches a list that actually contains the message.
+      invalidateMessagesCache();
     },
-    [rowKey]
+    [rowKey, invalidateMessagesCache]
   );
 
   /* ── Drag & drop ──────────────────────────────────────────────────────────────
@@ -2570,15 +2672,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
           if (!applied) return;
           // Same as "Move to → label": tag it, then take it out of the Inbox.
           if (activeModule === "inbox") await runAction("archive");
-          const label = labels.find((entry) => entry.id === labelId);
-          showSentToast(`Moved to "${label?.name || "label"}"`);
         } else {
           const action = MESSAGE_DROP_ACTIONS[destination];
           if (!action) return;
           const response = await runAction(action);
           if (!response.ok) return;
-          const target = MODULES.find((item) => item.key === destination);
-          showSentToast(`Moved ${rows.length === 1 ? "message" : `${rows.length} messages`} to ${target?.label || destination}`);
         }
         // Update in place — the moved rows just leave the list. No mailbox re-fetch.
         removeRowsLocally(rows);
@@ -2591,11 +2689,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       MESSAGE_DROP_ACTIONS,
       activeModule,
       applyLabelToSelection,
-      labels,
       loadMailboxCounts,
       loadUnreadBadges,
       removeRowsLocally,
-      showSentToast,
     ]
   );
 
@@ -2635,8 +2731,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
       const moved = await applyLabelToSelection(labelId, rows);
       if (moved) {
-        const label = labels.find((entry) => entry.id === labelId);
-        showSentToast(`Moved to "${label?.name || "label"}"`);
         // Filing under a label means leaving the Inbox; archive quietly, then drop the rows
         // from the list in place rather than re-fetching the whole mailbox.
         if (activeModule === "inbox") await archiveRowsQuietly(rows);
@@ -3071,38 +3165,6 @@ ${sourceText}`;
     }
   };
 
-  const buildThreadContext = () =>
-    threadMessages
-      .map((message) => {
-        const who = parseMailboxAddress(message.fromRaw || "").name || message.fromRaw || "Unknown";
-        const body = (message.bodyText || message.snippet || "").trim();
-        return `From: ${who}\n${body}`;
-      })
-      .join("\n\n---\n\n")
-      .slice(0, 12000);
-
-  const handleArtemisSummarize = async () => {
-    if (artemisSummaryLoading) return;
-    const thread = buildThreadContext();
-    if (!thread) return;
-    setArtemisSummaryLoading(true);
-    setArtemisSummary("");
-    try {
-      const response = await fetch("/api/ai/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ thread }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.message || "Couldn't summarize.");
-      setArtemisSummary(String(payload?.text || "").trim());
-    } catch (error) {
-      setArtemisSummary(`⚠ ${error instanceof Error ? error.message : "Error"}`);
-    } finally {
-      setArtemisSummaryLoading(false);
-    }
-  };
-
   const handleArtemisRewrite = async (mode: string) => {
     setArtemisRewriteOpen(false);
     const current = (composeBody || "").trim();
@@ -3493,7 +3555,11 @@ ${sourceText}`;
       byAccount.set(message.accountEmail, list);
     }
     let cancelled = false;
-    (async () => {
+    // Hold the scan back briefly. It pulls full bodies for the page, so firing it the moment
+    // the list paints put ~60 requests in flight against the same connection the mailbox and
+    // reader are using — the list felt slow because the scan was competing with it.
+    const startDelay = setTimeout(() => {
+      void (async () => {
       for (const [accountEmail, messageIds] of byAccount) {
         try {
           const response = await fetch("/api/gmail/tracker-scan", {
@@ -3510,9 +3576,11 @@ ${sourceText}`;
           /* a failed scan just leaves those rows dot-less */
         }
       }
-    })();
+      })();
+    }, 700);
     return () => {
       cancelled = true;
+      clearTimeout(startDelay);
     };
   }, [conversationRows, messagesLoading]);
 
@@ -3969,6 +4037,18 @@ ${sourceText}`;
                                   >
                                     <MdRefresh className={`h-[18px] w-[18px] ${messagesLoading ? "motion-safe:animate-spin" : ""}`} />
                                   </button>
+                                  {/* Spam-only: restore to the inbox and tell Gmail it isn't spam. */}
+                                  {activeModule === "spam" && hasSelectedEmails ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => applyAction("unspam")}
+                                      className={`${ICON_BUTTON_SOLID} email-tip`}
+                                      aria-label="Mark As Not Spam"
+                                      data-tip="Mark As Not Spam"
+                                    >
+                                      <FiShield className="h-4 w-4" />
+                                    </button>
+                                  ) : null}
                                 </>
                               ) : null}
                               {hasSelectedEmails ? (
@@ -4013,8 +4093,7 @@ ${sourceText}`;
                                         <FiMove className="w-4 h-4" />
                                       </button>
                                       {moveMenuOpen === "list" ? (
-                                        <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 min-w-[210px] overflow-hidden rounded-xl shadow-2xl">
-                                          <div className="email-menu-heading">Move to</div>
+                                        <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 min-w-[164px]">
                                           {moveToOptions
                                             .filter((option) => !option.value.startsWith("label:"))
                                             .map((option) => (
@@ -4022,19 +4101,19 @@ ${sourceText}`;
                                                 key={`list-move-${option.value}`}
                                                 type="button"
                                                 onClick={() => handleMoveToChange(option.value)}
-                                                className="email-menu-item flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm"
+                                                className="email-menu-item flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[12.5px] font-medium"
                                               >
-                                                {option.value === "inbox" ? <FiInbox className="h-4 w-4 shrink-0" /> : null}
-                                                {option.value === "archive" ? <FiArchive className="h-4 w-4 shrink-0" /> : null}
-                                                {option.value === "spam" ? <FiSlash className="h-4 w-4 shrink-0" /> : null}
-                                                {option.value === "trash" ? <FiTrash2 className="h-4 w-4 shrink-0" /> : null}
+                                                {option.value === "inbox" ? <FiInbox className="h-3.5 w-3.5 shrink-0" /> : null}
+                                                {option.value === "archive" ? <FiArchive className="h-3.5 w-3.5 shrink-0" /> : null}
+                                                {option.value === "spam" ? <FiSlash className="h-3.5 w-3.5 shrink-0" /> : null}
+                                                {option.value === "trash" ? <FiTrash2 className="h-3.5 w-3.5 shrink-0" /> : null}
                                                 <span className="truncate">{option.label}</span>
                                               </button>
                                             ))}
                                           {moveToOptions.some((option) => option.value.startsWith("label:")) ? (
                                             <>
-                                              <div className="email-menu-heading border-t border-white/[0.07]">Labels</div>
-                                              <div className="max-h-56 overflow-y-auto">
+                                              <div className="h-1.5" />
+                                              <div className="max-h-48 overflow-y-auto">
                                                 {moveToOptions
                                                   .filter((option) => option.value.startsWith("label:"))
                                                   .map((option) => (
@@ -4042,9 +4121,9 @@ ${sourceText}`;
                                                       key={`list-move-${option.value}`}
                                                       type="button"
                                                       onClick={() => handleMoveToChange(option.value)}
-                                                      className="email-menu-item flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm"
+                                                      className="email-menu-item flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[12.5px] font-medium"
                                                     >
-                                                      <FiTag className="h-4 w-4 shrink-0" />
+                                                      <FiTag className="h-3.5 w-3.5 shrink-0" />
                                                       <span className="truncate">{option.label}</span>
                                                     </button>
                                                   ))}
@@ -4065,7 +4144,7 @@ ${sourceText}`;
                                       >
                                         <FiArchive className="w-4 h-4" />
                                       </button>
-                                      <div className="relative">
+                                      <div ref={snoozeMenuRef} className="relative">
                                         <button
                                           type="button"
                                           onClick={() => setSnoozeMenuOpen((open) => !open)}
@@ -4076,7 +4155,7 @@ ${sourceText}`;
                                           <FiClock className="w-4 h-4" />
                                         </button>
                                         {snoozeMenuOpen ? (
-                                          <div className="email-menu absolute z-[130] mt-1 w-44 overflow-hidden rounded-lg shadow-lg">
+                                          <div className="email-menu absolute z-[130] mt-1.5 w-44">
                                             {(
                                               [
                                                 ["later", "Later today"],
@@ -4088,7 +4167,7 @@ ${sourceText}`;
                                                 key={preset}
                                                 type="button"
                                                 onClick={() => snoozeSelected(preset)}
-                                                className="email-menu-item block w-full px-3 py-2 text-left text-sm"
+                                                className="email-menu-item block w-full px-2.5 py-[7px] text-left text-[12.5px] font-medium"
                                               >
                                                 {label}
                                               </button>
@@ -4544,6 +4623,14 @@ ${sourceText}`;
                                   draggable={!message.isComposeDraft}
                                   onDragStart={(event) => startMessageDrag(event, message)}
                                   onDragEnd={endMessageDrag}
+                                  /* Warm the reader while the pointer is on the row, so opening
+                                     it is usually a cache hit rather than a fresh round trip. */
+                                  onMouseEnter={() => {
+                                    if (!message.isComposeDraft) void fetchDetailInto(message.accountEmail, message.id);
+                                  }}
+                                  onFocus={() => {
+                                    if (!message.isComposeDraft) void fetchDetailInto(message.accountEmail, message.id);
+                                  }}
                                   onClick={() => {
                                     if (message.isComposeDraft) {
                                       openComposeDraftFromRow(message);
@@ -4581,37 +4668,40 @@ ${sourceText}`;
                                     >
                                       <FiStar className={`h-4 w-4 ${message.starred ? "fill-[#F5A623]" : ""}`} aria-hidden />
                                     </span>
-                                    {/* ONE status slot, same 16px box as the checkbox and star so the
-                                        pitch is uniform. (There used to be a second, usually-empty
-                                        slot here for outbound tracking — its width plus the flex gap
-                                        was the phantom space between the star and this dot.)
-                                        Outbound tracking wins on sent mail; otherwise it reports an
-                                        incoming beacon. */}
+                                    {/* Tracking status. Outbound (mail we sent, with our tracker)
+                                        shows a green CHECK; incoming mail carrying someone else's
+                                        beacon shows a DOT. Same 16px box as the checkbox and star
+                                        so the gutter keeps a uniform pitch. */}
                                     <span
                                       className={`flex w-4 shrink-0 items-center justify-center ${
                                         message.tracked || incomingTracker?.tracked ? "email-tip" : ""
                                       }`}
                                       data-tip={
-                                        message.tracked && incomingTracker?.tracked
-                                          ? `${outboundTip} · Incoming tracker: ${incomingTracker.vendors.length ? incomingTracker.vendors.join(", ") : `${incomingTracker.count} beacon${incomingTracker.count === 1 ? "" : "s"}`}`
-                                          : message.tracked
-                                            ? outboundTip
-                                            : incomingTracker?.tracked
-                                              ? `Email tracked · ${incomingTracker.vendors.length ? incomingTracker.vendors.join(", ") : `${incomingTracker.count} beacon${incomingTracker.count === 1 ? "" : "s"}`}`
-                                              : undefined
+                                        message.tracked
+                                          ? outboundTip
+                                          : incomingTracker?.tracked
+                                            ? `Incoming tracker · ${
+                                                incomingTracker.vendors.length
+                                                  ? incomingTracker.vendors.join(", ")
+                                                  : `${incomingTracker.count} beacon${incomingTracker.count === 1 ? "" : "s"}`
+                                              }`
+                                            : undefined
                                       }
                                       aria-label={
                                         message.tracked
                                           ? openCount > 0
-                                            ? "Opened by recipient"
+                                            ? "Tracked, opened by recipient"
                                             : "Tracked, not yet opened"
                                           : incomingTracker?.tracked
-                                            ? "Email tracked"
+                                            ? "Contains a tracking pixel"
                                             : undefined
                                       }
                                     >
                                       {message.tracked ? (
-                                        <span className={`h-1.5 w-1.5 rounded-full ${openCount > 0 ? "bg-[#22C55E]" : "bg-[#6F6889]"}`} />
+                                        <FiCheck
+                                          className={`h-3.5 w-3.5 ${openCount > 0 ? "text-[#22C55E]" : "text-[#6F6889]"}`}
+                                          aria-hidden
+                                        />
                                       ) : incomingTracker?.tracked ? (
                                         <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E]" />
                                       ) : null}
@@ -4772,17 +4862,43 @@ ${sourceText}`;
                               <FiMove className="w-4 h-4" />
                             </button>
                             {moveMenuOpen === "message" ? (
-                              <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 min-w-[160px] overflow-hidden rounded-lg shadow-lg">
-                                {moveToOptions.map((option) => (
-                                  <button
-                                    key={`message-move-${option.value}`}
-                                    type="button"
-                                    onClick={() => handleMoveToChange(option.value)}
-                                    className="email-menu-item w-full px-3 py-2 text-left text-sm"
-                                  >
-                                    {option.label}
-                                  </button>
-                                ))}
+                              <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 min-w-[164px]">
+                                {moveToOptions
+                                  .filter((option) => !option.value.startsWith("label:"))
+                                  .map((option) => (
+                                    <button
+                                      key={`message-move-${option.value}`}
+                                      type="button"
+                                      onClick={() => handleMoveToChange(option.value)}
+                                      className="email-menu-item flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[12.5px] font-medium"
+                                    >
+                                      {option.value === "inbox" ? <FiInbox className="h-3.5 w-3.5 shrink-0" /> : null}
+                                      {option.value === "archive" ? <FiArchive className="h-3.5 w-3.5 shrink-0" /> : null}
+                                      {option.value === "spam" ? <FiSlash className="h-3.5 w-3.5 shrink-0" /> : null}
+                                      {option.value === "trash" ? <FiTrash2 className="h-3.5 w-3.5 shrink-0" /> : null}
+                                      <span className="truncate">{option.label}</span>
+                                    </button>
+                                  ))}
+                                {moveToOptions.some((option) => option.value.startsWith("label:")) ? (
+                                  <>
+                                    <div className="h-1.5" />
+                                    <div className="max-h-48 overflow-y-auto">
+                                      {moveToOptions
+                                        .filter((option) => option.value.startsWith("label:"))
+                                        .map((option) => (
+                                          <button
+                                            key={`message-move-${option.value}`}
+                                            type="button"
+                                            onClick={() => handleMoveToChange(option.value)}
+                                            className="email-menu-item flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[12.5px] font-medium"
+                                          >
+                                            <FiTag className="h-3.5 w-3.5 shrink-0" />
+                                            <span className="truncate">{option.label}</span>
+                                          </button>
+                                        ))}
+                                    </div>
+                                  </>
+                                ) : null}
                               </div>
                             ) : null}
                           </div>
@@ -4881,43 +4997,16 @@ ${sourceText}`;
                                   <div key={`${threadMessage.id || index}`} className="email-body-card rounded-2xl border border-white/70 bg-white/70 p-5">
                                     {threadMessage.bodyHtml ? (
                                       <div
-                                        className="text-sm text-[#374151] leading-6"
+                                        className="email-body text-[14px] leading-[1.65] text-[#2C313A]"
                                         dangerouslySetInnerHTML={{ __html: sanitizeHtml(threadMessage.bodyHtml) }}
                                       />
                                     ) : (
-                                      <div className="text-sm text-[#374151] whitespace-pre-wrap leading-6">
+                                      <div className="email-body whitespace-pre-wrap text-[14px] leading-[1.65] text-[#2C313A]">
                                         {threadMessage.bodyText || threadMessage.snippet || "No message content available."}
                                       </div>
                                     )}
                                   </div>
                                 ))}
-
-                                {!inlineComposeMode ? (
-                                  <div className="mt-4 rounded-2xl border border-[#701CC0]/20 bg-gradient-to-br from-[#701CC0]/[0.07] to-[#C42B9F]/[0.05] p-4">
-                                    <div className="mb-2 flex items-center gap-2">
-                                      <span
-                                        className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-white"
-                                        style={{ backgroundImage: BRAND_GRADIENT }}
-                                      >
-                                        <FiZap className="h-3.5 w-3.5" aria-hidden />
-                                      </span>
-                                      <b className="text-[13px] text-[#1E1B2E]">Artemis</b>
-                                      <button
-                                        type="button"
-                                        onClick={handleArtemisSummarize}
-                                        disabled={artemisSummaryLoading}
-                                        className="ml-auto text-[12px] font-semibold text-[#701CC0] hover:underline disabled:opacity-50"
-                                      >
-                                        {artemisSummaryLoading ? "Summarizing…" : "Summarize thread"}
-                                      </button>
-                                    </div>
-                                    {artemisSummary ? (
-                                      <div className="mb-3 whitespace-pre-wrap rounded-xl border border-white/70 bg-white/70 p-3 text-[12.5px] leading-relaxed text-[#4A465C]">
-                                        {artemisSummary}
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                ) : null}
 
                                 {inlineComposeMode ? (
                                   <div ref={inlineComposeRef} className="pt-3">
@@ -5353,7 +5442,7 @@ ${sourceText}`;
         >
           <div
             onClick={(event) => event.stopPropagation()}
-            className={`flex flex-col overflow-hidden bg-white shadow-[0_24px_60px_-18px_rgba(46,16,80,0.5)] border border-white/70 ring-1 ring-black/5 ${
+            className={`compose-hud flex flex-col overflow-hidden bg-white shadow-[0_24px_60px_-18px_rgba(46,16,80,0.5)] ${
               composeExpanded
                 ? "h-[75vh] w-[75vw] max-h-[75vh] max-w-[75vw] rounded-2xl"
                 : "fixed bottom-6 right-6 z-[120] w-[min(100vw-1.5rem,572px)] max-h-[min(92vh,760px)] rounded-2xl"
@@ -5361,7 +5450,7 @@ ${sourceText}`;
             role="dialog"
             aria-label={composeThreadId ? "Reply composer" : "New message composer"}
           >
-            <div style={{ backgroundImage: BRAND_GRADIENT }} className="flex shrink-0 cursor-default items-center justify-between gap-2 px-4 py-3">
+            <div className="compose-hud-header flex shrink-0 cursor-default items-center justify-between gap-2 px-4 py-2.5">
               <p className="min-w-0 flex-1 truncate pr-2 text-sm font-semibold text-white">
                 {composeThreadId ? "Reply" : "New message"}
               </p>
@@ -5766,7 +5855,7 @@ ${sourceText}`;
                         <FiZap className="h-3.5 w-3.5" aria-hidden /> Rewrite
                       </button>
                       {artemisRewriteOpen ? (
-                        <div className="email-menu absolute bottom-full left-0 z-[130] mb-1 w-44 overflow-hidden rounded-lg shadow-lg">
+                        <div className="email-menu absolute bottom-full left-0 z-[130] mb-1.5 w-44">
                           {([
                             ["shorten", "Make shorter"],
                             ["expand", "Expand"],
@@ -5778,7 +5867,7 @@ ${sourceText}`;
                               key={mode}
                               type="button"
                               onClick={() => handleArtemisRewrite(mode)}
-                              className="email-menu-item block w-full px-3 py-2 text-left text-sm"
+                              className="email-menu-item block w-full px-2.5 py-[7px] text-left text-[12.5px] font-medium"
                             >
                               {label}
                             </button>
@@ -6182,8 +6271,8 @@ ${sourceText}`;
         message={
           <>
             Are you sure you want to delete{" "}
-            <span className="font-semibold text-[#1E1B2E]">{labelToDelete?.name || "this label"}</span>? Messages keep
-            their content.
+            <span className="font-semibold text-white">{labelToDelete?.name || "this label"}</span>? Messages keep their
+            content.
           </>
         }
         confirmLabel={deletingLabel ? "Deleting..." : "Delete Label"}
