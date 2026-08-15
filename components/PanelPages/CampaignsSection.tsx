@@ -3,6 +3,7 @@ import { FiPlus, FiX, FiCheck, FiTrash2 } from "react-icons/fi";
 import { Inter } from "next/font/google";
 import Modal from "@/components/ui/Modal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import CampaignDetail from "./CampaignsSection/CampaignDetail";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -62,6 +63,28 @@ const CampaignsSection: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showNewCampaign, setShowNewCampaign] = useState(false);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  const [campaignToDelete, setCampaignToDelete] = useState<Campaign | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  const deleteCampaign = async () => {
+    if (!campaignToDelete || deleting) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res = await fetch(`/api/campaigns/${campaignToDelete.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload?.message || "Failed to delete campaign.");
+      }
+      setCampaignToDelete(null);
+      await loadCampaigns();
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Failed to delete campaign.");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const loadCampaigns = async () => {
     setLoading(true);
@@ -129,7 +152,7 @@ const CampaignsSection: React.FC = () => {
                 <table className="w-full">
                   <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
                     <tr>
-                      {["Name", "Status", "Provider", "Steps", "Contacts", "Sender", "Created"].map((h) => (
+                      {["Name", "Status", "Provider", "Steps", "Contacts", "Sender", "Created", ""].map((h) => (
                         <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
                           {h}
                         </th>
@@ -154,6 +177,23 @@ const CampaignsSection: React.FC = () => {
                         <td className="px-4 py-4 text-sm text-[#111827]">{c.contactCount ?? 0}</td>
                         <td className="px-4 py-4 text-sm text-[#111827]">{c.accountEmail || "—"}</td>
                         <td className="px-4 py-4 text-sm text-[#6B7280]">{new Date(c.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-4 text-sm text-right">
+                          {c.status === "draft" ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteError("");
+                                setCampaignToDelete(c);
+                              }}
+                              className="text-[#9CA3AF] hover:text-red-600"
+                              title="Delete campaign"
+                              aria-label={`Delete ${c.name}`}
+                            >
+                              <FiTrash2 className="w-4 h-4" />
+                            </button>
+                          ) : null}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -173,6 +213,24 @@ const CampaignsSection: React.FC = () => {
           }}
         />
       )}
+
+      <ConfirmActionModal
+        isOpen={campaignToDelete !== null}
+        title="Delete campaign?"
+        message={
+          <>
+            {`Permanently delete "${campaignToDelete?.name}"? This can't be undone.`}
+            {deleteError ? <span className="mt-2 block text-red-600">{deleteError}</span> : null}
+          </>
+        }
+        confirmLabel={deleting ? "Deleting…" : "Delete"}
+        onConfirm={deleteCampaign}
+        onCancel={() => {
+          if (deleting) return;
+          setCampaignToDelete(null);
+          setDeleteError("");
+        }}
+      />
     </div>
   );
 };
@@ -466,7 +524,7 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+              className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
               placeholder="Q3 Outreach — SMBs"
             />
           </div>
@@ -502,7 +560,7 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
             <select
               value={accountId}
               onChange={(e) => setAccountId(e.target.value)}
-              className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+              className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
             >
               <option value="">Select a connected mailbox…</option>
               {accounts.length > 0 && (
@@ -533,7 +591,7 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
                 <select
                   value={senderEmail}
                   onChange={(e) => setSenderEmail(e.target.value)}
-                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
                 >
                   <option value="">
                     {brevoSenders.length === 0 ? "Loading senders…" : "Select a Brevo sender…"}
@@ -577,7 +635,7 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
               <select
                 value={newStepTemplateId}
                 onChange={(e) => setNewStepTemplateId(e.target.value)}
-                className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
               >
                 <option value="">Select a template…</option>
                 {templates.map((t) => (
@@ -593,7 +651,7 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
                   min={0}
                   value={newStepDelayDays}
                   onChange={(e) => setNewStepDelayDays(Number(e.target.value))}
-                  className="w-24 border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                  className="w-24 border border-[#E5E7EB] rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
                 />
                 <span className="text-sm text-[#6B7280]">
                   day{newStepDelayDays === 1 ? "" : "s"} {steps.length === 0 ? "after enrollment" : "after the previous step"}
@@ -624,9 +682,10 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
           </p>
           <div className="space-y-2 max-h-64 overflow-y-auto">
             {tags.map((tag) => (
-              <label key={tag.id} className="flex items-center gap-2 text-sm">
+              <label key={tag.id} className="flex items-center gap-2 text-sm text-[#111827]">
                 <input
                   type="checkbox"
+                  aria-label={tag.name}
                   checked={selectedTagIds.includes(tag.id)}
                   onChange={(e) =>
                     setSelectedTagIds((prev) => (e.target.checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id)))

@@ -3,7 +3,7 @@ import { modifyMessageLabels, getOrCreateLabelId, createGmailDraft } from "@/lib
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { sendEmailCore } from "@/lib/gmail/sendCore";
 import { artemisGenerate, artemisConfigured } from "@/lib/ai/artemis";
-import { notifyDiscordEmbed, discordConfigured } from "@/lib/notify/discord";
+import { notifyDiscordEmbed, notifyCampaignReply, discordConfigured } from "@/lib/notify/discord";
 import { addToDnc } from "@/lib/campaigns/dnc";
 import type { InboundMessage, InboundContext } from "@/lib/gmail/inboundTypes";
 
@@ -214,32 +214,48 @@ export async function maybeHandleMdn(msg: InboundMessage, ctx: InboundContext): 
   });
 }
 
+/** Result of a campaign-contact match + classification, threaded into maybeNotifyDiscord so the
+ *  Discord ping can carry campaign name + lead status instead of firing blind. */
+export type ReplyIntelligenceResult = {
+  campaignId: string;
+  campaignContactId: string;
+  fromStatus: string | null;
+  leadStatus: string;
+} | null;
+
 /**
  * Reply-intelligence (Artemis): when an inbound reply matches an active campaign contact,
  * auto-pause their sequence and record the lead-status change. If Artemis is configured,
- * classify the reply to set a more specific lead status.
+ * classify the reply to set a more specific lead status. Returns the match + classification
+ * (or null when no campaign contact matched) so callers — namely maybeNotifyDiscord — can
+ * enrich their own output without re-running this lookup.
  */
-export async function maybeReplyIntelligence(msg: InboundMessage): Promise<void> {
-  if (isAutomatedSender(msg)) return;
+export async function maybeReplyIntelligence(msg: InboundMessage): Promise<ReplyIntelligenceResult> {
+  if (isAutomatedSender(msg)) return null;
 
   // Scope to campaigns sent FROM the mailbox that received this reply — replies come back to
   // the sending address, so this is the same account. Without it, a prospect email shared
-  // across two tenants' campaigns would flip whichever contact sorts first (wrong tenant).
+  // across two tenants' campaigns would flip whichever contact sorts first (wrong tenant). A
+  // missing accountId (no EmailProviderAccount row for this mailbox — e.g. an alternate connect
+  // path) previously dropped the scope filter entirely rather than failing closed, which let a
+  // reply match the most-recently-enrolled contact with that email ACROSS EVERY TENANT. Fail
+  // closed instead: no resolvable account means no reliable scope, so match nothing.
   const accountId = await resolveAccountId(msg.userId, msg.accountEmail);
+  if (!accountId) return null;
   const contact = await prisma.campaignContact.findFirst({
     where: {
       contact_email: msg.fromEmail,
       // Canonical QUEUE_STATUSES (lib/api/campaigns.ts) is queued|sending|sent|failed|skipped|
-      // completed|paused — "unsubscribed"/"bounced" here previously were never-valid values that
-      // this filter could never actually match (bounces land in "failed", unsubscribes/DNC in
-      // "skipped"). Fixed to the real terminal-ish states so this only matches contacts still
-      // eligible for a reply to affect.
-      queue_status: { notIn: ["paused", "completed", "skipped", "failed"] },
-      ...(accountId ? { campaigns: { account_id: accountId } } : {}),
+      // completed|paused. "completed" is deliberately NOT excluded here — sendQueueTick.ts sets it
+      // as soon as a contact's last sequence step goes out, which is exactly when most real replies
+      // arrive (after reading the full sequence, or the one email in a single-step campaign).
+      // Excluding it meant most replies never matched a campaign contact at all.
+      queue_status: { notIn: ["paused", "skipped", "failed"] },
+      campaigns: { account_id: accountId },
     },
     orderBy: { enrolled_at: "desc" },
   });
-  if (!contact) return;
+  if (!contact) return null;
 
   // Default: a reply pauses the sequence. ("reply" — not "replied", which isn't in LEAD_STATUSES.)
   let leadStatus = "reply";
@@ -268,6 +284,24 @@ export async function maybeReplyIntelligence(msg: InboundMessage): Promise<void>
     }
   }
 
+  const fromStatus = contact.lead_status;
+  // An out-of-office-flavored reply ("no_response") must not erase a status that already carries
+  // real signal — isAutomatedSender() only checks headers, so a genuine human reply whose body
+  // just reads like an OOO note (e.g. "swamped this week, will follow up Monday" sent from a
+  // normal inbox) can reach here after the contact was already classified positive_response,
+  // meeting_booked, etc. Downgrading that back to no_response would silently discard the prior
+  // signal. Keep the existing status in that case instead of overwriting it.
+  const STICKY_STATUSES = new Set([
+    "positive_response",
+    "positive_response_closed",
+    "meeting_booked",
+    "not_interested",
+    "remove_contact",
+    "bad_timing",
+  ]);
+  if (leadStatus === "no_response" && STICKY_STATUSES.has(fromStatus)) {
+    leadStatus = fromStatus;
+  }
   const now = new Date();
   await prisma.campaignContact.update({
     where: { id: contact.id },
@@ -280,7 +314,7 @@ export async function maybeReplyIntelligence(msg: InboundMessage): Promise<void>
   await prisma.leadStatusEvent.create({
     data: {
       campaign_contact_id: contact.id,
-      from_status: contact.lead_status,
+      from_status: fromStatus,
       to_status: leadStatus,
       changed_by_rule: "inbound_reply",
       note: "Auto-updated from an inbound reply.",
@@ -293,10 +327,18 @@ export async function maybeReplyIntelligence(msg: InboundMessage): Promise<void>
   if (leadStatus === "remove_contact") {
     await addToDnc(contact.campaign_id, msg.fromEmail, "categorization");
   }
+
+  return { campaignId: contact.campaign_id, campaignContactId: contact.id, fromStatus, leadStatus };
 }
 
-/** Notify the team Discord when a real reply (to one of your threads) arrives. */
-export async function maybeNotifyDiscord(msg: InboundMessage): Promise<void> {
+/**
+ * Notify the team Discord when a real reply (to one of your threads) arrives. When `replyIntel`
+ * identifies this as a campaign contact's reply (passed in by the inbound loop, which runs
+ * maybeReplyIntelligence first), the message is enriched with the campaign name and lead status
+ * — color/emoji-coded so a positive reply is visually distinguishable from a negative one —
+ * instead of the plain "someone replied" ping.
+ */
+export async function maybeNotifyDiscord(msg: InboundMessage, replyIntel?: ReplyIntelligenceResult): Promise<void> {
   if (!discordConfigured()) return;
   // Only reply threads (In-Reply-To present) from humans — not cold inbound / automated mail.
   if (!msg.inReplyTo || isAutomatedSender(msg)) return;
@@ -314,6 +356,21 @@ export async function maybeNotifyDiscord(msg: InboundMessage): Promise<void> {
     base && msg.threadId
       ? `${base}/panel/email?accounts=${encodeURIComponent(msg.accountEmail)}&thread=${encodeURIComponent(msg.threadId)}`
       : undefined;
+
+  if (replyIntel) {
+    const campaign = await prisma.campaign.findUnique({ where: { id: replyIntel.campaignId }, select: { name: true } });
+    await notifyCampaignReply({
+      contactEmail: msg.fromEmail,
+      campaignName: campaign?.name ?? "(unknown)",
+      leadStatus: replyIntel.leadStatus,
+      fromStatus: replyIntel.fromStatus,
+      subject: msg.subject,
+      snippet: msg.snippet,
+      threadUrl,
+    });
+    return;
+  }
+
   await notifyDiscordEmbed({
     author: { name: `Reply From ${(msg.from || msg.fromEmail).slice(0, 240)}` },
     title: (msg.subject || "(no subject)").slice(0, 250),

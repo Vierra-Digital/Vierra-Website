@@ -16,6 +16,7 @@ import {
   FiFileText,
   FiFilter,
   FiMail,
+  FiMapPin,
   FiServer,
   FiSlash,
   FiTag,
@@ -216,6 +217,10 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   });
   const [providerAccounts, setProviderAccounts] = useState<EmailProviderAccount[]>([]);
   const [blockedSenders, setBlockedSenders] = useState<BlockedSender[]>([]);
+  const [companyMailingAddress, setCompanyMailingAddress] = useState("");
+  const [companyPrivacyPolicyUrl, setCompanyPrivacyPolicyUrl] = useState("");
+  const [companySettingsSaving, setCompanySettingsSaving] = useState(false);
+  const [companySettingsStatus, setCompanySettingsStatus] = useState("");
   /** Baseline for tracking / vacation / contact visibility — updated after load and successful save. */
   const [savedSettings, setSavedSettings] = useState<Settings | null>(null);
   const [savedContactVisibility, setSavedContactVisibility] = useState<ContactVisibility | null>(null);
@@ -700,6 +705,41 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   }, [isAdmin]);
 
+  const loadCompanySettings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/company/settings");
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setCompanyMailingAddress(data?.mailingAddress || "");
+        setCompanyPrivacyPolicyUrl(data?.privacyPolicyUrl || "");
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const saveCompanySettings = async () => {
+    if (companySettingsSaving) return;
+    setCompanySettingsSaving(true);
+    setCompanySettingsStatus("");
+    try {
+      const res = await fetch("/api/company/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mailingAddress: companyMailingAddress,
+          privacyPolicyUrl: companyPrivacyPolicyUrl,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to save.");
+      setCompanySettingsStatus("Saved.");
+    } catch {
+      setCompanySettingsStatus("Failed to save — try again.");
+    } finally {
+      setCompanySettingsSaving(false);
+    }
+  };
+
   const createGrant = async () => {
     if (grantBusy || !newGrant.granteeUserId || !newGrant.accountEmail) return;
     setGrantBusy(true);
@@ -1063,6 +1103,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
           loadAiPrefs(),
           loadNavLayout(),
           loadMailboxGrants(),
+          loadCompanySettings(),
         ]);
         // loadAccounts is the one loader without its own try/catch; guard it so a failed
         // /api/gmail/status fetch can't reject out of the IIFE and wedge the page on the
@@ -1336,6 +1377,41 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     })}
                   </ul>
                 )}
+              </SettingsSection>
+
+              <SettingsSection
+                title="Campaign sending (CAN-SPAM)"
+                description="Every commercial campaign email must include a real physical mailing address by law. Until this is set, campaigns for this company cannot send at all — the send queue silently skips them."
+                icon={FiMapPin}
+              >
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-[#374151]">Mailing address</label>
+                    <textarea
+                      value={companyMailingAddress}
+                      onChange={(e) => setCompanyMailingAddress(e.target.value)}
+                      rows={2}
+                      className={fieldClass}
+                      placeholder="123 Main St, Suite 100, San Francisco, CA 94105"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-[#374151]">Privacy policy URL (optional)</label>
+                    <input
+                      type="text"
+                      value={companyPrivacyPolicyUrl}
+                      onChange={(e) => setCompanyPrivacyPolicyUrl(e.target.value)}
+                      className={fieldClass}
+                      placeholder="https://example.com/privacy"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button onClick={saveCompanySettings} disabled={companySettingsSaving} className={btnPrimary}>
+                      {companySettingsSaving ? "Saving…" : "Save"}
+                    </button>
+                    {companySettingsStatus ? <span className={TEXT_MUTED}>{companySettingsStatus}</span> : null}
+                  </div>
+                </div>
               </SettingsSection>
 
               <SettingsSection
