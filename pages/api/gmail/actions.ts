@@ -57,7 +57,9 @@ async function callGmailAction(accessToken: string, action: ActionType, messageI
 
   const body: { addLabelIds: string[]; removeLabelIds: string[] } = { addLabelIds: [], removeLabelIds: [] };
   if (action === "archive") {
-    body.removeLabelIds = ["INBOX"];
+    // Also drop SPAM: archiving a message that lives in Spam only removed INBOX, which it
+    // never had, so the message stayed exactly where it was and the action looked broken.
+    body.removeLabelIds = ["INBOX", "SPAM"];
   } else if (action === "moveToInbox" || action === "unspam") {
     body.addLabelIds = ["INBOX"];
     body.removeLabelIds = ["SPAM"];

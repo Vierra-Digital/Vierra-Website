@@ -16,9 +16,9 @@ import { scanHtmlForTrackers } from "@/lib/email/trackerDetection";
  * blocked" badge in the reader can never disagree.
  */
 
-const MAX_IDS = 60;
+const MAX_IDS = 40;
 /** Gmail tolerates parallel gets, but keep a lid on it so a page scan can't stampede the API. */
-const CONCURRENCY = 6;
+const CONCURRENCY = 4;
 
 function decodeBase64Url(data: string) {
   return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
