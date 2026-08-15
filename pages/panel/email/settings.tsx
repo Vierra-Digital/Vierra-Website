@@ -1012,13 +1012,22 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     if (!activeAccountEmail) return;
     setPromptConfig({
       title: "New template",
-      fields: [{ name: "name", label: "Template name", required: true, maxLength: 120 }],
+      fields: [
+        { name: "name", label: "Template name", required: true, maxLength: 120 },
+        { name: "subject", label: "Subject", placeholder: "e.g. Quick question, {{firstName|there}}" },
+        {
+          name: "bodyText",
+          label: "Body",
+          type: "textarea",
+          placeholder: "Hi {{firstName|there}}, {Hi|Hey|Hello}...",
+        },
+      ],
       confirmLabel: "Create template",
-      onSubmit: async ({ name }) => {
+      onSubmit: async ({ name, subject, bodyText }) => {
         await fetch("/api/gmail/templates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accountEmail: activeAccountEmail, name, subject: "", bodyText: "" }),
+          body: JSON.stringify({ accountEmail: activeAccountEmail, name, subject, bodyText }),
         });
         await loadAccountData(activeAccountEmail);
       },
@@ -1032,6 +1041,26 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       body: JSON.stringify({ id }),
     });
     await loadAccountData(activeAccountEmail);
+  };
+
+  const editTemplate = (template: TemplateRow) => {
+    setPromptConfig({
+      title: "Edit template",
+      fields: [
+        { name: "name", label: "Template name", required: true, defaultValue: template.name, maxLength: 120 },
+        { name: "subject", label: "Subject", defaultValue: template.subject || "" },
+        { name: "bodyText", label: "Body", type: "textarea", defaultValue: template.bodyText || "" },
+      ],
+      confirmLabel: "Save template",
+      onSubmit: async ({ name, subject, bodyText }) => {
+        await fetch("/api/gmail/templates", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: template.id, name: name || template.name, subject, bodyText }),
+        });
+        await loadAccountData(activeAccountEmail);
+      },
+    });
   };
 
   const createTag = () => {
@@ -2169,6 +2198,13 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                                 {showPreview ? "Hide preview" : "Preview"}
                               </button>
                             ) : null}
+                            <button
+                              type="button"
+                              onClick={() => editTemplate(row)}
+                              className="text-sm font-medium text-[#374151] hover:text-[#701CC0]"
+                            >
+                              Edit
+                            </button>
                             <button type="button" onClick={() => deleteTemplate(row.id)} className="text-sm font-medium text-red-600 hover:underline">
                               Remove
                             </button>
