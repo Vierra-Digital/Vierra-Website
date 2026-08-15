@@ -4038,7 +4038,7 @@ ${sourceText}`;
                                             ))}
                                           {moveToOptions.some((option) => option.value.startsWith("label:")) ? (
                                             <>
-                                              <div className="email-menu-divider" />
+                                              <div className="h-1.5" />
                                               <div className="max-h-48 overflow-y-auto">
                                                 {moveToOptions
                                                   .filter((option) => option.value.startsWith("label:"))
@@ -4799,7 +4799,7 @@ ${sourceText}`;
                                   ))}
                                 {moveToOptions.some((option) => option.value.startsWith("label:")) ? (
                                   <>
-                                    <div className="email-menu-divider" />
+                                    <div className="h-1.5" />
                                     <div className="max-h-48 overflow-y-auto">
                                       {moveToOptions
                                         .filter((option) => option.value.startsWith("label:"))
