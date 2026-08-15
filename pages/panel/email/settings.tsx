@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Head from "next/head";
 import Link from "next/link";
 import Image from "next/image";
@@ -10,6 +10,8 @@ import {
   FiActivity,
   FiArrowLeft,
   FiCalendar,
+  FiChevronDown,
+  FiChevronUp,
   FiCoffee,
   FiEdit3,
   FiEye,
@@ -29,7 +31,7 @@ import { requireSession } from "@/lib/auth";
 import { renderTemplate } from "@/lib/email/templateRender";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import PromptModal, { type PromptField } from "@/components/ui/PromptModal";
-import { MODULES } from "@/components/email/constants";
+import { MODULES, orderModules } from "@/components/email/constants";
 import type { ContactVisibility } from "@/components/email/types";
 
 type PromptConfig = {
@@ -397,6 +399,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [deletingLink, setDeletingLink] = useState(false);
   const [deleteLinkError, setDeleteLinkError] = useState("");
   const [navHidden, setNavHidden] = useState<string[]>([]);
+  /** Custom sidebar order (module keys). Empty = built-in MODULES order. */
+  const [navOrder, setNavOrder] = useState<string[]>([]);
   const [navSaving, setNavSaving] = useState(false);
   // Undo-send window (seconds). Stored in localStorage — the same key the composer reads before it
   // actually sends — so this is a per-device preference (no server round-trip).
@@ -986,12 +990,16 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   };
 
   // Domain-auth health (SPF/DKIM/DMARC) for each connected account's sending domain.
+  // `requestedDomainsRef` (not the `deliverability` state) is the de-dupe key: keying off
+  // state meant every resolved domain re-ran this effect for all the others.
+  const requestedDomainsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const domains = Array.from(
       new Set(connectedAccounts.map((a) => a.email.split("@")[1]).filter(Boolean))
     );
     domains.forEach(async (domain) => {
-      if (deliverability[domain]) return;
+      if (requestedDomainsRef.current.has(domain)) return;
+      requestedDomainsRef.current.add(domain);
       try {
         const res = await fetch(`/api/gmail/deliverability?domain=${encodeURIComponent(domain)}`);
         if (res.ok) {
@@ -1002,7 +1010,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         /* ignore */
       }
     });
-  }, [connectedAccounts, deliverability]);
+  }, [connectedAccounts]);
 
   const toggleAccountEnabled = async (email: string, enabled: boolean) => {
     const key = email.toLowerCase();
@@ -1085,6 +1093,21 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       setSaving(false);
     }
   };
+
+  // Auto-save this block. Every other control on the page persists the moment you change it
+  // (sidebar layout, undo-send, account toggles), so making these the one group that needed
+  // a separate button is what made changing them look like it did nothing. Debounced, so
+  // typing in the vacation fields doesn't fire a request per keystroke. The sticky bar still
+  // reports status and still offers a manual Save.
+  const saveSettingsRef = useRef(saveSettings);
+  saveSettingsRef.current = saveSettings;
+  useEffect(() => {
+    if (!hasUnsavedSettingsChanges || saving || switchingAccount) return;
+    const timer = setTimeout(() => {
+      void saveSettingsRef.current();
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [hasUnsavedSettingsChanges, saving, switchingAccount, settings, contactVisibility]);
 
   const createSignature = () => {
     if (!activeAccountEmail) return;
@@ -1184,39 +1207,41 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       if (r.ok) {
         const d = await r.json();
         if (Array.isArray(d?.hiddenModules)) setNavHidden(d.hiddenModules);
+        if (Array.isArray(d?.moduleOrder)) setNavOrder(d.moduleOrder);
       }
     } catch {
       /* ignore */
     }
   }, []);
 
-  // Single orchestrated initial load. Fires the account-independent fetches immediately (in
-  // parallel with the accounts lookup), awaits everything, then drops the loading gate ONCE — so
-  // the page paints a single time with all sections populated instead of each fetch resolving at
-  // a different time and popping its section in (the old "choppy" load).
+  // Initial load. The account-independent fetches start immediately but are NOT awaited:
+  // waiting on the slowest of a dozen endpoints (bookings, org queue, mailbox grants,
+  // filters, company settings…) is what left this page sitting on "Loading settings…".
+  // Each section fills in as its data lands; only the account-scoped data gates the shell.
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      void Promise.allSettled([
+        loadFilters(),
+        loadAccountPrefs(),
+        loadBookingLinks(),
+        loadBookings(),
+        loadOrgQueue(),
+        loadAiPrefs(),
+        loadNavLayout(),
+        loadMailboxGrants(),
+        loadCompanySettings(),
+      ]);
       try {
-        const independent = Promise.allSettled([
-          loadFilters(),
-          loadAccountPrefs(),
-          loadBookingLinks(),
-          loadBookings(),
-          loadOrgQueue(),
-          loadAiPrefs(),
-          loadNavLayout(),
-          loadMailboxGrants(),
-          loadCompanySettings(),
-        ]);
         // loadAccounts is the one loader without its own try/catch; guard it so a failed
         // /api/gmail/status fetch can't reject out of the IIFE and wedge the page on the
         // loading gate forever. On failure we fall through to an empty accounts state.
         const primary = await loadAccounts().catch(() => "");
         if (cancelled) return;
         setSelectedAccountEmail(primary);
-        const accountScoped = primary ? loadAccountData(primary) : Promise.resolve();
-        await Promise.allSettled([independent, accountScoped]);
+        // Only the account-scoped settings gate the shell — they're what the first
+        // screenful actually renders.
+        if (primary) await loadAccountData(primary).catch(() => {});
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -1229,14 +1254,94 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
   const toggleModuleVisible = async (key: string, visible: boolean) => {
     if (key === "inbox") return; // Inbox is always shown.
+    const previous = navHidden;
     const next = visible ? navHidden.filter((k) => k !== key) : [...new Set([...navHidden, key])];
     setNavHidden(next);
+    setNavSaving(true);
+    setStatus("");
+    try {
+      // Roll the toggle back if the write didn't land, so the UI never shows a state the
+      // server doesn't have (a silently-dropped save is why this looked like it "didn't save").
+      const response = await fetch("/api/gmail/nav-layout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hiddenModules: next }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || payload?.ok === false) {
+        setNavHidden(previous);
+        setStatus("Failed to save sidebar layout.");
+      }
+    } catch {
+      setNavHidden(previous);
+      setStatus("Failed to save sidebar layout.");
+    } finally {
+      setNavSaving(false);
+    }
+  };
+
+  /** The sidebar list as currently ordered — the saved order, or MODULES when unset. */
+  const orderedModules = useMemo(() => orderModules(MODULES, navOrder), [navOrder]);
+
+  /** Move a module one slot up (-1) or down (+1) and persist the resulting order. */
+  const moveModule = async (key: string, direction: -1 | 1) => {
+    const keys = orderedModules.map((m) => m.key as string);
+    const from = keys.indexOf(key);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= keys.length) return;
+    const next = [...keys];
+    [next[from], next[to]] = [next[to], next[from]];
+    setNavOrder(next);
     setNavSaving(true);
     try {
       await fetch("/api/gmail/nav-layout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hiddenModules: next }),
+        body: JSON.stringify({ moduleOrder: next }),
+      });
+    } finally {
+      setNavSaving(false);
+    }
+  };
+
+  /** Drag-to-reorder for the same list. The arrows remain the keyboard-accessible path. */
+  const [draggingKey, setDraggingKey] = useState<string | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+
+  const dropModuleOn = async (targetKey: string) => {
+    const sourceKey = draggingKey;
+    setDraggingKey(null);
+    setDragOverKey(null);
+    if (!sourceKey || sourceKey === targetKey) return;
+    const keys = orderedModules.map((m) => m.key as string);
+    const from = keys.indexOf(sourceKey);
+    const to = keys.indexOf(targetKey);
+    if (from < 0 || to < 0) return;
+    const next = [...keys];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setNavOrder(next);
+    setNavSaving(true);
+    try {
+      await fetch("/api/gmail/nav-layout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moduleOrder: next }),
+      });
+    } finally {
+      setNavSaving(false);
+    }
+  };
+
+  /** Drop the custom order and fall back to the built-in one. */
+  const resetModuleOrder = async () => {
+    setNavOrder([]);
+    setNavSaving(true);
+    try {
+      await fetch("/api/gmail/nav-layout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moduleOrder: [] }),
       });
     } finally {
       setNavSaving(false);
@@ -1403,20 +1508,89 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   ) : null}
               <SettingsSection
                 title="Inbox layout"
-                description="Choose which items show in the email panel's left sidebar. Inbox is always shown. Syncs across your devices."
+                description="Choose which items show in the email panel's left sidebar, and use the arrows to put them in the order you want. Inbox is always shown. Syncs across your devices."
                 icon={FiEye}
-                right={navSaving ? <span className="text-xs text-[#9CA3AF]">Saving…</span> : null}
+                right={
+                  <div className="flex items-center gap-3">
+                    {navSaving ? <span className="text-xs text-[#9CA3AF]">Saving…</span> : null}
+                    {navOrder.length > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => void resetModuleOrder()}
+                        className="text-xs font-medium text-[#701CC0] transition-colors hover:text-[#5E17A8]"
+                      >
+                        Reset order
+                      </button>
+                    ) : null}
+                  </div>
+                }
               >
                 <ul className="divide-y divide-gray-100">
-                  {MODULES.map((m) => {
+                  {orderedModules.map((m, index) => {
                     const visible = m.key === "inbox" || !navHidden.includes(m.key);
                     return (
-                      <li key={m.key} className="flex items-center justify-between py-2.5">
-                        <span className="flex items-center gap-2.5 text-sm text-[#1E1B2E]">
+                      <li
+                        key={m.key}
+                        draggable
+                        onDragStart={(e) => {
+                          setDraggingKey(m.key);
+                          e.dataTransfer.effectAllowed = "move";
+                          e.dataTransfer.setData("text/plain", m.key);
+                        }}
+                        onDragEnd={() => {
+                          setDraggingKey(null);
+                          setDragOverKey(null);
+                        }}
+                        onDragOver={(e) => {
+                          if (!draggingKey) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          setDragOverKey(m.key);
+                        }}
+                        onDragLeave={() => setDragOverKey((k) => (k === m.key ? null : k))}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          void dropModuleOn(m.key);
+                        }}
+                        /* Insertion line above the target row — not a highlighted box — so it
+                           reads as "it will land here" rather than "this row is selected". */
+                        className={`relative flex cursor-grab items-center justify-between gap-3 py-2.5 active:cursor-grabbing ${
+                          draggingKey === m.key ? "opacity-40" : ""
+                        } ${
+                          dragOverKey === m.key
+                            ? "before:pointer-events-none before:absolute before:inset-x-0 before:-top-px before:h-[2px] before:rounded-full before:bg-[#701CC0] before:content-['']"
+                            : ""
+                        }`}
+                      >
+                        <span className="flex min-w-0 items-center gap-2.5 text-sm text-[#1E1B2E]">
                           <span className="text-[#847FA0]">{m.icon}</span>
-                          {m.label}
+                          <span className="truncate">{m.label}</span>
                         </span>
-                        <Toggle checked={visible} onChange={(v) => toggleModuleVisible(m.key, v)} disabled={m.key === "inbox"} />
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => void moveModule(m.key, -1)}
+                            disabled={index === 0}
+                            aria-label={`Move ${m.label} up`}
+                            title="Move up"
+                            className="rounded-md border border-[#E5E7EB] p-1.5 text-[#6B7280] transition-colors hover:bg-[#F9FAFB] hover:text-[#701CC0] disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            <FiChevronUp className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void moveModule(m.key, 1)}
+                            disabled={index === orderedModules.length - 1}
+                            aria-label={`Move ${m.label} down`}
+                            title="Move down"
+                            className="rounded-md border border-[#E5E7EB] p-1.5 text-[#6B7280] transition-colors hover:bg-[#F9FAFB] hover:text-[#701CC0] disabled:cursor-not-allowed disabled:opacity-30"
+                          >
+                            <FiChevronDown className="h-3.5 w-3.5" />
+                          </button>
+                          <span className="ml-1.5">
+                            <Toggle checked={visible} onChange={(v) => toggleModuleVisible(m.key, v)} disabled={m.key === "inbox"} />
+                          </span>
+                        </div>
                       </li>
                     );
                   })}

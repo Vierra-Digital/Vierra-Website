@@ -11,6 +11,8 @@ type ConfirmActionModalProps = {
   onConfirm: () => void;
   onCancel: () => void;
   danger?: boolean;
+  /** Render on the email panel's dark surface instead of the default light card. */
+  dark?: boolean;
 };
 
 const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
@@ -22,6 +24,7 @@ const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
   onConfirm,
   onCancel,
   danger = true,
+  dark = false,
 }) => {
   if (!isOpen) return null;
 
@@ -30,7 +33,7 @@ const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
       onClose={onCancel}
       zIndexClass="z-50"
       backdropClassName="bg-black/50 backdrop-blur-sm"
-      cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+      cardClassName={`rounded-lg shadow-xl p-6 max-w-md w-full mx-4 ${dark ? "email-dialog-dark" : "bg-white"}`}
       closeOnBackdrop={true}
     >
         <div className="flex items-center gap-3 mb-4">
@@ -40,10 +43,10 @@ const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
           <h3 className="text-xl font-semibold text-[#111827]">{title}</h3>
         </div>
         <p className="text-sm text-[#6B7280] mb-6">{message}</p>
-        <div className="flex gap-3 justify-end">
+        <div className="flex items-center justify-between gap-3">
           <button
             onClick={onCancel}
-            className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium"
+            className={`px-4 py-2 rounded-lg border text-sm font-medium ${dark ? "border-white/12 text-[#C9C4DC] hover:bg-white/5" : "border-[#E5E7EB] text-[#374151] hover:bg-gray-50"}`}
           >
             {cancelLabel}
           </button>
