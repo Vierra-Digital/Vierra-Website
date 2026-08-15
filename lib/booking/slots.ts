@@ -102,7 +102,12 @@ export function computeSlots(opts: {
   // host tz at rangeStart isn't skipped), stopping once slots pass the end of the range.
   let { year, month, day } = localYMD(new Date(rangeStart.getTime() - 24 * 60 * 60 * 1000), timeZone);
 
-  for (let guard = 0; guard < 400 && slots.length < max; guard += 1) {
+  // Safety backstop, not the real terminator — the loop already exits via the rangeEnd check
+  // below once a local day starts past the window. Sized off the actual requested range (plus
+  // slack) instead of a fixed guess so a long window (e.g. an "unbounded" booking link's ~2-year
+  // horizon) can't get silently truncated by an unrelated hardcoded day count.
+  const maxIterations = Math.ceil((rangeEndMs - rangeStart.getTime()) / (24 * 60 * 60 * 1000)) + 3;
+  for (let guard = 0; guard < maxIterations && slots.length < max; guard += 1) {
     if (availability.days.includes(localWeekday(year, month, day, timeZone))) {
       for (let m = availability.startMinutes; m + durationMinutes <= availability.endMinutes; m += durationMinutes) {
         const startMs = wallToUtc(year, month, day, m, timeZone).getTime();
