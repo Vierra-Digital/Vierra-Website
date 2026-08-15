@@ -3493,7 +3493,11 @@ ${sourceText}`;
       byAccount.set(message.accountEmail, list);
     }
     let cancelled = false;
-    (async () => {
+    // Hold the scan back briefly. It pulls full bodies for the page, so firing it the moment
+    // the list paints put ~60 requests in flight against the same connection the mailbox and
+    // reader are using — the list felt slow because the scan was competing with it.
+    const startDelay = setTimeout(() => {
+      void (async () => {
       for (const [accountEmail, messageIds] of byAccount) {
         try {
           const response = await fetch("/api/gmail/tracker-scan", {
@@ -3510,9 +3514,11 @@ ${sourceText}`;
           /* a failed scan just leaves those rows dot-less */
         }
       }
-    })();
+      })();
+    }, 700);
     return () => {
       cancelled = true;
+      clearTimeout(startDelay);
     };
   }, [conversationRows, messagesLoading]);
 
@@ -4013,8 +4019,7 @@ ${sourceText}`;
                                         <FiMove className="w-4 h-4" />
                                       </button>
                                       {moveMenuOpen === "list" ? (
-                                        <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 min-w-[210px] overflow-hidden rounded-xl shadow-2xl">
-                                          <div className="email-menu-heading">Move to</div>
+                                        <div className="email-menu absolute right-0 top-[calc(100%+4px)] z-20 min-w-[168px] overflow-hidden rounded-lg py-1 shadow-xl">
                                           {moveToOptions
                                             .filter((option) => !option.value.startsWith("label:"))
                                             .map((option) => (
@@ -4022,19 +4027,19 @@ ${sourceText}`;
                                                 key={`list-move-${option.value}`}
                                                 type="button"
                                                 onClick={() => handleMoveToChange(option.value)}
-                                                className="email-menu-item flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm"
+                                                className="email-menu-item flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px]"
                                               >
-                                                {option.value === "inbox" ? <FiInbox className="h-4 w-4 shrink-0" /> : null}
-                                                {option.value === "archive" ? <FiArchive className="h-4 w-4 shrink-0" /> : null}
-                                                {option.value === "spam" ? <FiSlash className="h-4 w-4 shrink-0" /> : null}
-                                                {option.value === "trash" ? <FiTrash2 className="h-4 w-4 shrink-0" /> : null}
+                                                {option.value === "inbox" ? <FiInbox className="h-3.5 w-3.5 shrink-0" /> : null}
+                                                {option.value === "archive" ? <FiArchive className="h-3.5 w-3.5 shrink-0" /> : null}
+                                                {option.value === "spam" ? <FiSlash className="h-3.5 w-3.5 shrink-0" /> : null}
+                                                {option.value === "trash" ? <FiTrash2 className="h-3.5 w-3.5 shrink-0" /> : null}
                                                 <span className="truncate">{option.label}</span>
                                               </button>
                                             ))}
                                           {moveToOptions.some((option) => option.value.startsWith("label:")) ? (
                                             <>
-                                              <div className="email-menu-heading border-t border-white/[0.07]">Labels</div>
-                                              <div className="max-h-56 overflow-y-auto">
+                                              <div className="my-1 border-t border-white/[0.07]" />
+                                              <div className="max-h-48 overflow-y-auto">
                                                 {moveToOptions
                                                   .filter((option) => option.value.startsWith("label:"))
                                                   .map((option) => (
@@ -4042,9 +4047,9 @@ ${sourceText}`;
                                                       key={`list-move-${option.value}`}
                                                       type="button"
                                                       onClick={() => handleMoveToChange(option.value)}
-                                                      className="email-menu-item flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm"
+                                                      className="email-menu-item flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[13px]"
                                                     >
-                                                      <FiTag className="h-4 w-4 shrink-0" />
+                                                      <FiTag className="h-3.5 w-3.5 shrink-0" />
                                                       <span className="truncate">{option.label}</span>
                                                     </button>
                                                   ))}
@@ -4581,37 +4586,40 @@ ${sourceText}`;
                                     >
                                       <FiStar className={`h-4 w-4 ${message.starred ? "fill-[#F5A623]" : ""}`} aria-hidden />
                                     </span>
-                                    {/* ONE status slot, same 16px box as the checkbox and star so the
-                                        pitch is uniform. (There used to be a second, usually-empty
-                                        slot here for outbound tracking — its width plus the flex gap
-                                        was the phantom space between the star and this dot.)
-                                        Outbound tracking wins on sent mail; otherwise it reports an
-                                        incoming beacon. */}
+                                    {/* Tracking status. Outbound (mail we sent, with our tracker)
+                                        shows a green CHECK; incoming mail carrying someone else's
+                                        beacon shows a DOT. Same 16px box as the checkbox and star
+                                        so the gutter keeps a uniform pitch. */}
                                     <span
                                       className={`flex w-4 shrink-0 items-center justify-center ${
                                         message.tracked || incomingTracker?.tracked ? "email-tip" : ""
                                       }`}
                                       data-tip={
-                                        message.tracked && incomingTracker?.tracked
-                                          ? `${outboundTip} · Incoming tracker: ${incomingTracker.vendors.length ? incomingTracker.vendors.join(", ") : `${incomingTracker.count} beacon${incomingTracker.count === 1 ? "" : "s"}`}`
-                                          : message.tracked
-                                            ? outboundTip
-                                            : incomingTracker?.tracked
-                                              ? `Email tracked · ${incomingTracker.vendors.length ? incomingTracker.vendors.join(", ") : `${incomingTracker.count} beacon${incomingTracker.count === 1 ? "" : "s"}`}`
-                                              : undefined
+                                        message.tracked
+                                          ? outboundTip
+                                          : incomingTracker?.tracked
+                                            ? `Incoming tracker · ${
+                                                incomingTracker.vendors.length
+                                                  ? incomingTracker.vendors.join(", ")
+                                                  : `${incomingTracker.count} beacon${incomingTracker.count === 1 ? "" : "s"}`
+                                              }`
+                                            : undefined
                                       }
                                       aria-label={
                                         message.tracked
                                           ? openCount > 0
-                                            ? "Opened by recipient"
+                                            ? "Tracked, opened by recipient"
                                             : "Tracked, not yet opened"
                                           : incomingTracker?.tracked
-                                            ? "Email tracked"
+                                            ? "Contains a tracking pixel"
                                             : undefined
                                       }
                                     >
                                       {message.tracked ? (
-                                        <span className={`h-1.5 w-1.5 rounded-full ${openCount > 0 ? "bg-[#22C55E]" : "bg-[#6F6889]"}`} />
+                                        <FiCheck
+                                          className={`h-3.5 w-3.5 ${openCount > 0 ? "text-[#22C55E]" : "text-[#6F6889]"}`}
+                                          aria-hidden
+                                        />
                                       ) : incomingTracker?.tracked ? (
                                         <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E]" />
                                       ) : null}
