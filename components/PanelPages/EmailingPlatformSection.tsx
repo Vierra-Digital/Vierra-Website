@@ -299,6 +299,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   /** Set below; lets applyAction re-sync after a partial failure without a cyclic dep. */
   const loadMessagesRef = useRef<() => void>(() => {});
   const [labelToDelete, setLabelToDelete] = useState<{ id: string; name: string } | null>(null);
+  /** Open when the trash button is about to hard-delete (Spam/Trash) — that has no undo. */
+  const [confirmHardDelete, setConfirmHardDelete] = useState(false);
   const [labelToRename, setLabelToRename] = useState<{ id: string; name: string } | null>(null);
   const [renamingLabel, setRenamingLabel] = useState(false);
   const [deletingLabel, setDeletingLabel] = useState(false);
@@ -604,6 +606,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   }, [messages, rowKey, selectedRows, selectedMessage]);
 
   const hasSelectedEmails = selectedRows.length > 0;
+  /**
+   * Mailboxes where the trash button hard-deletes instead of moving to Trash — matching Gmail,
+   * where Spam and Trash both delete outright. Needs the restricted https://mail.google.com/
+   * scope (gmail.modify can only trash); accounts connected before that scope was requested
+   * get the "reconnect" error from the actions API until they reauthorize.
+   */
+  const deletesPermanently = activeModule === "trash" || activeModule === "spam";
   /** Any unread in the selection (all-unread or mixed) → offer "Mark As Read".
       Only when every selected email is already read do we offer "Mark As Unread". */
   const selectionHasUnread =
@@ -4055,9 +4064,9 @@ ${sourceText}`;
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
+                                    onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
                                     className={`${ICON_BUTTON_SOLID} email-tip`}
-                                    data-tip={activeModule === "trash" ? "Delete Permanently" : "Move To Trash"}
+                                    data-tip={deletesPermanently ? "Delete Permanently" : "Move To Trash"}
                                   >
                                     <FiTrash2 className="w-4 h-4" />
                                   </button>
@@ -4912,9 +4921,9 @@ ${sourceText}`;
                           </button>
                           <button
                             type="button"
-                            onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
+                            onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
                             className={ICON_BUTTON}
-                            title={activeModule === "trash" ? "Delete Permanently" : "Trash"}
+                            title={deletesPermanently ? "Delete Permanently" : "Trash"}
                           >
                             <FiTrash2 className="w-4 h-4" />
                           </button>
@@ -6264,6 +6273,30 @@ ${sourceText}`;
           setContactToDelete(null);
         }}
         onConfirm={confirmDeleteContact}
+      />
+      <ConfirmActionModal
+        isOpen={confirmHardDelete}
+        title="Delete Permanently"
+        message={
+          <>
+            {selectedRows.length > 1 ? (
+              <>
+                Permanently delete <span className="font-semibold text-white">{selectedRows.length} emails</span>?
+              </>
+            ) : (
+              <>Permanently delete this email?</>
+            )}{" "}
+            They will not go to Trash and this cannot be undone.
+          </>
+        }
+        confirmLabel="Delete Permanently"
+        danger
+        dark
+        onCancel={() => setConfirmHardDelete(false)}
+        onConfirm={() => {
+          setConfirmHardDelete(false);
+          void applyAction("deletePermanently");
+        }}
       />
       <ConfirmActionModal
         isOpen={Boolean(labelToDelete)}
