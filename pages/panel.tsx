@@ -17,6 +17,7 @@ import { FaRegFilePdf } from "react-icons/fa6";
 import { HiOutlineDocumentText } from "react-icons/hi";
 import { HiGlobeAlt } from "react-icons/hi2";
 import { useSession, signOut } from "@/lib/session-client"
+import { useActivityHeartbeat } from "@/hooks/useActivityHeartbeat"
 const SignPdfSection = dynamic(
   () => import("@/components/PanelPages/SignPdfSection"),
   { ssr: false }
@@ -83,6 +84,7 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
   const router = useRouter()
   const [showSettings, setShowSettings] = useState(false)
   const [currentSection, setCurrentSection] = useState(0);
+  const [visitedSections, setVisitedSections] = useState<Set<number>>(() => new Set([0]))
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const { data: session } = useSession()
   const [isAddClientOpen, setIsAddClientOpen] = useState(false)
@@ -102,39 +104,17 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
   }, [])
 
   useEffect(() => {
+    setVisitedSections((prev) => (prev.has(currentSection) ? prev : new Set(prev).add(currentSection)))
+  }, [currentSection])
+
+  useEffect(() => {
     if (!router.isReady) return;
     if (router.query.settings === "1") {
       setShowSettings(true);
     }
   }, [router.isReady, router.query.settings]);
 
-  useEffect(() => {
-    const updateActivity = async () => {
-      try {
-        await fetch("/api/profile/updateActivity", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "online" }),
-        });
-      } catch (error) {
-        console.error("Failed to update activity:", error);
-      }
-    };
-
-    updateActivity();
-    const interval = setInterval(updateActivity, 2 * 60 * 1000);
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        updateActivity();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, []);
+  useActivityHeartbeat();
 
   async function fetchCurrentUser() {
     try {
@@ -435,26 +415,60 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
                     </>
                   ) : (
                     <>
-                      {currentSection === 0 && <DashboardSection />}
-                      {currentSection === 1 && !isStaff && (
-                        <ClientsSection
-                          onAddClient={() => setIsAddClientOpen(true)}
-                          refreshTrigger={clientRefreshTrigger}
-                          onViewClient={enterClientViewMode}
-                        />
+                      {visitedSections.has(0) && (
+                        <div style={{ display: currentSection === 0 ? undefined : "none" }}>
+                          <DashboardSection />
+                        </div>
                       )}
-                      {currentSection === 2 && <TeamPanelSection userRole={resolvedUserRole} />}
-                      {currentSection === 4 && <LtvCalculatorSection />}
-                      {currentSection === 5 && <OutreachSection />}
-                      {currentSection === 6 && <ProjectManagement />}
-                      {currentSection === 7 && (
-                        <div className="w-full pb-24">
+                      {visitedSections.has(1) && !isStaff && (
+                        <div style={{ display: currentSection === 1 ? undefined : "none" }}>
+                          <ClientsSection
+                            onAddClient={() => setIsAddClientOpen(true)}
+                            refreshTrigger={clientRefreshTrigger}
+                            onViewClient={enterClientViewMode}
+                          />
+                        </div>
+                      )}
+                      {visitedSections.has(2) && (
+                        <div style={{ display: currentSection === 2 ? undefined : "none" }}>
+                          <TeamPanelSection userRole={resolvedUserRole} />
+                        </div>
+                      )}
+                      {visitedSections.has(4) && (
+                        <div style={{ display: currentSection === 4 ? undefined : "none" }}>
+                          <LtvCalculatorSection />
+                        </div>
+                      )}
+                      {visitedSections.has(5) && (
+                        <div style={{ display: currentSection === 5 ? undefined : "none" }}>
+                          <OutreachSection />
+                        </div>
+                      )}
+                      {visitedSections.has(6) && (
+                        <div style={{ display: currentSection === 6 ? undefined : "none" }}>
+                          <ProjectManagement />
+                        </div>
+                      )}
+                      {visitedSections.has(7) && (
+                        <div className="w-full pb-24" style={{ display: currentSection === 7 ? undefined : "none" }}>
                           <BlogEditorSection />
                         </div>
                       )}
-                      {currentSection === 8 && !isStaff && <AdminEditorSection />}
-                      {currentSection === 9 && !isStaff && <SignPdfSection />}
-                      {currentSection === 10 && <FilesSection />}
+                      {visitedSections.has(8) && !isStaff && (
+                        <div style={{ display: currentSection === 8 ? undefined : "none" }}>
+                          <AdminEditorSection />
+                        </div>
+                      )}
+                      {visitedSections.has(9) && !isStaff && (
+                        <div style={{ display: currentSection === 9 ? undefined : "none" }}>
+                          <SignPdfSection />
+                        </div>
+                      )}
+                      {visitedSections.has(10) && (
+                        <div style={{ display: currentSection === 10 ? undefined : "none" }}>
+                          <FilesSection />
+                        </div>
+                      )}
                     </>
                   )}
                 </>
