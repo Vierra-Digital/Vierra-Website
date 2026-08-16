@@ -31,7 +31,7 @@ import { requireSession } from "@/lib/auth";
 import { renderTemplate } from "@/lib/email/templateRender";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import PromptModal, { type PromptField } from "@/components/ui/PromptModal";
-import { MODULES, orderModules } from "@/components/email/constants";
+import { MODULES, orderModules, PAGE_SIZE } from "@/components/email/constants";
 import type { ContactVisibility } from "@/components/email/types";
 
 type PromptConfig = {
@@ -423,6 +423,12 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   /** Custom sidebar order (module keys). Empty = built-in MODULES order. */
   const [navOrder, setNavOrder] = useState<string[]>([]);
   const [navSaving, setNavSaving] = useState(false);
+  /** Rows per mailbox page. Empty string = "use the default". */
+  const [navPageSize, setNavPageSize] = useState<string>("");
+  /** Verified send-as identities for the active account (Gmail "Send mail as"). */
+  const [sendAsAliases, setSendAsAliases] = useState<
+    Array<{ email: string; displayName: string; isPrimary: boolean }>
+  >([]);
   // Undo-send window (seconds). Stored in localStorage — the same key the composer reads before it
   // actually sends — so this is a per-device preference (no server round-trip).
   const [undoSendDelay, setUndoSendDelay] = useState(5);
@@ -544,7 +550,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const loadAccountData = async (accountEmail: string) => {
     if (!accountEmail) return;
     try {
-      const [settingsRes, signaturesRes, templatesRes, tagsRes, visibilityRes, providersRes, blockedRes] = await Promise.all([
+      const [settingsRes, signaturesRes, templatesRes, tagsRes, visibilityRes, providersRes, blockedRes, sendAsRes] = await Promise.all([
         fetch(`/api/gmail/settings?accountEmail=${encodeURIComponent(accountEmail)}`),
         fetch(`/api/gmail/signatures?accountEmail=${encodeURIComponent(accountEmail)}`),
         fetch(`/api/gmail/templates?accountEmail=${encodeURIComponent(accountEmail)}`),
@@ -552,6 +558,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         fetch(`/api/contacts/visibility?accountEmail=${encodeURIComponent(accountEmail)}`),
         fetch("/api/email/accounts"),
         fetch("/api/gmail/blocked-senders"),
+        fetch(`/api/gmail/send-as?accountEmail=${encodeURIComponent(accountEmail)}`),
       ]);
       const settingsPayload = await settingsRes.json().catch(() => ({}));
       const signaturesPayload = await signaturesRes.json().catch(() => ({}));
@@ -560,6 +567,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       const visibilityPayload = await visibilityRes.json().catch(() => ({}));
       const providersPayload = await providersRes.json().catch(() => ({}));
       const blockedPayload = await blockedRes.json().catch(() => ({}));
+      const sendAsPayload = await sendAsRes.json().catch(() => ({}));
 
       const rawSettings = settingsPayload?.settings || {};
       const nextSettings: Settings = {
@@ -589,6 +597,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       setSavedContactVisibility(nextVisibility);
       setProviderAccounts(Array.isArray(providersPayload?.accounts) ? providersPayload.accounts : []);
       setBlockedSenders(Array.isArray(blockedPayload?.blocked) ? blockedPayload.blocked : []);
+      setSendAsAliases(Array.isArray(sendAsPayload?.aliases) ? sendAsPayload.aliases : []);
     } catch {
       /* leave prior state on error */
     }
@@ -1246,6 +1255,42 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
   const deleteTag = (tag: ContactTag) => setTagToDelete(tag);
 
+  /**
+   * Persist the rows-per-page preference. The server clamps to 10–100; mirror that here so the
+   * field can't show a value the panel won't actually use.
+   */
+  const saveNavPageSize = async (raw: string) => {
+    const trimmed = raw.trim();
+    const parsed = Number(trimmed);
+    const value = trimmed && Number.isFinite(parsed) && parsed > 0
+      ? Math.min(100, Math.max(10, Math.floor(parsed)))
+      : null;
+    setNavPageSize(value ? String(value) : "");
+    setNavSaving(true);
+    setStatus("");
+    try {
+      const response = await fetch("/api/gmail/nav-layout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageSize: value }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || payload?.ok === false) {
+        setStatus(
+          payload?.message
+            ? `Failed to save emails per page — ${payload.message}`
+            : "Failed to save emails per page."
+        );
+      }
+    } catch (error) {
+      setStatus(
+        `Failed to save emails per page — ${error instanceof Error ? error.message : "network error"}`
+      );
+    } finally {
+      setNavSaving(false);
+    }
+  };
+
   const loadNavLayout = useCallback(async () => {
     try {
       const r = await fetch("/api/gmail/nav-layout");
@@ -1253,6 +1298,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         const d = await r.json();
         if (Array.isArray(d?.hiddenModules)) setNavHidden(d.hiddenModules);
         if (Array.isArray(d?.moduleOrder)) setNavOrder(d.moduleOrder);
+        setNavPageSize(d?.pageSize ? String(d.pageSize) : "");
       }
     } catch {
       /* ignore */
@@ -1471,7 +1517,49 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
         <main className="flex min-h-0 flex-1 overflow-hidden">
           {loading ? (
-            <div className="flex flex-1 items-center justify-center text-sm text-[#6B7280]">Loading settings…</div>
+            /* Skeleton of the real shell — nav rail on the left, stacked section cards on the
+               right — so the page holds its shape while data lands instead of collapsing to a
+               line of centred text and then jumping into a full layout. */
+            <div className="flex flex-1 overflow-hidden" role="status" aria-label="Loading settings">
+              <aside className="hidden w-[248px] shrink-0 flex-col gap-2 overflow-hidden border-r border-white/[0.07] px-3 pt-3 lg:flex">
+                <div className="settings-skeleton mb-2 h-9 rounded-lg" />
+                <div className="settings-skeleton h-9 rounded-lg" />
+                {[...Array(7)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="settings-skeleton h-7 rounded-md"
+                    style={{ width: `${88 - (i % 3) * 14}%`, animationDelay: `${i * 70}ms` }}
+                  />
+                ))}
+              </aside>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <div className="mx-auto max-w-3xl space-y-5 px-5 py-6 lg:px-8 lg:py-8">
+                  {[...Array(3)].map((_, card) => (
+                    <div key={card} className="rounded-xl border border-white/[0.07] p-5">
+                      <div className="flex items-center gap-3">
+                        <div className="settings-skeleton h-9 w-9 shrink-0 rounded-lg" />
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div className="settings-skeleton h-4 w-40 rounded" style={{ animationDelay: `${card * 90}ms` }} />
+                          <div className="settings-skeleton h-3 w-64 max-w-full rounded" style={{ animationDelay: `${card * 90 + 60}ms` }} />
+                        </div>
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        {[...Array(card === 0 ? 4 : 2)].map((__, row) => (
+                          <div key={row} className="flex items-center justify-between gap-4">
+                            <div
+                              className="settings-skeleton h-3.5 rounded"
+                              style={{ width: `${52 - row * 6}%`, animationDelay: `${row * 80}ms` }}
+                            />
+                            <div className="settings-skeleton h-5 w-10 shrink-0 rounded-full" style={{ animationDelay: `${row * 80}ms` }} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <span className="sr-only">Loading settings…</span>
+            </div>
           ) : (
             <SettingsFilterContext.Provider value={settingsFilter}>
               <aside className="hidden w-[248px] shrink-0 flex-col overflow-hidden border-r border-white/[0.07] lg:flex">
@@ -1538,6 +1626,28 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   </div>
                 }
               >
+                <div className="mb-3 flex items-center justify-between gap-4 border-b border-gray-100 pb-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#1E1B2E]">Emails per page</p>
+                    <p className="mt-0.5 text-xs text-[#6B7280]">
+                      How many messages each mailbox page loads. Each row is a separate Gmail
+                      fetch, so a smaller number opens mailboxes faster. 10–100; blank uses the
+                      default of {PAGE_SIZE}.
+                    </p>
+                  </div>
+                  <input
+                    type="number"
+                    min={10}
+                    max={100}
+                    step={5}
+                    value={navPageSize}
+                    placeholder={String(PAGE_SIZE)}
+                    onChange={(event) => setNavPageSize(event.target.value)}
+                    onBlur={(event) => void saveNavPageSize(event.target.value)}
+                    className="w-24 shrink-0 rounded-lg border border-[#E5E7EB] px-3 py-1.5 text-sm text-[#1E1B2E] focus:border-[#701CC0] focus:outline-none focus:ring-1 focus:ring-[#701CC0]"
+                    aria-label="Emails per page"
+                  />
+                </div>
                 <ul className="divide-y divide-gray-100">
                   {orderedModules.map((m, index) => {
                     const visible = m.key === "inbox" || !navHidden.includes(m.key);
@@ -1608,6 +1718,47 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     );
                   })}
                 </ul>
+              </SettingsSection>
+              <SettingsSection
+                title="Send mail as"
+                description="Addresses this account is allowed to send from. These come from Gmail's own “Send mail as” settings — add or remove them in Gmail and they update here."
+                icon={FiMail}
+              >
+                {sendAsAliases.length === 0 ? (
+                  <p className={TEXT_MUTED}>
+                    No send-as addresses found for {activeAccountEmail || "this account"}.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-gray-100">
+                    {sendAsAliases.map((alias) => (
+                      <li key={alias.email} className="flex items-center justify-between gap-4 py-2.5">
+                        <div className="min-w-0">
+                          <p className={`${TEXT_STRONG} truncate`}>
+                            {alias.displayName ? `${alias.displayName} <${alias.email}>` : alias.email}
+                          </p>
+                          <p className={TEXT_MUTED}>
+                            {alias.isPrimary
+                              ? "Primary address for this mailbox"
+                              : `Alias — sends through ${activeAccountEmail}`}
+                          </p>
+                        </div>
+                        <span
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
+                            alias.isPrimary ? "bg-[#F3EDFB] text-[#701CC0]" : "bg-[#ECFDF3] text-[#067647]"
+                          }`}
+                        >
+                          {alias.isPrimary ? "Primary" : "Verified"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="mt-3 border-t border-gray-100 pt-3 text-xs leading-relaxed text-[#6B7280]">
+                  Incoming mail sent to any of these addresses is delivered to{" "}
+                  {activeAccountEmail || "this mailbox"} by Gmail, so it already appears in your
+                  Inbox — there is nothing separate to connect. To see only one address, search{" "}
+                  <code className="rounded bg-gray-100 px-1 py-0.5">to:address@example.com</code>.
+                </p>
               </SettingsSection>
               <SettingsSection
                 title="Undo send"
