@@ -53,6 +53,21 @@ export async function fetchSendAsAliases(accessToken: string): Promise<GmailSend
     .filter((entry: GmailSendAsAlias) => entry.email);
 }
 
+/**
+ * A Gmail search fragment that scopes results to mail addressed to (or, for sent/drafts, sent
+ * from) a "send as" alias's address — used to give an alias its own filtered view of the
+ * account it shares a mailbox with. `deliveredto:` matches the `Delivered-To` header, which the
+ * receiving MTA adds and which survives most forwarding setups even when a `To:` header gets
+ * rewritten along the way; `to:`/`from:` cover the common case where it doesn't. Combining both
+ * with OR is strictly wider (never narrower) than either alone, so this can only recover
+ * messages a single-operator filter would have missed — it can't introduce false positives
+ * beyond what `to:`/`from:` already would.
+ */
+export function buildAliasScopeQuery(aliasEmail: string, direction: "to" | "from"): string {
+  const primary = `${direction}:${aliasEmail}`;
+  return direction === "to" ? `(${primary} OR deliveredto:${aliasEmail})` : primary;
+}
+
 /** Create a Gmail draft (a plain-text reply). Returns the draft id or null. Never sends. */
 export async function createGmailDraft(
   accessToken: string,

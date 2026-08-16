@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { toBase64Url, extractHeader, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { toBase64Url, extractHeader, parseAddressFromHeader, buildAliasScopeQuery, fetchSendAsAliases } from "@/lib/gmail/gmailApi";
 
 describe("toBase64Url", () => {
   it("produces URL-safe base64 with no +, /, or = padding", () => {
@@ -32,5 +32,48 @@ describe("parseAddressFromHeader", () => {
   });
   it("preserves case when lower:false", () => {
     expect(parseAddressFromHeader("Alex <Alex@Acme.CO>", { lower: false })).toBe("Alex@Acme.CO");
+  });
+});
+
+describe("buildAliasScopeQuery", () => {
+  it("ORs in deliveredto: for the inbound (to) direction, to survive header-rewriting forwards", () => {
+    expect(buildAliasScopeQuery("business@alexshick.com", "to")).toBe(
+      "(to:business@alexshick.com OR deliveredto:business@alexshick.com)"
+    );
+  });
+  it("uses a plain from: filter for the outbound (sent/drafts) direction", () => {
+    expect(buildAliasScopeQuery("business@alexshick.com", "from")).toBe("from:business@alexshick.com");
+  });
+});
+
+describe("fetchSendAsAliases", () => {
+  const mockFetch = vi.fn();
+  beforeEach(() => {
+    mockFetch.mockReset();
+    vi.stubGlobal("fetch", mockFetch);
+  });
+
+  it("keeps the primary plus any verified (accepted) alias, dropping unverified ones", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          sendAs: [
+            { sendAsEmail: "Alex@Vierradev.com", isPrimary: true },
+            { sendAsEmail: "Business@AlexShick.com", verificationStatus: "accepted", displayName: "Alex" },
+            { sendAsEmail: "unverified@alexshick.com", verificationStatus: "pending" },
+          ],
+        }),
+    });
+    const aliases = await fetchSendAsAliases("tok");
+    expect(aliases).toEqual([
+      { email: "alex@vierradev.com", displayName: "", isPrimary: true },
+      { email: "business@alexshick.com", displayName: "Alex", isPrimary: false },
+    ]);
+  });
+
+  it("returns an empty list on a failed request rather than throwing", async () => {
+    mockFetch.mockResolvedValue({ ok: false, json: () => Promise.resolve({}) });
+    expect(await fetchSendAsAliases("tok")).toEqual([]);
   });
 });

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { getAccessibleGmailAccounts, getGmailAliasAccounts } from "@/lib/email/mailboxAccess";
-import { extractHeader } from "@/lib/gmail/gmailApi";
+import { extractHeader, buildAliasScopeQuery } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
 
 type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive" | "allmail" | "starred" | "important" | "scheduled";
@@ -273,9 +273,9 @@ export default withAuth(async (req, res, session) => {
 
         // An alias has no inbox of its own — it shares the owning account's, so scope the fetch
         // to just the mail addressed to (or, for sent/drafts, sent from) that alias.
-        const aliasOperator = mailbox === "sent" || mailbox === "drafts" ? "from" : "to";
+        const aliasDirection = mailbox === "sent" || mailbox === "drafts" ? "from" : "to";
         const effectiveSearch = account.aliasOfEmail
-          ? `${aliasOperator}:${account.email} ${searchQuery}`.trim()
+          ? `${buildAliasScopeQuery(account.email, aliasDirection)} ${searchQuery}`.trim()
           : searchQuery;
 
         const loadAccountMessages = async (accessToken: string) => {

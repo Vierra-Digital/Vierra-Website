@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { getOrCreateLabelId, modifyMessageLabels } from "@/lib/gmail/gmailApi";
+import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 
 /**
  * Snooze: hide a message from the inbox until a chosen time, then re-surface it.
@@ -18,7 +19,11 @@ export async function snoozeMessages(
   items: SnoozeItem[],
   until: Date
 ): Promise<{ ok: boolean; snoozed: number; message?: string }> {
-  const token = await getValidGmailAccessToken(userId, accountEmail);
+  // accountEmail may be a Gmail "send as" alias, which has no OAuth token of its own — resolve
+  // back to the real Gmail address that holds one (a no-op for a directly-connected account).
+  const access = await resolveMailboxOwner(userId, accountEmail);
+  const tokenEmail = access?.tokenEmail || accountEmail;
+  const token = await getValidGmailAccessToken(userId, tokenEmail);
   if (!token.ok) return { ok: false, snoozed: 0, message: token.message };
   const labelId = await getOrCreateLabelId(token.accessToken, SNOOZE_LABEL);
 
@@ -48,7 +53,9 @@ export async function snoozeMessages(
 export async function unsnooze(userId: string, id: string): Promise<boolean> {
   const row = await prisma.emailSnooze.findFirst({ where: { id, user_id: userId, status: "SNOOZED" } });
   if (!row) return false;
-  const token = await getValidGmailAccessToken(userId, row.account_email);
+  const access = await resolveMailboxOwner(userId, row.account_email);
+  const tokenEmail = access?.tokenEmail || row.account_email;
+  const token = await getValidGmailAccessToken(userId, tokenEmail);
   if (token.ok) {
     const labelId = await getOrCreateLabelId(token.accessToken, SNOOZE_LABEL);
     await modifyMessageLabels(token.accessToken, row.message_id, {
@@ -81,7 +88,9 @@ export async function resurfaceDueSnoozes(now: Date): Promise<{ resurfaced: numb
   let resurfaced = 0;
   for (const group of groups.values()) {
     try {
-      const token = await getValidGmailAccessToken(group.userId, group.accountEmail);
+      const access = await resolveMailboxOwner(group.userId, group.accountEmail);
+      const tokenEmail = access?.tokenEmail || group.accountEmail;
+      const token = await getValidGmailAccessToken(group.userId, tokenEmail);
       // Token invalid (account disconnected / needs reconnect): leave these rows SNOOZED so a later
       // tick retries once the token recovers, instead of marking them resurfaced while the message
       // is still hidden from the inbox (which would strand it there permanently).
