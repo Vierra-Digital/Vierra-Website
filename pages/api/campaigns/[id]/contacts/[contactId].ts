@@ -9,6 +9,7 @@ import {
   REMOVE_CONTACT_STATUS,
 } from "@/lib/api/campaigns";
 import { addToDnc } from "@/lib/campaigns/dnc";
+import { notifyMeetingBooked, discordConfigured } from "@/lib/notify/discord";
 
 function getIds(req: NextApiRequest) {
   const campaignRaw = req.query.id;
@@ -137,6 +138,21 @@ export default withAuth(async (req, res, session) => {
     if (leadStatus === REMOVE_CONTACT_STATUS) {
       await addToDnc(campaignId, existing.contact_email);
       await prisma.campaignContact.update({ where: { id: contactId }, data: { queue_status: "skipped", skip_reason: "removed_by_categorization" } });
+    }
+
+    // Guard on the transition, not just the new value — a no-op PATCH (re-saving the same status,
+    // e.g. a stale form re-submit) must not re-notify. See
+    // .claude/schema_v2_campaigns_discord_notifications.md §4.
+    if (leadStatus === "meeting_booked" && existing.lead_status !== "meeting_booked" && discordConfigured()) {
+      const campaignRow = await prisma.campaign.findUnique({ where: { id: campaignId }, select: { name: true } });
+      const contactName = [existing.contact_first_name, existing.contact_last_name].filter(Boolean).join(" ");
+      await notifyMeetingBooked({
+        contactEmail: existing.contact_email,
+        contactName: contactName || null,
+        campaignId,
+        campaignName: campaignRow?.name ?? "(unknown)",
+        contactId,
+      });
     }
 
     res.status(200).json({ contact: serializeCampaignContact(updated) });

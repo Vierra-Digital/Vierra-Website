@@ -12,6 +12,7 @@ import {
   translateMergeTagsForSmartlead,
 } from "@/lib/campaigns/smartlead/client";
 import { brevoConfigured } from "@/lib/campaigns/brevo/client";
+import { notifyCampaignCompleted, notifyCampaignLaunched, discordConfigured } from "@/lib/notify/discord";
 
 function getId(req: NextApiRequest) {
   const raw = req.query.id;
@@ -37,7 +38,7 @@ export default withAuth(async (req, res, session) => {
   const existing = await prisma.campaign.findFirst({
     where: { id, company_id: session.companyId },
     include: {
-      email_provider_accounts: { select: { account_email: true, smartlead_email_account_id: true } },
+      email_provider_accounts: { select: { user_id: true, account_email: true, smartlead_email_account_id: true } },
       _count: { select: { campaign_steps: true, campaign_contacts: true } },
     },
   });
@@ -154,9 +155,32 @@ export default withAuth(async (req, res, session) => {
       // is a plain transport, not a system of record), but we still must not flip a campaign to
       // "active" if BREVO_API_KEY isn't set — otherwise every contact silently fails at send time
       // in sendQueueTick.ts instead of being blocked upfront.
-      if (existing.send_provider === "brevo" && nextStatus === "active" && !brevoConfigured()) {
-        res.status(400).json({ message: "Brevo isn't configured (BREVO_API_KEY missing)." });
-        return;
+      if (existing.send_provider === "brevo" && nextStatus === "active") {
+        if (!brevoConfigured()) {
+          res.status(400).json({ message: "Brevo isn't configured (BREVO_API_KEY missing)." });
+          return;
+        }
+        // Brevo has no inbound-reply webhook — reply detection for Brevo campaigns depends
+        // entirely on lib/gmail/inbound.ts's Gmail polling, which only covers mailboxes actually
+        // OAuth-connected in this app (a PlatformToken row). Nothing else enforces that a Brevo
+        // campaign's account_email is such a mailbox (see pages/api/campaigns/index.ts — vendor-
+        // provider accounts are identity-only, no connection required to create one), so without
+        // this check a launched campaign could send fine while every reply silently vanishes into
+        // the mailbox's real inbox with no lead-status update and no Discord notification.
+        const gmailConnected = await prisma.platformToken.findFirst({
+          where: {
+            user_id: existing.email_provider_accounts.user_id,
+            platform: `gmail:${existing.email_provider_accounts.account_email}`,
+          },
+          select: { id: true },
+        });
+        if (!gmailConnected) {
+          res.status(400).json({
+            message:
+              `"${existing.email_provider_accounts.account_email}" isn't connected via Gmail in this app, so replies to this Brevo campaign would never be detected. Connect this mailbox under Email Panel settings before launching.`,
+          });
+          return;
+        }
       }
 
       const updated = await prisma.campaign.update({
@@ -167,6 +191,26 @@ export default withAuth(async (req, res, session) => {
           _count: { select: { campaign_steps: true, campaign_contacts: true } },
         },
       });
+
+      // "cancelled" is intentionally excluded — cancellation isn't "done," it's abandoned, and a
+      // distinct notification for that wasn't asked for. See
+      // .claude/schema_v2_campaigns_discord_notifications.md §5/§7.
+      if (nextStatus === "completed" && discordConfigured()) {
+        const [sentCount, contactCount] = await Promise.all([
+          prisma.emailOutboundMessage.count({ where: { campaign_id: id } }),
+          prisma.campaignContact.count({ where: { campaign_id: id } }),
+        ]);
+        await notifyCampaignCompleted({ campaignId: id, campaignName: existing.name, sentCount, contactCount });
+      }
+
+      // Symmetric with the completed notification above. Gated on the true draft -> active
+      // transition (matches the started_at-setting condition earlier) so resuming a paused
+      // campaign back to "active" doesn't re-fire this as if it were a fresh launch.
+      if (nextStatus === "active" && existing.status === "draft" && discordConfigured()) {
+        const contactCount = await prisma.campaignContact.count({ where: { campaign_id: id } });
+        await notifyCampaignLaunched({ campaignId: id, campaignName: existing.name, contactCount });
+      }
+
       res.status(200).json({ campaign: serializeCampaign(updated) });
       return;
     }

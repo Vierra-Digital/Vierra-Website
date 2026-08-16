@@ -1,16 +1,23 @@
 import { prisma } from "@/lib/prisma";
-import { notifyDiscord, discordConfigured } from "@/lib/notify/discord";
+import { notifySignal, discordConfigured } from "@/lib/notify/discord";
 
 /**
  * Signal-based outreach (v1): scan recent tracked-link CLICKS — a high-intent signal —
- * and, when the click maps to a campaign contact, advance their lead status to "interested"
- * and alert the team on Discord. Runs on the inbound cron (every ~5 min) so it stays off the
- * click-redirect hot path.
+ * and, when the click maps to a campaign contact, advance their lead status to
+ * "positive_response" and alert the team on Discord. Runs on the inbound cron (every ~5 min)
+ * so it stays off the click-redirect hot path.
  *
- * Idempotent: only acts on contacts not already engaged, so re-scanning the overlap window
- * never double-fires. Full signal-triggered sequence enrollment is a later enhancement.
+ * Idempotent: only acts on contacts still at the default "no_response" status, so re-scanning
+ * the overlap window never double-fires and a contact already categorized (by a reply, a
+ * manual action, or a prior signal) is never overwritten. Full signal-triggered sequence
+ * enrollment is a later enhancement.
+ *
+ * lead_status must be one of the canonical LEAD_STATUSES (lib/api/campaigns.ts) — writing an
+ * arbitrary string here would bypass that validation (only the manual PATCH endpoint enforces
+ * it) and leave the contact with a status the rest of the app (labels, filters, stats) doesn't
+ * recognize.
  */
-const ENGAGED = new Set(["interested", "replied", "booked", "won"]);
+const SIGNAL_LEAD_STATUS = "positive_response";
 
 export async function processSignals(now: Date): Promise<{ signals: number; enrolled: number }> {
   const windowStart = new Date(now.getTime() - 6 * 60 * 1000);
@@ -55,28 +62,31 @@ export async function processSignals(now: Date): Promise<{ signals: number; enro
         contact_first_name: true,
         contact_last_name: true,
         contact_business: true,
-        campaigns: { select: { company_id: true } },
+        campaigns: { select: { company_id: true, name: true } },
       },
     });
-    if (!contact || ENGAGED.has(contact.lead_status)) continue;
+    if (!contact || contact.lead_status !== "no_response") continue;
 
     await prisma.campaignContact.update({
       where: { id: contact.id },
-      data: { lead_status: "interested", updated_at: now },
+      data: { lead_status: SIGNAL_LEAD_STATUS, updated_at: now },
     });
     await prisma.leadStatusEvent.create({
       data: {
         campaign_contact_id: contact.id,
         from_status: contact.lead_status,
-        to_status: "interested",
+        to_status: SIGNAL_LEAD_STATUS,
         changed_by_rule: "link_click_signal",
         note: "Clicked a tracked link.",
       },
     });
     if (discordConfigured()) {
-      await notifyDiscord(
-        `🔥 High-intent signal: ${email} clicked a link${c.email_outbound_messages?.subject ? ` in "${c.email_outbound_messages.subject}"` : ""} — marked interested.`
-      );
+      await notifySignal({
+        contactEmail: email,
+        campaignName: contact.campaigns?.name,
+        kind: "click",
+        subject: c.email_outbound_messages?.subject,
+      });
     }
     signals += 1;
 
@@ -87,7 +97,7 @@ export async function processSignals(now: Date): Promise<{ signals: number; enro
     if (companyId) {
       const target = await prisma.campaign.findFirst({
         where: { company_id: companyId, enroll_on_signal: true, status: "active" },
-        select: { id: true },
+        select: { id: true, name: true },
       });
       if (target && target.id !== contact.campaign_id) {
         const already = await prisma.campaignContact.findFirst({
@@ -103,14 +113,14 @@ export async function processSignals(now: Date): Promise<{ signals: number; enro
               contact_first_name: contact.contact_first_name,
               contact_last_name: contact.contact_last_name,
               contact_business: contact.contact_business,
-              lead_status: "interested",
+              lead_status: SIGNAL_LEAD_STATUS,
               queue_status: "queued",
               next_send_at: now,
             },
           });
           enrolled += 1;
           if (discordConfigured()) {
-            await notifyDiscord(`➕ Auto-enrolled ${email} into the signal nurture sequence.`);
+            await notifySignal({ contactEmail: email, campaignName: target.name, kind: "enrolled" });
           }
         }
       }
