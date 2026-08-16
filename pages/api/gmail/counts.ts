@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getAccessibleGmailAccounts } from "@/lib/email/mailboxAccess";
+import { getAccessibleGmailAccounts, getGmailAliasAccounts } from "@/lib/email/mailboxAccess";
+import { buildAliasScopeQuery } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
 
 type GmailListEstimateResponse = {
@@ -43,14 +44,24 @@ async function fetchDraftLabelMessageTotal(accessToken: string) {
   return Number(payload.messagesTotal ?? 0);
 }
 
-async function fetchMailboxCounts(accessToken: string) {
+/**
+ * `aliasEmail` scopes every count to mail addressed to (or, for sent, from) that alias — an
+ * alias shares its owning account's mailbox, so an unscoped count would show the WHOLE
+ * account's badges under the alias's name. Drafts for an alias use `in:drafts from:<alias>`
+ * (an estimate — a draft's "From" reflects whichever send-as identity was selected when it was
+ * composed) rather than the exact DRAFT label total, since that total has no per-recipient
+ * filter; it's an approximation, but a closer one than showing 0 regardless of real draft count.
+ */
+async function fetchMailboxCounts(accessToken: string, aliasEmail?: string) {
+  const toFilter = aliasEmail ? `${buildAliasScopeQuery(aliasEmail, "to")} ` : "";
+  const fromFilter = aliasEmail ? `${buildAliasScopeQuery(aliasEmail, "from")} ` : "";
   const [inbox, sent, draftsTotal, spam, trash, archive] = await Promise.all([
-    fetchEstimate(accessToken, "in:inbox is:unread"),
-    fetchEstimate(accessToken, "in:sent is:unread"),
-    fetchDraftLabelMessageTotal(accessToken),
-    fetchEstimate(accessToken, "in:spam is:unread"),
-    fetchEstimate(accessToken, "in:trash is:unread"),
-    fetchEstimate(accessToken, "-in:inbox -in:sent -in:drafts -in:spam -in:trash is:unread"),
+    fetchEstimate(accessToken, `${toFilter}in:inbox is:unread`),
+    fetchEstimate(accessToken, `${fromFilter}in:sent is:unread`),
+    aliasEmail ? fetchEstimate(accessToken, `${fromFilter}in:drafts`) : fetchDraftLabelMessageTotal(accessToken),
+    fetchEstimate(accessToken, `${toFilter}in:spam is:unread`),
+    fetchEstimate(accessToken, `${toFilter}in:trash is:unread`),
+    fetchEstimate(accessToken, `${toFilter}-in:inbox -in:sent -in:drafts -in:spam -in:trash is:unread`),
   ]);
 
   return { inbox, sent, drafts: draftsTotal, spam, trash, archive };
@@ -76,10 +87,24 @@ export default withAuth(async (req, res, session) => {
   // use. For owned accounts ownerUserId === userId, so this is unchanged for non-delegated users —
   // it just lets granted shared inboxes contribute to the unread badges.
   const accessible = await getAccessibleGmailAccounts(userId);
+  const accessibleEmails = new Set(accessible.map((row) => row.email));
+  type FetchAccount = { email: string; ownerUserId: string; aliasOfEmail?: string };
+  let accountRows: FetchAccount[] = accessible;
 
-  const accountRows = accessible.filter((row) =>
-    selectedEmails.length ? selectedEmails.includes(row.email) : true
-  );
+  if (selectedEmails.length) {
+    const direct: FetchAccount[] = accessible.filter((row) => selectedEmails.includes(row.email));
+    // A selected email that isn't directly connected may be a Gmail "send as" alias sharing its
+    // owning account's mailbox (see messages.ts) — resolve it the same way here.
+    const unresolved = selectedEmails.filter((email) => !accessibleEmails.has(email));
+    let aliasRows: FetchAccount[] = [];
+    if (unresolved.length) {
+      const aliasAccounts = await getGmailAliasAccounts(userId);
+      aliasRows = aliasAccounts
+        .filter((alias) => unresolved.includes(alias.email))
+        .map((alias) => ({ email: alias.email, ownerUserId: alias.ownerUserId, aliasOfEmail: alias.viaAccountEmail }));
+    }
+    accountRows = [...direct, ...aliasRows];
+  }
 
   let selectedAccountIds: string[] = [];
   if (selectedEmails.length > 0) {
@@ -120,20 +145,22 @@ export default withAuth(async (req, res, session) => {
   await Promise.all(
     accountRows.map(async (account) => {
       try {
-        const tokenResult = await getValidGmailAccessToken(account.ownerUserId, account.email);
+        const tokenAccountEmail = account.aliasOfEmail || account.email;
+        const tokenResult = await getValidGmailAccessToken(account.ownerUserId, tokenAccountEmail);
         if (!tokenResult.ok) {
           throw new Error(tokenResult.message);
         }
+        const aliasEmail = account.aliasOfEmail ? account.email : undefined;
         let counts: Awaited<ReturnType<typeof fetchMailboxCounts>>;
         try {
-          counts = await fetchMailboxCounts(tokenResult.accessToken);
+          counts = await fetchMailboxCounts(tokenResult.accessToken, aliasEmail);
         } catch (error) {
           if (!isAuthError(error)) throw error;
-          const refreshResult = await getValidGmailAccessToken(account.ownerUserId, account.email, { forceRefresh: true });
+          const refreshResult = await getValidGmailAccessToken(account.ownerUserId, tokenAccountEmail, { forceRefresh: true });
           if (!refreshResult.ok) {
             throw new Error(refreshResult.message);
           }
-          counts = await fetchMailboxCounts(refreshResult.accessToken);
+          counts = await fetchMailboxCounts(refreshResult.accessToken, aliasEmail);
         }
         aggregated.inbox += counts.inbox;
         aggregated.sent += counts.sent;

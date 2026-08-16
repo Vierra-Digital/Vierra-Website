@@ -24,7 +24,7 @@ export default withAuth(
       res.status(403).json({ message: "You don't have permission to act on this mailbox." });
       return;
     }
-    const token = await getValidGmailAccessToken(access.ownerUserId, accountEmail);
+    const token = await getValidGmailAccessToken(access.ownerUserId, access.tokenEmail);
     if (!token.ok) {
       res.status(400).json({ message: token.message });
       return;
