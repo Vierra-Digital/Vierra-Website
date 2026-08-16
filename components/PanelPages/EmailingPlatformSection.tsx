@@ -2316,6 +2316,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         setSelectedMessageDetail(null);
         // The destination mailbox's cached page is now out of date.
         invalidateMessagesCache();
+      } else if (action === "markUnread") {
+        // Marking unread from the reader means "I'm not done with this" — staying on the open
+        // message contradicts that, and the reader would immediately re-mark it read. Drop back
+        // to the list so the row is visibly unread again. markRead stays put: you're reading it.
+        setSelectedRows([]);
+        setViewMode("list");
+        setSelectedMessageId("");
+        setSelectedMessageDetail(null);
       }
       try {
         if (
@@ -5517,8 +5525,7 @@ ${sourceText}`;
                           .filter((alias) => !composeFromOptions.includes(alias.email))
                           .map((alias) => (
                             <option key={`${alias.accountEmail}::${alias.email}`} value={alias.email}>
-                              {alias.displayName ? `${alias.displayName} <${alias.email}>` : alias.email} (alias of{" "}
-                              {alias.accountEmail})
+                              {alias.displayName ? `${alias.displayName} <${alias.email}>` : alias.email}
                             </option>
                           ))}
                       </select>
