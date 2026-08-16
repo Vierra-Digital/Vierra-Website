@@ -420,3 +420,625 @@ input[type="search"]::-ms-clear {
 input[type="search"]::-ms-clear:hover {
   opacity: 1;
 }
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   Email panel — dark theme.
+
+   The panel's markup was authored light-first (bg-white, text-[#1E1B2E], …) across
+   thousands of call sites, so rather than rewrite every class this remaps that light
+   palette to a dark one, scoped to `.email-shell`. Nothing here can leak to the
+   marketing site. Brand purples (#701CC0/#8F42FF) and status colors are left alone
+   so accents keep their meaning.
+
+   Deliberate exception: `.email-body-card` (and everything inside it) stays light —
+   that subtree renders the sender's own HTML, which is authored for white
+   backgrounds and would be unreadable inverted.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+.email-shell {
+  --mail-surface: #141020;      /* cards, list, reader */
+  --mail-surface-2: #1B1529;    /* raised: toolbars, hovers */
+  --mail-surface-3: #221A33;    /* active/selected rows */
+  --mail-brand-tint: #251640;   /* was the #F5EFFF / #F4F1FA purple wash */
+  --mail-border: #2B2340;
+  --mail-text: #EDEBF5;
+  --mail-text-muted: #A29CBB;
+}
+
+/* ── Surfaces ─────────────────────────────────────────────────────────────── */
+.email-shell :not(.email-body-card):not(.email-body-card *) > .bg-white,
+.email-shell .bg-white:not(.email-body-card):not(.email-body-card *) {
+  background-color: var(--mail-surface);
+}
+.email-shell .bg-\[\#FAFAFB\]:not(.email-body-card *),
+.email-shell .bg-\[\#F9FAFB\]:not(.email-body-card *),
+.email-shell .bg-\[\#f1f3f4\]:not(.email-body-card *),
+.email-shell .bg-\[\#e8eaed\]:not(.email-body-card *) {
+  background-color: var(--mail-surface-2);
+}
+.email-shell .bg-\[\#F3F4F6\]:not(.email-body-card *),
+.email-shell .bg-\[\#F6F5F8\]:not(.email-body-card *) {
+  background-color: var(--mail-surface-3);
+}
+.email-shell .bg-\[\#F5EFFF\]:not(.email-body-card *),
+.email-shell .bg-\[\#F4F1FA\]:not(.email-body-card *) {
+  background-color: var(--mail-brand-tint);
+}
+
+/* ── Text ─────────────────────────────────────────────────────────────────── */
+.email-shell .text-\[\#1E1B2E\]:not(.email-body-card *),
+.email-shell .text-\[\#111827\]:not(.email-body-card *),
+.email-shell .text-\[\#241245\]:not(.email-body-card *),
+.email-shell .text-\[\#2A2540\]:not(.email-body-card *) {
+  color: var(--mail-text);
+}
+.email-shell .text-\[\#374151\]:not(.email-body-card *),
+.email-shell .text-\[\#6B7280\]:not(.email-body-card *),
+.email-shell .text-\[\#5f6368\]:not(.email-body-card *),
+.email-shell .text-\[\#9CA3AF\]:not(.email-body-card *),
+.email-shell .text-\[\#847FA0\]:not(.email-body-card *),
+.email-shell .text-\[\#5B5670\]:not(.email-body-card *),
+.email-shell .text-\[\#4A465C\]:not(.email-body-card *),
+.email-shell .text-\[\#B9B3CC\]:not(.email-body-card *),
+.email-shell .text-\[\#9A94AD\]:not(.email-body-card *) {
+  color: var(--mail-text-muted);
+}
+/* Brand purple text needs lifting to stay legible on a dark ground. */
+.email-shell .text-\[\#701CC0\]:not(.email-body-card *),
+.email-shell .text-\[\#5B21B6\]:not(.email-body-card *) {
+  color: #B98CFF;
+}
+
+/* ── Borders & dividers ───────────────────────────────────────────────────── */
+.email-shell .border-\[\#E5E7EB\]:not(.email-body-card *),
+.email-shell .border-\[\#EAE5F4\]:not(.email-body-card *),
+.email-shell .border-\[\#D1D5DB\]:not(.email-body-card *),
+.email-shell .border-\[\#E8EBF4\]:not(.email-body-card *),
+.email-shell .border-\[\#E8EAEF\]:not(.email-body-card *),
+.email-shell .border-\[\#EFEFEF\]:not(.email-body-card *),
+.email-shell .border-\[\#e8eaed\]:not(.email-body-card *),
+.email-shell .border-\[\#EBEAF0\]:not(.email-body-card *),
+.email-shell .border-\[\#EDEAF3\]:not(.email-body-card *),
+.email-shell .border-\[\#EEECF3\]:not(.email-body-card *),
+.email-shell .border-\[\#F1EDF8\]:not(.email-body-card *),
+.email-shell .border-\[\#F2EFF8\]:not(.email-body-card *) {
+  border-color: var(--mail-border);
+}
+.email-shell .divide-gray-100:not(.email-body-card *) > * + * {
+  border-color: var(--mail-border);
+}
+
+/* Inputs: match the surface instead of punching white holes in the chrome. */
+.email-shell input:not(.email-body-card *),
+.email-shell textarea:not(.email-body-card *),
+.email-shell select:not(.email-body-card *) {
+  background-color: var(--mail-surface-2);
+  color: var(--mail-text);
+}
+.email-shell input::placeholder,
+.email-shell textarea::placeholder {
+  color: #6F6889;
+}
+
+/* The sender's own HTML keeps its light card — see note above. */
+.email-shell .email-body-card {
+  background-color: #FFFFFF;
+  border-color: #E8E4F0;
+}
+
+/* ── Email panel: connected shell (rail + content as one surface) ──────────── */
+
+/* Left rail. Translucent over the shell's brand glow (glassmorphic), separated from
+   the content by a single hairline instead of a floating card with a ridge. */
+.email-shell .email-rail {
+  background: linear-gradient(180deg, #211935 0%, #171021 100%);
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Mail content sits flush against the rail — no border, no radius, no shadow. */
+.email-shell .email-content {
+  background: #231A36;
+}
+
+/* The rail's own controls shouldn't paint opaque light boxes over the glass. */
+.email-shell .email-rail .bg-white,
+.email-shell .email-rail .bg-\[\#FAFAFB\],
+.email-shell .email-rail .bg-\[\#F9FAFB\] {
+  background-color: transparent;
+}
+.email-shell .email-rail .hover\:bg-\[\#F6F5F8\]:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+/* Active nav row: a soft brand wash rather than a light chip. */
+.email-shell .email-rail .bg-\[\#F4F1FA\] {
+  background-color: rgba(143, 66, 255, 0.18);
+}
+
+/* Active mailbox row in the rail. */
+.email-shell .email-nav-active {
+  background-color: rgba(143, 66, 255, 0.16);
+  color: #F1EEFA;
+}
+
+/* Empty states: no stark white card outline against the dark canvas. */
+.email-shell .email-content .border-dashed {
+  border-color: rgba(255, 255, 255, 0.09);
+}
+.email-shell .email-content .bg-white.border,
+.email-shell .email-content .border-\[\#E5E7EB\] {
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+/* Panel dialogs follow the dark theme (New Label, Delete Label, prompts). */
+.email-dialog-dark {
+  background: #171225 !important;
+  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  box-shadow: 0 30px 80px -28px rgba(0, 0, 0, 0.75) !important;
+}
+.email-dialog-dark h3 { color: #F1EEFA; }
+.email-dialog-dark p { color: #A29CBB; }
+.email-dialog-dark input,
+.email-dialog-dark textarea {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #F1EEFA;
+}
+.email-dialog-dark input::placeholder { color: #6F6889; }
+
+/* Dragged rail item: keep it legible (a faint lift), never a washed-out ghost. */
+.email-shell .email-nav-dragging {
+  background-color: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(185, 140, 255, 0.35);
+}
+
+/* ── Ask Artemis: recessed panel with a slow, wavy brand sheen ─────────────── */
+.email-shell .email-artemis {
+  position: relative;
+  overflow: hidden;
+  background: #150E24;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  color: #D9D5E8;
+}
+.email-shell .email-artemis::before {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  background:
+    radial-gradient(42% 52% at 18% 46%, rgba(79, 18, 140, 0.95) 0%, transparent 70%),
+    radial-gradient(38% 48% at 74% 38%, rgba(52, 12, 96, 0.95) 0%, transparent 72%),
+    radial-gradient(34% 44% at 52% 84%, rgba(104, 26, 156, 0.7) 0%, transparent 70%);
+  background-size: 180% 180%;
+  filter: blur(16px);
+  animation: artemis-wave 9s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+.email-shell .email-artemis:hover::before { animation-duration: 2.6s; }
+
+@keyframes artemis-wave {
+  0%   { transform: translate3d(-10%, -7%, 0) scale(1);    background-position: 0% 50%; }
+  50%  { transform: translate3d(9%, 8%, 0)    scale(1.18); background-position: 100% 50%; }
+  100% { transform: translate3d(-7%, 10%, 0)  scale(1.08); background-position: 0% 50%; }
+}
+
+/* The bolt draws itself, pauses, then redraws — a light "writing" motion. */
+.email-shell .email-artemis-bolt {
+  color: #C79BFF;
+  stroke-dasharray: 64;
+  animation: artemis-bolt-draw 2.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 5px rgba(199, 155, 255, 0.45));
+}
+@keyframes artemis-bolt-draw {
+  0%        { stroke-dashoffset: 64; opacity: 0.35; }
+  35%       { stroke-dashoffset: 0;  opacity: 1; }
+  75%       { stroke-dashoffset: 0;  opacity: 1; }
+  100%      { stroke-dashoffset: -64; opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .email-shell .email-artemis::before,
+  .email-shell .email-artemis-bolt { animation: none; }
+}
+
+/* ── Email list + reader ───────────────────────────────────────────────────────
+   Rebuilt deliberately. Two things were wrong before:
+   (1) the panel uses `border-white/30`, `bg-white/70` etc., which my dark layer never
+       touched — on a dark canvas those read as glaring white lines and slabs;
+   (2) a blanket `.email-row span { color }` flattened sender/subject/snippet to one
+       grey, so nothing had hierarchy and everything read as low contrast.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* 1. Neutralise every white-alpha utility inside the panel. The sender's own message
+      card (`.email-body-card`) is the single deliberate exception — it stays paper-white. */
+.email-shell :is(.border-white\/70, .border-white\/30, .border-white\/50, .border-white\/15):not(.email-body-card) {
+  border-color: rgba(255, 255, 255, 0.07);
+}
+.email-shell :is(.bg-white\/90, .bg-white\/70, .bg-white\/50, .bg-white\/15):not(.email-body-card):not(.email-body-card *) {
+  background-color: rgba(255, 255, 255, 0.035);
+}
+
+/* 2. List rows: one hairline, generous hit area, clear read/unread hierarchy. */
+/* Separators are barely-there and inset from the edges — they should suggest rows,
+   not rule them off. Drawn as a background gradient so it never touches the pane edge. */
+.email-shell .email-row {
+  border-bottom: 0;
+  background-image: linear-gradient(to right, transparent 0, rgba(255,255,255,0.04) 16px, rgba(255,255,255,0.04) calc(100% - 16px), transparent 100%);
+  background-repeat: no-repeat;
+  background-position: bottom left;
+  background-size: 100% 1px;
+}
+.email-shell .email-row:last-child { background-image: none; }
+/* Unread carries a faint brand wash and a left accent, so it separates from read mail at a
+   glance rather than relying on font weight alone. */
+/* Read mail is recessed (darker than the pane); unread sits proud with a light lift and
+   its purple accent. The gap between the two is what makes them scannable. */
+.email-shell .email-row:not(.is-unread) {
+  background-color: rgba(0, 0, 0, 0.22);
+}
+.email-shell .email-row.is-unread {
+  background-color: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 2px 0 0 rgba(185, 140, 255, 0.85);
+}
+.email-shell .email-row:hover { background-color: rgba(255, 255, 255, 0.085); }
+.email-shell .email-row.is-selected {
+  background-color: rgba(143, 66, 255, 0.3);
+  box-shadow: inset 3px 0 0 #B98CFF;
+}
+
+/* 3. Reader: dark chrome, hairline rules, no bright slabs. */
+.email-shell .email-content .bg-\[\#F9FAFB\],
+.email-shell .email-content .bg-\[\#F3F4F6\] { background-color: rgba(255, 255, 255, 0.035); }
+.email-shell .email-content .border-b,
+.email-shell .email-content .border-t { border-color: rgba(255, 255, 255, 0.06); }
+
+/* The message itself keeps a real white sheet — email HTML is authored for it — but as a
+   clean card with a soft edge rather than a hard bright border. */
+.email-shell .email-body-card {
+  background-color: #FFFFFF !important;
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px -18px rgba(0, 0, 0, 0.8);
+}
+.email-shell .email-body-card,
+.email-shell .email-body-card * { color: #1F2937; }
+
+/* 4. Sidebar: inactive mailboxes stay legible — not greyed out. */
+.email-shell .email-rail a,
+.email-shell .email-rail button { color: #C6C0DA; }
+.email-shell .email-rail .email-nav-active { color: #FFFFFF; }
+
+/* Row checkbox: light outline like the star — never a solid purple fill. */
+.email-shell .email-check {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1.5px solid #5E5877;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+}
+.email-shell .email-check:hover { border-color: #B98CFF; }
+.email-shell .email-check:checked { border-color: #B98CFF; background: transparent; }
+.email-shell .email-check:checked {
+  background: #8F42FF;
+  border-color: #B98CFF;
+}
+/* Centred with transforms rather than hardcoded offsets, so the tick sits dead-centre
+   at any box size. The -55% y nudge optically centres a rotated check. */
+.email-shell .email-check:checked::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 8px;
+  border: solid #FFFFFF;
+  border-width: 0 2px 2px 0;
+  transform: translate(-50%, -55%) rotate(45deg);
+}
+
+/* Compose — flat brand fill, no animation. Squarer corners to match the site's audit CTA. */
+.email-shell .compose-cta {
+  background: #701CC0;
+  border-radius: 0.375rem;
+}
+.email-shell .compose-cta:hover { background: #7F27D6; }
+
+/* Ask Artemis carries no hover shadow or border flare — only the wash speeds up. */
+.email-shell .email-artemis:hover {
+  box-shadow: none;
+  border-color: rgba(255, 255, 255, 0.07);
+}
+
+/* CRITICAL: the wash layers are absolutely positioned with inset:-40%, so their host MUST
+   establish a containing block and clip. Without this the Compose wash escaped and painted
+   across the whole panel (the nearest positioned ancestor was .email-shell). */
+.email-shell .email-artemis {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* ── Reader header / list toolbar ──────────────────────────────────────────── */
+
+/* Same surface as the rail, so the header reads as one continuous chrome band. */
+.email-shell .email-toolbar {
+  background: #211935;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Search: ONE box. The wrapper is the field; the inner <input> must stay fully
+   transparent, otherwise the panel-wide input rule paints a second box inside it
+   (that was the "double box"). */
+.email-shell .email-search {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.email-shell .email-search:focus-within {
+  border-color: rgba(185, 140, 255, 0.55);
+  background: rgba(255, 255, 255, 0.07);
+}
+.email-shell .email-search input,
+.email-shell .email-search input:focus {
+  background-color: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* Pager arrows — quiet by default, brand on hover, clearly dead when disabled. */
+.email-shell .email-pager {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.75rem;
+  width: 1.75rem;
+  border-radius: 0.5rem;
+  color: #A8A2C0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  transition: color .15s ease, background-color .15s ease, border-color .15s ease;
+}
+.email-shell .email-pager:hover:not(:disabled) {
+  color: #FFFFFF;
+  background: rgba(143, 66, 255, 0.22);
+  border-color: rgba(185, 140, 255, 0.45);
+}
+.email-shell .email-pager:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Toolbar icon buttons sit on the header glass, not on white chips. */
+.email-shell .email-toolbar button:not(.email-pager) {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #C6C0DA;
+}
+.email-shell .email-toolbar button:not(.email-pager):hover:not(:disabled) {
+  background-color: rgba(143, 66, 255, 0.2);
+  border-color: rgba(185, 140, 255, 0.4);
+  color: #FFFFFF;
+}
+
+/* Fast tooltip. The native `title` bubble is on a ~1s browser delay that CSS can't touch,
+   so hover-critical controls use this instead: same look, appears in 120ms. */
+.email-shell .email-tip { position: relative; }
+.email-shell .email-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1;
+  color: #F1EEFA;
+  background: #241B38;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 8px 20px -10px rgba(0, 0, 0, 0.8);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s ease;
+  z-index: 40;
+}
+.email-shell .email-tip:hover::after,
+.email-shell .email-tip:focus-visible::after { opacity: 1; }
+
+/* Reader thread: dividers between stacked messages are hairlines, never white rules. */
+.email-shell .email-content .divide-y > * + *,
+.email-shell .email-content hr { border-color: rgba(255, 255, 255, 0.05); }
+
+/* Panel dialogs (New Label / Rename Label / Delete Label): consistent dark styling for the
+   header, body and both actions, so the three read as one family. */
+.email-dialog-dark h3 { color: #F1EEFA; }
+.email-dialog-dark p,
+.email-dialog-dark label { color: #A29CBB; }
+.email-dialog-dark input,
+.email-dialog-dark textarea {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #F1EEFA !important;
+}
+.email-dialog-dark input:focus,
+.email-dialog-dark textarea:focus {
+  border-color: rgba(185, 140, 255, 0.6) !important;
+  box-shadow: 0 0 0 2px rgba(143, 66, 255, 0.25) !important;
+}
+/* Destructive confirm keeps its red, but tuned for the dark card. */
+.email-dialog-dark .bg-red-600 { background-color: #DC2626; }
+.email-dialog-dark .bg-red-100 { background-color: rgba(220, 38, 38, 0.16); }
+.email-dialog-dark .text-red-600 { color: #F87171; }
+
+/* Dropdown menus in the panel (Move To, Snooze). No vertical gutter — the container's
+   surface peeking above the first item and below the last read as odd coloured bands. */
+/* Dropdown menus. Deliberately plain: ONE hairline border (no second shadow ring —
+   that read as a two-tone double outline), one surface colour, and full-width rows so
+   there is no rounded-inside-rounded nesting. */
+.email-shell .email-menu {
+  /* No border at all. Any visible stroke on a dark surface reads as an extra edge next to
+     the card's own contrast — depth comes from the surface step and the shadow instead. */
+  background: #241C38;
+  border: 0;
+  border-radius: 8px;
+  padding: 4px 0;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.85);
+  overflow: hidden;
+}
+.email-shell .email-menu-item {
+  color: #CFC9E0;
+  background: transparent;
+  border-radius: 0;
+  transition: background-color .12s ease, color .12s ease;
+}
+.email-shell .email-menu-item:hover {
+  background: rgba(143, 66, 255, 0.24);
+  color: #FFFFFF;
+}
+
+/* Section heading inside panel dropdowns. */
+.email-shell .email-menu-heading {
+  padding: 8px 12px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #7E7897;
+}
+.email-shell .email-menu-item svg { color: #8F88A8; }
+.email-shell .email-menu-item:hover svg { color: #FFFFFF; }
+
+.email-dialog-dark .text-\[\#1E1B2E\],
+.email-dialog-dark .text-\[\#111827\],
+.email-dialog-dark .text-\[\#374151\] {
+  color: #F1EEFA;
+}
+.email-dialog-dark .text-\[\#6B7280\] { color: #A29CBB; }
+
+/* Rendered message body. The sender's HTML keeps its own styling; these are guardrails so
+   long URLs, oversized media and cramped spacing don't break the reader. */
+.email-shell .email-body { max-width: 74ch; word-break: break-word; overflow-wrap: anywhere; }
+.email-shell .email-body img { max-width: 100%; height: auto; }
+.email-shell .email-body a { color: #5B21B6; text-decoration: underline; text-underline-offset: 2px; }
+.email-shell .email-body p { margin: 0 0 0.85em; }
+.email-shell .email-body > *:last-child { margin-bottom: 0; }
+.email-shell .email-body blockquote {
+  margin: 0.85em 0;
+  padding-left: 12px;
+  border-left: 2px solid #E3DEEE;
+  color: #6B7280;
+}
+.email-shell .email-body table { max-width: 100%; }
+.email-shell .email-body pre { white-space: pre-wrap; overflow-x: auto; }
+
+/* The white sheet the message sits on: roomier and less boxy. */
+.email-shell .email-body-card { padding: 22px 26px; }
+
+/* ── Email settings page ───────────────────────────────────────────────────────
+   Shares the panel's shell, so the surface remap above already handles cards,
+   text and borders. These fill the gaps that are specific to this page. */
+
+/* Section cards read as panels on the dark canvas, not floating white sheets. */
+.email-shell section[id] {
+  background: #231A36;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: none;
+}
+
+/* Section nav: quiet by default, brand-lit for the section you're in. */
+.email-shell nav[aria-label="Settings sections"] a {
+  color: #A8A2C0;
+  border-radius: 7px;
+}
+.email-shell nav[aria-label="Settings sections"] a:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #FFFFFF;
+}
+.email-shell nav[aria-label="Settings sections"] a[aria-current="true"],
+.email-shell nav[aria-label="Settings sections"] a[data-active="true"] {
+  background: rgba(143, 66, 255, 0.2);
+  color: #FFFFFF;
+}
+
+/* Inputs, selects and the filter box sit on the dark surface. */
+.email-shell main input,
+.email-shell main select,
+.email-shell main textarea {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #F1EEFA;
+}
+.email-shell main input::placeholder,
+.email-shell main textarea::placeholder { color: #6F6889; }
+
+/* Sticky save bar. */
+.email-shell main .sticky.bottom-4 {
+  background: #241C38;
+  border-color: rgba(185, 140, 255, 0.35);
+}
+
+/* Dividers between rows inside a section. */
+.email-shell main .divide-gray-100 > * + * { border-color: rgba(255, 255, 255, 0.07); }
+
+/* Settings shell: nav rail matches the panel's rail; content pane matches its list pane. */
+.email-shell main > aside { background: linear-gradient(180deg, #211935 0%, #1B1429 100%); }
+.email-shell main > div.flex-1 { background: #231A36; }
+/* The account switcher sits on the header surface. */
+.email-shell header select {
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: #F1EEFA;
+}
+
+/* ── Compose window ────────────────────────────────────────────────────────────
+   Was a stack of boxes: bordered field rows, a bordered body, and a wall of
+   outlined buttons. Gmail's compose is mostly chrome-less — hairline field rows,
+   one solid Send, and small icon buttons — which is what this reproduces. */
+
+.compose-hud { border: 1px solid rgba(0, 0, 0, 0.10); border-radius: 12px; }
+
+/* Header: flat brand bar rather than a saturated gradient slab. */
+.compose-hud-header { background: #2A1148; color: #FFFFFF; }
+.compose-hud-header button { color: rgba(255, 255, 255, 0.85); }
+.compose-hud-header button:hover { color: #FFFFFF; }
+
+/* Field rows: hairline separators, no boxes. */
+.compose-hud input:not([type="checkbox"]):not([type="radio"]),
+.compose-hud select {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.compose-hud input:focus,
+.compose-hud select:focus { outline: none !important; box-shadow: none !important; }
+
+/* The body area loses its box; the divider above it does the separating. */
+.compose-hud [contenteditable="true"],
+.compose-hud textarea {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* Action bar: one solid Send pill, everything else compact and quiet. */
+.compose-hud button.bg-\[\#701CC0\] { border-radius: 9999px; padding-left: 22px; padding-right: 22px; }
+.compose-hud button[title="Schedule send"],
+.compose-hud button[aria-label="Schedule send"],
+.compose-hud button[title*="Confidential"],
+.compose-hud button[title*="Receipt"],
+.compose-hud button[title*="Artemis"],
+.compose-hud button[title*="Rewrite"] {
+  border-color: transparent !important;
+  background: transparent !important;
+  color: #5B5670 !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+}
+.compose-hud button[title="Schedule send"]:hover,
+.compose-hud button[title*="Confidential"]:hover,
+.compose-hud button[title*="Receipt"]:hover,
+.compose-hud button[title*="Artemis"]:hover,
+.compose-hud button[title*="Rewrite"]:hover {
+  background: #F3F0FA !important;
+  color: #701CC0 !important;
+}
