@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
+import { fetchSendAsAliases } from "@/lib/gmail/gmailApi";
 
 /**
  * Shared-inbox delegation helpers. A user can access a mailbox if they OWN it (their own
@@ -66,49 +68,92 @@ export async function getAccessibleGmailAccounts(
   return out;
 }
 
+export type GmailAliasAccount = { email: string; ownerUserId: string; viaAccountEmail: string };
+
+/**
+ * A "domain address forwarded into Gmail" (e.g. added under Gmail Settings > Accounts > Send
+ * mail as, verified) has no OAuth token of its own — its mail is delivered straight into the
+ * connected Gmail account's inbox. Without this, selecting that address as an "account" in the
+ * panel matches nothing in getAccessibleGmailAccounts and silently returns an empty inbox, even
+ * though the mail is really sitting in an account the user already has access to. Resolves each
+ * accessible Gmail account's verified send-as aliases (skipping the primary — that's the account
+ * itself) so callers can route a request for the alias's mail back to the real account + token.
+ * Best-effort: a Gmail API failure for one account just omits its aliases, it never throws.
+ */
+export async function getGmailAliasAccounts(userId: string): Promise<GmailAliasAccount[]> {
+  const accessible = await getAccessibleGmailAccounts(userId);
+  const seen = new Set<string>(accessible.map((a) => a.email));
+  const out: GmailAliasAccount[] = [];
+  await Promise.all(
+    accessible.map(async (acct) => {
+      try {
+        const token = await getValidGmailAccessToken(acct.ownerUserId, acct.email);
+        if (!token.ok) return;
+        const aliases = await fetchSendAsAliases(token.accessToken);
+        for (const alias of aliases) {
+          if (alias.isPrimary || seen.has(alias.email)) continue;
+          seen.add(alias.email);
+          out.push({ email: alias.email, ownerUserId: acct.ownerUserId, viaAccountEmail: acct.email });
+        }
+      } catch {
+        /* best effort — one account's alias lookup failing shouldn't break the rest */
+      }
+    })
+  );
+  return out;
+}
+
 /**
  * The enforcement primitive for shared inboxes. Resolves WHOSE token/data should be used for
  * `accountEmail` when `requesterId` asks for it:
  *   - owns it (Gmail token or SMTP account)  → { ownerUserId: requesterId } (identical to today)
  *   - granted it                             → { ownerUserId: <real owner>, canSend: grant.can_send }
+ *   - a Gmail send-as alias of an account they can access → resolved to that account, tokenEmail
+ *     pointed at the real Gmail address (aliases have no OAuth token of their own)
  *   - neither                                → null (FAIL-CLOSED — no access)
- * Wire endpoints to use ownerUserId for token + data ops; owners are unaffected because for
- * them ownerUserId === requesterId.
+ * Wire endpoints to use ownerUserId + **tokenEmail** (not accountEmail) for token lookups —
+ * they're the same for owned/granted accounts, but differ for aliases.
  */
 export async function resolveMailboxOwner(
   requesterId: string,
   accountEmail: string
-): Promise<{ ownerUserId: string; canSend: boolean } | null> {
+): Promise<{ ownerUserId: string; canSend: boolean; tokenEmail: string } | null> {
   const email = accountEmail.toLowerCase();
   try {
     const ownsGmail = await prisma.platformToken.findFirst({
       where: { user_id: requesterId, platform: `gmail:${email}` },
       select: { id: true },
     });
-    if (ownsGmail) return { ownerUserId: requesterId, canSend: true };
+    if (ownsGmail) return { ownerUserId: requesterId, canSend: true, tokenEmail: email };
     const ownsSmtp = await prisma.emailProviderAccount.findFirst({
       where: { user_id: requesterId, account_email: email },
       select: { id: true },
     });
-    if (ownsSmtp) return { ownerUserId: requesterId, canSend: true };
+    if (ownsSmtp) return { ownerUserId: requesterId, canSend: true, tokenEmail: email };
 
     const grant = await prisma.mailboxGrant.findFirst({
       where: { grantee_user_id: requesterId, account_email: email },
       select: { can_send: true },
     });
-    if (!grant) return null;
+    if (grant) {
+      const gmailOwner = await prisma.platformToken.findFirst({
+        where: { platform: `gmail:${email}` },
+        orderBy: { created_at: "asc" },
+        select: { user_id: true },
+      });
+      if (gmailOwner) return { ownerUserId: gmailOwner.user_id, canSend: grant.can_send, tokenEmail: email };
+      const smtpOwner = await prisma.emailProviderAccount.findFirst({
+        where: { account_email: email },
+        select: { user_id: true },
+      });
+      if (smtpOwner) return { ownerUserId: smtpOwner.user_id, canSend: grant.can_send, tokenEmail: email };
+    }
 
-    const gmailOwner = await prisma.platformToken.findFirst({
-      where: { platform: `gmail:${email}` },
-      orderBy: { created_at: "asc" },
-      select: { user_id: true },
-    });
-    if (gmailOwner) return { ownerUserId: gmailOwner.user_id, canSend: grant.can_send };
-    const smtpOwner = await prisma.emailProviderAccount.findFirst({
-      where: { account_email: email },
-      select: { user_id: true },
-    });
-    if (smtpOwner) return { ownerUserId: smtpOwner.user_id, canSend: grant.can_send };
+    // Not a directly-connected or granted mailbox — check whether it's a verified "send as"
+    // alias of an account this requester can already reach (owned or granted).
+    const alias = (await getGmailAliasAccounts(requesterId)).find((a) => a.email === email);
+    if (alias) return { ownerUserId: alias.ownerUserId, canSend: true, tokenEmail: alias.viaAccountEmail };
+
     return null;
   } catch {
     return null;

@@ -30,6 +30,29 @@ export function parseAddressFromHeader(value: string, opts?: { lower?: boolean }
   return opts?.lower === false ? addr : addr.toLowerCase();
 }
 
+export type GmailSendAsAlias = { email: string; displayName: string; isPrimary: boolean };
+
+/**
+ * Verified "send as" identities on a connected Gmail account — includes the primary address
+ * plus any custom "From" address the user added under Gmail Settings > Accounts > Send mail as
+ * (the mechanism behind "attach a domain address to my Gmail via forwarding"). Non-primary
+ * aliases have no OAuth token of their own; their mail is delivered into THIS account's inbox.
+ */
+export async function fetchSendAsAliases(accessToken: string): Promise<GmailSendAsAlias[]> {
+  const { ok, data } = await gmailGet(accessToken, "/settings/sendAs");
+  if (!ok) return [];
+  const list = (data as { sendAs?: unknown })?.sendAs;
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((entry: { isPrimary?: boolean; verificationStatus?: string }) => entry?.isPrimary || entry?.verificationStatus === "accepted")
+    .map((entry: { sendAsEmail?: string; displayName?: string; isPrimary?: boolean }) => ({
+      email: String(entry.sendAsEmail || "").toLowerCase(),
+      displayName: entry.displayName || "",
+      isPrimary: Boolean(entry.isPrimary),
+    }))
+    .filter((entry: GmailSendAsAlias) => entry.email);
+}
+
 /** Create a Gmail draft (a plain-text reply). Returns the draft id or null. Never sends. */
 export async function createGmailDraft(
   accessToken: string,
