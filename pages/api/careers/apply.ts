@@ -1,5 +1,4 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { EMAIL_REGEX } from "@/lib/utils";
 import { getJobRole } from "@/lib/careers";
 import {
   isCareersDriveConfigured,
@@ -8,24 +7,15 @@ import {
 } from "@/lib/careersDrive";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 import { asStr as asString } from "@/lib/api/parsing";
+import {
+  normalizeCareerApplication,
+  validateCareerFileMetadata,
+} from "@/lib/careerApplicationValidation";
 
 // Max submissions per IP per window — generous for a real applicant (who applies
 // to a handful of roles at most) but blocks a script hammering the endpoint.
 const RATE_LIMIT = 5;
 const RATE_WINDOW_MS = 15 * 60 * 1000;
-
-// Sane abuse guard, not a practical ceiling — real resumes/cover letters are a
-// few MB at most. Files are streamed to Drive in chunks (see apply-chunk.ts), so
-// this no longer runs into the platform's ~6 MB function payload limit.
-const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB per file
-const ALLOWED_EXT = ["pdf", "doc", "docx"];
-
-interface FileMeta {
-  field: string;
-  name: string;
-  mimeType: string;
-  size: number;
-}
 
 /** Strip characters Drive/OS dislike, collapse whitespace. */
 function safeName(value: string): string {
@@ -38,27 +28,10 @@ function extOf(name: string): string {
   return ext || "pdf";
 }
 
-function readFileMeta(raw: unknown): FileMeta | null {
-  if (!raw || typeof raw !== "object") return null;
-  const r = raw as Record<string, unknown>;
-  const field = asString(r.field);
-  const name = asString(r.name);
-  const size = typeof r.size === "number" ? r.size : Number(r.size);
-  if (!field || !name || !Number.isFinite(size)) return null;
-  return { field, name, mimeType: asString(r.mimeType), size: Math.floor(size) };
-}
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
     return res.status(405).json({ message: `Method ${req.method} Not Allowed` });
-  }
-
-  if (!isCareersDriveConfigured()) {
-    return res.status(503).json({
-      message:
-        "Applications aren't accepting uploads right now. Please email careers@vierradev.com.",
-    });
   }
 
   const ip = getClientIp(req);
@@ -78,60 +51,58 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({ ok: true });
   }
 
-  const roleSlug = asString(body.roleSlug);
-  const fullName = asString(body.fullName);
-  const email = asString(body.email);
-  const phoneNumber = asString(body.phoneNumber);
-  const currentLocation = asString(body.currentLocation);
-  const needRelocate = asString(body.needRelocate);
-  const usCitizen = asString(body.usCitizen);
-  const additionalNotes = asString(body.additionalNotes);
-
-  const role = getJobRole(roleSlug);
-  if (!role) {
-    return res.status(400).json({ message: "Unknown role." });
-  }
-  if (!fullName || !email || !EMAIL_REGEX.test(email) || !phoneNumber || !currentLocation) {
+  const application = normalizeCareerApplication(body);
+  if (!application) {
     return res.status(400).json({ message: "Missing or invalid required fields." });
   }
 
+  const role = getJobRole(application.roleSlug);
+  if (!role) {
+    return res.status(400).json({ message: "Unknown role." });
+  }
+
+  if (!isCareersDriveConfigured()) {
+    return res.status(503).json({
+      message:
+        "Applications aren't accepting uploads right now. Please email careers@vierradev.com.",
+    });
+  }
+
   const rawFiles = Array.isArray(body.files) ? body.files : [];
-  const files = rawFiles.map(readFileMeta).filter((f): f is FileMeta => f !== null);
+  const checkedFiles = rawFiles.map(validateCareerFileMetadata).filter(({ field }) => field === "resume" || field === "coverLetter");
+  if (checkedFiles.some(({ issue }) => issue === "unsupported-type")) {
+    return res.status(400).json({ message: "Files must be PDF, DOC, or DOCX." });
+  }
+  if (checkedFiles.some(({ issue }) => issue === "size")) {
+    return res.status(400).json({ message: "Each file must be under 25 MB." });
+  }
+  const files = checkedFiles.map(({ metadata }) => metadata).filter((f) => f !== null);
   const resume = files.find((f) => f.field === "resume");
   const coverLetter = files.find((f) => f.field === "coverLetter");
 
   if (!resume || !coverLetter) {
     return res.status(400).json({ message: "Resume and cover letter are both required." });
   }
-  for (const file of [resume, coverLetter]) {
-    if (!ALLOWED_EXT.includes(extOf(file.name))) {
-      return res.status(400).json({ message: "Files must be PDF, DOC, or DOCX." });
-    }
-    if (file.size <= 0 || file.size > MAX_FILE_SIZE) {
-      return res.status(400).json({ message: "Each file must be under 25 MB." });
-    }
-  }
-
-  const applicant = safeName(fullName) || "Applicant";
+  const applicant = safeName(application.fullName) || "Applicant";
   const description = [
     `Role: ${role.title}`,
-    `Name: ${fullName}`,
-    `Email: ${email}`,
-    `Phone: ${phoneNumber}`,
-    `Location: ${currentLocation}`,
-    `Needs relocation: ${needRelocate || "—"}`,
-    `US citizen: ${usCitizen || "—"}`,
+    `Name: ${application.fullName}`,
+    `Email: ${application.email}`,
+    `Phone: ${application.phoneNumber}`,
+    `Location: ${application.currentLocation}`,
+    `Needs relocation: ${application.needRelocate}`,
+    `US citizen: ${application.usCitizen}`,
   ].join(" | ");
 
   const detailsText =
     `Vierra Application — ${role.title}\n\n` +
-    `Name: ${fullName}\n` +
-    `Email: ${email}\n` +
-    `Phone: ${phoneNumber}\n` +
-    `Current location: ${currentLocation}\n` +
-    `Needs to relocate: ${needRelocate || "—"}\n` +
-    `US citizen: ${usCitizen || "—"}\n\n` +
-    `Additional notes:\n${additionalNotes || "(none)"}\n`;
+    `Name: ${application.fullName}\n` +
+    `Email: ${application.email}\n` +
+    `Phone: ${application.phoneNumber}\n` +
+    `Current location: ${application.currentLocation}\n` +
+    `Needs to relocate: ${application.needRelocate}\n` +
+    `US citizen: ${application.usCitizen}\n\n` +
+    `Additional notes:\n${application.additionalNotes || "(none)"}\n`;
 
   const targets: ApplicationUploadTarget[] = [
     {
@@ -150,7 +121,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const sessions = await prepareApplicationUpload({
-      roleSlug,
+      roleSlug: application.roleSlug,
       targets,
       detailsFilename: `${applicant} - Application Details.txt`,
       detailsText,
