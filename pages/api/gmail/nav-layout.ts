@@ -44,6 +44,12 @@ export default withAuth(
     const userId = session.user.id;
 
     if (req.method === "GET") {
+      // Read the newest shape first, then fall back column-by-column. The fallbacks trigger on
+      // ANY error, not just Prisma's P2021/P2022: a running server holding a client generated
+      // before a column existed rejects it with a validation error instead, which used to
+      // escape as a 500 and take the whole nav layout down with it — the saved hidden set
+      // couldn't be read, so every module came back visible and a save that had genuinely
+      // landed in the database looked like it had been lost.
       try {
         const row = await prisma.emailNavPreference.findUnique({
           where: { user_id: userId },
@@ -54,25 +60,38 @@ export default withAuth(
           moduleOrder: row?.module_order ?? [],
           pageSize: row?.page_size ?? null,
         });
-      } catch (error) {
-        if (isMissingTable(error)) {
-          res.status(200).json({ hiddenModules: [], moduleOrder: [], pageSize: null });
-          return;
-        }
-        // Column not migrated yet — still serve the hidden set so the nav works.
-        if (isMissingColumn(error)) {
-          try {
-            const row = await prisma.emailNavPreference.findUnique({
-              where: { user_id: userId },
-              select: { hidden_modules: true },
-            });
-            res.status(200).json({ hiddenModules: row?.hidden_modules ?? [], moduleOrder: [], pageSize: null, degraded: true });
-          } catch {
-            res.status(200).json({ hiddenModules: [], moduleOrder: [], pageSize: null, degraded: true });
-          }
-          return;
-        }
-        throw error;
+        return;
+      } catch {
+        /* fall through */
+      }
+      try {
+        const row = await prisma.emailNavPreference.findUnique({
+          where: { user_id: userId },
+          select: { hidden_modules: true, module_order: true },
+        });
+        res.status(200).json({
+          hiddenModules: row?.hidden_modules ?? [],
+          moduleOrder: row?.module_order ?? [],
+          pageSize: null,
+          degraded: true,
+        });
+        return;
+      } catch {
+        /* fall through */
+      }
+      try {
+        const row = await prisma.emailNavPreference.findUnique({
+          where: { user_id: userId },
+          select: { hidden_modules: true },
+        });
+        res.status(200).json({
+          hiddenModules: row?.hidden_modules ?? [],
+          moduleOrder: [],
+          pageSize: null,
+          degraded: true,
+        });
+      } catch {
+        res.status(200).json({ hiddenModules: [], moduleOrder: [], pageSize: null, degraded: true });
       }
       return;
     }
@@ -103,6 +122,38 @@ export default withAuth(
       });
       res.status(200).json({ ok: true, hiddenModules, moduleOrder, pageSize });
     } catch (error) {
+      // A save carrying page_size can fail on a server whose Prisma client predates that
+      // column. Retry without it rather than losing the visibility/order half of the write,
+      // and say plainly that the page size didn't stick — reporting a blanket failure for a
+      // save that mostly succeeded is as misleading as reporting success for one that didn't.
+      if (hasPageSize && (hasHidden || hasOrder)) {
+        try {
+          await prisma.emailNavPreference.upsert({
+            where: { user_id: userId },
+            create: {
+              user_id: userId,
+              hidden_modules: hasHidden ? hiddenModules : [],
+              module_order: hasOrder ? moduleOrder : [],
+            },
+            update: {
+              ...(hasHidden ? { hidden_modules: hiddenModules } : {}),
+              ...(hasOrder ? { module_order: moduleOrder } : {}),
+              updated_at: new Date(),
+            },
+          });
+          res.status(200).json({
+            ok: false,
+            hiddenModules,
+            moduleOrder,
+            pageSize: null,
+            degraded: true,
+            message: "Emails per page needs a server restart to pick up a new database column.",
+          });
+          return;
+        } catch {
+          /* fall through */
+        }
+      }
       // The order column is missing (migration not applied yet). Don't drop the write on the
       // floor — retry persisting just the hidden set, which is what most saves are, and only
       // then report the ordering half as degraded. Reporting ok:true while saving nothing is

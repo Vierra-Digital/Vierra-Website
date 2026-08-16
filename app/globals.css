@@ -1130,3 +1130,28 @@ input[type="search"]::-ms-clear:hover {
   border-color: rgba(255, 255, 255, 0.09) !important;
   color: #DCD7EC !important;
 }
+
+/* ── Settings skeleton ─────────────────────────────────────────────────────────
+   Placeholder blocks for the email settings shell while its data loads. A soft
+   sheen rather than a pulse, so a dozen of them on screen reads as one surface
+   settling instead of a dozen things blinking. */
+.settings-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.045) 0%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.045) 100%
+  );
+  background-size: 200% 100%;
+  animation: settings-skeleton-sheen 1.5s ease-in-out infinite;
+}
+
+@keyframes settings-skeleton-sheen {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Respect a reduced-motion preference: keep the placeholder, drop the movement. */
+@media (prefers-reduced-motion: reduce) {
+  .settings-skeleton { animation: none; background: rgba(255, 255, 255, 0.06); }
+}
