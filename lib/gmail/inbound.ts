@@ -207,12 +207,27 @@ async function processAccount(
       }
       if (!claimed) continue; // already processed by another tick/run — don't re-run its hooks
       // Each hook is best-effort and must not throw; guard anyway.
-      for (const hook of [applyFilters, maybeSendVacationReply, maybeAutoDraft, maybeHandleMdn, maybeReplyIntelligence, maybeNotifyDiscord]) {
+      for (const hook of [applyFilters, maybeSendVacationReply, maybeAutoDraft, maybeHandleMdn]) {
         try {
           await hook(message, ctx);
         } catch {
           /* one hook failing must not block the others or the loop */
         }
+      }
+      // Run separately (not in the generic loop above) so maybeReplyIntelligence's campaign-match
+      // result can be threaded into maybeNotifyDiscord — lets the Discord ping carry the campaign
+      // name + lead status instead of firing blind. Still best-effort: a failure in either must not
+      // block the other or the loop.
+      let replyIntel: Awaited<ReturnType<typeof maybeReplyIntelligence>> = null;
+      try {
+        replyIntel = await maybeReplyIntelligence(message);
+      } catch {
+        /* best-effort */
+      }
+      try {
+        await maybeNotifyDiscord(message, replyIntel);
+      } catch {
+        /* best-effort */
       }
       processed += 1;
     }

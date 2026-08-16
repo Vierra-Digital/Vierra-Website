@@ -4,7 +4,12 @@ import { EMAIL_REGEX } from "@/lib/utils";
 import { FiInbox, FiMail, FiSend, FiUsers, FiArchive, FiTrash2, FiKey, FiCheckSquare, FiBarChart2, FiStar, FiFlag, FiClock, FiLayers } from "react-icons/fi";
 import type { ModuleKey, MailboxCounts } from "@/components/email/types";
 
-export const PAGE_SIZE = 50;
+/**
+ * Rows per mailbox page. Each row costs a metadata messages.get, so this is the single
+ * biggest lever on how long a mailbox takes to appear — 50 meant fifty round trips before
+ * the list could render. 25 fills the viewport with room to spare and halves that.
+ */
+export const PAGE_SIZE = 25;
 export const CONTACTS_PAGE_SIZE = 50;
 
 /** Neutral scrollbar; overrides global purple `::-webkit-scrollbar` in app/globals.css for compose UI. */
@@ -49,6 +54,26 @@ export const MODULES: Array<{ key: ModuleKey; label: string; icon: React.ReactNo
   { key: "spam", label: "Spam", icon: <FiMail className="w-4 h-4" /> },
   { key: "trash", label: "Trash", icon: <FiTrash2 className="w-4 h-4" /> },
 ];
+
+/**
+ * Apply a user's custom sidebar order to a module list.
+ *
+ * Keys the user has never ordered (e.g. a module added in a later release) fall to
+ * the end in their original MODULES order rather than disappearing or jumping to
+ * the front, so the sidebar stays stable as the module set evolves.
+ */
+export function orderModules<T extends { key: ModuleKey }>(items: T[], order: string[]): T[] {
+  if (!order?.length) return items;
+  const rank = new Map(order.map((key, index) => [key, index]));
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const ra = rank.get(a.item.key) ?? Number.MAX_SAFE_INTEGER;
+      const rb = rank.get(b.item.key) ?? Number.MAX_SAFE_INTEGER;
+      return ra === rb ? a.index - b.index : ra - rb;
+    })
+    .map(({ item }) => item);
+}
 
 export const BADGE_MODULES = new Set<ModuleKey>(["inbox", "sent", "drafts", "archive", "spam"]);
 export const BADGE_MAILBOXES: Array<"inbox" | "sent" | "drafts" | "archive" | "spam" | "trash"> = [

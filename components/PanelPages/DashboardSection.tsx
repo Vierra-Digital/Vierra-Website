@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import { RiArrowDropDownLine } from "react-icons/ri"
 import { FiTrendingUp, FiTrendingDown, FiMinus, FiCalendar, FiClock } from "react-icons/fi"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -182,17 +182,25 @@ const DashboardSection = () => {
         }
     }
 
-    const formatMeetingDate = (iso: string, timeZone: string) => {
+    const localTimeZone = useMemo(() => {
+        try {
+            return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+        } catch {
+            return "UTC"
+        }
+    }, [])
+
+    const formatMeetingDate = (iso: string) => {
         const date = new Date(iso)
         const now = new Date()
         const meetingDay = new Intl.DateTimeFormat("en-CA", {
-            timeZone,
+            timeZone: localTimeZone,
             year: "numeric",
             month: "2-digit",
             day: "2-digit",
         }).format(date)
         const todayDay = new Intl.DateTimeFormat("en-CA", {
-            timeZone,
+            timeZone: localTimeZone,
             year: "numeric",
             month: "2-digit",
             day: "2-digit",
@@ -200,7 +208,7 @@ const DashboardSection = () => {
         const tomorrow = new Date(now)
         tomorrow.setDate(tomorrow.getDate() + 1)
         const tomorrowDay = new Intl.DateTimeFormat("en-CA", {
-            timeZone,
+            timeZone: localTimeZone,
             year: "numeric",
             month: "2-digit",
             day: "2-digit",
@@ -213,21 +221,21 @@ const DashboardSection = () => {
             month: "2-digit",
             day: "2-digit",
             year: "numeric",
-            timeZone,
+            timeZone: localTimeZone,
         }).format(date)
     }
 
-    const isMeetingToday = (iso: string, timeZone: string) => {
+    const isMeetingToday = (iso: string) => {
         const date = new Date(iso)
         const now = new Date()
         const meetingDay = new Intl.DateTimeFormat("en-CA", {
-            timeZone,
+            timeZone: localTimeZone,
             year: "numeric",
             month: "2-digit",
             day: "2-digit",
         }).format(date)
         const todayDay = new Intl.DateTimeFormat("en-CA", {
-            timeZone,
+            timeZone: localTimeZone,
             year: "numeric",
             month: "2-digit",
             day: "2-digit",
@@ -235,20 +243,31 @@ const DashboardSection = () => {
         return meetingDay === todayDay
     }
 
-    const formatMeetingTime = (iso: string, timeZone: string) => {
+    const formatMeetingTime = (iso: string) => {
         const date = new Date(iso)
         return new Intl.DateTimeFormat(undefined, {
             hour: "numeric",
             minute: "2-digit",
             hour12: true,
-            timeZone,
+            timeZone: localTimeZone,
         }).format(date)
     }
 
-    const formatMeetingTimeRange = (startIso: string, endIso: string | null, timeZone: string) => {
-        const start = formatMeetingTime(startIso, timeZone)
-        if (!endIso) return start
-        return `${start} - ${formatMeetingTime(endIso, timeZone)}`
+    const localTimeZoneAbbreviation = (iso: string) => {
+        const date = new Date(iso)
+        return new Intl.DateTimeFormat(undefined, {
+            timeZone: localTimeZone,
+            timeZoneName: "short",
+        })
+            .formatToParts(date)
+            .find((part) => part.type === "timeZoneName")?.value
+    }
+
+    const formatMeetingTimeRange = (startIso: string, endIso: string | null) => {
+        const start = formatMeetingTime(startIso)
+        const range = endIso ? `${start} - ${formatMeetingTime(endIso)}` : start
+        const zoneAbbreviation = localTimeZoneAbbreviation(startIso)
+        return zoneAbbreviation ? `${range} ${zoneAbbreviation}` : range
     }
 
     return (
@@ -395,13 +414,13 @@ const DashboardSection = () => {
                                             <div className="flex items-center gap-4 mb-3">
                                                 <div className="flex items-center gap-1 text-xs text-[#6B7280]">
                                                     <FiCalendar className="w-3 h-3" />
-                                                    <span className={isMeetingToday(meeting.startIso, meeting.timeZone) ? "text-red-600 font-semibold" : ""}>
-                                                        {formatMeetingDate(meeting.startIso, meeting.timeZone)}
+                                                    <span className={isMeetingToday(meeting.startIso) ? "text-red-600 font-semibold" : ""}>
+                                                        {formatMeetingDate(meeting.startIso)}
                                                     </span>
                                                 </div>
                                                 <div className="flex items-center gap-1 text-xs text-[#6B7280]">
                                                     <FiClock className="w-3 h-3" />
-                                                    {formatMeetingTimeRange(meeting.startIso, meeting.endIso, meeting.timeZone)}
+                                                    {formatMeetingTimeRange(meeting.startIso, meeting.endIso)}
                                                 </div>
                                             </div>
                                             {meeting.meetingLink ? (

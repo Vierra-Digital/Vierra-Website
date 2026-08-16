@@ -70,6 +70,9 @@ export function isPrefetchOpen(userAgent: string | null, msSinceSend: number): b
   const ua = (userAgent || "").toLowerCase();
   if (/proofpoint|mimecast|barracuda|forcepoint|symantec|fireeye|cloudmark|messagelabs|trendmicro/.test(ua)) return true;
   if (/\bbot\b|crawler|spider|scanner|monitor|headlesschrome|preview/.test(ua)) return true;
-  if (msSinceSend >= 0 && msSinceSend < 10_000) return true;
+  // Math.abs so a negative gap (open-pixel hit racing/preceding the outbound row's created_at
+  // write, or app/DB clock skew) still falls in the immediate-delivery window instead of
+  // silently bypassing this heuristic and miscounting a same-second prefetch as a real open.
+  if (Math.abs(msSinceSend) < 10_000) return true;
   return false;
 }

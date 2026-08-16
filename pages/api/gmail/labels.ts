@@ -8,7 +8,9 @@ const LABELS_URL = "https://gmail.googleapis.com/gmail/v1/users/me/labels";
 export default withAuth(
   async (req, res, session) => {
     const userId = session.user.id;
-    const accountEmail = asStr(req.method === "GET" ? req.query.accountEmail : req.body?.accountEmail)
+    // Read identifiers from the query when present so DELETE works even where a request
+    // body is dropped in transit (a silently-ignored DELETE body is why deletes never reached Gmail).
+    const accountEmail = asStr(req.query.accountEmail ?? req.body?.accountEmail)
       .trim()
       .toLowerCase();
     if (!accountEmail) {
@@ -68,20 +70,43 @@ export default withAuth(
       return;
     }
 
-    if (req.method === "DELETE") {
+    // Rename — Gmail PATCH on the label resource, so the change lands in Gmail itself.
+    if (req.method === "PATCH") {
       const id = asStr(req.body?.id).trim();
+      const name = asStr(req.body?.name).trim();
+      if (!id || !name) {
+        res.status(400).json({ message: "Label id and name are required." });
+        return;
+      }
+      const response = await fetch(`${LABELS_URL}/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { ...auth, "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        res.status(502).json({ message: data?.error?.message || "Failed to rename label." });
+        return;
+      }
+      res.status(200).json({ label: { id: data.id, name: data.name } });
+      return;
+    }
+
+    if (req.method === "DELETE") {
+      const id = asStr(req.query.id ?? req.body?.id).trim();
       if (!id) {
         res.status(400).json({ message: "Label id is required." });
         return;
       }
       const response = await fetch(`${LABELS_URL}/${encodeURIComponent(id)}`, { method: "DELETE", headers: auth });
       if (!response.ok && response.status !== 204) {
-        res.status(502).json({ message: "Failed to delete label." });
+        const detail = await response.json().catch(() => null);
+        res.status(502).json({ message: detail?.error?.message || "Failed to delete label." });
         return;
       }
       res.status(200).json({ ok: true });
       return;
     }
   },
-  { methods: ["GET", "POST", "DELETE"] }
+  { methods: ["GET", "POST", "PATCH", "DELETE"] }
 );

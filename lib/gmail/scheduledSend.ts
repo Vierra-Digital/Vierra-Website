@@ -69,17 +69,21 @@ export type DispatchSummary = { processed: number; sent: number; failed: number 
  * don't double-send. `now` is injected for testability.
  */
 export async function dispatchDueScheduledSends(baseUrl: string, now: Date): Promise<DispatchSummary> {
-  // Reclaim rows orphaned in SENDING (worker crashed/OOM'd/redeployed after claiming but
-  // before resolving): return them to PENDING for retry, or FAIL them once attempts are spent.
-  // Without this a stuck row would never be retried (the query below only selects PENDING).
+  // Reclaim rows orphaned in SENDING (worker crashed/OOM'd/redeployed after claiming but before
+  // resolving). This used to reset them straight back to PENDING for an automatic retry, but that
+  // can't distinguish "crashed before the provider call" from "the email actually sent and the
+  // process died before the SENT write" — resetting the latter to PENDING silently double-sends
+  // the recipient on the next tick. A duplicate email is worse than a delayed manual resend, so
+  // stale SENDING rows are always marked FAILED for a human to verify (via last_error) rather than
+  // auto-retried, regardless of attempts remaining.
   const staleBefore = new Date(now.getTime() - STALE_SENDING_MS);
   await prisma.emailScheduledSend.updateMany({
-    where: { status: "SENDING", updated_at: { lt: staleBefore }, attempts: { lt: MAX_ATTEMPTS } },
-    data: { status: "PENDING", updated_at: now },
-  });
-  await prisma.emailScheduledSend.updateMany({
-    where: { status: "SENDING", updated_at: { lt: staleBefore }, attempts: { gte: MAX_ATTEMPTS } },
-    data: { status: "FAILED", last_error: "Timed out while sending.", updated_at: now },
+    where: { status: "SENDING", updated_at: { lt: staleBefore } },
+    data: {
+      status: "FAILED",
+      last_error: "Send timed out in an indeterminate state — verify manually whether it was delivered before resending.",
+      updated_at: now,
+    },
   });
 
   const due = await prisma.emailScheduledSend.findMany({
