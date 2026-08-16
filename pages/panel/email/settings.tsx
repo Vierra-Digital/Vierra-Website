@@ -31,7 +31,7 @@ import { requireSession } from "@/lib/auth";
 import { renderTemplate } from "@/lib/email/templateRender";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import PromptModal, { type PromptField } from "@/components/ui/PromptModal";
-import { MODULES, orderModules } from "@/components/email/constants";
+import { MODULES, orderModules, PAGE_SIZE } from "@/components/email/constants";
 import type { ContactVisibility } from "@/components/email/types";
 
 type PromptConfig = {
@@ -423,6 +423,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   /** Custom sidebar order (module keys). Empty = built-in MODULES order. */
   const [navOrder, setNavOrder] = useState<string[]>([]);
   const [navSaving, setNavSaving] = useState(false);
+  /** Rows per mailbox page. Empty string = "use the default". */
+  const [navPageSize, setNavPageSize] = useState<string>("");
   // Undo-send window (seconds). Stored in localStorage — the same key the composer reads before it
   // actually sends — so this is a per-device preference (no server round-trip).
   const [undoSendDelay, setUndoSendDelay] = useState(5);
@@ -1246,6 +1248,36 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
   const deleteTag = (tag: ContactTag) => setTagToDelete(tag);
 
+  /**
+   * Persist the rows-per-page preference. The server clamps to 10–100; mirror that here so the
+   * field can't show a value the panel won't actually use.
+   */
+  const saveNavPageSize = async (raw: string) => {
+    const trimmed = raw.trim();
+    const parsed = Number(trimmed);
+    const value = trimmed && Number.isFinite(parsed) && parsed > 0
+      ? Math.min(100, Math.max(10, Math.floor(parsed)))
+      : null;
+    setNavPageSize(value ? String(value) : "");
+    setNavSaving(true);
+    setStatus("");
+    try {
+      const response = await fetch("/api/gmail/nav-layout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageSize: value }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || payload?.ok === false) {
+        setStatus("Failed to save emails per page.");
+      }
+    } catch {
+      setStatus("Failed to save emails per page.");
+    } finally {
+      setNavSaving(false);
+    }
+  };
+
   const loadNavLayout = useCallback(async () => {
     try {
       const r = await fetch("/api/gmail/nav-layout");
@@ -1253,6 +1285,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         const d = await r.json();
         if (Array.isArray(d?.hiddenModules)) setNavHidden(d.hiddenModules);
         if (Array.isArray(d?.moduleOrder)) setNavOrder(d.moduleOrder);
+        setNavPageSize(d?.pageSize ? String(d.pageSize) : "");
       }
     } catch {
       /* ignore */
@@ -1538,6 +1571,28 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   </div>
                 }
               >
+                <div className="mb-3 flex items-center justify-between gap-4 border-b border-gray-100 pb-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#1E1B2E]">Emails per page</p>
+                    <p className="mt-0.5 text-xs text-[#6B7280]">
+                      How many messages each mailbox page loads. Each row is a separate Gmail
+                      fetch, so a smaller number opens mailboxes faster. 10–100; blank uses the
+                      default of {PAGE_SIZE}.
+                    </p>
+                  </div>
+                  <input
+                    type="number"
+                    min={10}
+                    max={100}
+                    step={5}
+                    value={navPageSize}
+                    placeholder={String(PAGE_SIZE)}
+                    onChange={(event) => setNavPageSize(event.target.value)}
+                    onBlur={(event) => void saveNavPageSize(event.target.value)}
+                    className="w-24 shrink-0 rounded-lg border border-[#E5E7EB] px-3 py-1.5 text-sm text-[#1E1B2E] focus:border-[#701CC0] focus:outline-none focus:ring-1 focus:ring-[#701CC0]"
+                    aria-label="Emails per page"
+                  />
+                </div>
                 <ul className="divide-y divide-gray-100">
                   {orderedModules.map((m, index) => {
                     const visible = m.key === "inbox" || !navHidden.includes(m.key);

@@ -17,8 +17,17 @@ function isMissingColumn(error: unknown): boolean {
   return typeof error === "object" && error !== null && (error as { code?: string }).code === "P2022";
 }
 
+/** Clamp a requested page size to the range the mailbox list can actually serve. */
+export const PAGE_SIZE_MIN = 10;
+export const PAGE_SIZE_MAX = 100;
+export function sanitizePageSize(raw: unknown): number | null {
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(PAGE_SIZE_MAX, Math.max(PAGE_SIZE_MIN, Math.floor(n)));
+}
+
 /** Normalize a list of module keys: trimmed, lowercased, de-duped, bounded. */
-function sanitizeKeys(raw: unknown): string[] {
+export function sanitizeKeys(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   return [
     ...new Set(
@@ -38,15 +47,16 @@ export default withAuth(
       try {
         const row = await prisma.emailNavPreference.findUnique({
           where: { user_id: userId },
-          select: { hidden_modules: true, module_order: true },
+          select: { hidden_modules: true, module_order: true, page_size: true },
         });
         res.status(200).json({
           hiddenModules: row?.hidden_modules ?? [],
           moduleOrder: row?.module_order ?? [],
+          pageSize: row?.page_size ?? null,
         });
       } catch (error) {
         if (isMissingTable(error)) {
-          res.status(200).json({ hiddenModules: [], moduleOrder: [] });
+          res.status(200).json({ hiddenModules: [], moduleOrder: [], pageSize: null });
           return;
         }
         // Column not migrated yet — still serve the hidden set so the nav works.
@@ -56,9 +66,9 @@ export default withAuth(
               where: { user_id: userId },
               select: { hidden_modules: true },
             });
-            res.status(200).json({ hiddenModules: row?.hidden_modules ?? [], moduleOrder: [], degraded: true });
+            res.status(200).json({ hiddenModules: row?.hidden_modules ?? [], moduleOrder: [], pageSize: null, degraded: true });
           } catch {
-            res.status(200).json({ hiddenModules: [], moduleOrder: [], degraded: true });
+            res.status(200).json({ hiddenModules: [], moduleOrder: [], pageSize: null, degraded: true });
           }
           return;
         }
@@ -71,8 +81,10 @@ export default withAuth(
     // sends it, so toggling visibility never clobbers a saved order (and vice versa).
     const hasHidden = req.body?.hiddenModules !== undefined;
     const hasOrder = req.body?.moduleOrder !== undefined;
+    const hasPageSize = req.body?.pageSize !== undefined;
     const hiddenModules = sanitizeKeys(req.body?.hiddenModules);
     const moduleOrder = sanitizeKeys(req.body?.moduleOrder);
+    const pageSize = sanitizePageSize(req.body?.pageSize);
     try {
       await prisma.emailNavPreference.upsert({
         where: { user_id: userId },
@@ -80,14 +92,16 @@ export default withAuth(
           user_id: userId,
           hidden_modules: hasHidden ? hiddenModules : [],
           module_order: hasOrder ? moduleOrder : [],
+          ...(hasPageSize ? { page_size: pageSize } : {}),
         },
         update: {
           ...(hasHidden ? { hidden_modules: hiddenModules } : {}),
           ...(hasOrder ? { module_order: moduleOrder } : {}),
+          ...(hasPageSize ? { page_size: pageSize } : {}),
           updated_at: new Date(),
         },
       });
-      res.status(200).json({ ok: true, hiddenModules, moduleOrder });
+      res.status(200).json({ ok: true, hiddenModules, moduleOrder, pageSize });
     } catch (error) {
       // The order column is missing (migration not applied yet). Don't drop the write on the
       // floor — retry persisting just the hidden set, which is what most saves are, and only

@@ -547,6 +547,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // Lightweight pre-send deliverability lint — proactive warnings shown in the composer.
   // Deliverability guardrail (#2): check the sending domain's SPF/DMARC when compose opens.
   const [composeDeliverability, setComposeDeliverability] = useState<{ spfOk: boolean; dmarcOk: boolean } | null>(null);
+  /** Rows per mailbox page. PAGE_SIZE is the default; Settings → Layout can override it. */
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE);
   useEffect(() => {
     let cancelled = false;
     fetch("/api/gmail/nav-layout")
@@ -555,6 +557,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         if (cancelled || !d) return;
         if (Array.isArray(d.hiddenModules)) setHiddenModules(d.hiddenModules);
         if (Array.isArray(d.moduleOrder)) setModuleOrder(d.moduleOrder);
+        if (Number.isFinite(Number(d.pageSize)) && Number(d.pageSize) > 0) setPageSize(Number(d.pageSize));
       })
       .catch(() => {});
     return () => {
@@ -1619,7 +1622,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     const query = new URLSearchParams({
       mailbox,
       accounts: activeLabelId ? selectedAccounts[0] || "" : selectedAccounts.join(","),
-      limit: String(PAGE_SIZE),
+      limit: String(pageSize),
       page: String(currentPage),
     });
     if (activeLabelId) query.set("labelId", activeLabelId);
@@ -1680,7 +1683,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       if (requestId !== loadMessagesRequestRef.current) return;
       setMessagesLoading(false);
     }
-  }, [activeModule, activeLabelId, canLoadMessages, currentPage, debouncedSearch, selectedAccounts, step]);
+  }, [activeModule, activeLabelId, canLoadMessages, currentPage, debouncedSearch, pageSize, selectedAccounts, step]);
 
   useEffect(() => {
     loadMessagesRef.current = () => void loadMessages();
@@ -2302,6 +2305,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       );
       if (action !== "markRead" && action !== "markUnread") {
         setSelectedRows([]);
+        // Leave the reader now, not after Gmail answers. Acting on an open message used to
+        // hold the reader open for the whole round trip, so deleting felt like it hung before
+        // dropping back to the list — even though the row had already gone from the list
+        // underneath. The message is gone either way; the reconcile below only corrects rows.
+        setViewMode("list");
+        setSelectedMessageId("");
+        setSelectedMessageDetail(null);
         // The destination mailbox's cached page is now out of date.
         invalidateMessagesCache();
       }
@@ -2405,18 +2415,15 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             })
             .filter(Boolean) as MessageRow[];
 
-          const unreadCount = next.filter((message) => message.unread).length;
-          setModuleUnreadBadges((prevBadges) =>
-            activeModule in prevBadges ? { ...prevBadges, [activeModule]: unreadCount } : prevBadges
-          );
           return next;
         });
 
         setSelectedRows([]);
-        setViewMode("list");
-        setSelectedMessageId("");
-        setSelectedMessageDetail(null);
-        await loadMailboxCounts();
+        // Not awaited: the list is already correct optimistically, so blocking the action's
+        // completion on a counts round trip only kept the toolbar spinner up. Badges are
+        // Gmail's own totals now, so deriving them from the visible page here would also have
+        // re-capped them at one page's worth.
+        void loadMailboxCounts();
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "Action failed.");
       } finally {
@@ -2946,13 +2953,25 @@ ${sourceText}`;
     if (!isComposeOpen || !composeAccountEmail) return;
     let cancelled = false;
     setComposeFrom(composeAccountEmail);
+    // A failure here used to be indistinguishable from "this account has no aliases" — both
+    // ended as an empty list — so a broken alias fetch looked like the feature not existing.
+    // Surface it instead; the From selector is useless without it.
     fetch(`/api/gmail/send-as?accountEmail=${encodeURIComponent(composeAccountEmail)}`)
-      .then((response) => response.json())
-      .then((payload) => {
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload?.message || "Failed to load send-as aliases.");
+        }
         if (!cancelled) setComposeAliases(Array.isArray(payload?.aliases) ? payload.aliases : []);
       })
-      .catch(() => {
-        if (!cancelled) setComposeAliases([]);
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setComposeAliases([]);
+        setComposeError(
+          `Couldn't load your send-as addresses: ${
+            error instanceof Error ? error.message : "unknown error"
+          }`
+        );
       });
     return () => {
       cancelled = true;

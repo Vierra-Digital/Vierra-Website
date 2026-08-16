@@ -4,60 +4,63 @@ import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { getAccessibleGmailAccounts } from "@/lib/email/mailboxAccess";
 import { asQueryStr } from "@/lib/api/parsing";
 
-type GmailListEstimateResponse = {
-  resultSizeEstimate?: number;
+type GmailLabel = {
+  messagesTotal?: number;
+  messagesUnread?: number;
 };
 
-
-async function fetchEstimate(accessToken: string, query: string) {
-  const params = new URLSearchParams({
-    q: query,
-    maxResults: "1",
-    fields: "resultSizeEstimate",
-  });
-  const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params.toString()}`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+/**
+ * Exact counts for one system label.
+ *
+ * These used to come from `messages.list?q=…&fields=resultSizeEstimate`. That field is, as its
+ * name says, an estimate — Gmail rounds it and it drifts badly on large mailboxes, which is why
+ * the sidebar showed an inbox unread count in the hundreds that matched nothing, and a Sent
+ * "unread" count of 201 against 7 genuinely unread sent messages. labels.get returns the same
+ * totals Gmail's own UI renders, and costs one cheap call per label instead of a search.
+ */
+async function fetchLabel(accessToken: string, labelId: string): Promise<GmailLabel> {
+  const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/labels/${labelId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`gmail unread estimate failed ${response.status}: ${text}`);
+    throw new Error(`gmail label ${labelId} failed ${response.status}: ${text}`);
   }
-  const payload = (await response.json()) as GmailListEstimateResponse;
-  return Number(payload.resultSizeEstimate || 0);
+  return (await response.json()) as GmailLabel;
 }
 
-/** Draft count for the DRAFT label — matches `labelIds=DRAFT` in messages list (not `q=in:drafts`, whose resultSizeEstimate can be wildly off). */
-async function fetchDraftLabelMessageTotal(accessToken: string) {
-  const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/labels/DRAFT", {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`gmail label DRAFT failed ${response.status}: ${text}`);
-  }
-  const payload = (await response.json()) as { messagesTotal?: number };
-  return Number(payload.messagesTotal ?? 0);
+/**
+ * What each badge means follows Gmail: Inbox and Spam show unread, Drafts shows the total
+ * (a draft is never "unread"). Sent, Archive and Trash carry no badge in Gmail and no longer
+ * carry one here — a count on Sent was noise, and "Archive" isn't a Gmail label at all, so it
+ * could only ever have been a guess assembled from a negated search.
+ */
+export function toBadgeCounts(inbox: GmailLabel, drafts: GmailLabel, spam: GmailLabel) {
+  const nonNegative = (value: unknown) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  };
+  return {
+    inbox: nonNegative(inbox?.messagesUnread),
+    sent: 0,
+    drafts: nonNegative(drafts?.messagesTotal),
+    spam: nonNegative(spam?.messagesUnread),
+    trash: 0,
+    archive: 0,
+  };
 }
 
 async function fetchMailboxCounts(accessToken: string) {
-  const [inbox, sent, draftsTotal, spam, trash, archive] = await Promise.all([
-    fetchEstimate(accessToken, "in:inbox is:unread"),
-    fetchEstimate(accessToken, "in:sent is:unread"),
-    fetchDraftLabelMessageTotal(accessToken),
-    fetchEstimate(accessToken, "in:spam is:unread"),
-    fetchEstimate(accessToken, "in:trash is:unread"),
-    fetchEstimate(accessToken, "-in:inbox -in:sent -in:drafts -in:spam -in:trash is:unread"),
+  const [inbox, drafts, spam] = await Promise.all([
+    fetchLabel(accessToken, "INBOX"),
+    fetchLabel(accessToken, "DRAFT"),
+    fetchLabel(accessToken, "SPAM"),
   ]);
-
-  return { inbox, sent, drafts: draftsTotal, spam, trash, archive };
+  return toBadgeCounts(inbox, drafts, spam);
 }
 
 function isAuthError(error: unknown) {
-  return error instanceof Error && /gmail (unread estimate|label DRAFT) failed 401/i.test(error.message);
+  return error instanceof Error && /gmail label [A-Z]+ failed 401/i.test(error.message);
 }
 
 export default withAuth(async (req, res, session) => {
