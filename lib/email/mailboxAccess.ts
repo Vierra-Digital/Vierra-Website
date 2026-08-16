@@ -21,9 +21,12 @@ export async function getAccessibleGmailAccounts(
   const out: Array<{ email: string; ownerUserId: string }> = [];
   const seen = new Set<string>();
   try {
+    // Ordered by connection age so downstream consumers (e.g. getGmailAliasAccounts' collision
+    // tiebreak) can rely on "first in this list" meaning "earliest connected", deterministically.
     const owned = await prisma.platformToken.findMany({
       where: { user_id: userId, platform: { startsWith: "gmail:" } },
       select: { platform: true },
+      orderBy: { created_at: "asc" },
     });
     for (const r of owned) {
       const email = r.platform.replace(/^gmail:/, "").toLowerCase();
@@ -79,27 +82,51 @@ export type GmailAliasAccount = { email: string; ownerUserId: string; viaAccount
  * accessible Gmail account's verified send-as aliases (skipping the primary — that's the account
  * itself) so callers can route a request for the alias's mail back to the real account + token.
  * Best-effort: a Gmail API failure for one account just omits its aliases, it never throws.
+ *
+ * Short-TTL, per-instance cache: this is called on every /status, and every /messages or
+ * /counts request for an unrecognized account, so an uncached version means one extra Gmail
+ * sendAs.list call per accessible account on every poll. Aliases change rarely, so a few
+ * minutes of staleness is an acceptable trade — worst case a newly-added alias takes up to
+ * ALIAS_CACHE_TTL_MS to appear. Scoped to the warm serverless instance only (no shared store),
+ * so this helps hot polling within an instance but doesn't survive cold starts.
  */
+const ALIAS_CACHE_TTL_MS = 5 * 60 * 1000;
+const aliasCache = new Map<string, { expiresAt: number; data: GmailAliasAccount[] }>();
+
 export async function getGmailAliasAccounts(userId: string): Promise<GmailAliasAccount[]> {
+  const cached = aliasCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
   const accessible = await getAccessibleGmailAccounts(userId);
-  const seen = new Set<string>(accessible.map((a) => a.email));
-  const out: GmailAliasAccount[] = [];
-  await Promise.all(
+  // Fetch every account's aliases concurrently, but keep `results[i]` aligned with
+  // `accessible[i]` and merge them back in that (deterministic, connection-order) sequence —
+  // so if two accounts somehow share an alias email, the earliest-connected account always
+  // wins, regardless of which Gmail API call happens to resolve first.
+  const results = await Promise.all(
     accessible.map(async (acct) => {
       try {
         const token = await getValidGmailAccessToken(acct.ownerUserId, acct.email);
-        if (!token.ok) return;
-        const aliases = await fetchSendAsAliases(token.accessToken);
-        for (const alias of aliases) {
-          if (alias.isPrimary || seen.has(alias.email)) continue;
-          seen.add(alias.email);
-          out.push({ email: alias.email, ownerUserId: acct.ownerUserId, viaAccountEmail: acct.email });
-        }
+        if (!token.ok) return [];
+        return await fetchSendAsAliases(token.accessToken);
       } catch {
         /* best effort — one account's alias lookup failing shouldn't break the rest */
+        return [];
       }
     })
   );
+
+  const seen = new Set<string>(accessible.map((a) => a.email));
+  const out: GmailAliasAccount[] = [];
+  results.forEach((aliases, index) => {
+    const acct = accessible[index];
+    for (const alias of aliases) {
+      if (alias.isPrimary || seen.has(alias.email)) continue;
+      seen.add(alias.email);
+      out.push({ email: alias.email, ownerUserId: acct.ownerUserId, viaAccountEmail: acct.email });
+    }
+  });
+
+  aliasCache.set(userId, { expiresAt: Date.now() + ALIAS_CACHE_TTL_MS, data: out });
   return out;
 }
 
