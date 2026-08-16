@@ -75,7 +75,6 @@ import {
   MODULES,
   orderModules,
   BADGE_MODULES,
-  BADGE_MAILBOXES,
 } from "@/components/email/constants";
 import type {
   ModuleKey,
@@ -1582,14 +1581,20 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         throw new Error(payload?.message || "Failed to load mailbox counts.");
       }
       const counts = payload?.counts || {};
-      setMailboxCounts({
+      const next = {
         inbox: Number(counts.inbox || 0),
         sent: Number(counts.sent || 0),
         drafts: Number(counts.drafts || 0),
         archive: Number(counts.archive || 0),
         spam: Number(counts.spam || 0),
         trash: Number(counts.trash || 0),
-      });
+      };
+      setMailboxCounts(next);
+      // Sidebar badges render from this. They used to be counted off the first page of each
+      // mailbox, which silently capped every badge at PAGE_SIZE — an inbox with 80 unread read
+      // as 50. These are Gmail's own totals, so they're both correct and cheap. Local mark
+      // read/unread still adjusts the number optimistically between refreshes.
+      setModuleUnreadBadges(next);
     } catch {
       setMailboxCounts(EMPTY_COUNTS);
     } finally {
@@ -1600,74 +1605,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   useEffect(() => {
     loadMailboxCounts();
   }, [loadMailboxCounts]);
-
-  const loadUnreadBadges = useCallback(async () => {
-    if (step !== "client" || selectedAccounts.length === 0) {
-      setModuleUnreadBadges({
-        inbox: 0,
-        sent: 0,
-        drafts: 0,
-        archive: 0,
-        spam: 0,
-        trash: 0,
-      });
-      return;
-    }
-    try {
-      const results = await Promise.all(
-        BADGE_MAILBOXES.map(async (mailbox) => {
-          const query = new URLSearchParams({
-            mailbox,
-            accounts: selectedAccounts.join(","),
-            limit: String(PAGE_SIZE),
-            page: "1",
-          });
-          const response = await fetch(`/api/gmail/messages?${query.toString()}`);
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok) return [mailbox, 0] as const;
-          const rows: MessageRow[] = Array.isArray(payload?.messages) ? payload.messages : [];
-          // This fetch already pulled the full first page for every standard mailbox — warm
-          // loadMessages's cache with it (identical query shape for a plain tab switch: page
-          // resets to 1, search/label are cleared) so the FIRST visit to that tab also paints
-          // instantly instead of showing the loading spinner. No extra network requests; this
-          // data was previously fetched here just to count unread and then discarded.
-          const cacheKey = query.toString();
-          messagesCacheRef.current.delete(cacheKey);
-          messagesCacheRef.current.set(cacheKey, {
-            messages: rows,
-            accountErrors: Array.isArray(payload?.accountErrors) ? payload.accountErrors : [],
-            hasNextPage: Boolean(payload?.hasNextPage),
-          });
-          if (messagesCacheRef.current.size > MESSAGE_CACHE_LIMIT) {
-            const oldest = messagesCacheRef.current.keys().next().value;
-            if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
-          }
-          return [mailbox, rows.filter((row) => row.unread).length] as const;
-        })
-      );
-      const next: ModuleUnreadBadgeCounts = {
-        inbox: 0,
-        sent: 0,
-        drafts: 0,
-        archive: 0,
-        spam: 0,
-        trash: 0,
-      };
-      for (const [mailbox, count] of results) {
-        next[mailbox] = count;
-      }
-      setModuleUnreadBadges(next);
-    } catch {
-      setModuleUnreadBadges({
-        inbox: 0,
-        sent: 0,
-        drafts: 0,
-        archive: 0,
-        spam: 0,
-        trash: 0,
-      });
-    }
-  }, [selectedAccounts, step]);
 
   const loadMessages = useCallback(async () => {
     const requestId = ++loadMessagesRequestRef.current;
@@ -1710,7 +1647,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         throw new Error(payload?.message || "Failed to load Gmail messages.");
       }
       const nextMessages = Array.isArray(payload?.messages) ? payload.messages : [];
-      const unreadCount = nextMessages.filter((message: MessageRow) => message.unread).length;
       const nextAccountErrors = Array.isArray(payload?.accountErrors) ? payload.accountErrors : [];
       const nextHasNextPage = Boolean(payload?.hasNextPage);
       // Bounded LRU-ish cache: re-inserting moves the key to the end, and we evict the oldest.
@@ -1724,7 +1660,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         const oldest = messagesCacheRef.current.keys().next().value;
         if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
       }
-      setModuleUnreadBadges((prev) => ({ ...prev, [mailbox as keyof ModuleUnreadBadgeCounts]: unreadCount }));
       setMessages(nextMessages);
       setAccountErrors(nextAccountErrors);
       setHasNextPage(nextHasNextPage);
@@ -1739,7 +1674,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       if (requestId !== loadMessagesRequestRef.current) return;
       setMessages([]);
       setHasNextPage(false);
-      setModuleUnreadBadges((prev) => ({ ...prev, [mailbox as keyof ModuleUnreadBadgeCounts]: 0 }));
       setAccountErrors([]);
       setMessagesError(error instanceof Error ? error.message : "Failed to load Gmail messages.");
     } finally {
@@ -1804,15 +1738,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   useEffect(() => {
     setCurrentPage(1);
   }, [debouncedSearch]);
-
-  useEffect(() => {
-    // Defer the unread-badge fetch (6 mailbox scans) so it doesn't compete with the
-    // active mailbox load for Gmail rate limit/bandwidth — the visible inbox paints first.
-    const t = setTimeout(() => {
-      loadUnreadBadges();
-    }, 800);
-    return () => clearTimeout(t);
-  }, [loadUnreadBadges]);
 
   useEffect(() => {
     if (step === "client" && activeModule === "contacts") {
@@ -1935,9 +1860,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         items: [{ accountEmail: selectedMessage.accountEmail, messageId: selectedMessage.id }],
       }),
     })
-      .then(() => Promise.all([loadMailboxCounts(), loadUnreadBadges()]))
+      .then(() => loadMailboxCounts())
       .catch(() => null);
-  }, [selectedMessage, viewMode, loadMailboxCounts, loadUnreadBadges]);
+  }, [selectedMessage, viewMode, loadMailboxCounts]);
 
   /** Fetch a message's detail into the cache. Shared by the reader and hover prefetch. */
   const fetchDetailInto = useCallback(async (accountEmail: string, messageId: string) => {
@@ -2113,9 +2038,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
   const flushDraftsNow = useCallback(() => {
     if (!sendingCompose && isComposeOpen && effectiveComposeDraftStorageKey) {
+      // Recipients or a subject with no body still count — closing after typing only a
+      // "To" used to discard it, which reads as the composer losing your work.
       const hasComposeContent =
         composeBody.trim() ||
-        composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim();
+        composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim() ||
+        composeTo.trim() ||
+        composeSubject.trim();
       if (hasComposeContent) {
         void saveLocalDraft(
           effectiveComposeDraftStorageKey,
@@ -2487,7 +2416,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         setViewMode("list");
         setSelectedMessageId("");
         setSelectedMessageDetail(null);
-        await Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
+        await loadMailboxCounts();
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "Action failed.");
       } finally {
@@ -2495,7 +2424,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         setActionLoading(false);
       }
     },
-    [activeModule, invalidateMessagesCache, loadMailboxCounts, loadUnreadBadges, rowKey, selectedMessageRows, selectedRows]
+    [activeModule, invalidateMessagesCache, loadMailboxCounts, rowKey, selectedMessageRows, selectedRows]
   );
 
 
@@ -2534,7 +2463,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       removeRowsLocally(rows);
       showSentToast("Snoozed");
       invalidateMessagesCache();
-      void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
+      void Promise.all([loadMessages(), loadMailboxCounts()]);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Failed to snooze.");
     } finally {
@@ -2704,7 +2633,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         }
         // Update in place — the moved rows just leave the list. No mailbox re-fetch.
         removeRowsLocally(rows);
-        void Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
+        void loadMailboxCounts();
       } catch {
         /* transient — the list refresh below/next poll reconciles */
       }
@@ -2714,7 +2643,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       activeModule,
       applyLabelToSelection,
       loadMailboxCounts,
-      loadUnreadBadges,
       removeRowsLocally,
     ]
   );
@@ -2760,7 +2688,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         if (activeModule === "inbox") await archiveRowsQuietly(rows);
         removeRowsLocally(rows);
         if (viewMode === "message") setViewMode("list");
-        void Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
+        void loadMailboxCounts();
       }
       return;
     }
@@ -2782,7 +2710,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, items }),
     })
-      .then(() => Promise.all([loadMailboxCounts(), loadUnreadBadges()]))
+      .then(() => loadMailboxCounts())
       .catch(() => setActionError("Failed to move the message."));
   };
 
@@ -2907,7 +2835,7 @@ ${sourceText}`;
       showSentToast("Message Sent");
       setInlineComposeMode(null);
       invalidateMessagesCache();
-      void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
+      void Promise.all([loadMessages(), loadMailboxCounts()]);
       setDetailError("");
       setSelectedMessageDetail(null);
     } catch (error) {
@@ -3289,9 +3217,9 @@ ${sourceText}`;
       setRequestReceipt(false);
       if (activeModule === "sent" || activeModule === "drafts") {
         invalidateMessagesCache();
-        void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
+        void Promise.all([loadMessages(), loadMailboxCounts()]);
       } else {
-        void Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
+        void loadMailboxCounts();
       }
     } catch (error) {
       setComposeError(error instanceof Error ? error.message : "Failed to send email.");
@@ -3317,7 +3245,12 @@ ${sourceText}`;
   // running would send a message the user just tried to abort (and could clobber a fresh draft).
   const closeCompose = () => {
     cancelUndoSend();
+    // The autosave is debounced 450ms and its cleanup cancels the pending write, so closing
+    // right after a keystroke dropped those edits. Flush synchronously first, then resync the
+    // Drafts badge so the count reflects a draft created by this close.
+    flushDraftsNow();
     setIsComposeOpen(false);
+    void loadMailboxCounts();
   };
 
   // Undo-send: hold the message for a short window with an Undo affordance, then actually send.
@@ -4053,7 +3986,7 @@ ${sourceText}`;
                                     type="button"
                                     onClick={() => {
                                       invalidateMessagesCache();
-                                      void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
+                                      void Promise.all([loadMessages(), loadMailboxCounts()]);
                                     }}
                                     disabled={messagesLoading}
                                     className={`${ICON_BUTTON_SOLID} email-tip`}
@@ -5459,7 +5392,7 @@ ${sourceText}`;
         <div
           className={
             composeExpanded
-              ? "fixed inset-0 z-[120] flex items-center justify-center bg-[#2E1050]/45 backdrop-blur-sm p-4"
+              ? "fixed inset-0 z-[120] flex items-center justify-center bg-black/45 backdrop-blur-sm p-4"
               : "contents"
           }
           onClick={composeExpanded ? () => setComposeExpanded(false) : undefined}
@@ -5477,7 +5410,7 @@ ${sourceText}`;
           >
             <div className="compose-hud-header flex shrink-0 cursor-default items-center justify-between gap-2 px-4 py-2.5">
               <p className="min-w-0 flex-1 truncate pr-2 text-sm font-semibold text-white">
-                {composeThreadId ? "Reply" : "New message"}
+                {composeThreadId ? "Reply" : "New Message"}
               </p>
               <div className="flex shrink-0 items-center">
                 <button
@@ -5493,6 +5426,7 @@ ${sourceText}`;
                   type="button"
                   onClick={closeCompose}
                   className="rounded-full p-2 text-white/90 hover:bg-white/15"
+                  title="Close"
                   aria-label="Close compose"
                 >
                   <FiX className="h-5 w-5" />

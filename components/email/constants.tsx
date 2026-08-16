@@ -5,11 +5,13 @@ import { FiInbox, FiMail, FiSend, FiUsers, FiArchive, FiTrash2, FiKey, FiCheckSq
 import type { ModuleKey, MailboxCounts } from "@/components/email/types";
 
 /**
- * Rows per mailbox page. Each row costs a metadata messages.get, so this is the single
- * biggest lever on how long a mailbox takes to appear — 50 meant fifty round trips before
- * the list could render. 25 fills the viewport with room to spare and halves that.
+ * Rows per mailbox page. Each row costs a metadata messages.get, so this is also the biggest
+ * lever on how long a mailbox takes to appear — 50 rows is 50 round trips before the list can
+ * render. It's a deliberate trade for a full page of mail; the prefetch that used to run this
+ * same query across six mailboxes on load was dropped when the sidebar badges moved to the
+ * counts endpoint, which paid most of that cost back.
  */
-export const PAGE_SIZE = 25;
+export const PAGE_SIZE = 50;
 export const CONTACTS_PAGE_SIZE = 50;
 
 /** Neutral scrollbar; overrides global purple `::-webkit-scrollbar` in app/globals.css for compose UI. */
