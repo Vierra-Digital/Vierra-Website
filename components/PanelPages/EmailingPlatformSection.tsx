@@ -5505,11 +5505,11 @@ ${sourceText}`;
                 className={`flex min-h-0 flex-1 flex-col px-0 ${
                   composeExpanded
                     ? "overflow-hidden"
-                    : `max-h-[min(52vh,440px)] overflow-y-auto ${COMPOSE_NEUTRAL_SCROLLBAR}`
+                    : `max-h-[min(66vh,580px)] overflow-y-auto ${COMPOSE_NEUTRAL_SCROLLBAR}`
                 }`}
               >
                 <div className="shrink-0 px-3">
-                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
+                  <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
                     <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">From</span>
                     <div className="relative min-w-0">
                       <select
@@ -5545,7 +5545,7 @@ ${sourceText}`;
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
+                  <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
                     <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">To</span>
                     <div className="flex min-w-0 items-center gap-2">
                       <input
@@ -5582,7 +5582,7 @@ ${sourceText}`;
                   </div>
 
                   {showCc ? (
-                    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
+                    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
                       <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Cc</span>
                       <input
                         value={composeCc}
@@ -5594,7 +5594,7 @@ ${sourceText}`;
                   ) : null}
 
                   {showBcc ? (
-                    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
+                    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
                       <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Bcc</span>
                       <input
                         value={composeBcc}
@@ -5605,7 +5605,7 @@ ${sourceText}`;
                     </div>
                   ) : null}
 
-                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
+                  <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
                     <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Subject</span>
                     <input
                       value={composeSubject}
@@ -5630,7 +5630,7 @@ ${sourceText}`;
                       setComposeBodyHtml(html);
                       setComposeBody(text);
                     }}
-                    minHeightClass={composeExpanded ? "min-h-0 flex-1" : "min-h-[140px]"}
+                    minHeightClass={composeExpanded ? "min-h-0 flex-1" : "min-h-[280px]"}
                     className={composeExpanded ? "min-h-0 flex-1 flex flex-col overflow-hidden" : ""}
                     showToolbar={composeFormattingToolbarOpen}
                   />
@@ -5699,8 +5699,8 @@ ${sourceText}`;
                     {composeSuccess}
                   </div>
                 ) : null}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-1">
+                <div className="compose-actions flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-0.5">
                     <button
                       type="button"
                       onClick={handleSendCompose}

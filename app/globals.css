@@ -1014,12 +1014,30 @@ input[type="search"]::-ms-clear:hover {
   background: transparent;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   color: #F3F0FB;
-  padding-top: 14px;
-  padding-bottom: 14px;
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
-.compose-hud-header p { font-size: 13.5px; letter-spacing: 0.01em; color: #EDE9F8; }
-.compose-hud-header button { color: #9C95B8; border-radius: 9999px; }
+.compose-hud-header p { font-size: 12.5px; letter-spacing: 0.015em; color: #EDE9F8; }
+.compose-hud-header button { color: #9C95B8; border-radius: 9999px; padding: 6px; }
 .compose-hud-header button:hover { background: rgba(255, 255, 255, 0.07); color: #F3F0FB; }
+.compose-hud-header button svg { width: 15px; height: 15px; }
+
+/* The rich editor ships its own bordered card — inside the composer the body is
+   just the surface, with the field hairline above it doing the separating. */
+.compose-hud .rounded-md.border,
+.compose-hud [class*="rounded-md"][class*="border-[#EAE5F4]"] {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+/* …but its formatting toolbar is a real strip, so it keeps a hairline. */
+.compose-hud .bg-\[\#F6F3FD\] {
+  background: rgba(255, 255, 255, 0.035) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 8px;
+}
+.compose-hud .bg-\[\#F6F3FD\] button { color: #C3BCD8 !important; }
+.compose-hud .bg-\[\#F6F3FD\] button:hover { background: rgba(255, 255, 255, 0.08) !important; color: #F3F0FB !important; }
 
 /* Field rows: hairlines only, and the label sits quiet against the value. */
 .compose-hud .border-b { border-color: rgba(255, 255, 255, 0.055) !important; }
@@ -1039,15 +1057,32 @@ input[type="search"]::-ms-clear:hover {
 .compose-hud [contenteditable="true"]:focus { outline: none !important; box-shadow: none !important; }
 .compose-hud input::placeholder { color: #6F6989 !important; }
 /* "From" / "To" / "Subject" labels. */
-.compose-hud span.text-\[\#5f6368\] { color: #837CA0 !important; font-size: 12.5px; }
+.compose-hud span.text-\[\#5f6368\] { color: #837CA0 !important; font-size: 12px; }
 .compose-hud select option { background: #17122A; color: #EDE9F8; }
+/* Field + body text one step down from the panel's default, so the taller body
+   reads as room to write rather than as oversized chrome. */
+.compose-hud input:not([type="checkbox"]):not([type="radio"]),
+.compose-hud select,
+.compose-hud [contenteditable="true"] { font-size: 13px !important; }
+.compose-hud .grid { padding-top: 3px !important; padding-bottom: 3px !important; }
+.compose-hud button.text-\[\#701CC0\] { font-size: 12px; }
+
+/* Footer: smaller discs and icons than the toolbars elsewhere in the panel —
+   this row sits inside a 572px card and should read as quiet, not as chrome. */
+.compose-actions button svg { width: 16px; height: 16px; }
+.compose-actions > div > div > button,
+.compose-actions > button,
+.compose-actions > div > button:not(.bg-\[\#701CC0\]) { height: 32px; width: 32px; }
 
 /* Send: the one solid element, and the only thing carrying the brand. */
 .compose-hud button.bg-\[\#701CC0\] {
   background: linear-gradient(120deg, #7A17C5 0%, #9B1FB4 100%) !important;
   border-radius: 9999px;
-  padding-left: 24px;
-  padding-right: 24px;
+  min-height: 32px;
+  padding-left: 20px;
+  padding-right: 20px;
+  margin-right: 4px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.01em;
   box-shadow: 0 6px 18px -6px rgba(122, 23, 197, 0.7);
