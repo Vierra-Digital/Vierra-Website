@@ -121,10 +121,23 @@ export default withAuth(
         }
       }
       if (isMissingTable(error) || isMissingColumn(error)) {
-        res.status(200).json({ ok: false, hiddenModules, moduleOrder, degraded: true });
+        res.status(200).json({
+          ok: false,
+          hiddenModules,
+          moduleOrder,
+          degraded: true,
+          message: "Email panel preferences aren't migrated on this database yet.",
+        });
         return;
       }
-      throw error;
+      // Anything else (most often a Prisma client that predates a column this write uses)
+      // used to surface as a bare 500, leaving the UI to guess at a generic failure string.
+      // Report the reason so the message on screen names the actual problem.
+      res.status(500).json({
+        ok: false,
+        message: error instanceof Error ? error.message : "Failed to save email panel preferences.",
+      });
+      return;
     }
   },
   { methods: ["GET", "POST"] }

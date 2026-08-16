@@ -324,7 +324,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [composeFormattingToolbarOpen, setComposeFormattingToolbarOpen] = useState(false);
   const [composeAccountEmail, setComposeAccountEmail] = useState("");
   const [composeFrom, setComposeFrom] = useState("");
-  const [composeAliases, setComposeAliases] = useState<Array<{ email: string; displayName: string; isPrimary: boolean }>>([]);
+  const [composeAliases, setComposeAliases] = useState<
+    Array<{ email: string; displayName: string; isPrimary: boolean; accountEmail: string }>
+  >([]);
   const [composeThreadId, setComposeThreadId] = useState("");
   const [composeInReplyTo, setComposeInReplyTo] = useState("");
   const [composeReferences, setComposeReferences] = useState("");
@@ -2948,34 +2950,58 @@ ${sourceText}`;
     loadLabels();
   }, [loadLabels]);
 
-  // Load verified send-as aliases for the composing account (for the From selector).
+  /**
+   * Load send-as identities for every connected mailbox, not just the active one.
+   *
+   * These used to be fetched for composeAccountEmail alone, which made aliases undiscoverable:
+   * opening compose on a mailbox with no aliases showed none, and the only way to reach an
+   * alias on another mailbox was to already know it was there and switch accounts first. Now
+   * every address the user can legitimately send from is in the list up front, each tagged with
+   * the mailbox that owns it (Gmail rejects sending as an alias through a mailbox that doesn't).
+   */
+  const composeAliasAccountsKey = useMemo(
+    () => (selectedAccounts.length > 0 ? selectedAccounts : connectedAccounts.map((a) => a.email)).join(","),
+    [selectedAccounts, connectedAccounts]
+  );
   useEffect(() => {
-    if (!isComposeOpen || !composeAccountEmail) return;
+    if (!isComposeOpen) return;
+    const accounts = composeAliasAccountsKey.split(",").filter(Boolean);
+    if (accounts.length === 0) return;
     let cancelled = false;
-    setComposeFrom(composeAccountEmail);
-    // A failure here used to be indistinguishable from "this account has no aliases" — both
-    // ended as an empty list — so a broken alias fetch looked like the feature not existing.
-    // Surface it instead; the From selector is useless without it.
-    fetch(`/api/gmail/send-as?accountEmail=${encodeURIComponent(composeAccountEmail)}`)
-      .then(async (response) => {
+    Promise.all(
+      accounts.map(async (accountEmail) => {
+        const response = await fetch(`/api/gmail/send-as?accountEmail=${encodeURIComponent(accountEmail)}`);
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-          throw new Error(payload?.message || "Failed to load send-as aliases.");
+          throw new Error(`${accountEmail}: ${payload?.message || "failed to load send-as addresses"}`);
         }
-        if (!cancelled) setComposeAliases(Array.isArray(payload?.aliases) ? payload.aliases : []);
+        const aliases: Array<{ email: string; displayName: string; isPrimary: boolean }> = Array.isArray(
+          payload?.aliases
+        )
+          ? payload.aliases
+          : [];
+        return aliases.map((alias) => ({ ...alias, accountEmail }));
       })
+    )
+      .then((perAccount) => {
+        if (!cancelled) setComposeAliases(perAccount.flat());
+      })
+      // A failure used to be indistinguishable from "this account has no aliases" — both ended
+      // as an empty list — so a broken fetch looked like the feature not existing.
       .catch((error: unknown) => {
         if (cancelled) return;
         setComposeAliases([]);
         setComposeError(
-          `Couldn't load your send-as addresses: ${
-            error instanceof Error ? error.message : "unknown error"
-          }`
+          `Couldn't load your send-as addresses: ${error instanceof Error ? error.message : "unknown error"}`
         );
       });
     return () => {
       cancelled = true;
     };
+  }, [isComposeOpen, composeAliasAccountsKey]);
+
+  useEffect(() => {
+    if (isComposeOpen && composeAccountEmail) setComposeFrom(composeAccountEmail);
   }, [isComposeOpen, composeAccountEmail]);
 
   const openLabel = (label: { id: string; name: string }) => {
@@ -5469,12 +5495,15 @@ ${sourceText}`;
                         value={composeFrom || composeAccountEmail}
                         onChange={(event) => {
                           const value = event.target.value;
+                          setComposeFrom(value);
                           if (composeFromOptions.includes(value)) {
                             setComposeAccountEmail(value);
-                            setComposeFrom(value);
-                          } else {
-                            setComposeFrom(value);
+                            return;
                           }
+                          // An alias only sends through the mailbox that owns it — picking one
+                          // has to move the sending account too, or Gmail rejects the send.
+                          const owner = composeAliases.find((alias) => alias.email === value)?.accountEmail;
+                          if (owner) setComposeAccountEmail(owner);
                         }}
                         className="min-w-0 w-full cursor-pointer appearance-none border-0 bg-transparent py-1.5 pl-0 pr-7 text-sm text-[#1E1B2E] outline-none focus:ring-0"
                       >
@@ -5484,10 +5513,12 @@ ${sourceText}`;
                           </option>
                         ))}
                         {composeAliases
-                          .filter((alias) => !composeFromOptions.includes(alias.email) && alias.email !== composeAccountEmail)
+                          // Drop the primaries — they're already listed above as accounts.
+                          .filter((alias) => !composeFromOptions.includes(alias.email))
                           .map((alias) => (
-                            <option key={alias.email} value={alias.email}>
-                              {alias.displayName ? `${alias.displayName} <${alias.email}>` : alias.email} (alias)
+                            <option key={`${alias.accountEmail}::${alias.email}`} value={alias.email}>
+                              {alias.displayName ? `${alias.displayName} <${alias.email}>` : alias.email} (alias of{" "}
+                              {alias.accountEmail})
                             </option>
                           ))}
                       </select>

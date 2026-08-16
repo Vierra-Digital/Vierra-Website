@@ -1269,10 +1269,16 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok || payload?.ok === false) {
-        setStatus("Failed to save emails per page.");
+        setStatus(
+          payload?.message
+            ? `Failed to save emails per page — ${payload.message}`
+            : "Failed to save emails per page."
+        );
       }
-    } catch {
-      setStatus("Failed to save emails per page.");
+    } catch (error) {
+      setStatus(
+        `Failed to save emails per page — ${error instanceof Error ? error.message : "network error"}`
+      );
     } finally {
       setNavSaving(false);
     }
