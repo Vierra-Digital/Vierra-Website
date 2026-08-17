@@ -915,7 +915,10 @@ input[type="search"]::-ms-clear:hover {
 
 /* Rendered message body. The sender's HTML keeps its own styling; these are guardrails so
    long URLs, oversized media and cramped spacing don't break the reader. */
-.email-shell .email-body { max-width: 74ch; word-break: break-word; overflow-wrap: anywhere; }
+/* Full width of the reader. A 74ch measure is the right call for a column of prose, but the
+   reader is already a bounded pane inside the panel, so capping it again left the text ending
+   partway across a mostly-empty card. */
+.email-shell .email-body { max-width: 100%; word-break: break-word; overflow-wrap: anywhere; }
 .email-shell .email-body img { max-width: 100%; height: auto; }
 .email-shell .email-body a { color: #5B21B6; text-decoration: underline; text-underline-offset: 2px; }
 .email-shell .email-body p { margin: 0 0 0.85em; }
