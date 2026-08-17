@@ -287,7 +287,7 @@ export default function HomeClient() {
                 aria-label="UMass Isenberg School of Management"
                 className="opacity-80 transition-opacity duration-300 hover:opacity-100"
               >
-                <Image src="/assets/Partners/Isenberg-w.png" alt="UMass Isenberg School of Management logo" width={580} height={120} className="h-7 w-auto object-contain" />
+                <Image src="/assets/Partners/Isenberg-w.png" alt="UMass Isenberg School of Management logo" width={580} height={120} sizes="136px" className="h-7 w-auto object-contain" />
               </a>
               <a
                 href="https://ironandwaterco.com"
@@ -307,7 +307,7 @@ export default function HomeClient() {
                 aria-label="Granite Logistics"
                 className="opacity-80 transition-opacity duration-300 hover:opacity-100"
               >
-                <Image src="/assets/Partners/Granite-w.png" alt="Granite Logistics logo" width={1041} height={240} className="h-8 w-auto object-contain" />
+                <Image src="/assets/Partners/Granite-w.png" alt="Granite Logistics logo" width={1041} height={240} sizes="139px" className="h-8 w-auto object-contain" />
               </a>
               <a
                 href="https://thearoundhub.com"
@@ -316,7 +316,7 @@ export default function HomeClient() {
                 aria-label="The Around Hub"
                 className="opacity-80 transition-opacity duration-300 hover:opacity-100"
               >
-                <Image src="/assets/Partners/AroundHub-w.png" alt="The Around Hub logo" width={457} height={120} className="h-7 w-auto object-contain" />
+                <Image src="/assets/Partners/AroundHub-w.png" alt="The Around Hub logo" width={457} height={120} sizes="107px" className="h-7 w-auto object-contain" />
               </a>
               <a
                 href="https://freeclass.qigonginfusedyoga.com/"
@@ -325,7 +325,7 @@ export default function HomeClient() {
                 aria-label="Qigong Infused Yoga"
                 className="opacity-80 transition-opacity duration-300 hover:opacity-100"
               >
-                <Image src="/assets/Partners/Qigong-w.png" alt="Qigong Infused Yoga logo" width={282} height={120} className="h-9 w-auto object-contain" />
+                <Image src="/assets/Partners/Qigong-w.png" alt="Qigong Infused Yoga logo" width={282} height={120} sizes="85px" className="h-9 w-auto object-contain" />
               </a>
               <a
                 href="https://somervilledentalassociates.com/"
