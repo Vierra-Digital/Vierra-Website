@@ -71,6 +71,8 @@ export type MessageDetail = {
   messageIdHeader?: string;
   references?: string;
   senderPhotoUrl?: string;
+  /** Ordered avatar sources (contact photo → Gravatar → company favicon), built server-side. */
+  senderAvatarUrls?: string[];
   threadMessages?: ThreadMessage[];
   trackers?: { count: number; vendors: string[] };
 };

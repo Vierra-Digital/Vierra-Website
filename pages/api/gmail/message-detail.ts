@@ -5,6 +5,7 @@ import { extractHeader, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
 import { scanHtmlForTrackers } from "@/lib/email/trackerDetection";
 import { chainFor } from "@/lib/gmail/threading";
+import { senderAvatarCandidates } from "@/lib/email/senderAvatar";
 
 function decodeBase64Url(data: string) {
   const padded = data.replace(/-/g, "+").replace(/_/g, "/");
@@ -285,6 +286,10 @@ export default withAuth(async (req, res, session) => {
     messageIdHeader: currentMessage.messageIdHeader,
     references: currentMessage.references,
     senderPhotoUrl,
+    // Ordered avatar sources (contact photo → Gravatar → company favicon). Built here so the md5
+    // stays on the server: importing node:crypto into the panel would ship a polyfill to the
+    // browser for one hash. The client walks these on image error, then falls back to initials.
+    senderAvatarUrls: senderEmail ? senderAvatarCandidates(senderEmail, senderPhotoUrl) : [],
     threadMessages,
     // Authoritative tracker scan (DOM-free) so the "tracker blocked" badge is consistent with the
     // client's own detection and available without client-side rendering.

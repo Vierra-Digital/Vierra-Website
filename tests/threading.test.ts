@@ -114,3 +114,24 @@ describe("chainFor", () => {
     expect(chainFor(messages, "1").map((m) => m.id)).toEqual(["1"]);
   });
 });
+
+describe("regression: 8 conversations must not render as 9 rows", () => {
+  // The shipped rule was "does it have References?" — an original (none) got its own row and its
+  // reply (some) got another, so one two-message conversation counted twice.
+  it("keeps an original and its reply on a single row", () => {
+    const original = msg("m1", "<root@vierra>");
+    const reply = msg("m2", "<reply@vierra>", "<root@vierra>");
+    const keys = new Set([chainKeyFor(original), chainKeyFor(reply)]);
+    expect(keys.size).toBe(1);
+  });
+
+  it("counts 8 rows for 8 conversations when one of them is a 2-message chain", () => {
+    const rows = [
+      msg("a1", "<a@x>"),
+      msg("a2", "<a-reply@x>", "<a@x>"), // same conversation as a1
+      ...Array.from({ length: 7 }, (_, i) => msg(`s${i}`, `<solo${i}@x>`)),
+    ];
+    const distinct = new Set(rows.map(chainKeyFor));
+    expect(distinct.size).toBe(8);
+  });
+});

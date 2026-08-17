@@ -223,7 +223,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   /** Ids already sent for scanning, so a page never re-scans rows it has seen. */
   const scannedIdsRef = useRef<Set<string>>(new Set());
   /** messageId → tracker verdict. Filled in just after the list paints (see the scan effect). */
-  const [senderPhotoFailed, setSenderPhotoFailed] = useState(false);
+  /** Index into the sender's ordered avatar candidates; advanced on each image error. */
+  const [senderAvatarIndex, setSenderAvatarIndex] = useState(0);
   const [messageTrackers, setMessageTrackers] = useState<
     Record<string, { tracked: boolean; count: number; vendors: string[]; hasAttachment?: boolean }>
   >({});
@@ -1879,8 +1880,23 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // photo URL doesn't suppress every later sender's picture. Keyed on the id so it covers every
   // path that opens a message (list click, deep link, thread navigation).
   useEffect(() => {
-    setSenderPhotoFailed(false);
+    setSenderAvatarIndex(0);
   }, [selectedMessageId]);
+
+  /**
+   * Current avatar URL for the open message's sender: the Google Contacts photo when one exists,
+   * then Gravatar, then the company favicon. Empty once every candidate has errored, which is the
+   * signal to render the initials avatar. Contacts-only lookup meant most senders had no photo at
+   * all, which is why pictures appeared not to load.
+   */
+  const senderAvatarSrc = useMemo(() => {
+    const candidates = selectedMessageDetail?.senderAvatarUrls ?? [];
+    // Legacy fallback: if an older payload carries only the single contact photo, still use it.
+    if (candidates.length === 0) {
+      return senderAvatarIndex === 0 ? selectedMessageDetail?.senderPhotoUrl || "" : "";
+    }
+    return candidates[senderAvatarIndex] || "";
+  }, [selectedMessageDetail, senderAvatarIndex]);
 
   useEffect(() => {
     if (deepLinkAppliedRef.current || !initialOpenThreadId) return;
@@ -1947,6 +1963,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         messageIdHeader: payload?.messageIdHeader,
         references: payload?.references,
         senderPhotoUrl: typeof payload?.senderPhotoUrl === "string" ? payload.senderPhotoUrl : "",
+          senderAvatarUrls: Array.isArray(payload?.senderAvatarUrls) ? payload.senderAvatarUrls : [],
         threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
         trackers:
           payload?.trackers && typeof payload.trackers.count === "number"
@@ -1997,6 +2014,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             typeof payload?.messageIdHeader === "string" ? payload.messageIdHeader : selectedMessage.messageIdHeader,
           references: typeof payload?.references === "string" ? payload.references : selectedMessage.references,
           senderPhotoUrl: typeof payload?.senderPhotoUrl === "string" ? payload.senderPhotoUrl : "",
+          senderAvatarUrls: Array.isArray(payload?.senderAvatarUrls) ? payload.senderAvatarUrls : [],
           threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
           trackers:
             payload?.trackers && typeof payload.trackers.count === "number"
@@ -4783,10 +4801,10 @@ ${sourceText}`;
                                         message.tracked
                                           ? outboundTip
                                           : incomingTracker?.tracked
-                                            ? `Incoming tracker · ${
+                                            ? `Incoming Tracker · ${
                                                 incomingTracker.vendors.length
                                                   ? incomingTracker.vendors.join(", ")
-                                                  : `${incomingTracker.count} beacon${incomingTracker.count === 1 ? "" : "s"}`
+                                                  : `${incomingTracker.count} Beacon${incomingTracker.count === 1 ? "" : "s"}`
                                               }`
                                             : undefined
                                       }
@@ -5049,23 +5067,24 @@ ${sourceText}`;
                         <div className="flex-1 overflow-y-auto px-6 pt-5 pb-10">
                           <h2 className="text-[22px] font-semibold tracking-tight text-[#1E1B2E]">{selectedMessage.subject || "(No Subject)"}</h2>
                           <div className="mt-4 flex items-start gap-3">
-                            {selectedMessageDetail?.senderPhotoUrl && !senderPhotoFailed ? (
+                            {senderAvatarSrc ? (
                               // Deliberately a plain <img>, not next/image: the optimizer rejects any
-                              // host missing from images.remotePatterns (Google serves these from
-                              // lh3.googleusercontent.com), and these URLs 403 when a referrer is
-                              // sent. onError swaps in the initials avatar so a dead URL never leaves
-                              // a broken image.
+                              // host absent from images.remotePatterns (Google serves contact photos
+                              // from lh3.googleusercontent.com), and those URLs 403 when a referrer
+                              // is sent. onError advances to the next candidate — contact photo,
+                              // Gravatar, then company favicon — and initials show once they run out.
                               /* eslint-disable-next-line @next/next/no-img-element */
                               <img
-                                src={selectedMessageDetail.senderPhotoUrl}
+                                key={senderAvatarSrc}
+                                src={senderAvatarSrc}
                                 alt=""
                                 width={40}
                                 height={40}
                                 referrerPolicy="no-referrer"
                                 loading="lazy"
                                 decoding="async"
-                                onError={() => setSenderPhotoFailed(true)}
-                                className="w-10 h-10 rounded-full object-cover border border-[#E5E7EB]"
+                                onError={() => setSenderAvatarIndex((i) => i + 1)}
+                                className="w-10 h-10 rounded-full object-cover border border-[#E5E7EB] bg-white"
                               />
                             ) : (
                               <div className="w-10 h-10 rounded-full bg-[#ECE3FF] text-[#5B21B6] border border-[#E5E7EB] flex items-center justify-center text-sm font-semibold">
