@@ -29,6 +29,7 @@ import {
   FiMapPin,
   FiServer,
   FiSearch,
+  FiShield,
   FiSlash,
   FiTag,
   FiUsers,
@@ -257,7 +258,7 @@ type PageProps = {
  */
 const SETTINGS_NAV: { group: string; items: string[] }[] = [
   { group: "Mailbox", items: ["Inbox layout", "Undo send", "Meeting booking"] },
-  { group: "Accounts & delivery", items: ["Accounts", "Shared inboxes", "Deliverability", "Domain mail (SMTP / IMAP / POP)"] },
+  { group: "Accounts & delivery", items: ["Accounts", "Shared inboxes", "Deliverability", "Gmail reputation (Postmaster)", "Domain mail (SMTP / IMAP / POP)"] },
   { group: "Tracking", items: ["Email tracking", "Read receipts", "Reply notifications"] },
   { group: "Automation", items: ["Vacation responder", "Artemis AI", "Filters & rules"] },
   { group: "Content", items: ["Signatures", "Templates"] },
@@ -335,6 +336,42 @@ function SettingsNav({ filter }: { filter: string }) {
 
 const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [settingsFilter, setSettingsFilter] = useState("");
+  /** Postmaster reputation per sending domain. Entries self-describe when unavailable. */
+  type PostmasterRow = {
+    domain: string;
+    ok: boolean;
+    reason?: string;
+    message?: string;
+    stats?: { date: string; userReportedSpamRatio: number | null; domainReputation: string | null };
+  };
+  const [postmaster, setPostmaster] = useState<PostmasterRow[]>([]);
+  const [postmasterLoading, setPostmasterLoading] = useState(true);
+
+  const loadPostmaster = useCallback(async () => {
+    setPostmasterLoading(true);
+    try {
+      const res = await fetch("/api/email/postmaster", { cache: "no-store" });
+      const payload = await res.json().catch(() => ({}));
+      const rows = Array.isArray(payload?.domains) ? payload.domains : [];
+      setPostmaster(
+        rows.map((r: Record<string, unknown>) => ({
+          domain: String(r.domain ?? (r.stats as { domain?: string } | undefined)?.domain ?? ""),
+          ok: Boolean(r.ok),
+          reason: typeof r.reason === "string" ? r.reason : undefined,
+          message: typeof r.message === "string" ? r.message : undefined,
+          stats: r.stats as PostmasterRow["stats"],
+        }))
+      );
+    } catch {
+      setPostmaster([]);
+    } finally {
+      setPostmasterLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPostmaster();
+  }, [loadPostmaster]);
   const [accounts, setAccounts] = useState<GmailAccount[]>([]);
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [signatures, setSignatures] = useState<SignatureRow[]>([]);
@@ -1862,6 +1899,94 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     })}
                   </ul>
                 )}
+              </SettingsSection>
+
+              <SettingsSection
+                title="Gmail reputation (Postmaster)"
+                description="Spam-complaint rate and the SPF/DKIM/DMARC pass rates Gmail actually observed. A 'Report spam' click is reported to Google, not to us, so this is the only real source for complaint data."
+                icon={FiShield}
+              >
+                <div className="space-y-3">
+                  {postmasterLoading ? (
+                    <p className={TEXT_MUTED}>Checking Postmaster…</p>
+                  ) : postmaster.length === 0 ? (
+                    <p className={TEXT_MUTED}>
+                      No custom sending domains connected. Postmaster only covers domains you own — consumer
+                      domains (gmail.com, outlook.com…) can never be verified.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {postmaster.map((entry) => (
+                        <li key={entry.domain} className="rounded-xl border border-[#ECEAF1] bg-white p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className={`truncate ${TEXT_STRONG}`}>{entry.domain}</span>
+                            {entry.ok ? (
+                              <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-semibold text-green-700">
+                                Connected
+                              </span>
+                            ) : (
+                              <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                {entry.reason === "no_permission" ? "Needs reconnect" : "No data yet"}
+                              </span>
+                            )}
+                          </div>
+                          {entry.ok && entry.stats ? (
+                            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#6B7280]">
+                              <span>
+                                Spam:{" "}
+                                <b className="text-[#1E1B2E]">
+                                  {entry.stats.userReportedSpamRatio === null
+                                    ? "—"
+                                    : `${(entry.stats.userReportedSpamRatio * 100).toFixed(3)}%`}
+                                </b>
+                              </span>
+                              <span>
+                                Reputation: <b className="text-[#1E1B2E]">{entry.stats.domainReputation ?? "—"}</b>
+                              </span>
+                              <span>as of {entry.stats.date}</span>
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-xs text-[#9A93AE]">{entry.message}</p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <div className="rounded-xl border border-[#ECEAF1] bg-[#FAFAFB] p-3">
+                    <p className="text-xs text-[#6B7280]">
+                      Reputation data needs two one-time steps: the connected Google account must grant Postmaster
+                      access (reconnect below — existing logins don&apos;t carry new permissions), and each sending
+                      domain must be verified at{" "}
+                      <a
+                        href="https://postmaster.google.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-[#701CC0] underline"
+                      >
+                        postmaster.google.com
+                      </a>
+                      . Google publishes with a 1–2 day lag and only above a daily volume threshold.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const target = activeAccountEmail
+                            ? `/api/gmail/initiate?from=email-settings&account=${encodeURIComponent(activeAccountEmail)}`
+                            : "/api/gmail/initiate?from=email-settings";
+                          window.open(target, "_self");
+                        }}
+                        className={btnPrimary}
+                      >
+                        Reconnect Google for Postmaster
+                      </button>
+                      <button type="button" onClick={loadPostmaster} disabled={postmasterLoading} className={btnSecondary}>
+                        {postmasterLoading ? "Checking…" : "Re-check now"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </SettingsSection>
 
               <SettingsSection
