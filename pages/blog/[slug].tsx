@@ -467,7 +467,11 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
     const post = await getPostBySlug(slug);
 
     if (!post) {
-        return { notFound: true };
+        // Revalidate the 404 so a slug that becomes valid after this first request
+        // (e.g. a post published, or read before the DB row was replicated) stops
+        // 404ing on its own within the window, instead of the negative result
+        // sticking until the next deploy.
+        return { notFound: true, revalidate: 600 };
     }
 
     const relatedPosts = await getRelatedPosts(

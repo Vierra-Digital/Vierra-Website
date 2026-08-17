@@ -10,9 +10,20 @@ function decodeBase64Url(data: string) {
   return Buffer.from(padded, "base64").toString("utf8");
 }
 
-function extractBodies(payload: any): { bodyText: string; bodyHtml: string } {
+/**
+ * An inline image referenced from the HTML body by `cid:` — signature logos and pasted images are
+ * sent this way, so without resolving them the reader shows a broken image.
+ */
+type InlinePart = { contentId: string; mimeType: string; attachmentId: string; size: number };
+
+/** Per-image and total budget for inlining as data URIs, so a heavy thread can't balloon the response. */
+const MAX_INLINE_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_INLINE_TOTAL_BYTES = 6 * 1024 * 1024;
+
+function extractBodies(payload: any): { bodyText: string; bodyHtml: string; inlineParts: InlinePart[] } {
   let bodyText = "";
   let bodyHtml = "";
+  const inlineParts: InlinePart[] = [];
 
   const walk = (part: any) => {
     if (!part) return;
@@ -23,6 +34,19 @@ function extractBodies(payload: any): { bodyText: string; bodyHtml: string } {
       if (mimeType.includes("text/plain") && !bodyText) bodyText = decoded;
       if (mimeType.includes("text/html") && !bodyHtml) bodyHtml = decoded;
     }
+    // Collect image parts that carry a Content-ID so the body's cid: refs can be resolved below.
+    const partHeaders = Array.isArray(part?.headers) ? part.headers : [];
+    const rawContentId = extractHeader(partHeaders, "Content-ID") || "";
+    const attachmentId = typeof part?.body?.attachmentId === "string" ? part.body.attachmentId : "";
+    if (mimeType.startsWith("image/") && rawContentId && attachmentId) {
+      inlineParts.push({
+        // Content-ID is wrapped in angle brackets on the wire; cid: refs use the bare value.
+        contentId: rawContentId.trim().replace(/^<|>$/g, ""),
+        mimeType,
+        attachmentId,
+        size: Number(part?.body?.size || 0),
+      });
+    }
     if (Array.isArray(part?.parts)) {
       part.parts.forEach((child: any) => walk(child));
     }
@@ -32,7 +56,7 @@ function extractBodies(payload: any): { bodyText: string; bodyHtml: string } {
   if (!bodyText && !bodyHtml && typeof payload?.body?.data === "string") {
     bodyText = decodeBase64Url(payload.body.data);
   }
-  return { bodyText, bodyHtml };
+  return { bodyText, bodyHtml, inlineParts };
 }
 
 function parseThreadMessage(message: any) {
@@ -54,7 +78,52 @@ function parseThreadMessage(message: any) {
     bodyHtml: bodies.bodyHtml || "",
     messageIdHeader: extractHeader(headers, "Message-ID") || "",
     references: extractHeader(headers, "References") || "",
+    inlineParts: bodies.inlineParts,
   };
+}
+
+/**
+ * Replace `cid:` image references with data URIs by pulling the inline attachments from Gmail.
+ * Browsers can't resolve cid: on their own, so a signature logo would otherwise render broken.
+ * Best-effort and budgeted: anything oversized, failed, or beyond the total cap is left as-is.
+ */
+async function inlineCidImages(
+  messageId: string,
+  bodyHtml: string,
+  inlineParts: InlinePart[],
+  getToken: (forceRefresh?: boolean) => Promise<string | null>
+): Promise<string> {
+  if (!bodyHtml || inlineParts.length === 0 || !/\bcid:/i.test(bodyHtml)) return bodyHtml;
+
+  // Only fetch parts the body actually references, cheapest first, and stop at the total budget.
+  const referenced = inlineParts
+    .filter((part) => bodyHtml.toLowerCase().includes(`cid:${part.contentId.toLowerCase()}`))
+    .sort((a, b) => a.size - b.size);
+
+  let budget = MAX_INLINE_TOTAL_BYTES;
+  let html = bodyHtml;
+  for (const part of referenced) {
+    if (part.size > MAX_INLINE_IMAGE_BYTES || part.size > budget) continue;
+    try {
+      const response = await fetchWithAuthRetry(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(part.attachmentId)}`,
+        getToken
+      );
+      if (!response?.ok) continue;
+      const payload = await response.json();
+      const data = typeof payload?.data === "string" ? payload.data : "";
+      if (!data) continue;
+      // Gmail returns base64url; data: URIs need standard base64.
+      const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
+      budget -= part.size;
+      // Replace every occurrence of this cid, with or without surrounding quotes.
+      const escapedId = part.contentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      html = html.replace(new RegExp(`cid:${escapedId}`, "gi"), `data:${part.mimeType};base64,${base64}`);
+    } catch {
+      /* leave this image unresolved rather than failing the whole message */
+    }
+  }
+  return html;
 }
 
 type ThreadMessageRow = ReturnType<typeof parseThreadMessage>;
@@ -135,6 +204,17 @@ export default withAuth(async (req, res, session) => {
     }
   }
 
+  // Resolve inline (cid:) images so signature logos and pasted images actually render. Done per
+  // message and in parallel across the thread; each message degrades independently.
+  threadMessages = await Promise.all(
+    threadMessages.map(async (message: ThreadMessageRow) => ({
+      ...message,
+      bodyHtml: await inlineCidImages(message.id, message.bodyHtml, message.inlineParts, getToken),
+    }))
+  );
+  const resolvedCurrent =
+    threadMessages.find((message: ThreadMessageRow) => message.id === currentMessage.id) ?? currentMessage;
+
   let senderPhotoUrl = "";
   const senderEmail = parseAddressFromHeader(currentMessage.fromRaw);
   if (senderEmail && senderEmail.includes("@")) {
@@ -187,7 +267,7 @@ export default withAuth(async (req, res, session) => {
 
   res.status(200).json({
     bodyText: currentMessage.bodyText || payload?.snippet || "",
-    bodyHtml: currentMessage.bodyHtml || "",
+    bodyHtml: resolvedCurrent.bodyHtml || "",
     fromRaw: currentMessage.fromRaw,
     toRaw: currentMessage.toRaw,
     subject: currentMessage.subject,

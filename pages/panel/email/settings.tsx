@@ -4,7 +4,15 @@ import Link from "next/link";
 import Image from "next/image";
 import type { GetServerSideProps } from "next";
 import { Geist } from "next/font/google";
-import { GLASS_SURFACE, TEXT_MUTED, TEXT_STRONG } from "@/components/email/emailTheme";
+import {
+  BUTTON_DANGER_OUTLINE,
+  BUTTON_PRIMARY,
+  BUTTON_SECONDARY,
+  FIELD_INPUT,
+  GLASS_SURFACE,
+  TEXT_MUTED,
+  TEXT_STRONG,
+} from "@/components/email/emailTheme";
 import type { IconType } from "react-icons";
 import {
   FiActivity,
@@ -153,14 +161,12 @@ function SettingsSection({
   );
 }
 
-const fieldClass =
-  "w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#1E1B2E] placeholder-[#9CA3AF] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]";
-const btnPrimary =
-  "inline-flex items-center justify-center rounded-xl bg-[#701CC0] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50";
-const btnSecondary =
-  "inline-flex items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-3 py-1.5 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F9FAFB]";
-const btnDangerOutline =
-  "rounded-xl border border-red-200 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50";
+// Local aliases for the shared styling guide, so the many call sites below stay unchanged while
+// the definitions live in exactly one place (components/email/emailTheme).
+const fieldClass = FIELD_INPUT;
+const btnPrimary = BUTTON_PRIMARY;
+const btnSecondary = BUTTON_SECONDARY;
+const btnDangerOutline = BUTTON_DANGER_OUTLINE;
 
 type GmailAccount = {
   email: string;

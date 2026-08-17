@@ -1,5 +1,8 @@
 User-agent: *
 Allow: /
+# Allow the dynamic OG social-preview image endpoint (used in og:image and the
+# BlogPosting schema image) so Google can fetch it; keep the rest of /api/ blocked.
+Allow: /api/og
 Disallow: /api/
 Disallow: /panel
 Disallow: /admin
