@@ -5,6 +5,8 @@ import {
   getJson,
   postJson,
   deleteJson,
+  patchJson,
+  putJson,
   errorMessageFrom,
   arrayFrom,
   queryString,
@@ -92,6 +94,14 @@ describe("verb shorthands", () => {
     await deleteJson("/a");
     expect(mockFetch.mock.calls[2][1].method).toBe("DELETE");
     expect(mockFetch.mock.calls[2][1].body).toBeUndefined();
+
+    await patchJson("/a", { p: 1 });
+    expect(mockFetch.mock.calls[3][1].method).toBe("PATCH");
+    expect(mockFetch.mock.calls[3][1].body).toBe(JSON.stringify({ p: 1 }));
+
+    await putJson("/a");
+    expect(mockFetch.mock.calls[4][1].method).toBe("PUT");
+    expect(mockFetch.mock.calls[4][1].body).toBe("{}");
   });
 });
 
