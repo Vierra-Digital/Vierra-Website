@@ -7,6 +7,16 @@ export default defineConfig({
   resolve: {
     alias: { "@": path.resolve(__dirname) },
   },
+  // Own the JSX transform here instead of inheriting tsconfig's "jsx".
+  //
+  // Next rewrites tsconfig.json's "jsx" to "preserve" on every build/lint (it compiles JSX
+  // itself), so any value we commit that differs is reverted under us — and when the runner
+  // relied on that setting, merely running a build left it with no transform and every test
+  // importing a .tsx module failed with a confusing "Unexpected JSX expression".
+  //
+  // tsconfig now stores "preserve" to match what Next enforces (no more phantom diffs), and the
+  // transform lives here, so the suite is independent of that file entirely.
+  oxc: { jsx: { runtime: "automatic" } },
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
