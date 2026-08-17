@@ -223,6 +223,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   /** Ids already sent for scanning, so a page never re-scans rows it has seen. */
   const scannedIdsRef = useRef<Set<string>>(new Set());
   /** messageId → tracker verdict. Filled in just after the list paints (see the scan effect). */
+  const [senderPhotoFailed, setSenderPhotoFailed] = useState(false);
   const [messageTrackers, setMessageTrackers] = useState<
     Record<string, { tracked: boolean; count: number; vendors: string[]; hasAttachment?: boolean }>
   >({});
@@ -1505,6 +1506,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       img.style.maxWidth = "100%";
       img.style.height = "auto";
       img.loading = "lazy";
+      img.decoding = "async";
+      // Many sender CDNs reject requests carrying a cross-site referrer, which is a common cause of
+      // email images silently failing to load. Ask the browser not to send one.
+      img.referrerPolicy = "no-referrer";
     });
     parsed.querySelectorAll<HTMLAnchorElement>("a").forEach((link) => {
       link.target = "_blank";
@@ -1870,6 +1875,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // linked conversation and switch to the reader. Matches by threadId and opens whichever
   // message in that thread is loaded — the reader then renders the full chain (threadMessages
   // from message-detail). Runs once when a row from the target thread appears.
+  // Clear the avatar-failure flag whenever a different message is opened, so one sender's dead
+  // photo URL doesn't suppress every later sender's picture. Keyed on the id so it covers every
+  // path that opens a message (list click, deep link, thread navigation).
+  useEffect(() => {
+    setSenderPhotoFailed(false);
+  }, [selectedMessageId]);
+
   useEffect(() => {
     if (deepLinkAppliedRef.current || !initialOpenThreadId) return;
     const row = messages.find((m) => m.threadId === initialOpenThreadId);
@@ -4219,16 +4231,22 @@ ${sourceText}`;
                                       ) : null}
                                     </div>
                                   ) : null}
+                                  {/* Archive is hidden in Starred for the same reason as Move To:
+                                      Starred is a label view, so archiving from it just makes the
+                                      message vanish from where you were working. Unstar is the
+                                      meaningful action and sits by Refresh. */}
                                   {activeModule !== "drafts" ? (
                                     <>
-                                      <button
-                                        type="button"
-                                        onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                                        className={`${ICON_BUTTON_SOLID} email-tip`}
-                                        data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
-                                      >
-                                        <FiArchive className="w-4 h-4" />
-                                      </button>
+                                      {activeModule !== "starred" ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
+                                          className={`${ICON_BUTTON_SOLID} email-tip`}
+                                          data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
+                                        >
+                                          <FiArchive className="w-4 h-4" />
+                                        </button>
+                                      ) : null}
                                       <div ref={snoozeMenuRef} className="relative">
                                         <button
                                           type="button"
@@ -4990,14 +5008,16 @@ ${sourceText}`;
                               </div>
                             ) : null}
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                            className={ICON_BUTTON}
-                            title={activeModule === "archive" ? "Unarchive" : "Archive"}
-                          >
-                            <FiArchive className="w-4 h-4" />
-                          </button>
+                          {activeModule !== "starred" ? (
+                            <button
+                              type="button"
+                              onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
+                              className={ICON_BUTTON}
+                              title={activeModule === "archive" ? "Unarchive" : "Archive"}
+                            >
+                              <FiArchive className="w-4 h-4" />
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
@@ -5026,16 +5046,25 @@ ${sourceText}`;
                       </div>
 
                       {selectedMessage ? (
-                        <div className="flex-1 overflow-y-auto px-6 pb-0 pt-5">
+                        <div className="flex-1 overflow-y-auto px-6 pt-5 pb-10">
                           <h2 className="text-[22px] font-semibold tracking-tight text-[#1E1B2E]">{selectedMessage.subject || "(No Subject)"}</h2>
                           <div className="mt-4 flex items-start gap-3">
-                            {selectedMessageDetail?.senderPhotoUrl ? (
-                              <Image
+                            {selectedMessageDetail?.senderPhotoUrl && !senderPhotoFailed ? (
+                              // Deliberately a plain <img>, not next/image: the optimizer rejects any
+                              // host missing from images.remotePatterns (Google serves these from
+                              // lh3.googleusercontent.com), and these URLs 403 when a referrer is
+                              // sent. onError swaps in the initials avatar so a dead URL never leaves
+                              // a broken image.
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img
                                 src={selectedMessageDetail.senderPhotoUrl}
-                                alt="Sender"
+                                alt=""
                                 width={40}
                                 height={40}
-                                unoptimized
+                                referrerPolicy="no-referrer"
+                                loading="lazy"
+                                decoding="async"
+                                onError={() => setSenderPhotoFailed(true)}
                                 className="w-10 h-10 rounded-full object-cover border border-[#E5E7EB]"
                               />
                             ) : (
@@ -5052,12 +5081,12 @@ ${sourceText}`;
                                   selectedMessageDetail?.trackers ?? detectTrackers(selectedMessageDetail?.bodyHtml || "");
                                 if (trackers === 0) return null;
                                 const label = vendors.length
-                                  ? `${vendors.slice(0, 2).join(", ")}${vendors.length > 2 ? ` +${vendors.length - 2}` : ""} tracker blocked`
-                                  : `${trackers} tracker${trackers === 1 ? "" : "s"} blocked`;
+                                  ? `${vendors.slice(0, 2).join(", ")}${vendors.length > 2 ? ` +${vendors.length - 2}` : ""} Tracker${trackers === 1 ? "" : "s"} Blocked`
+                                  : `${trackers} Tracker${trackers === 1 ? "" : "s"} Blocked`;
                                 return (
                                   <p>
                                     <span
-                                      className="inline-flex items-center gap-1.5 rounded-md bg-[#F5EFFF] px-2 py-0.5 text-[11px] font-semibold text-[#701CC0]"
+                                      className="-ml-2 inline-flex items-center gap-1.5 rounded-md bg-[#F5EFFF] px-2 py-0.5 text-[11px] font-semibold text-[#701CC0]"
                                       title={
                                         vendors.length
                                           ? `Detected ${vendors.join(", ")} tracking. Remote pixels were blocked, so the sender can't tell you opened this.`
