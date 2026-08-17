@@ -66,11 +66,31 @@ export function faviconUrl(email: string, size = 64): string {
  * initials avatar once it runs out. Duplicates and empties are removed so the walk can't stall.
  */
 export function senderAvatarCandidates(email: string, contactPhotoUrl?: string | null): string[] {
+  return senderAvatarSources(email, contactPhotoUrl).map((source) => source.url);
+}
+
+/** A candidate plus how it should be rendered — a headshot fills the circle, a logo must not. */
+export type SenderAvatarSource = { url: string; kind: "photo" | "logo" };
+
+/**
+ * Ordered candidates with render hints.
+ *
+ * Requesting 2x the display size keeps both a photo and a favicon crisp on retina, and tagging the
+ * favicon as a logo lets the UI contain it with padding instead of cropping it to a circle — a
+ * cropped, stretched favicon is what made these look poor even when they loaded.
+ */
+export function senderAvatarSources(email: string, contactPhotoUrl?: string | null): SenderAvatarSource[] {
   const trimmedEmail = (email || "").trim();
-  const candidates = [
-    (contactPhotoUrl || "").trim(),
-    trimmedEmail.includes("@") ? gravatarUrl(trimmedEmail) : "",
-    trimmedEmail.includes("@") ? faviconUrl(trimmedEmail) : "",
+  const hasAddress = trimmedEmail.includes("@");
+  const sources: SenderAvatarSource[] = [
+    { url: (contactPhotoUrl || "").trim(), kind: "photo" },
+    { url: hasAddress ? gravatarUrl(trimmedEmail, 160) : "", kind: "photo" },
+    { url: hasAddress ? faviconUrl(trimmedEmail, 128) : "", kind: "logo" },
   ];
-  return [...new Set(candidates.filter(Boolean))];
+  const seen = new Set<string>();
+  return sources.filter((source) => {
+    if (!source.url || seen.has(source.url)) return false;
+    seen.add(source.url);
+    return true;
+  });
 }

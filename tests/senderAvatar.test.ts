@@ -5,6 +5,7 @@ import {
   faviconUrl,
   senderDomain,
   senderAvatarCandidates,
+  senderAvatarSources,
 } from "@/lib/email/senderAvatar";
 
 describe("gravatarHash", () => {
@@ -83,5 +84,27 @@ describe("senderAvatarCandidates", () => {
   it("de-duplicates so the error-walk cannot stall on a repeat", () => {
     const photo = gravatarUrl("someone@vierradev.com");
     expect(senderAvatarCandidates("someone@vierradev.com", photo).filter((u) => u === photo)).toHaveLength(1);
+  });
+});
+
+describe("senderAvatarSources", () => {
+  it("tags a favicon as a logo so the UI contains rather than crops it", () => {
+    const sources = senderAvatarSources("someone@vierradev.com", "");
+    expect(sources.map((s) => s.kind)).toEqual(["photo", "logo"]);
+  });
+
+  it("requests 2x assets so a 40px avatar stays crisp on retina", () => {
+    const sources = senderAvatarSources("someone@vierradev.com", "");
+    expect(sources[0].url).toContain("s=160");
+    expect(sources[1].url).toContain("size=128");
+  });
+
+  it("treats a Google Contacts photo as a photo and puts it first", () => {
+    const sources = senderAvatarSources("someone@vierradev.com", "https://lh3.googleusercontent.com/x");
+    expect(sources[0]).toEqual({ url: "https://lh3.googleusercontent.com/x", kind: "photo" });
+  });
+
+  it("returns nothing for a malformed address", () => {
+    expect(senderAvatarSources("nope")).toEqual([]);
   });
 });

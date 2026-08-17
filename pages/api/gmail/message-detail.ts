@@ -4,8 +4,7 @@ import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { extractHeader, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
 import { scanHtmlForTrackers } from "@/lib/email/trackerDetection";
-import { chainFor } from "@/lib/gmail/threading";
-import { senderAvatarCandidates } from "@/lib/email/senderAvatar";
+import { senderAvatarSources, senderDomain } from "@/lib/email/senderAvatar";
 
 function decodeBase64Url(data: string) {
   const padded = data.replace(/-/g, "+").replace(/_/g, "/");
@@ -207,12 +206,6 @@ export default withAuth(async (req, res, session) => {
     }
   }
 
-  // Gmail puts unrelated messages in one thread when they share a subject and participants, so the
-  // raw thread is not a conversation. Narrow it to the messages actually linked to the opened one by
-  // In-Reply-To / References, otherwise the reader stitches separate emails into a single chain and
-  // the others are effectively hidden.
-  threadMessages = chainFor(threadMessages, currentMessage.id);
-
   // Resolve inline (cid:) images so signature logos and pasted images actually render. Done per
   // message and in parallel across the thread; each message degrades independently.
   threadMessages = await Promise.all(
@@ -289,10 +282,12 @@ export default withAuth(async (req, res, session) => {
     // Ordered avatar sources (contact photo → Gravatar → company favicon). Built here so the md5
     // stays on the server: importing node:crypto into the panel would ship a polyfill to the
     // browser for one hash. The client walks these on image error, then falls back to initials.
-    senderAvatarUrls: senderEmail ? senderAvatarCandidates(senderEmail, senderPhotoUrl) : [],
+    senderAvatarSources: senderEmail ? senderAvatarSources(senderEmail, senderPhotoUrl) : [],
     threadMessages,
     // Authoritative tracker scan (DOM-free) so the "tracker blocked" badge is consistent with the
     // client's own detection and available without client-side rendering.
-    trackers: scanHtmlForTrackers(currentMessage.bodyHtml || ""),
+    // Pass the sender's domain: without it every remote image scored a "third-party" penalty, so
+    // images a sender hosts on its OWN domain were being flagged as beacons and stripped.
+    trackers: scanHtmlForTrackers(currentMessage.bodyHtml || "", senderDomain(senderEmail)),
   });
 }, { methods: ["GET"] });

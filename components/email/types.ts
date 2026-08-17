@@ -71,8 +71,11 @@ export type MessageDetail = {
   messageIdHeader?: string;
   references?: string;
   senderPhotoUrl?: string;
-  /** Ordered avatar sources (contact photo → Gravatar → company favicon), built server-side. */
-  senderAvatarUrls?: string[];
+  /**
+   * Ordered avatar sources (contact photo → Gravatar → company favicon), built server-side.
+   * `kind` drives rendering: a photo fills the circle, a logo is contained so it isn't cropped.
+   */
+  senderAvatarSources?: Array<{ url: string; kind: "photo" | "logo" }>;
   threadMessages?: ThreadMessage[];
   trackers?: { count: number; vendors: string[] };
 };

@@ -62,7 +62,6 @@ import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEdit
 import { printComposeContent } from "@/components/email/printCompose";
 import { getJson } from "@/lib/email/panelApi";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
-import { chainKeyFor } from "@/lib/gmail/threading";
 import {
   BRAND_LOGO,
   ICON_BUTTON, ICON_BUTTON_SOLID, FIELD_LABEL, ALERT,
@@ -529,27 +528,26 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // (latest message represents the thread) with a message count. Compose drafts
   // and thread-less messages pass through individually.
   const conversationRows = useMemo(() => {
-    // Collapse a conversation into one row, keyed on the REAL chain rather than Gmail's threadId.
+    // One row per Gmail thread — deliberately Gmail's own conversation boundary.
     //
-    // Gmail reuses one threadId for messages that merely share a subject and participants, so
-    // grouping on it merged independent emails into a single row and hid all but the newest — mail
-    // got missed. Keying on References/In-Reply-To (see lib/gmail/threading) fixes both directions:
-    // two separate sends stay separate, AND two replies to different originals stay separate, which
-    // a "does it have References at all?" test could not distinguish.
-    const byChain = new Map<string, MessageRow & { threadCount: number }>();
+    // Two earlier attempts tried to be cleverer than Gmail and both misfired: keying on "does it
+    // have References?" split an original from its reply (8 conversations rendered as 9 rows), and
+    // keying on the References root could merge messages Gmail keeps in separate threads. Matching
+    // threadId means the panel's grouping and counts agree with the Gmail UI you compare against.
+    const byThread = new Map<string, MessageRow & { threadCount: number }>();
     const rows: Array<MessageRow & { threadCount: number }> = [];
     for (const message of filteredMessages) {
-      if (message.isComposeDraft) {
+      // Local compose drafts have no Gmail thread, so they always stand alone.
+      if (!message.threadId || message.isComposeDraft) {
         rows.push({ ...message, threadCount: 1 });
         continue;
       }
-      const key = chainKeyFor(message);
-      const existing = byChain.get(key);
+      const existing = byThread.get(message.threadId);
       if (existing) {
         existing.threadCount += 1;
       } else {
         const row = { ...message, threadCount: 1 };
-        byChain.set(key, row);
+        byThread.set(message.threadId, row);
         rows.push(row);
       }
     }
@@ -1431,6 +1429,17 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       )
       .replace(/\n/g, "<br>");
 
+  /**
+   * Domain of the message being read, so images the sender hosts on its own domain aren't scored as
+   * third-party. Without this the client stripped legitimate sender-hosted images and its count
+   * disagreed with the server's authoritative scan.
+   */
+  const readerSenderDomain = useMemo(() => {
+    const fromRaw = selectedMessageDetail?.fromRaw || selectedMessage?.fromRaw || selectedMessage?.from || "";
+    const email = parseMailboxAddress(fromRaw).email;
+    return (email.split("@")[1] || "").trim().toLowerCase();
+  }, [selectedMessageDetail, selectedMessage]);
+
   const isTrackerPixel = (img: HTMLImageElement, srcValue: string) =>
     scoreTrackerImage({
       src: srcValue,
@@ -1438,6 +1447,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       height: img.getAttribute("height"),
       style: img.getAttribute("style"),
       alt: img.getAttribute("alt"),
+      senderDomain: readerSenderDomain,
     }).tracked;
 
   const detectTrackers = (rawHtml: string): { count: number; vendors: string[] } => {
@@ -1889,13 +1899,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
    * signal to render the initials avatar. Contacts-only lookup meant most senders had no photo at
    * all, which is why pictures appeared not to load.
    */
-  const senderAvatarSrc = useMemo(() => {
-    const candidates = selectedMessageDetail?.senderAvatarUrls ?? [];
-    // Legacy fallback: if an older payload carries only the single contact photo, still use it.
-    if (candidates.length === 0) {
-      return senderAvatarIndex === 0 ? selectedMessageDetail?.senderPhotoUrl || "" : "";
+  const senderAvatar = useMemo(() => {
+    const sources = selectedMessageDetail?.senderAvatarSources ?? [];
+    if (sources.length === 0) {
+      // Older payloads carry only the single contact photo.
+      const legacy = selectedMessageDetail?.senderPhotoUrl || "";
+      return senderAvatarIndex === 0 && legacy ? { url: legacy, kind: "photo" as const } : null;
     }
-    return candidates[senderAvatarIndex] || "";
+    return sources[senderAvatarIndex] ?? null;
   }, [selectedMessageDetail, senderAvatarIndex]);
 
   useEffect(() => {
@@ -1963,7 +1974,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         messageIdHeader: payload?.messageIdHeader,
         references: payload?.references,
         senderPhotoUrl: typeof payload?.senderPhotoUrl === "string" ? payload.senderPhotoUrl : "",
-          senderAvatarUrls: Array.isArray(payload?.senderAvatarUrls) ? payload.senderAvatarUrls : [],
+          senderAvatarSources: Array.isArray(payload?.senderAvatarSources) ? payload.senderAvatarSources : [],
         threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
         trackers:
           payload?.trackers && typeof payload.trackers.count === "number"
@@ -2014,7 +2025,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             typeof payload?.messageIdHeader === "string" ? payload.messageIdHeader : selectedMessage.messageIdHeader,
           references: typeof payload?.references === "string" ? payload.references : selectedMessage.references,
           senderPhotoUrl: typeof payload?.senderPhotoUrl === "string" ? payload.senderPhotoUrl : "",
-          senderAvatarUrls: Array.isArray(payload?.senderAvatarUrls) ? payload.senderAvatarUrls : [],
+          senderAvatarSources: Array.isArray(payload?.senderAvatarSources) ? payload.senderAvatarSources : [],
           threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
           trackers:
             payload?.trackers && typeof payload.trackers.count === "number"
@@ -5067,7 +5078,7 @@ ${sourceText}`;
                         <div className="flex-1 overflow-y-auto px-6 pt-5 pb-10">
                           <h2 className="text-[22px] font-semibold tracking-tight text-[#1E1B2E]">{selectedMessage.subject || "(No Subject)"}</h2>
                           <div className="mt-4 flex items-start gap-3">
-                            {senderAvatarSrc ? (
+                            {senderAvatar ? (
                               // Deliberately a plain <img>, not next/image: the optimizer rejects any
                               // host absent from images.remotePatterns (Google serves contact photos
                               // from lh3.googleusercontent.com), and those URLs 403 when a referrer
@@ -5075,16 +5086,18 @@ ${sourceText}`;
                               // Gravatar, then company favicon — and initials show once they run out.
                               /* eslint-disable-next-line @next/next/no-img-element */
                               <img
-                                key={senderAvatarSrc}
-                                src={senderAvatarSrc}
+                                key={senderAvatar.url}
+                                src={senderAvatar.url}
                                 alt=""
                                 width={40}
                                 height={40}
                                 referrerPolicy="no-referrer"
-                                loading="lazy"
+                                loading="eager"
                                 decoding="async"
                                 onError={() => setSenderAvatarIndex((i) => i + 1)}
-                                className="w-10 h-10 rounded-full object-cover border border-[#E5E7EB] bg-white"
+                                className={`h-10 w-10 shrink-0 rounded-full border border-[#E5E7EB] bg-white ${
+                                  senderAvatar.kind === "logo" ? "object-contain p-1.5" : "object-cover"
+                                }`}
                               />
                             ) : (
                               <div className="w-10 h-10 rounded-full bg-[#ECE3FF] text-[#5B21B6] border border-[#E5E7EB] flex items-center justify-center text-sm font-semibold">

@@ -141,3 +141,54 @@ describe("visible images are content, not beacons", () => {
     expect(verdict.tracked).toBe(true);
   });
 });
+
+describe("senderDomain suppresses false positives on sender-hosted images", () => {
+  // No caller used to pass senderDomain, so EVERY remote image took a +1 "third-party" penalty and
+  // an image the sender hosts on its own domain could cross the flag threshold.
+  it("does not flag a hashed 1x1 on the sender's own domain when the domain is known", () => {
+    const args = {
+      src: "https://assets.acme.com/9f8e7d6c5b4a3210/spacer.gif",
+      width: "1",
+      height: "1",
+      alt: "",
+      style: null,
+    };
+    expect(scoreTrackerImage(args).tracked).toBe(true);
+    expect(scoreTrackerImage({ ...args, senderDomain: "acme.com" }).score).toBeLessThan(
+      scoreTrackerImage(args).score
+    );
+  });
+
+  it("still flags a third-party beacon even when a senderDomain is supplied", () => {
+    const verdict = scoreTrackerImage({
+      src: "https://t.yesware.com/t/abc/open.gif",
+      width: "1",
+      height: "1",
+      alt: "",
+      style: null,
+      senderDomain: "acme.com",
+    });
+    expect(verdict.tracked).toBe(true);
+    expect(verdict.vendor).toBe("Yesware");
+  });
+
+  it("treats a subdomain of the sender as first-party", () => {
+    const onSubdomain = scoreTrackerImage({
+      src: "https://cdn.acme.com/abcdef1234567890/logo.png",
+      width: "1",
+      height: "1",
+      alt: "",
+      style: null,
+      senderDomain: "acme.com",
+    });
+    const offDomain = scoreTrackerImage({
+      src: "https://cdn.other.com/abcdef1234567890/logo.png",
+      width: "1",
+      height: "1",
+      alt: "",
+      style: null,
+      senderDomain: "acme.com",
+    });
+    expect(onSubdomain.score).toBeLessThan(offDomain.score);
+  });
+});
