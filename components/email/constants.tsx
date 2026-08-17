@@ -83,7 +83,7 @@ export function orderModules<T extends { key: ModuleKey }>(items: T[], order: st
  * meant nothing, and Archive isn't a Gmail label so its number was a guess from a negated
  * search. See fetchMailboxCounts in pages/api/gmail/counts.ts.
  */
-export const BADGE_MODULES = new Set<ModuleKey>(["inbox", "drafts", "spam"]);
+export const BADGE_MODULES = new Set<ModuleKey>(["inbox", "drafts", "spam", "starred"]);
 export const BADGE_MAILBOXES: Array<"inbox" | "sent" | "drafts" | "archive" | "spam" | "trash"> = [
   "inbox",
   "sent",
