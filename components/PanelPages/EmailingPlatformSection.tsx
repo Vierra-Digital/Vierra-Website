@@ -526,11 +526,22 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // (latest message represents the thread) with a message count. Compose drafts
   // and thread-less messages pass through individually.
   const conversationRows = useMemo(() => {
+    // Collapse a thread into one row — but only for messages that are genuinely part of a chain.
+    //
+    // Gmail assigns the same threadId to separate messages that merely share a subject and
+    // participants, so grouping on threadId alone merged two independent sends (or two unrelated
+    // messages that happened to reuse a subject) into a single row, hiding one of them.
+    //
+    // RFC 5322 gives the real signal: a reply carries References / In-Reply-To pointing at what it
+    // answers, and a NEW message carries neither. So a message with no References is a conversation
+    // root and always gets its own row; only messages that actually reference something collapse
+    // under their thread. Replies still group, independent sends no longer do.
     const byThread = new Map<string, MessageRow & { threadCount: number }>();
     const rows: Array<MessageRow & { threadCount: number }> = [];
     for (const message of filteredMessages) {
       const threadId = message.threadId;
-      if (!threadId || message.isComposeDraft) {
+      const isChainReply = Boolean((message.references || "").trim());
+      if (!threadId || message.isComposeDraft || !isChainReply) {
         rows.push({ ...message, threadCount: 1 });
         continue;
       }
@@ -1611,6 +1622,38 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     loadMailboxCounts();
   }, [loadMailboxCounts]);
 
+  /**
+   * Unstar every selected message. The Starred view is a label view, so removing the star is the
+   * meaningful bulk action there (Move To / Archive are hidden for it). Rows are dropped from the
+   * list optimistically since they no longer belong in this view, then counts are refreshed.
+   */
+  const unstarSelected = useCallback(async () => {
+    const selected = conversationRows.filter((message) => selectedRows.includes(rowKey(message)));
+    if (selected.length === 0) return;
+    const items = selected.map((message) => ({ accountEmail: message.accountEmail, messageId: message.id }));
+    const affected = new Set(items.map((i) => `${i.accountEmail}::${i.messageId}`));
+    setActionLoading(true);
+    try {
+      const response = await fetch("/api/gmail/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unstar", items }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.message || "Could not unstar the selected messages.");
+      }
+      setMessages((prev) => prev.filter((m) => !affected.has(`${m.accountEmail}::${m.id}`)));
+      setSelectedRows([]);
+      invalidateMessagesCache();
+      await loadMailboxCounts();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Could not unstar the selected messages.");
+    } finally {
+      setActionLoading(false);
+    }
+  }, [conversationRows, selectedRows, rowKey, invalidateMessagesCache, loadMailboxCounts]);
+
   const loadMessages = useCallback(async () => {
     const requestId = ++loadMessagesRequestRef.current;
     if (step !== "client" || !canLoadMessages || selectedAccounts.length === 0) {
@@ -2305,6 +2348,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
           })
           .filter(Boolean) as MessageRow[]
       );
+      // Invalidate the per-view message cache for EVERY action, not just ones taken from the
+      // reader. Deleting straight from the list left the cached page intact, so the next
+      // revalidate repainted the row that had just been removed — the "delete didn't work the
+      // first time, worked on the second" symptom. Clearing it up front means no later paint can
+      // resurrect a message this action already removed.
+      invalidateMessagesCache();
       if (action !== "markRead" && action !== "markUnread") {
         setSelectedRows([]);
         // Leave the reader now, not after Gmail answers. Acting on an open message used to
@@ -2314,8 +2363,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         setViewMode("list");
         setSelectedMessageId("");
         setSelectedMessageDetail(null);
-        // The destination mailbox's cached page is now out of date.
-        invalidateMessagesCache();
       } else if (action === "markUnread") {
         // Marking unread from the reader means "I'm not done with this" — staying on the open
         // message contradicts that, and the reader would immediately re-mark it read. Drop back
@@ -3304,6 +3351,11 @@ ${sourceText}`;
     flushDraftsNow();
     setIsComposeOpen(false);
     void loadMailboxCounts();
+    // Closing a compose can create, update or empty a draft, so the cached Drafts page is now
+    // stale. Only the badge was refreshed before, which left the Drafts LIST showing the old
+    // contents until a manual refresh. Drop the cache and, if that list is on screen, refetch it.
+    invalidateMessagesCache();
+    if (activeModule === "drafts") void loadMessages();
   };
 
   // Undo-send: hold the message for a short window with an Undo affordance, then actually send.
@@ -3511,8 +3563,14 @@ ${sourceText}`;
       return Number.isFinite(draftCount) && draftCount > 0 ? draftCount : 0;
     }
     if (!BADGE_MODULES.has(moduleKey)) return 0;
-    const countMap: Record<"inbox" | "sent" | "drafts" | "archive" | "spam" | "trash", number> = moduleUnreadBadges;
-    const count = countMap[moduleKey as keyof typeof countMap];
+    // Starred isn't a mailbox we page through, so its unread count comes from the label totals
+    // rather than from the currently-loaded page of rows.
+    if (moduleKey === "starred") {
+      const starredUnread = Number(mailboxCounts.starred || 0);
+      return Number.isFinite(starredUnread) && starredUnread > 0 ? starredUnread : 0;
+    }
+    const countMap: Record<string, number> = moduleUnreadBadges as unknown as Record<string, number>;
+    const count = countMap[moduleKey];
     return Number.isFinite(count) && count > 0 ? count : 0;
   };
 
@@ -4048,6 +4106,22 @@ ${sourceText}`;
                                   >
                                     <MdRefresh className={`h-[18px] w-[18px] ${messagesLoading ? "motion-safe:animate-spin" : ""}`} />
                                   </button>
+                                  {/* Starred-only: the useful action here is removing the star. Placed
+                                      between Refresh and Trash, replacing Move To / Archive — moving a
+                                      starred message out of the view it lives in was disorienting, and
+                                      Starred is a label view rather than a mailbox. */}
+                                  {activeModule === "starred" && hasSelectedEmails ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => void unstarSelected()}
+                                      disabled={actionLoading}
+                                      className={`${ICON_BUTTON_SOLID} email-tip`}
+                                      aria-label="Unstar"
+                                      data-tip="Unstar"
+                                    >
+                                      <FiStar className="h-4 w-4 fill-[#F5A623]" />
+                                    </button>
+                                  ) : null}
                                   {/* Spam-only: restore to the inbox and tell Gmail it isn't spam. */}
                                   {activeModule === "spam" && hasSelectedEmails ? (
                                     <button
@@ -4092,7 +4166,7 @@ ${sourceText}`;
                                       </button>
                                     </>
                                   ) : null}
-                                  {activeModule !== "drafts" ? (
+                                  {activeModule !== "drafts" && activeModule !== "starred" ? (
                                     <div ref={moveListMenuRef} className="relative">
                                       <button
                                         type="button"

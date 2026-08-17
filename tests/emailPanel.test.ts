@@ -50,7 +50,11 @@ describe("toBadgeCounts", () => {
       spam: 0,
       trash: 0,
       archive: 0,
+      starred: 0,
     });
+    // Starred is optional on the wire (older payloads omit it) and must still floor to 0.
+    expect(toBadgeCounts({}, {}, {}, undefined).starred).toBe(0);
+    expect(toBadgeCounts({}, {}, {}, { messagesUnread: 7 }).starred).toBe(7);
     const junk = { messagesUnread: undefined, messagesTotal: undefined };
     expect(toBadgeCounts(junk, junk, junk).inbox).toBe(0);
     expect(toBadgeCounts({ messagesUnread: NaN }, {}, {}).inbox).toBe(0);
@@ -66,7 +70,8 @@ describe("toBadgeCounts", () => {
   });
 
   it("only badges the modules the sidebar actually renders a number for", () => {
-    expect([...BADGE_MODULES].sort()).toEqual(["drafts", "inbox", "spam"]);
+    // Starred badges its unread count like Inbox/Spam; Sent and Archive carry none (as in Gmail).
+    expect([...BADGE_MODULES].sort()).toEqual(["drafts", "inbox", "spam", "starred"]);
     expect(BADGE_MODULES.has("sent" as ModuleKey)).toBe(false);
     expect(BADGE_MODULES.has("archive" as ModuleKey)).toBe(false);
   });
