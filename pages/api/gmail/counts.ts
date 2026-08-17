@@ -35,7 +35,7 @@ async function fetchLabel(accessToken: string, labelId: string): Promise<GmailLa
  * carry one here — a count on Sent was noise, and "Archive" isn't a Gmail label at all, so it
  * could only ever have been a guess assembled from a negated search.
  */
-export function toBadgeCounts(inbox: GmailLabel, drafts: GmailLabel, spam: GmailLabel) {
+export function toBadgeCounts(inbox: GmailLabel, drafts: GmailLabel, spam: GmailLabel, starred?: GmailLabel) {
   const nonNegative = (value: unknown) => {
     const n = Number(value);
     return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
@@ -47,16 +47,19 @@ export function toBadgeCounts(inbox: GmailLabel, drafts: GmailLabel, spam: Gmail
     spam: nonNegative(spam?.messagesUnread),
     trash: 0,
     archive: 0,
+    // Starred mirrors Inbox/Spam semantics: how many starred messages are still unread.
+    starred: nonNegative(starred?.messagesUnread),
   };
 }
 
 async function fetchMailboxCounts(accessToken: string) {
-  const [inbox, drafts, spam] = await Promise.all([
+  const [inbox, drafts, spam, starred] = await Promise.all([
     fetchLabel(accessToken, "INBOX"),
     fetchLabel(accessToken, "DRAFT"),
     fetchLabel(accessToken, "SPAM"),
+    fetchLabel(accessToken, "STARRED"),
   ]);
-  return toBadgeCounts(inbox, drafts, spam);
+  return toBadgeCounts(inbox, drafts, spam, starred);
 }
 
 function isAuthError(error: unknown) {
@@ -108,14 +111,14 @@ export default withAuth(async (req, res, session) => {
   if (accountRows.length === 0) {
     const composeDraftCount = await prisma.emailComposeDraft.count({ where: composeDraftWhere });
     res.status(200).json({
-      counts: { inbox: 0, sent: 0, drafts: composeDraftCount, spam: 0, trash: 0, archive: 0 },
+      counts: { inbox: 0, sent: 0, drafts: composeDraftCount, spam: 0, trash: 0, archive: 0, starred: 0 },
       accountErrors: [],
     });
     return;
   }
 
   const accountErrors: Array<{ accountEmail: string; message: string }> = [];
-  const aggregated = { inbox: 0, sent: 0, drafts: 0, spam: 0, trash: 0, archive: 0 };
+  const aggregated = { inbox: 0, sent: 0, drafts: 0, spam: 0, trash: 0, archive: 0, starred: 0 };
 
   // Independent of the Gmail label fetches — start it now so it runs in parallel with them.
   const composeDraftPromise = prisma.emailComposeDraft.count({ where: composeDraftWhere });
@@ -144,6 +147,7 @@ export default withAuth(async (req, res, session) => {
         aggregated.spam += counts.spam;
         aggregated.trash += counts.trash;
         aggregated.archive += counts.archive;
+        aggregated.starred += counts.starred;
       } catch (error) {
         accountErrors.push({
           accountEmail: account.email,

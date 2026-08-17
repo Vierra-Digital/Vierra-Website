@@ -98,6 +98,8 @@ export type MailboxCounts = {
   archive: number;
   spam: number;
   trash: number;
+  /** Unread count for the Starred view. Optional so older payloads still type-check. */
+  starred?: number;
 };
 
 export type ModuleUnreadBadgeCounts = MailboxCounts;
