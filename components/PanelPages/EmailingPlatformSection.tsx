@@ -62,6 +62,7 @@ import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEdit
 import { printComposeContent } from "@/components/email/printCompose";
 import { getJson } from "@/lib/email/panelApi";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
+import { chainKeyFor } from "@/lib/gmail/threading";
 import {
   BRAND_LOGO,
   ICON_BUTTON, ICON_BUTTON_SOLID, FIELD_LABEL, ALERT,
@@ -526,31 +527,27 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // (latest message represents the thread) with a message count. Compose drafts
   // and thread-less messages pass through individually.
   const conversationRows = useMemo(() => {
-    // Collapse a thread into one row — but only for messages that are genuinely part of a chain.
+    // Collapse a conversation into one row, keyed on the REAL chain rather than Gmail's threadId.
     //
-    // Gmail assigns the same threadId to separate messages that merely share a subject and
-    // participants, so grouping on threadId alone merged two independent sends (or two unrelated
-    // messages that happened to reuse a subject) into a single row, hiding one of them.
-    //
-    // RFC 5322 gives the real signal: a reply carries References / In-Reply-To pointing at what it
-    // answers, and a NEW message carries neither. So a message with no References is a conversation
-    // root and always gets its own row; only messages that actually reference something collapse
-    // under their thread. Replies still group, independent sends no longer do.
-    const byThread = new Map<string, MessageRow & { threadCount: number }>();
+    // Gmail reuses one threadId for messages that merely share a subject and participants, so
+    // grouping on it merged independent emails into a single row and hid all but the newest — mail
+    // got missed. Keying on References/In-Reply-To (see lib/gmail/threading) fixes both directions:
+    // two separate sends stay separate, AND two replies to different originals stay separate, which
+    // a "does it have References at all?" test could not distinguish.
+    const byChain = new Map<string, MessageRow & { threadCount: number }>();
     const rows: Array<MessageRow & { threadCount: number }> = [];
     for (const message of filteredMessages) {
-      const threadId = message.threadId;
-      const isChainReply = Boolean((message.references || "").trim());
-      if (!threadId || message.isComposeDraft || !isChainReply) {
+      if (message.isComposeDraft) {
         rows.push({ ...message, threadCount: 1 });
         continue;
       }
-      const existing = byThread.get(threadId);
+      const key = chainKeyFor(message);
+      const existing = byChain.get(key);
       if (existing) {
         existing.threadCount += 1;
       } else {
         const row = { ...message, threadCount: 1 };
-        byThread.set(threadId, row);
+        byChain.set(key, row);
         rows.push(row);
       }
     }
@@ -1604,6 +1601,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         archive: Number(counts.archive || 0),
         spam: Number(counts.spam || 0),
         trash: Number(counts.trash || 0),
+        // Was missing, so mailboxCounts.starred stayed undefined and the badge never rendered
+        // even though the API returns it.
+        starred: Number(counts.starred || 0),
       };
       setMailboxCounts(next);
       // Sidebar badges render from this. They used to be counted off the first page of each
@@ -4937,7 +4937,10 @@ ${sourceText}`;
                               </div>
                             ) : null}
                           </div>
-                          <div ref={moveMessageMenuRef} className="relative">
+                          {/* Starred is a label view, not a mailbox — moving a message out of it
+                              (Archive included) was disorienting, so the whole menu is hidden there
+                              to match the list toolbar. */}
+                          <div ref={moveMessageMenuRef} className={`relative ${activeModule === "starred" ? "hidden" : ""}`}>
                             <button
                               type="button"
                               onClick={() => setMoveMenuOpen((prev) => (prev === "message" ? null : "message"))}

@@ -4,6 +4,7 @@ import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { extractHeader, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
 import { scanHtmlForTrackers } from "@/lib/email/trackerDetection";
+import { chainFor } from "@/lib/gmail/threading";
 
 function decodeBase64Url(data: string) {
   const padded = data.replace(/-/g, "+").replace(/_/g, "/");
@@ -78,6 +79,7 @@ function parseThreadMessage(message: any) {
     bodyHtml: bodies.bodyHtml || "",
     messageIdHeader: extractHeader(headers, "Message-ID") || "",
     references: extractHeader(headers, "References") || "",
+    inReplyTo: extractHeader(headers, "In-Reply-To") || "",
     inlineParts: bodies.inlineParts,
   };
 }
@@ -203,6 +205,12 @@ export default withAuth(async (req, res, session) => {
       }
     }
   }
+
+  // Gmail puts unrelated messages in one thread when they share a subject and participants, so the
+  // raw thread is not a conversation. Narrow it to the messages actually linked to the opened one by
+  // In-Reply-To / References, otherwise the reader stitches separate emails into a single chain and
+  // the others are effectively hidden.
+  threadMessages = chainFor(threadMessages, currentMessage.id);
 
   // Resolve inline (cid:) images so signature logos and pasted images actually render. Done per
   // message and in parallel across the thread; each message degrades independently.
