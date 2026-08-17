@@ -7,6 +7,11 @@ export default defineConfig({
   resolve: {
     alias: { "@": path.resolve(__dirname) },
   },
+  // Transform JSX here rather than inheriting it from tsconfig. `next build` rewrites
+  // tsconfig.json's "jsx" to "preserve" (Next compiles JSX itself), which used to leave the test
+  // runner with no transform — so simply running a build broke every test that imported a .tsx
+  // module. Pinning it locally keeps the suite independent of that rewrite.
+  oxc: { jsx: { runtime: "automatic" } },
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
