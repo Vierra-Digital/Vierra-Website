@@ -22,6 +22,16 @@ export default defineConfig({
         "lib/email/templateRender.ts",
         "lib/campaigns/mergeTags.ts",
         "lib/api/marketing.ts",
+        // Added as their suites landed — the gate is only meaningful if it covers the modules we
+        // actually test. Everything below has a dedicated tests/*.test.ts file.
+        "lib/contacts/csv.ts",
+        "lib/booking/slots.ts",
+        "lib/api/emailTracking.ts",
+        "lib/batch.ts",
+        "lib/email/panelApi.ts",
+        "lib/ga4Client.ts",
+        "lib/gmail/dsn.ts",
+        "lib/email/postmaster.ts",
       ],
       // Floor set below current levels (~93% stmts/branch, 100% funcs) with margin: passes today,
       // blocks regressions, raise further as tests grow.
