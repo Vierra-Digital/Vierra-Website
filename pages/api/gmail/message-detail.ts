@@ -4,6 +4,7 @@ import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { extractHeader, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
 import { scanHtmlForTrackers } from "@/lib/email/trackerDetection";
+import { senderAvatarSources, senderDomain } from "@/lib/email/senderAvatar";
 
 function decodeBase64Url(data: string) {
   const padded = data.replace(/-/g, "+").replace(/_/g, "/");
@@ -78,6 +79,7 @@ function parseThreadMessage(message: any) {
     bodyHtml: bodies.bodyHtml || "",
     messageIdHeader: extractHeader(headers, "Message-ID") || "",
     references: extractHeader(headers, "References") || "",
+    inReplyTo: extractHeader(headers, "In-Reply-To") || "",
     inlineParts: bodies.inlineParts,
   };
 }
@@ -277,9 +279,15 @@ export default withAuth(async (req, res, session) => {
     messageIdHeader: currentMessage.messageIdHeader,
     references: currentMessage.references,
     senderPhotoUrl,
+    // Ordered avatar sources (contact photo → Gravatar → company favicon). Built here so the md5
+    // stays on the server: importing node:crypto into the panel would ship a polyfill to the
+    // browser for one hash. The client walks these on image error, then falls back to initials.
+    senderAvatarSources: senderEmail ? senderAvatarSources(senderEmail, senderPhotoUrl) : [],
     threadMessages,
     // Authoritative tracker scan (DOM-free) so the "tracker blocked" badge is consistent with the
     // client's own detection and available without client-side rendering.
-    trackers: scanHtmlForTrackers(currentMessage.bodyHtml || ""),
+    // Pass the sender's domain: without it every remote image scored a "third-party" penalty, so
+    // images a sender hosts on its OWN domain were being flagged as beacons and stripped.
+    trackers: scanHtmlForTrackers(currentMessage.bodyHtml || "", senderDomain(senderEmail)),
   });
 }, { methods: ["GET"] });
