@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import Head from "next/head"
 import { inter } from "@/lib/fonts";
 import Image from "next/image"
@@ -15,6 +15,7 @@ import { useSession, signOut } from "@/lib/session-client"
 import { requireSession } from "@/lib/auth"
 import type { GetServerSideProps } from "next"
 import dynamic from "next/dynamic"
+import { useActivityHeartbeat } from "@/hooks/useActivityHeartbeat"
 
 const UserSettingsPage = dynamic(() => import("@/components/UserSettingsPage"), {
   ssr: false,
@@ -47,29 +48,7 @@ const ClientPage = () => {
     }
   }, [router.query.settings])
 
-  useEffect(() => {
-    const updateActivity = async () => {
-      try {
-        await fetch("/api/profile/updateActivity", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "online" }),
-        })
-      } catch (error) {
-        console.error("Failed to update activity:", error)
-      }
-    }
-    updateActivity()
-    const interval = setInterval(updateActivity, 2 * 60 * 1000)
-    const handleVisibilityChange = () => {
-      if (!document.hidden) updateActivity()
-    }
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
-    }
-  }, [])
+  useActivityHeartbeat()
 
   async function fetchCurrentUser() {
     try {

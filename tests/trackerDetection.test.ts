@@ -91,3 +91,104 @@ describe("decodeProxiedUrl", () => {
     expect(decodeProxiedUrl("https://track.foo.com/o/123")).toBe("https://track.foo.com/o/123");
   });
 });
+
+describe("visible images are content, not beacons", () => {
+  // Regression: a hosted signature logo scored third-party(+1) + random-token(+2) = 3, hitting the
+  // flag threshold, so the reader stripped it. A beacon is invisible by definition — anything
+  // declaring real dimensions must survive heuristics.
+  it("keeps a remote logo with a hashed filename when it declares a visible width", () => {
+    const verdict = scoreTrackerImage({
+      src: "https://mail.assets-cdn.io/a1b2c3d4e5f6a7b8/vierra-logo.png",
+      width: "180",
+      height: "48",
+      alt: "",
+      style: null,
+    });
+    expect(verdict.tracked).toBe(false);
+  });
+
+  it("keeps a visible logo sized only via inline style", () => {
+    const verdict = scoreTrackerImage({
+      src: "https://email.somehost.net/9f8e7d6c5b4a3210/logo.png",
+      width: null,
+      height: null,
+      alt: null,
+      style: "width: 200px; height: 60px;",
+    });
+    expect(verdict.tracked).toBe(false);
+  });
+
+  it("still flags a 1x1 beacon on the same kind of host", () => {
+    const verdict = scoreTrackerImage({
+      src: "https://track.somehost.net/9f8e7d6c5b4a3210/open.gif",
+      width: "1",
+      height: "1",
+      alt: "",
+      style: null,
+    });
+    expect(verdict.tracked).toBe(true);
+  });
+
+  it("still flags a known vendor beacon even when it claims a large size", () => {
+    // A vendor-pattern hit is direct evidence, so it must outrank the visible-size exemption.
+    const verdict = scoreTrackerImage({
+      src: "https://t.yesware.com/t/abc123/spacer.gif",
+      width: "600",
+      height: "200",
+      alt: null,
+      style: null,
+    });
+    expect(verdict.tracked).toBe(true);
+  });
+});
+
+describe("senderDomain suppresses false positives on sender-hosted images", () => {
+  // No caller used to pass senderDomain, so EVERY remote image took a +1 "third-party" penalty and
+  // an image the sender hosts on its own domain could cross the flag threshold.
+  it("does not flag a hashed 1x1 on the sender's own domain when the domain is known", () => {
+    const args = {
+      src: "https://assets.acme.com/9f8e7d6c5b4a3210/spacer.gif",
+      width: "1",
+      height: "1",
+      alt: "",
+      style: null,
+    };
+    expect(scoreTrackerImage(args).tracked).toBe(true);
+    expect(scoreTrackerImage({ ...args, senderDomain: "acme.com" }).score).toBeLessThan(
+      scoreTrackerImage(args).score
+    );
+  });
+
+  it("still flags a third-party beacon even when a senderDomain is supplied", () => {
+    const verdict = scoreTrackerImage({
+      src: "https://t.yesware.com/t/abc/open.gif",
+      width: "1",
+      height: "1",
+      alt: "",
+      style: null,
+      senderDomain: "acme.com",
+    });
+    expect(verdict.tracked).toBe(true);
+    expect(verdict.vendor).toBe("Yesware");
+  });
+
+  it("treats a subdomain of the sender as first-party", () => {
+    const onSubdomain = scoreTrackerImage({
+      src: "https://cdn.acme.com/abcdef1234567890/logo.png",
+      width: "1",
+      height: "1",
+      alt: "",
+      style: null,
+      senderDomain: "acme.com",
+    });
+    const offDomain = scoreTrackerImage({
+      src: "https://cdn.other.com/abcdef1234567890/logo.png",
+      width: "1",
+      height: "1",
+      alt: "",
+      style: null,
+      senderDomain: "acme.com",
+    });
+    expect(onSubdomain.score).toBeLessThan(offDomain.score);
+  });
+});

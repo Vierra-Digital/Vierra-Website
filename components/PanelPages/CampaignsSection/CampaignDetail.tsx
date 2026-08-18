@@ -25,13 +25,29 @@ type CampaignStep = {
   delayDays: number;
 };
 
+type FailedContact = {
+  id: string;
+  email: string;
+  reason: string;
+  failedAt: string | null;
+  attempts: number;
+  gaveUp: boolean;
+};
+
+const DETAIL_CACHE_TTL_MS = 20_000;
+const detailCache = new Map<
+  string,
+  { data: { campaign: Campaign | null; steps: CampaignStep[]; failed: FailedContact[] }; ts: number }
+>();
+
 const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ campaignId, onBack }) => {
-  const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [steps, setSteps] = useState<CampaignStep[]>([]);
-  const [failed, setFailed] = useState<
-    Array<{ id: string; email: string; reason: string; failedAt: string | null; attempts: number; gaveUp: boolean }>
-  >([]);
-  const [loading, setLoading] = useState(true);
+  const cached = detailCache.get(campaignId);
+  const cacheFresh = !!cached && Date.now() - cached.ts < DETAIL_CACHE_TTL_MS;
+
+  const [campaign, setCampaign] = useState<Campaign | null>(cached?.data.campaign ?? null);
+  const [steps, setSteps] = useState<CampaignStep[]>(cached?.data.steps ?? []);
+  const [failed, setFailed] = useState<FailedContact[]>(cached?.data.failed ?? []);
+  const [loading, setLoading] = useState(!cacheFresh);
   const [tab, setTab] = useState<Tab>("Overview");
   const [busy, setBusy] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
@@ -39,23 +55,39 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [campaignRes, stepsRes, failedRes] = await Promise.all([
-        fetch(`/api/campaigns/${campaignId}`),
-        fetch(`/api/campaigns/${campaignId}/steps`),
-        fetch(`/api/campaigns/${campaignId}/failed`),
-      ]);
-      if (campaignRes.ok) setCampaign((await campaignRes.json()).campaign);
-      if (stepsRes.ok) setSteps((await stepsRes.json()).steps || []);
-      if (failedRes.ok) setFailed((await failedRes.json()).failed || []);
-    } catch (e) {
-      console.error("Error loading campaign detail:", e);
-    } finally {
-      setLoading(false);
-    }
-  }, [campaignId]);
+  const load = useCallback(
+    async (force = false) => {
+      const entry = detailCache.get(campaignId);
+      if (!force && entry && Date.now() - entry.ts < DETAIL_CACHE_TTL_MS) {
+        setCampaign(entry.data.campaign);
+        setSteps(entry.data.steps);
+        setFailed(entry.data.failed);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const [campaignRes, stepsRes, failedRes] = await Promise.all([
+          fetch(`/api/campaigns/${campaignId}`),
+          fetch(`/api/campaigns/${campaignId}/steps`),
+          fetch(`/api/campaigns/${campaignId}/failed`),
+        ]);
+        const nextCampaign = campaignRes.ok ? (await campaignRes.json()).campaign : null;
+        const nextSteps = stepsRes.ok ? (await stepsRes.json()).steps || [] : [];
+        const nextFailed = failedRes.ok ? (await failedRes.json()).failed || [] : [];
+        setCampaign(nextCampaign);
+        setSteps(nextSteps);
+        setFailed(nextFailed);
+        detailCache.set(campaignId, { data: { campaign: nextCampaign, steps: nextSteps, failed: nextFailed }, ts: Date.now() });
+      } catch (e) {
+        console.error("Error loading campaign detail:", e);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [campaignId]
+  );
 
   useEffect(() => {
     load();
@@ -72,6 +104,8 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to update campaign");
       setCampaign(data.campaign);
+      const entry = detailCache.get(campaignId);
+      if (entry) detailCache.set(campaignId, { ...entry, data: { ...entry.data, campaign: data.campaign } });
     } catch (e: any) {
       alert(e?.message || "Failed to update campaign.");
     } finally {
@@ -90,6 +124,8 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to update campaign");
       setCampaign(data.campaign);
+      const entry = detailCache.get(campaignId);
+      if (entry) detailCache.set(campaignId, { ...entry, data: { ...entry.data, campaign: data.campaign } });
     } catch (e: any) {
       alert(e?.message || "Failed to update campaign.");
     } finally {
@@ -122,6 +158,7 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
         const payload = await res.json().catch(() => ({}));
         throw new Error(payload?.message || "Failed to delete campaign.");
       }
+      detailCache.delete(campaignId);
       setConfirmDelete(false);
       onBack();
     } catch (e) {
@@ -139,7 +176,7 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to sync audience");
       setSyncMessage(`Enrolled ${data.enrolledCount} new contact${data.enrolledCount === 1 ? "" : "s"} (${data.contactCount} total).`);
-      load();
+      load(true);
     } catch (e: any) {
       setSyncMessage(e?.message || "Failed to sync audience.");
     } finally {

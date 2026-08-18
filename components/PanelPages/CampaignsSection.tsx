@@ -89,7 +89,9 @@ const CampaignsSection: React.FC = () => {
   const loadCampaigns = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/campaigns");
+      // no-store: this reloads right after create/delete/status-change writes, and the
+      // server's Cache-Control on this endpoint would otherwise serve the pre-write list.
+      const res = await fetch("/api/campaigns", { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to load campaigns");
       const data = await res.json();
       setCampaigns(data.campaigns || []);

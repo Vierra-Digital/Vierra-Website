@@ -11,6 +11,9 @@ type Stats = {
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
+const STATS_CACHE_TTL_MS = 60_000;
+const statsCache = new Map<string, { data: Stats; ts: number }>();
+
 const RateCard: React.FC<{ label: string; value: string; sub?: string }> = ({ label, value, sub }) => (
   <div className="bg-white rounded-lg border border-[#E5E7EB] p-4">
     <p className="text-xs font-medium text-[#6B7280] uppercase tracking-wider mb-1">{label}</p>
@@ -20,22 +23,44 @@ const RateCard: React.FC<{ label: string; value: string; sub?: string }> = ({ la
 );
 
 const AnalyticsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
-  const [stats, setStats] = useState<Stats | null>(null);
   const [days, setDays] = useState(7);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = `${campaignId}:${days}`;
+  const cached = statsCache.get(cacheKey);
+  const cacheFresh = !!cached && Date.now() - cached.ts < STATS_CACHE_TTL_MS;
+
+  const [stats, setStats] = useState<Stats | null>(cached?.data ?? null);
+  const [loading, setLoading] = useState(!cacheFresh);
 
   useEffect(() => {
+    const key = `${campaignId}:${days}`;
+    const entry = statsCache.get(key);
+    if (entry && Date.now() - entry.ts < STATS_CACHE_TTL_MS) {
+      setStats(entry.data);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
     (async () => {
       setLoading(true);
       try {
         const res = await fetch(`/api/campaigns/${campaignId}/stats?days=${days}`);
-        if (res.ok) setStats(await res.json());
+        if (res.ok) {
+          const data: Stats = await res.json();
+          if (!cancelled) {
+            setStats(data);
+            statsCache.set(key, { data, ts: Date.now() });
+          }
+        }
       } catch (e) {
         console.error("Error loading campaign stats:", e);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [campaignId, days]);
 
   if (loading || !stats) {
