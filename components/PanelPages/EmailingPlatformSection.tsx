@@ -191,6 +191,13 @@ const MailboxEmpty: React.FC = () => (
 // request-body limit) so oversized sends fail fast with a clear message instead of an opaque 413.
 const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 
+/**
+ * Cap on a mailbox action (trash, archive, move…). Comfortably above a normal Gmail round trip but
+ * well under the serverless function limit, so a stalled upstream surfaces as a clear message
+ * rather than a spinner that never ends.
+ */
+const ACTION_TIMEOUT_MS = 15_000;
+
 /** How many mailbox views to keep in the message cache (each is up to PAGE_SIZE rows). */
 const MESSAGE_CACHE_LIMIT = 12;
 
@@ -222,6 +229,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   /** Ids already sent for scanning, so a page never re-scans rows it has seen. */
   const scannedIdsRef = useRef<Set<string>>(new Set());
   /** messageId → tracker verdict. Filled in just after the list paints (see the scan effect). */
+  /** Index into the sender's ordered avatar candidates; advanced on each image error. */
+  const [senderAvatarIndex, setSenderAvatarIndex] = useState(0);
   const [messageTrackers, setMessageTrackers] = useState<
     Record<string, { tracked: boolean; count: number; vendors: string[]; hasAttachment?: boolean }>
   >({});
@@ -526,31 +535,26 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // (latest message represents the thread) with a message count. Compose drafts
   // and thread-less messages pass through individually.
   const conversationRows = useMemo(() => {
-    // Collapse a thread into one row — but only for messages that are genuinely part of a chain.
+    // One row per Gmail thread — deliberately Gmail's own conversation boundary.
     //
-    // Gmail assigns the same threadId to separate messages that merely share a subject and
-    // participants, so grouping on threadId alone merged two independent sends (or two unrelated
-    // messages that happened to reuse a subject) into a single row, hiding one of them.
-    //
-    // RFC 5322 gives the real signal: a reply carries References / In-Reply-To pointing at what it
-    // answers, and a NEW message carries neither. So a message with no References is a conversation
-    // root and always gets its own row; only messages that actually reference something collapse
-    // under their thread. Replies still group, independent sends no longer do.
+    // Two earlier attempts tried to be cleverer than Gmail and both misfired: keying on "does it
+    // have References?" split an original from its reply (8 conversations rendered as 9 rows), and
+    // keying on the References root could merge messages Gmail keeps in separate threads. Matching
+    // threadId means the panel's grouping and counts agree with the Gmail UI you compare against.
     const byThread = new Map<string, MessageRow & { threadCount: number }>();
     const rows: Array<MessageRow & { threadCount: number }> = [];
     for (const message of filteredMessages) {
-      const threadId = message.threadId;
-      const isChainReply = Boolean((message.references || "").trim());
-      if (!threadId || message.isComposeDraft || !isChainReply) {
+      // Local compose drafts have no Gmail thread, so they always stand alone.
+      if (!message.threadId || message.isComposeDraft) {
         rows.push({ ...message, threadCount: 1 });
         continue;
       }
-      const existing = byThread.get(threadId);
+      const existing = byThread.get(message.threadId);
       if (existing) {
         existing.threadCount += 1;
       } else {
         const row = { ...message, threadCount: 1 };
-        byThread.set(threadId, row);
+        byThread.set(message.threadId, row);
         rows.push(row);
       }
     }
@@ -1432,6 +1436,17 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       )
       .replace(/\n/g, "<br>");
 
+  /**
+   * Domain of the message being read, so images the sender hosts on its own domain aren't scored as
+   * third-party. Without this the client stripped legitimate sender-hosted images and its count
+   * disagreed with the server's authoritative scan.
+   */
+  const readerSenderDomain = useMemo(() => {
+    const fromRaw = selectedMessageDetail?.fromRaw || selectedMessage?.fromRaw || selectedMessage?.from || "";
+    const email = parseMailboxAddress(fromRaw).email;
+    return (email.split("@")[1] || "").trim().toLowerCase();
+  }, [selectedMessageDetail, selectedMessage]);
+
   const isTrackerPixel = (img: HTMLImageElement, srcValue: string) =>
     scoreTrackerImage({
       src: srcValue,
@@ -1439,6 +1454,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       height: img.getAttribute("height"),
       style: img.getAttribute("style"),
       alt: img.getAttribute("alt"),
+      senderDomain: readerSenderDomain,
     }).tracked;
 
   const detectTrackers = (rawHtml: string): { count: number; vendors: string[] } => {
@@ -1508,6 +1524,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       img.style.maxWidth = "100%";
       img.style.height = "auto";
       img.loading = "lazy";
+      img.decoding = "async";
+      // Many sender CDNs reject requests carrying a cross-site referrer, which is a common cause of
+      // email images silently failing to load. Ask the browser not to send one.
+      img.referrerPolicy = "no-referrer";
     });
     parsed.querySelectorAll<HTMLAnchorElement>("a").forEach((link) => {
       link.target = "_blank";
@@ -1604,6 +1624,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         archive: Number(counts.archive || 0),
         spam: Number(counts.spam || 0),
         trash: Number(counts.trash || 0),
+        // Was missing, so mailboxCounts.starred stayed undefined and the badge never rendered
+        // even though the API returns it.
+        starred: Number(counts.starred || 0),
       };
       setMailboxCounts(next);
       // Sidebar badges render from this. They used to be counted off the first page of each
@@ -1870,6 +1893,29 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // linked conversation and switch to the reader. Matches by threadId and opens whichever
   // message in that thread is loaded — the reader then renders the full chain (threadMessages
   // from message-detail). Runs once when a row from the target thread appears.
+  // Clear the avatar-failure flag whenever a different message is opened, so one sender's dead
+  // photo URL doesn't suppress every later sender's picture. Keyed on the id so it covers every
+  // path that opens a message (list click, deep link, thread navigation).
+  useEffect(() => {
+    setSenderAvatarIndex(0);
+  }, [selectedMessageId]);
+
+  /**
+   * Current avatar URL for the open message's sender: the Google Contacts photo when one exists,
+   * then Gravatar, then the company favicon. Empty once every candidate has errored, which is the
+   * signal to render the initials avatar. Contacts-only lookup meant most senders had no photo at
+   * all, which is why pictures appeared not to load.
+   */
+  const senderAvatar = useMemo(() => {
+    const sources = selectedMessageDetail?.senderAvatarSources ?? [];
+    if (sources.length === 0) {
+      // Older payloads carry only the single contact photo.
+      const legacy = selectedMessageDetail?.senderPhotoUrl || "";
+      return senderAvatarIndex === 0 && legacy ? { url: legacy, kind: "photo" as const } : null;
+    }
+    return sources[senderAvatarIndex] ?? null;
+  }, [selectedMessageDetail, senderAvatarIndex]);
+
   useEffect(() => {
     if (deepLinkAppliedRef.current || !initialOpenThreadId) return;
     const row = messages.find((m) => m.threadId === initialOpenThreadId);
@@ -1935,6 +1981,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         messageIdHeader: payload?.messageIdHeader,
         references: payload?.references,
         senderPhotoUrl: typeof payload?.senderPhotoUrl === "string" ? payload.senderPhotoUrl : "",
+          senderAvatarSources: Array.isArray(payload?.senderAvatarSources) ? payload.senderAvatarSources : [],
         threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
         trackers:
           payload?.trackers && typeof payload.trackers.count === "number"
@@ -1985,6 +2032,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             typeof payload?.messageIdHeader === "string" ? payload.messageIdHeader : selectedMessage.messageIdHeader,
           references: typeof payload?.references === "string" ? payload.references : selectedMessage.references,
           senderPhotoUrl: typeof payload?.senderPhotoUrl === "string" ? payload.senderPhotoUrl : "",
+          senderAvatarSources: Array.isArray(payload?.senderAvatarSources) ? payload.senderAvatarSources : [],
           threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
           trackers:
             payload?.trackers && typeof payload.trackers.count === "number"
@@ -2323,7 +2371,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }));
       if (items.length === 0 && composeDraftRows.length === 0) return;
       const isReadToggle = action === "markRead" || action === "markUnread";
-      if (!isReadToggle && actionInFlightRef.current) return;
+      if (!isReadToggle && actionInFlightRef.current) {
+        // Silently returning here is why a second delete "did nothing" while the first was still
+        // in flight. Say so instead.
+        setActionError("Still finishing the last action — one moment.");
+        return;
+      }
       if (!isReadToggle) actionInFlightRef.current = true;
 
       setActionError("");
@@ -2394,11 +2447,30 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
         let results: any[] = [];
         if (items.length > 0) {
-          const response = await fetch("/api/gmail/actions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action, items }),
-          });
+          // Bounded: an unbounded fetch can hang for minutes, and while it hangs the in-flight
+          // guard below silently swallows every further click. Failing fast frees the guard and
+          // surfaces a real message instead.
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), ACTION_TIMEOUT_MS);
+          let response: Response;
+          try {
+            response = await fetch("/api/gmail/actions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action, items }),
+              signal: controller.signal,
+            });
+          } catch (error) {
+            if ((error as Error)?.name === "AbortError") {
+              // The optimistic removal is now unverified, so resync rather than leave the list lying.
+              invalidateMessagesCache();
+              loadMessagesRef.current();
+              throw new Error("Gmail is taking too long to respond. Nothing was lost — try again.");
+            }
+            throw error;
+          } finally {
+            clearTimeout(timeout);
+          }
           const payload = await response.json().catch(() => ({}));
           if (!response.ok && response.status !== 207) {
             throw new Error(payload?.message || "Action failed.");
@@ -4219,16 +4291,22 @@ ${sourceText}`;
                                       ) : null}
                                     </div>
                                   ) : null}
+                                  {/* Archive is hidden in Starred for the same reason as Move To:
+                                      Starred is a label view, so archiving from it just makes the
+                                      message vanish from where you were working. Unstar is the
+                                      meaningful action and sits by Refresh. */}
                                   {activeModule !== "drafts" ? (
                                     <>
-                                      <button
-                                        type="button"
-                                        onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                                        className={`${ICON_BUTTON_SOLID} email-tip`}
-                                        data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
-                                      >
-                                        <FiArchive className="w-4 h-4" />
-                                      </button>
+                                      {activeModule !== "starred" ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
+                                          className={`${ICON_BUTTON_SOLID} email-tip`}
+                                          data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
+                                        >
+                                          <FiArchive className="w-4 h-4" />
+                                        </button>
+                                      ) : null}
                                       <div ref={snoozeMenuRef} className="relative">
                                         <button
                                           type="button"
@@ -4765,10 +4843,10 @@ ${sourceText}`;
                                         message.tracked
                                           ? outboundTip
                                           : incomingTracker?.tracked
-                                            ? `Incoming tracker · ${
+                                            ? `Incoming Tracker · ${
                                                 incomingTracker.vendors.length
                                                   ? incomingTracker.vendors.join(", ")
-                                                  : `${incomingTracker.count} beacon${incomingTracker.count === 1 ? "" : "s"}`
+                                                  : `${incomingTracker.count} Beacon${incomingTracker.count === 1 ? "" : "s"}`
                                               }`
                                             : undefined
                                       }
@@ -4937,7 +5015,10 @@ ${sourceText}`;
                               </div>
                             ) : null}
                           </div>
-                          <div ref={moveMessageMenuRef} className="relative">
+                          {/* Starred is a label view, not a mailbox — moving a message out of it
+                              (Archive included) was disorienting, so the whole menu is hidden there
+                              to match the list toolbar. */}
+                          <div ref={moveMessageMenuRef} className={`relative ${activeModule === "starred" ? "hidden" : ""}`}>
                             <button
                               type="button"
                               onClick={() => setMoveMenuOpen((prev) => (prev === "message" ? null : "message"))}
@@ -4987,14 +5068,16 @@ ${sourceText}`;
                               </div>
                             ) : null}
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                            className={ICON_BUTTON}
-                            title={activeModule === "archive" ? "Unarchive" : "Archive"}
-                          >
-                            <FiArchive className="w-4 h-4" />
-                          </button>
+                          {activeModule !== "starred" ? (
+                            <button
+                              type="button"
+                              onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
+                              className={ICON_BUTTON}
+                              title={activeModule === "archive" ? "Unarchive" : "Archive"}
+                            >
+                              <FiArchive className="w-4 h-4" />
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
@@ -5023,17 +5106,29 @@ ${sourceText}`;
                       </div>
 
                       {selectedMessage ? (
-                        <div className="flex-1 overflow-y-auto px-6 pb-0 pt-5">
+                        <div className="flex-1 overflow-y-auto px-6 pt-5 pb-10">
                           <h2 className="text-[22px] font-semibold tracking-tight text-[#1E1B2E]">{selectedMessage.subject || "(No Subject)"}</h2>
                           <div className="mt-4 flex items-start gap-3">
-                            {selectedMessageDetail?.senderPhotoUrl ? (
-                              <Image
-                                src={selectedMessageDetail.senderPhotoUrl}
-                                alt="Sender"
+                            {senderAvatar ? (
+                              // Deliberately a plain <img>, not next/image: the optimizer rejects any
+                              // host absent from images.remotePatterns (Google serves contact photos
+                              // from lh3.googleusercontent.com), and those URLs 403 when a referrer
+                              // is sent. onError advances to the next candidate — contact photo,
+                              // Gravatar, then company favicon — and initials show once they run out.
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img
+                                key={senderAvatar.url}
+                                src={senderAvatar.url}
+                                alt=""
                                 width={40}
                                 height={40}
-                                unoptimized
-                                className="w-10 h-10 rounded-full object-cover border border-[#E5E7EB]"
+                                referrerPolicy="no-referrer"
+                                loading="eager"
+                                decoding="async"
+                                onError={() => setSenderAvatarIndex((i) => i + 1)}
+                                className={`h-10 w-10 shrink-0 rounded-full border border-[#E5E7EB] bg-white ${
+                                  senderAvatar.kind === "logo" ? "object-contain p-1.5" : "object-cover"
+                                }`}
                               />
                             ) : (
                               <div className="w-10 h-10 rounded-full bg-[#ECE3FF] text-[#5B21B6] border border-[#E5E7EB] flex items-center justify-center text-sm font-semibold">
@@ -5049,12 +5144,12 @@ ${sourceText}`;
                                   selectedMessageDetail?.trackers ?? detectTrackers(selectedMessageDetail?.bodyHtml || "");
                                 if (trackers === 0) return null;
                                 const label = vendors.length
-                                  ? `${vendors.slice(0, 2).join(", ")}${vendors.length > 2 ? ` +${vendors.length - 2}` : ""} tracker blocked`
-                                  : `${trackers} tracker${trackers === 1 ? "" : "s"} blocked`;
+                                  ? `${vendors.slice(0, 2).join(", ")}${vendors.length > 2 ? ` +${vendors.length - 2}` : ""} Tracker${trackers === 1 ? "" : "s"} Blocked`
+                                  : `${trackers} Tracker${trackers === 1 ? "" : "s"} Blocked`;
                                 return (
                                   <p>
                                     <span
-                                      className="inline-flex items-center gap-1.5 rounded-md bg-[#F5EFFF] px-2 py-0.5 text-[11px] font-semibold text-[#701CC0]"
+                                      className="-ml-2 inline-flex items-center gap-1.5 rounded-md bg-[#F5EFFF] px-2 py-0.5 text-[11px] font-semibold text-[#701CC0]"
                                       title={
                                         vendors.length
                                           ? `Detected ${vendors.join(", ")} tracking. Remote pixels were blocked, so the sender can't tell you opened this.`

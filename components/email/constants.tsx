@@ -38,6 +38,7 @@ export const EMPTY_COUNTS: MailboxCounts = {
   archive: 0,
   spam: 0,
   trash: 0,
+  starred: 0,
 };
 
 export const MODULES: Array<{ key: ModuleKey; label: string; icon: React.ReactNode }> = [
