@@ -16,7 +16,6 @@ import {
   FiLock,
   FiChevronsRight,
   FiCornerUpLeft,
-  FiCornerUpRight,
   FiDownload,
   FiCalendar,
   FiEdit3,
@@ -230,7 +229,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const scannedIdsRef = useRef<Set<string>>(new Set());
   /** messageId → tracker verdict. Filled in just after the list paints (see the scan effect). */
   /** Index into the sender's ordered avatar candidates; advanced on each image error. */
-  const [senderAvatarIndex, setSenderAvatarIndex] = useState(0);
   const [messageTrackers, setMessageTrackers] = useState<
     Record<string, { tracked: boolean; count: number; vendors: string[]; hasAttachment?: boolean }>
   >({});
@@ -242,6 +240,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [messagesError, setMessagesError] = useState("");
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [accountErrors, setAccountErrors] = useState<Array<{ accountEmail: string; message: string }>>([]);
+  const [senderAvatarIndex, setSenderAvatarIndex] = useState(0);
   const [selectedMessageId, setSelectedMessageId] = useState("");
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
@@ -457,6 +456,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [providerAccounts, setProviderAccounts] = useState<ProviderAccount[]>([]);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const loadMessagesRequestRef = useRef(0);
+  const loadContactsRequestRef = useRef(0);
   /**
    * Per-view message cache (key = the messages query string) powering stale-while-revalidate,
    * so revisiting a mailbox/page paints instantly instead of spinning. Cleared whenever an action
@@ -532,35 +532,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     );
   }, [messages, searchTerm]);
 
-  // Conversation grouping: collapse messages sharing a threadId into one row
-  // (latest message represents the thread) with a message count. Compose drafts
-  // and thread-less messages pass through individually.
-  const conversationRows = useMemo(() => {
-    // One row per Gmail thread — deliberately Gmail's own conversation boundary.
-    //
-    // Two earlier attempts tried to be cleverer than Gmail and both misfired: keying on "does it
-    // have References?" split an original from its reply (8 conversations rendered as 9 rows), and
-    // keying on the References root could merge messages Gmail keeps in separate threads. Matching
-    // threadId means the panel's grouping and counts agree with the Gmail UI you compare against.
-    const byThread = new Map<string, MessageRow & { threadCount: number }>();
-    const rows: Array<MessageRow & { threadCount: number }> = [];
-    for (const message of filteredMessages) {
-      // Local compose drafts have no Gmail thread, so they always stand alone.
-      if (!message.threadId || message.isComposeDraft) {
-        rows.push({ ...message, threadCount: 1 });
-        continue;
-      }
-      const existing = byThread.get(message.threadId);
-      if (existing) {
-        existing.threadCount += 1;
-      } else {
-        const row = { ...message, threadCount: 1 };
-        byThread.set(message.threadId, row);
-        rows.push(row);
-      }
-    }
-    return rows;
-  }, [filteredMessages]);
+  // One row per message. No conversation grouping of any kind.
+  //
+  // Every rule that combined messages got this wrong in practice: Gmail's threadId merges unrelated
+  // mail that shares a subject and participants, and reference headers merge a sender's separate
+  // emails whenever an intervening reply of ours sits in Sent rather than in this mailbox. Both hid
+  // messages, which is worse than showing a chain across several rows. A message is a row.
+  const conversationRows = filteredMessages;
 
   // Lightweight pre-send deliverability lint — proactive warnings shown in the composer.
   // Deliverability guardrail (#2): check the sending domain's SPF/DMARC when compose opens.
@@ -791,6 +769,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
   const loadContacts = useCallback(async () => {
     if (step !== "client" || activeModule !== "contacts") return;
+    // Reloads on every keystroke in the search box, so responses can land out of order and a stale
+    // one would leave the table showing results for a query the user has already moved past.
+    const requestId = ++loadContactsRequestRef.current;
+    const isStale = () => requestId !== loadContactsRequestRef.current;
     setContactsLoading(true);
     setContactsError("");
     try {
@@ -808,6 +790,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       if (!response.ok) {
         throw new Error(payload?.message || "Failed to load contacts.");
       }
+      if (isStale()) return;
       setContacts(Array.isArray(payload?.contacts) ? payload.contacts : []);
       const pagination = payload?.pagination || {};
       const total = Number(pagination.total || 0);
@@ -817,12 +800,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       setContactsTotalCount(total);
       setContactsTotalPages(totalPages);
     } catch (error) {
+      if (isStale()) return;
       setContacts([]);
       setContactsTotalCount(0);
       setContactsTotalPages(1);
       setContactsError(error instanceof Error ? error.message : "Failed to load contacts.");
     } finally {
-      setContactsLoading(false);
+      if (!isStale()) setContactsLoading(false);
     }
   }, [activeModule, contactCurrentPage, debouncedContactSearch, contactSourceFilter, contactTagFilter, step]);
 
@@ -1542,7 +1526,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const loadGmailConnections = useCallback(async () => {
     setGmailLoading(true);
     try {
-      const response = await fetch("/api/gmail/status");
+      // Both together: these reads are independent, and this pair gates the whole panel opening —
+      // waiting for status before even asking for preferences cost a full round trip of blank screen.
+      const [response, prefRes] = await Promise.all([
+        fetch("/api/gmail/status"),
+        fetch("/api/gmail/account-preferences").catch(() => null),
+      ]);
       if (!response.ok) {
         setGmailAccounts([]);
         setSelectedAccounts([]);
@@ -1565,8 +1554,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       // Accounts default to enabled; only accounts explicitly disabled in settings are excluded.
       const disabled = new Set<string>();
       try {
-        const prefRes = await fetch("/api/gmail/account-preferences");
-        if (prefRes.ok) {
+        if (prefRes?.ok) {
           const prefData = await prefRes.json();
           for (const pref of Array.isArray(prefData?.preferences) ? prefData.preferences : []) {
             if (pref?.enabled === false && typeof pref?.accountEmail === "string") disabled.add(pref.accountEmail.toLowerCase());
@@ -1672,7 +1660,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       setMessages((prev) => prev.filter((m) => !affected.has(`${m.accountEmail}::${m.id}`)));
       setSelectedRows([]);
       invalidateMessagesCache();
-      await loadMailboxCounts();
+      // Not awaited: the rows are already gone from the view, so holding the button disabled until
+      // the badge numbers come back only makes the action feel slower than it was.
+      void loadMailboxCounts();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Could not unstar the selected messages.");
     } finally {
@@ -1733,6 +1723,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       if (messagesCacheRef.current.size > MESSAGE_CACHE_LIMIT) {
         const oldest = messagesCacheRef.current.keys().next().value;
         if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
+      }
+      // Self-heal the mark-read latch: anything Gmail still reports as unread must be markable
+      // again, including messages marked unread from another client since this page loaded.
+      for (const message of nextMessages as MessageRow[]) {
+        if (message.unread) markedReadRef.current.delete(`${message.accountEmail}::${message.id}`);
       }
       setMessages(nextMessages);
       setAccountErrors(nextAccountErrors);
@@ -1938,6 +1933,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
   // Opening an unread email marks it read the moment it opens: locally first (so going back
   // shows it read immediately) and on Gmail in the background. Keyed by id so it fires once.
+  /**
+   * Messages already marked read this session, so opening one does not POST twice while the
+   * optimistic update propagates. Entries must be cleared whenever a message becomes unread again —
+   * marking one unread and reopening it used to hit this latch and silently never mark it read.
+   */
   const markedReadRef = useRef<Set<string>>(new Set());
   /** accountEmail::id -> detail payload, so reopening a message is instant. */
   const detailCacheRef = useRef<Map<string, MessageDetail>>(new Map());
@@ -1967,6 +1967,40 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       .catch(() => null);
   }, [selectedMessage, viewMode, loadMailboxCounts]);
 
+  /**
+   * Build a MessageDetail from an API payload.
+   *
+   * Shared by the reader and the hover prefetch, which each had their own copy of this and had
+   * already drifted — the prefetch kept no fallbacks, so a payload missing a field cached a blank
+   * where the reader would have shown the row's own value.
+   */
+  const toMessageDetail = useCallback((payload: any, fallback?: MessageRow): MessageDetail => {
+    const str = (value: unknown, alternative?: string) =>
+      typeof value === "string" ? value : alternative;
+    return {
+      bodyHtml: str(payload?.bodyHtml, "") as string,
+      bodyText: str(payload?.bodyText, "") as string,
+      fromRaw: str(payload?.fromRaw, fallback?.fromRaw),
+      toRaw: str(payload?.toRaw, fallback?.toRaw),
+      subject: str(payload?.subject, fallback?.subject),
+      replyTo: str(payload?.replyTo, fallback?.replyTo),
+      date: str(payload?.date, fallback?.date),
+      timestamp: typeof payload?.timestamp === "number" ? payload.timestamp : fallback?.timestamp,
+      messageIdHeader: str(payload?.messageIdHeader, fallback?.messageIdHeader),
+      references: str(payload?.references, fallback?.references),
+      senderPhotoUrl: str(payload?.senderPhotoUrl, "") as string,
+      senderAvatarSources: Array.isArray(payload?.senderAvatarSources) ? payload.senderAvatarSources : [],
+      threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
+      trackers:
+        payload?.trackers && typeof payload.trackers.count === "number"
+          ? {
+              count: payload.trackers.count,
+              vendors: Array.isArray(payload.trackers.vendors) ? payload.trackers.vendors : [],
+            }
+          : undefined,
+    } as MessageDetail;
+  }, []);
+
   /** Fetch a message's detail into the cache. Shared by the reader and hover prefetch. */
   const fetchDetailInto = useCallback(async (accountEmail: string, messageId: string) => {
     const key = `${accountEmail}::${messageId}`;
@@ -1978,31 +2012,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       if (!response.ok) return;
       const payload = await response.json().catch(() => null);
       if (!payload) return;
-      detailCacheRef.current.set(key, {
-        bodyHtml: typeof payload?.bodyHtml === "string" ? payload.bodyHtml : "",
-        bodyText: typeof payload?.bodyText === "string" ? payload.bodyText : "",
-        fromRaw: payload?.fromRaw,
-        toRaw: payload?.toRaw,
-        subject: payload?.subject,
-        replyTo: payload?.replyTo,
-        date: payload?.date,
-        timestamp: payload?.timestamp,
-        messageIdHeader: payload?.messageIdHeader,
-        references: payload?.references,
-        senderPhotoUrl: typeof payload?.senderPhotoUrl === "string" ? payload.senderPhotoUrl : "",
-          senderAvatarSources: Array.isArray(payload?.senderAvatarSources) ? payload.senderAvatarSources : [],
-        threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
-        trackers:
-          payload?.trackers && typeof payload.trackers.count === "number"
-            ? { count: payload.trackers.count, vendors: Array.isArray(payload.trackers.vendors) ? payload.trackers.vendors : [] }
-            : undefined,
-      } as MessageDetail);
+      detailCacheRef.current.set(key, toMessageDetail(payload));
     } catch {
       /* prefetch is best-effort */
     } finally {
       detailInFlightRef.current.delete(key);
     }
-  }, []);
+  }, [toMessageDetail]);
 
   useEffect(() => {
     if (!selectedMessage || viewMode !== "message") return;
@@ -2015,6 +2031,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       setDetailError("");
       return;
     }
+    // Guards against a slow open losing a race with a newer one: open a heavy message, click a
+    // light one before it lands, and the first response used to overwrite the second, leaving the
+    // new message's header above the old message's body. The cache write is still allowed — it is
+    // keyed by message, so it is correct regardless of which message is on screen now.
+    let cancelled = false;
     const loadDetail = async () => {
       setDetailLoading(true);
       setDetailError("");
@@ -2028,36 +2049,22 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         if (!response.ok) {
           throw new Error(payload?.message || "Failed to load message detail.");
         }
-        const detail = {
-          bodyHtml: typeof payload?.bodyHtml === "string" ? payload.bodyHtml : "",
-          bodyText: typeof payload?.bodyText === "string" ? payload.bodyText : "",
-          fromRaw: typeof payload?.fromRaw === "string" ? payload.fromRaw : selectedMessage.fromRaw,
-          toRaw: typeof payload?.toRaw === "string" ? payload.toRaw : selectedMessage.toRaw,
-          subject: typeof payload?.subject === "string" ? payload.subject : selectedMessage.subject,
-          replyTo: typeof payload?.replyTo === "string" ? payload.replyTo : selectedMessage.replyTo,
-          date: typeof payload?.date === "string" ? payload.date : selectedMessage.date,
-          timestamp: typeof payload?.timestamp === "number" ? payload.timestamp : selectedMessage.timestamp,
-          messageIdHeader:
-            typeof payload?.messageIdHeader === "string" ? payload.messageIdHeader : selectedMessage.messageIdHeader,
-          references: typeof payload?.references === "string" ? payload.references : selectedMessage.references,
-          senderPhotoUrl: typeof payload?.senderPhotoUrl === "string" ? payload.senderPhotoUrl : "",
-          senderAvatarSources: Array.isArray(payload?.senderAvatarSources) ? payload.senderAvatarSources : [],
-          threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
-          trackers:
-            payload?.trackers && typeof payload.trackers.count === "number"
-              ? { count: payload.trackers.count, vendors: Array.isArray(payload.trackers.vendors) ? payload.trackers.vendors : [] }
-              : undefined,
-        };
+        const detail = toMessageDetail(payload, selectedMessage);
         detailCacheRef.current.set(`${selectedMessage.accountEmail}::${selectedMessage.id}`, detail as MessageDetail);
+        if (cancelled) return;
         setSelectedMessageDetail(detail);
       } catch (error) {
+        if (cancelled) return;
         setDetailError(error instanceof Error ? error.message : "Failed to load message detail.");
         setSelectedMessageDetail(null);
       } finally {
-        setDetailLoading(false);
+        if (!cancelled) setDetailLoading(false);
       }
     };
     loadDetail();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMessage?.id, selectedMessage?.accountEmail, viewMode]);
 
@@ -2389,6 +2396,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       if (!isReadToggle) actionInFlightRef.current = true;
 
       setActionError("");
+      // Marking unread clears the "already marked read" latch, or reopening the message would hit it
+      // and skip the mark-read entirely — the message would stay unread no matter how often it was
+      // opened. Cleared before the optimistic pass so it holds even if the Gmail call then fails.
+      if (action === "markUnread") {
+        for (const message of selectedMessageRows) {
+          markedReadRef.current.delete(`${message.accountEmail}::${message.id}`);
+        }
+      }
       // Optimistic pass: mutate the list immediately so the click lands instantly. The
       // authoritative pass below reconciles once Gmail answers. (Previously every action
       // awaited the round trip AND greyed the toolbar out for its duration.)
@@ -3747,6 +3762,17 @@ ${sourceText}`;
   // The toolbar stays fully populated on an empty mailbox — an empty Inbox should still show
   // its count, refresh, search and paging, exactly like a full one. Only select-all is
   // disabled, since there is genuinely nothing to select.
+  /**
+   * Whether this view may move messages between mailboxes (Move To, Archive).
+   *
+   * One predicate rather than the module name repeated at each control: this rule was missed at some
+   * of them twice, leaving Archive live in a view it had already been removed from.
+   *
+   * Starred is a label, not a mailbox, so moving out of it (Archive included) is disorienting. Sent
+   * is a record of what was sent — filing those into other mailboxes has no meaning.
+   */
+  const allowsMailboxMoves = activeModule !== "starred" && activeModule !== "sent";
+
   const mailboxListIsEmpty = !messagesLoading && conversationRows.length === 0;
   const showListSearch = true;
   const showListPaging = true;
@@ -4247,7 +4273,7 @@ ${sourceText}`;
                                       </button>
                                     </>
                                   ) : null}
-                                  {activeModule !== "drafts" && activeModule !== "starred" ? (
+                                  {activeModule !== "drafts" && allowsMailboxMoves ? (
                                     <div ref={moveListMenuRef} className="relative">
                                       <button
                                         type="button"
@@ -4306,7 +4332,7 @@ ${sourceText}`;
                                       meaningful action and sits by Refresh. */}
                                   {activeModule !== "drafts" ? (
                                     <>
-                                      {activeModule !== "starred" ? (
+                                      {allowsMailboxMoves ? (
                                         <button
                                           type="button"
                                           onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
@@ -4792,7 +4818,10 @@ ${sourceText}`;
                                   type="button"
                                   /* Drag onto a sidebar mailbox or label to move it there.
                                      Compose drafts live only locally, so they aren't draggable. */
-                                  draggable={!message.isComposeDraft}
+                                  /* Dragging a row onto a sidebar mailbox moves it there, so it is
+                                     off wherever moving between mailboxes is not allowed — otherwise
+                                     it would be a way around the hidden Move To and Archive. */
+                                  draggable={!message.isComposeDraft && allowsMailboxMoves}
                                   onDragStart={(event) => startMessageDrag(event, message)}
                                   onDragEnd={endMessageDrag}
                                   /* Warm the reader while the pointer is on the row, so opening
@@ -4898,15 +4927,6 @@ ${sourceText}`;
 
                                   {/* Subject leads, snippet trails in a quieter tone. */}
                                   <span className="flex min-w-0 items-center gap-2">
-                                    {message.threadCount && message.threadCount > 1 ? (
-                                      <span
-                                        className="email-tip flex shrink-0 items-center text-[#8F88A8]"
-                                        data-tip={`${message.threadCount} messages in this conversation`}
-                                        aria-label={`${message.threadCount} messages in this conversation`}
-                                      >
-                                        <FiCornerUpRight className="h-3.5 w-3.5" aria-hidden />
-                                      </span>
-                                    ) : null}
                                     <span className="min-w-0 truncate text-[13px]">
                                       <span className={message.unread ? "font-semibold text-white" : "font-normal text-[#CFC9E0]"}>
                                         {message.subject || "(No Subject)"}
@@ -5024,10 +5044,9 @@ ${sourceText}`;
                               </div>
                             ) : null}
                           </div>
-                          {/* Starred is a label view, not a mailbox — moving a message out of it
-                              (Archive included) was disorienting, so the whole menu is hidden there
-                              to match the list toolbar. */}
-                          <div ref={moveMessageMenuRef} className={`relative ${activeModule === "starred" ? "hidden" : ""}`}>
+                          {/* Hidden wherever moving between mailboxes is meaningless — see
+                              allowsMailboxMoves. */}
+                          <div ref={moveMessageMenuRef} className={`relative ${allowsMailboxMoves ? "" : "hidden"}`}>
                             <button
                               type="button"
                               onClick={() => setMoveMenuOpen((prev) => (prev === "message" ? null : "message"))}
@@ -5077,7 +5096,7 @@ ${sourceText}`;
                               </div>
                             ) : null}
                           </div>
-                          {activeModule !== "starred" ? (
+                          {allowsMailboxMoves ? (
                             <button
                               type="button"
                               onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
@@ -5135,9 +5154,10 @@ ${sourceText}`;
                                 loading="eager"
                                 decoding="async"
                                 onError={() => setSenderAvatarIndex((i) => i + 1)}
-                                className={`h-10 w-10 shrink-0 rounded-full border border-[#E5E7EB] bg-white ${
-                                  senderAvatar.kind === "logo" ? "object-contain p-1.5" : "object-cover"
-                                }`}
+                                /* Fills the circle. Padding a logo inside it left a small mark
+                                   floating in a white ring, which read as a half-loaded image;
+                                   sources here are square, so cover crops nothing meaningful. */
+                                className="h-10 w-10 shrink-0 rounded-full border border-[#E5E7EB] bg-white object-cover"
                               />
                             ) : (
                               <div className="w-10 h-10 rounded-full bg-[#ECE3FF] text-[#5B21B6] border border-[#E5E7EB] flex items-center justify-center text-sm font-semibold">
