@@ -1521,7 +1521,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       <Head>
         <title>Vierra | Email Settings</title>
       </Head>
-      <div className={`email-shell flex h-screen flex-col overflow-hidden ${pageFont.className}`}>
+      <div data-theme="light" className={`email-shell flex h-screen flex-col overflow-hidden ${pageFont.className}`}>
         <header className="email-toolbar flex h-14 shrink-0 items-center gap-4 px-5">
           <Link href="/panel" className="inline-flex shrink-0 items-center" aria-label="Admin panel">
             <Image

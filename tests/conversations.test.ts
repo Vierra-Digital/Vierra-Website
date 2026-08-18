@@ -131,3 +131,39 @@ describe("conversationFor (what the reader shows)", () => {
     expect(conversationFor(messages, "missing")).toHaveLength(2);
   });
 });
+
+describe("the Dan case: a sender's second email replies to something in our Sent folder", () => {
+  // Dan sends #1. We reply (that message lives in Sent, not in this mailbox). Dan replies to *our*
+  // message. Dan #2 still lists Dan #1 in its References ancestry, so linking on the whole chain
+  // merged both onto one row with a count of 2 — the reported bug. Linking on the immediate parent
+  // only breaks the chain at our absent reply, which is what makes these two rows.
+  const inboxPage = [
+    m("dan1", "T", "<dan-1@x>"),
+    m("dan2", "T", "<dan-2@x>", "<dan-1@x> <ours@x>", "<ours@x>"),
+  ];
+
+  it("shows two rows, not one row counted as two", () => {
+    const rows = groupConversations(inboxPage);
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.threadCount)).toEqual([1, 1]);
+  });
+
+  it("still falls back to the tail of References when In-Reply-To is missing", () => {
+    const noInReplyTo = [
+      m("dan1", "T", "<dan-1@x>"),
+      m("dan2", "T", "<dan-2@x>", "<dan-1@x> <ours@x>"),
+    ];
+    expect(groupConversations(noInReplyTo)).toHaveLength(2);
+  });
+
+  it("keeps a chain together while every link in it is present", () => {
+    const fullChain = [
+      m("a", "T", "<a@x>"),
+      m("b", "T", "<b@x>", "<a@x>", "<a@x>"),
+      m("c", "T", "<c@x>", "<a@x> <b@x>", "<b@x>"),
+    ];
+    const rows = groupConversations(fullChain);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].threadCount).toBe(3);
+  });
+});

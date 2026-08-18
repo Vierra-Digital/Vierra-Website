@@ -232,7 +232,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const scannedIdsRef = useRef<Set<string>>(new Set());
   /** messageId → tracker verdict. Filled in just after the list paints (see the scan effect). */
   /** Index into the sender's ordered avatar candidates; advanced on each image error. */
-  const [senderAvatarIndex, setSenderAvatarIndex] = useState(0);
   const [messageTrackers, setMessageTrackers] = useState<
     Record<string, { tracked: boolean; count: number; vendors: string[]; hasAttachment?: boolean }>
   >({});
@@ -1885,29 +1884,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // linked conversation and switch to the reader. Matches by threadId and opens whichever
   // message in that thread is loaded — the reader then renders the full chain (threadMessages
   // from message-detail). Runs once when a row from the target thread appears.
-  // Clear the avatar-failure flag whenever a different message is opened, so one sender's dead
-  // photo URL doesn't suppress every later sender's picture. Keyed on the id so it covers every
-  // path that opens a message (list click, deep link, thread navigation).
-  useEffect(() => {
-    setSenderAvatarIndex(0);
-  }, [selectedMessageId]);
-
-  /**
-   * Current avatar URL for the open message's sender: the Google Contacts photo when one exists,
-   * then Gravatar, then the company favicon. Empty once every candidate has errored, which is the
-   * signal to render the initials avatar. Contacts-only lookup meant most senders had no photo at
-   * all, which is why pictures appeared not to load.
-   */
-  const senderAvatar = useMemo(() => {
-    const sources = selectedMessageDetail?.senderAvatarSources ?? [];
-    if (sources.length === 0) {
-      // Older payloads carry only the single contact photo.
-      const legacy = selectedMessageDetail?.senderPhotoUrl || "";
-      return senderAvatarIndex === 0 && legacy ? { url: legacy, kind: "photo" as const } : null;
-    }
-    return sources[senderAvatarIndex] ?? null;
-  }, [selectedMessageDetail, senderAvatarIndex]);
-
   useEffect(() => {
     if (deepLinkAppliedRef.current || !initialOpenThreadId) return;
     const row = messages.find((m) => m.threadId === initialOpenThreadId);
@@ -3735,12 +3711,23 @@ ${sourceText}`;
   const showListPaging = true;
 
   return (
-    <div className={`email-shell relative w-full h-full text-[#1E1B2E] flex flex-col overflow-hidden ${panelFont.className}`}>
+    /* data-theme drives the whole panel palette. Light is the default so the frame
+       matches the white sheet the message HTML renders on; setting it to "dark"
+       restores the previous dark theme, which is kept intact in globals.css. */
+    <div
+      data-theme="light"
+      className={`email-shell relative w-full h-full text-[#1E1B2E] flex flex-col overflow-hidden ${panelFont.className}`}
+    >
       <style jsx global>{`
-        /* App shell — a flat, modern dark canvas (no animated starfield). One soft
-           brand glow off the top edge keeps it from reading as a plain black box,
-           and it costs nothing to paint since it never moves. */
+        /* App shell. The same soft brand glow off the top edge in both themes — it is
+           what keeps the canvas from reading as a plain flat slab — over a light or
+           dark ground. It never moves, so it costs nothing to paint. */
         .email-shell {
+          background:
+            radial-gradient(115% 70% at 50% -12%, rgba(112, 28, 192, 0.07) 0%, rgba(112, 28, 192, 0.02) 45%, transparent 72%),
+            #FFFFFF;
+        }
+        .email-shell[data-theme="dark"] {
           background:
             radial-gradient(115% 70% at 50% -12%, rgba(112, 28, 192, 0.28) 0%, rgba(112, 28, 192, 0.06) 45%, transparent 72%),
             #0C0715;
@@ -3767,12 +3754,12 @@ ${sourceText}`;
                 alt="Vierra"
                 width={220}
                 height={64}
-                className="pointer-events-none mx-auto mb-8 h-10 w-auto select-none opacity-95 brightness-0 invert"
+                className="pointer-events-none mx-auto mb-8 h-10 w-auto select-none opacity-95"
                 draggable={false}
                 priority
               />
-              <h1 className="text-xl font-semibold tracking-tight text-white">No Google accounts connected</h1>
-              <p className="mt-2 text-sm text-white/70">Connect Gmail from your account settings, then come back here.</p>
+              <h1 className="text-xl font-semibold tracking-tight text-[#1E1B2E]">No Google accounts connected</h1>
+              <p className="mt-2 text-sm text-[#6B7280]">Connect Gmail from your account settings, then come back here.</p>
             </div>
           </div>
         )
@@ -5108,32 +5095,6 @@ ${sourceText}`;
                         <div className="flex-1 overflow-y-auto px-6 pt-5 pb-10">
                           <h2 className="text-[22px] font-semibold tracking-tight text-[#1E1B2E]">{selectedMessage.subject || "(No Subject)"}</h2>
                           <div className="mt-4 flex items-start gap-3">
-                            {senderAvatar ? (
-                              // Deliberately a plain <img>, not next/image: the optimizer rejects any
-                              // host absent from images.remotePatterns (Google serves contact photos
-                              // from lh3.googleusercontent.com), and those URLs 403 when a referrer
-                              // is sent. onError advances to the next candidate — contact photo,
-                              // Gravatar, then company favicon — and initials show once they run out.
-                              /* eslint-disable-next-line @next/next/no-img-element */
-                              <img
-                                key={senderAvatar.url}
-                                src={senderAvatar.url}
-                                alt=""
-                                width={40}
-                                height={40}
-                                referrerPolicy="no-referrer"
-                                loading="eager"
-                                decoding="async"
-                                onError={() => setSenderAvatarIndex((i) => i + 1)}
-                                className={`h-10 w-10 shrink-0 rounded-full border border-[#E5E7EB] bg-white ${
-                                  senderAvatar.kind === "logo" ? "object-contain p-1.5" : "object-cover"
-                                }`}
-                              />
-                            ) : (
-                              <div className="w-10 h-10 rounded-full bg-[#ECE3FF] text-[#5B21B6] border border-[#E5E7EB] flex items-center justify-center text-sm font-semibold">
-                                {getInitials(selectedMessageDetail?.fromRaw || selectedMessage.fromRaw || selectedMessage.from)}
-                              </div>
-                            )}
                             <div className="text-xs text-[#6B7280] space-y-1">
                               <p>From: {formatIdentity(selectedMessageDetail?.fromRaw || selectedMessage.fromRaw || selectedMessage.from || "-")}</p>
                               <p>To: {formatIdentity(selectedMessageDetail?.toRaw || selectedMessage.toRaw || selectedMessage.to || "-")}</p>

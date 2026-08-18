@@ -172,6 +172,9 @@ async function fetchGmailMessage(accessToken: string, id: string) {
   params.append("metadataHeaders", "Date");
   params.append("metadataHeaders", "Message-ID");
   params.append("metadataHeaders", "References");
+  // Names the one message a reply directly answers. Without it we can only guess the immediate
+  // parent from the tail of References, which is why conversation splitting needs it requested here.
+  params.append("metadataHeaders", "In-Reply-To");
   const response = await fetchWithRetry(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?${params.toString()}`,
     {

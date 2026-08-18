@@ -41,22 +41,31 @@ export default function SenderAvatar({
   initials: string;
   size?: number;
 }) {
-  const [failed, setFailed] = useState(false);
+  // "loaded" matters as much as "failed": many logos are transparent PNGs, so initials left sitting
+  // behind a successfully loaded image showed through it and the two read as one overlapping mess.
+  const [status, setStatus] = useState<"pending" | "loaded" | "failed">("pending");
   const address = email.trim().toLowerCase();
-  const showImage = Boolean(address.includes("@")) && !failed;
+  const canFetch = address.includes("@") && status !== "failed";
   const colors = paletteFor(address || initials);
 
   return (
     <span
       className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-full"
-      style={{ width: size, height: size, backgroundColor: colors.bg }}
+      style={{
+        width: size,
+        height: size,
+        // White behind a loaded image, because logos are drawn for a light background and their
+        // transparency would otherwise pick up the initials colour behind them.
+        backgroundColor: status === "loaded" ? "#FFFFFF" : colors.bg,
+      }}
       aria-hidden
     >
-      {/* Initials sit underneath: they show through for a 204 (empty image) with no second paint. */}
-      <span className="absolute text-[10px] font-semibold leading-none" style={{ color: colors.fg }}>
-        {initials}
-      </span>
-      {showImage ? (
+      {status === "loaded" ? null : (
+        <span className="absolute text-[10px] font-semibold leading-none" style={{ color: colors.fg }}>
+          {initials}
+        </span>
+      )}
+      {canFetch ? (
         /* Plain <img>: next/image rejects hosts outside images.remotePatterns, and this URL is our
            own proxy precisely so the browser never sends a referrer to Gravatar or Google. */
         /* eslint-disable-next-line @next/next/no-img-element */
@@ -67,8 +76,11 @@ export default function SenderAvatar({
           height={size}
           loading="lazy"
           decoding="async"
-          onError={() => setFailed(true)}
-          className="relative h-full w-full object-cover"
+          onLoad={() => setStatus("loaded")}
+          onError={() => setStatus("failed")}
+          /* Sources are square (Gravatar and favicons both), so cover fills the circle without
+             cropping anything meaningful. Hidden until it loads so a broken load never half-paints. */
+          className={`relative h-full w-full object-cover ${status === "loaded" ? "" : "opacity-0"}`}
         />
       ) : null}
     </span>

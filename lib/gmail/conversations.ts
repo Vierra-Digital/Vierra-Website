@@ -34,9 +34,22 @@ function ownId(message: GroupableMessage): string {
   return parseMessageIds(message.messageIdHeader)[0] || "";
 }
 
-/** Every Message-ID this message points at. */
-function parentIds(message: GroupableMessage): string[] {
-  return [...parseMessageIds(message.inReplyTo), ...parseMessageIds(message.references)];
+/**
+ * The Message-ID of this message's *immediate* parent — the one message it directly answers.
+ *
+ * Deliberately not the whole of References. References carries the entire ancestry of a thread, so
+ * linking on any entry pulls every message in that thread into one row: a sender's second email
+ * still lists their first in its ancestry even when it actually replies to something we sent in
+ * between, which is how two visibly separate incoming emails collapsed onto a single row.
+ *
+ * In-Reply-To names the immediate parent directly. When it is absent, RFC 5322 puts the immediate
+ * parent last in References, so that is the fallback.
+ */
+function parentId(message: GroupableMessage): string {
+  const direct = parseMessageIds(message.inReplyTo);
+  if (direct.length > 0) return direct[direct.length - 1];
+  const chain = parseMessageIds(message.references);
+  return chain.length > 0 ? chain[chain.length - 1] : "";
 }
 
 /**
@@ -73,12 +86,15 @@ export function conversationKeys(messages: GroupableMessage[]): string[] {
     if (!indexById.has(key)) indexById.set(key, index);
   });
 
+  // Link each message to its immediate parent only. A longer chain still forms one component while
+  // every link in it is present; when the message in between is elsewhere (typically our own reply,
+  // which lives in Sent rather than in this mailbox), the chain breaks and both halves get a row.
   messages.forEach((message, index) => {
-    for (const ref of parentIds(message)) {
-      const target = indexById.get(`${message.threadId || ""}::${ref}`);
-      if (target === undefined || target === index) continue;
-      union(index, target);
-    }
+    const ref = parentId(message);
+    if (!ref) return;
+    const target = indexById.get(`${message.threadId || ""}::${ref}`);
+    if (target === undefined || target === index) return;
+    union(index, target);
   });
 
   // Stable key per component: thread id plus the earliest member's index.
