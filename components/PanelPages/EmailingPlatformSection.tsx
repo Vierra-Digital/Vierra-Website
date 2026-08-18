@@ -1721,6 +1721,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         const oldest = messagesCacheRef.current.keys().next().value;
         if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
       }
+      // Self-heal the mark-read latch: anything Gmail still reports as unread must be markable
+      // again, including messages marked unread from another client since this page loaded.
+      for (const message of nextMessages as MessageRow[]) {
+        if (message.unread) markedReadRef.current.delete(`${message.accountEmail}::${message.id}`);
+      }
       setMessages(nextMessages);
       setAccountErrors(nextAccountErrors);
       setHasNextPage(nextHasNextPage);
@@ -1919,6 +1924,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
   // Opening an unread email marks it read the moment it opens: locally first (so going back
   // shows it read immediately) and on Gmail in the background. Keyed by id so it fires once.
+  /**
+   * Messages already marked read this session, so opening one does not POST twice while the
+   * optimistic update propagates. Entries must be cleared whenever a message becomes unread again —
+   * marking one unread and reopening it used to hit this latch and silently never mark it read.
+   */
   const markedReadRef = useRef<Set<string>>(new Set());
   /** accountEmail::id -> detail payload, so reopening a message is instant. */
   const detailCacheRef = useRef<Map<string, MessageDetail>>(new Map());
@@ -2377,6 +2387,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       if (!isReadToggle) actionInFlightRef.current = true;
 
       setActionError("");
+      // Marking unread clears the "already marked read" latch, or reopening the message would hit it
+      // and skip the mark-read entirely — the message would stay unread no matter how often it was
+      // opened. Cleared before the optimistic pass so it holds even if the Gmail call then fails.
+      if (action === "markUnread") {
+        for (const message of selectedMessageRows) {
+          markedReadRef.current.delete(`${message.accountEmail}::${message.id}`);
+        }
+      }
       // Optimistic pass: mutate the list immediately so the click lands instantly. The
       // authoritative pass below reconciles once Gmail answers. (Previously every action
       // awaited the round trip AND greyed the toolbar out for its duration.)
@@ -3735,6 +3753,17 @@ ${sourceText}`;
   // The toolbar stays fully populated on an empty mailbox — an empty Inbox should still show
   // its count, refresh, search and paging, exactly like a full one. Only select-all is
   // disabled, since there is genuinely nothing to select.
+  /**
+   * Whether this view may move messages between mailboxes (Move To, Archive).
+   *
+   * One predicate rather than the module name repeated at each control: this rule was missed at some
+   * of them twice, leaving Archive live in a view it had already been removed from.
+   *
+   * Starred is a label, not a mailbox, so moving out of it (Archive included) is disorienting. Sent
+   * is a record of what was sent — filing those into other mailboxes has no meaning.
+   */
+  const allowsMailboxMoves = activeModule !== "starred" && activeModule !== "sent";
+
   const mailboxListIsEmpty = !messagesLoading && conversationRows.length === 0;
   const showListSearch = true;
   const showListPaging = true;
@@ -4235,7 +4264,7 @@ ${sourceText}`;
                                       </button>
                                     </>
                                   ) : null}
-                                  {activeModule !== "drafts" && activeModule !== "starred" ? (
+                                  {activeModule !== "drafts" && allowsMailboxMoves ? (
                                     <div ref={moveListMenuRef} className="relative">
                                       <button
                                         type="button"
@@ -4294,7 +4323,7 @@ ${sourceText}`;
                                       meaningful action and sits by Refresh. */}
                                   {activeModule !== "drafts" ? (
                                     <>
-                                      {activeModule !== "starred" ? (
+                                      {allowsMailboxMoves ? (
                                         <button
                                           type="button"
                                           onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
@@ -4780,7 +4809,10 @@ ${sourceText}`;
                                   type="button"
                                   /* Drag onto a sidebar mailbox or label to move it there.
                                      Compose drafts live only locally, so they aren't draggable. */
-                                  draggable={!message.isComposeDraft}
+                                  /* Dragging a row onto a sidebar mailbox moves it there, so it is
+                                     off wherever moving between mailboxes is not allowed — otherwise
+                                     it would be a way around the hidden Move To and Archive. */
+                                  draggable={!message.isComposeDraft && allowsMailboxMoves}
                                   onDragStart={(event) => startMessageDrag(event, message)}
                                   onDragEnd={endMessageDrag}
                                   /* Warm the reader while the pointer is on the row, so opening
@@ -5003,10 +5035,9 @@ ${sourceText}`;
                               </div>
                             ) : null}
                           </div>
-                          {/* Starred is a label view, not a mailbox — moving a message out of it
-                              (Archive included) was disorienting, so the whole menu is hidden there
-                              to match the list toolbar. */}
-                          <div ref={moveMessageMenuRef} className={`relative ${activeModule === "starred" ? "hidden" : ""}`}>
+                          {/* Hidden wherever moving between mailboxes is meaningless — see
+                              allowsMailboxMoves. */}
+                          <div ref={moveMessageMenuRef} className={`relative ${allowsMailboxMoves ? "" : "hidden"}`}>
                             <button
                               type="button"
                               onClick={() => setMoveMenuOpen((prev) => (prev === "message" ? null : "message"))}
@@ -5056,7 +5087,7 @@ ${sourceText}`;
                               </div>
                             ) : null}
                           </div>
-                          {activeModule !== "starred" ? (
+                          {allowsMailboxMoves ? (
                             <button
                               type="button"
                               onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
