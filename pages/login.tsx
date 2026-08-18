@@ -3,7 +3,7 @@ import { EMAIL_REGEX } from "@/lib/utils";
 import Image from "next/image";
 import Head from "next/head";
 import { inter } from "@/lib/fonts";
-import { motion } from "framer-motion";
+import { m as motion } from "framer-motion";
 import { Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
 import { useRouter } from "next/router";
 import { useSession } from "@/lib/session-client";
