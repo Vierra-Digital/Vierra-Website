@@ -476,6 +476,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const snoozeMenuRef = useRef<HTMLDivElement | null>(null);
   const [snoozeMenuOpen, setSnoozeMenuOpen] = useState(false);
   const moveMessageMenuRef = useRef<HTMLDivElement | null>(null);
+  const labelMenuRef = useRef<HTMLDivElement | null>(null);
   const contactFilterMenuRef = useRef<HTMLDivElement | null>(null);
   const inlineComposeRef = useRef<HTMLDivElement | null>(null);
   const editContactModalRef = useRef<HTMLDivElement | null>(null);
@@ -1858,11 +1859,30 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     };
   }, [snoozeMenuOpen]);
 
+  // Label menu dismisses on an outside click, exactly as Move To and Snooze do. It had no ref at
+  // all, so it stayed open until its own button was clicked again.
+  useEffect(() => {
+    if (!labelMenuOpen) return;
+    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
+      const targetNode = event.target as Node | null;
+      if (!targetNode) return;
+      if (labelMenuRef.current?.contains(targetNode)) return;
+      setLabelMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+    };
+  }, [labelMenuOpen]);
+
   // Any change of context (mailbox, label, opening a message, paging) closes open menus —
   // they used to survive navigation and hang over the new view.
   useEffect(() => {
     setMoveMenuOpen(null);
     setSnoozeMenuOpen(false);
+    setLabelMenuOpen(false);
   }, [activeModule, activeLabelId, viewMode, selectedMessageId, currentPage]);
 
   useEffect(() => {
@@ -4976,14 +4996,18 @@ ${sourceText}`;
                           Back
                         </button>
                         <div className="flex items-center gap-2">
+                          {/* Reply group leads, then every shared action in the same order as the
+                              list toolbar (star, spam, trash, read, move, archive, snooze), so the
+                              two toolbars are not two different sequences of the same icons.
+                              Reader-only actions (label, block) come last. */}
                           <button
                             type="button"
                             onClick={() => {
                               void openReplyCompose();
                             }}
-                            className={ICON_BUTTON}
+                            className={`${ICON_BUTTON} email-tip`}
                             aria-label="Reply"
-                            title="Reply"
+                            data-tip="Reply"
                           >
                             <FiCornerUpLeft className="w-4 h-4" />
                           </button>
@@ -4992,9 +5016,9 @@ ${sourceText}`;
                             onClick={() => {
                               void openReplyAllCompose();
                             }}
-                            className={ICON_BUTTON}
+                            className={`${ICON_BUTTON} email-tip`}
                             aria-label="Reply All"
-                            title="Reply All"
+                            data-tip="Reply All"
                           >
                             <FiUsers className="w-4 h-4" />
                           </button>
@@ -5003,57 +5027,65 @@ ${sourceText}`;
                             onClick={() => {
                               void openForwardCompose();
                             }}
-                            className={ICON_BUTTON}
+                            className={`${ICON_BUTTON} email-tip`}
                             aria-label="Forward"
-                            title="Forward"
+                            data-tip="Forward"
                           >
                             <FiSend className="w-4 h-4" />
+                          </button>
+
+                          <span className="mx-0.5 h-5 w-px bg-current opacity-15" aria-hidden />
+
+                          {/* Star was only ever on the list row, so an open message could not be
+                              starred without going back. In Starred this is the unstar the list
+                              offers in the same position. */}
+                          {selectedMessage ? (
+                            <button
+                              type="button"
+                              onClick={() => void toggleStar(selectedMessage)}
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label={selectedMessage.starred ? "Unstar" : "Star"}
+                              data-tip={selectedMessage.starred ? "Unstar" : "Star"}
+                            >
+                              <FiStar className={`w-4 h-4 ${selectedMessage.starred ? "fill-[#F5A623] text-[#F5A623]" : ""}`} />
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => applyAction(spamActionType)}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label={spamActionTitle}
+                            data-tip={spamActionTitle}
+                          >
+                            <FiAlertCircle className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label={deletesPermanently ? "Delete Permanently" : "Move To Trash"}
+                            data-tip={deletesPermanently ? "Delete Permanently" : "Move To Trash"}
+                          >
+                            <FiTrash2 className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
                             onClick={() => applyAction("markUnread")}
-                            className={ICON_BUTTON}
-                            title="Mark As Unread"
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label="Mark As Unread"
+                            data-tip="Mark As Unread"
                           >
                             <FiMail className="w-4 h-4" />
                           </button>
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={() => setLabelMenuOpen((open) => !open)}
-                              className={ICON_BUTTON}
-                              title="Label"
-                              aria-label="Label"
-                            >
-                              <FiTag className="w-4 h-4" />
-                            </button>
-                            {labelMenuOpen ? (
-                              <div className="absolute right-0 top-[calc(100%+6px)] z-20 max-h-64 min-w-[180px] overflow-y-auto rounded-lg border border-[#E5E7EB] bg-white shadow-lg py-1">
-                                {labels.length === 0 ? (
-                                  <div className="px-3 py-2 text-sm text-[#847FA0]">No labels yet.</div>
-                                ) : (
-                                  labels.map((label) => (
-                                    <button
-                                      key={`apply-${label.id}`}
-                                      type="button"
-                                      onClick={() => applyLabelToMessage(label.id)}
-                                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-[#374151] hover:bg-[#F3F4F6]"
-                                    >
-                                      <FiTag className="h-3.5 w-3.5 text-[#847FA0]" /> {label.name}
-                                    </button>
-                                  ))
-                                )}
-                              </div>
-                            ) : null}
-                          </div>
                           {/* Hidden wherever moving between mailboxes is meaningless — see
                               allowsMailboxMoves. */}
                           <div ref={moveMessageMenuRef} className={`relative ${allowsMailboxMoves ? "" : "hidden"}`}>
                             <button
                               type="button"
                               onClick={() => setMoveMenuOpen((prev) => (prev === "message" ? null : "message"))}
-                              className={ICON_BUTTON}
-                              title="Move To"
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label="Move To"
+                              data-tip="Move To"
                             >
                               <FiMove className="w-4 h-4" />
                             </button>
@@ -5102,33 +5134,88 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                              className={ICON_BUTTON}
-                              title={activeModule === "archive" ? "Unarchive" : "Archive"}
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label={activeModule === "archive" ? "Unarchive" : "Archive"}
+                              data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
                             >
                               <FiArchive className="w-4 h-4" />
                             </button>
                           ) : null}
-                          <button
-                            type="button"
-                            onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
-                            className={ICON_BUTTON}
-                            title={deletesPermanently ? "Delete Permanently" : "Trash"}
-                          >
-                            <FiTrash2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => applyAction(spamActionType)}
-                            className={ICON_BUTTON}
-                            title={spamActionTitle}
-                          >
-                            <FiAlertCircle className="w-4 h-4" />
-                          </button>
+                          {/* Snooze existed only on the list, so an open message had to be closed to
+                              snooze it. Same presets, same menu, same dismissal. */}
+                          <div ref={snoozeMenuRef} className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setSnoozeMenuOpen((open) => !open)}
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label="Snooze"
+                              data-tip="Snooze"
+                            >
+                              <FiClock className="w-4 h-4" />
+                            </button>
+                            {snoozeMenuOpen ? (
+                              <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 w-44">
+                                {(
+                                  [
+                                    ["later", "Later today"],
+                                    ["tomorrow", "Tomorrow"],
+                                    ["nextweek", "Next week"],
+                                  ] as const
+                                ).map(([preset, label]) => (
+                                  <button
+                                    key={preset}
+                                    type="button"
+                                    onClick={() => snoozeSelected(preset)}
+                                    className="email-menu-item block w-full px-2.5 py-[7px] text-left text-[12.5px] font-medium"
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <span className="mx-0.5 h-5 w-px bg-current opacity-15" aria-hidden />
+
+                          {/* Label: ref-scoped like every other menu here. It previously had no ref,
+                              so clicking outside it or changing view left it hanging open, and it was
+                              styled by hand instead of with the shared menu classes. */}
+                          <div ref={labelMenuRef} className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setLabelMenuOpen((open) => !open)}
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label="Label"
+                              data-tip="Label"
+                            >
+                              <FiTag className="w-4 h-4" />
+                            </button>
+                            {labelMenuOpen ? (
+                              <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 max-h-64 min-w-[180px] overflow-y-auto">
+                                {labels.length === 0 ? (
+                                  <div className="px-2.5 py-[7px] text-[12.5px] text-[#847FA0]">No labels yet.</div>
+                                ) : (
+                                  labels.map((label) => (
+                                    <button
+                                      key={`apply-${label.id}`}
+                                      type="button"
+                                      onClick={() => applyLabelToMessage(label.id)}
+                                      className="email-menu-item flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[12.5px] font-medium"
+                                    >
+                                      <FiTag className="h-3.5 w-3.5 shrink-0" />
+                                      <span className="truncate">{label.name}</span>
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
                           <button
                             type="button"
                             onClick={blockSelectedSender}
-                            className={ICON_BUTTON}
-                            title={selectedBlockedEntry ? "Unblock Sender" : "Block Sender"}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label={selectedBlockedEntry ? "Unblock Sender" : "Block Sender"}
+                            data-tip={selectedBlockedEntry ? "Unblock Sender" : "Block Sender"}
                           >
                             <FiX className="w-4 h-4" />
                           </button>
@@ -5311,7 +5398,9 @@ ${sourceText}`;
                                             !inlineComposeTo.trim() ||
                                             (!inlineComposeIntroText.trim() && !inlineComposeBodyText.trim())
                                           }
-                                          className="inline-flex items-center gap-2 rounded-full bg-[#701CC0] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#5f17a5] disabled:pointer-events-none disabled:opacity-45"
+                                          /* Same shape as the main composer's Send: a rectangle,
+                                             not a pill, so the two send buttons read as one control. */
+                                          className="inline-flex min-h-9 shrink-0 items-center gap-2 rounded bg-[#701CC0] px-4 text-sm font-medium text-white hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
                                         >
                                           <FiSend className="h-4 w-4" aria-hidden />
                                           {inlineComposeSending ? "Sending…" : "Send"}
@@ -5319,7 +5408,7 @@ ${sourceText}`;
                                         <button
                                           type="button"
                                           onClick={() => setInlineComposeMode(null)}
-                                          className="email-tip rounded-full p-2 text-[#6B7280] transition hover:text-[#1E1B2E]"
+                                          className="email-tip rounded p-2 text-[#6B7280] transition hover:text-[#1E1B2E]"
                                           data-tip="Discard reply"
                                           aria-label="Discard reply"
                                         >
