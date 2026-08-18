@@ -3,6 +3,7 @@ import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { prisma } from "@/lib/prisma";
 import { asStr } from "@/lib/api/parsing";
+import { mapInBatches } from "@/lib/batch";
 
 type ActionType =
   | "trash"
@@ -104,6 +105,30 @@ async function callGmailAction(accessToken: string, action: ActionType, messageI
   });
 }
 
+/**
+ * How many of a batch's Gmail calls run at once.
+ *
+ * Firing a whole selection in parallel is what produced "Too many concurrent requests for user":
+ * Gmail limits concurrency per user, so a 28-message bulk action had several items rejected with 429
+ * while the rest succeeded — a partial failure the user then had to retry by hand.
+ */
+const ACTION_CONCURRENCY = 5;
+/** Kept low deliberately: the client aborts the whole request at 15s, so retries must fit inside it. */
+const RATE_LIMIT_RETRIES = 2;
+
+/** Gmail signals rate limiting as 429, and as 403 with a rate-limit reason in the body. */
+function isRateLimited(status: number, body: string): boolean {
+  if (status === 429) return true;
+  return status === 403 && /rateLimitExceeded|userRateLimitExceeded|Too many concurrent requests/i.test(body);
+}
+
+/** Exponential backoff with jitter, so retried items in one batch don't resynchronise. */
+function backoffDelayMs(attempt: number): number {
+  return 300 * 2 ** attempt + Math.floor(Math.random() * 150);
+}
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export default withAuth(async (req, res, session) => {
   const action = asStr(req.body?.action) as ActionType;
   const items = normalizeItems(req.body?.items);
@@ -171,8 +196,10 @@ export default withAuth(async (req, res, session) => {
     }
   }
 
-  const results = await Promise.all(
-    items.map(async (item) => {
+  // Bounded concurrency rather than all at once — see ACTION_CONCURRENCY.
+  const results = await mapInBatches(
+    items,
+    async (item) => {
       const token = tokenMap.get(item.accountEmail);
       if (!token) {
         const owner = ownerMap.get(item.accountEmail);
@@ -184,17 +211,30 @@ export default withAuth(async (req, res, session) => {
       }
       try {
         const owner = ownerMap.get(item.accountEmail) || userId;
-        let response = await callGmailAction(token, action, item.messageId);
-        if (response.status === 401) {
-          const refreshResult = await getValidGmailAccessToken(owner, item.accountEmail, { forceRefresh: true });
-          if (!refreshResult.ok) {
-            return { ...item, ok: false, error: refreshResult.message };
+        let activeToken = token;
+        for (let attempt = 0; ; attempt += 1) {
+          let response = await callGmailAction(activeToken, action, item.messageId);
+          if (response.status === 401) {
+            const refreshResult = await getValidGmailAccessToken(owner, item.accountEmail, { forceRefresh: true });
+            if (!refreshResult.ok) {
+              return { ...item, ok: false, error: refreshResult.message };
+            }
+            activeToken = refreshResult.accessToken;
+            response = await callGmailAction(activeToken, action, item.messageId);
           }
-          response = await callGmailAction(refreshResult.accessToken, action, item.messageId);
-        }
-        if (!response.ok) {
+          if (response.ok) return { ...item, ok: true };
+
           const text = await response.text();
           const normalized = String(text || "");
+          // Rate limiting is transient and says nothing about this message, so retry it rather than
+          // reporting a failure the user can only fix by clicking the same button again.
+          if (isRateLimited(response.status, normalized) && attempt < RATE_LIMIT_RETRIES) {
+            await delay(backoffDelayMs(attempt));
+            continue;
+          }
+          if (isRateLimited(response.status, normalized)) {
+            return { ...item, ok: false, error: "Gmail is rate-limiting this account. Try these again in a moment." };
+          }
           if (response.status === 403 && /insufficientpermissions|insufficient permissions|forbidden/i.test(normalized)) {
             return {
               ...item,
@@ -204,7 +244,6 @@ export default withAuth(async (req, res, session) => {
           }
           return { ...item, ok: false, error: normalized || `Gmail action failed (${response.status})` };
         }
-        return { ...item, ok: true };
       } catch (error) {
         // A timeout aborts only this item's call, so the rest of the batch still reports normally.
         // Name it explicitly — "The operation was aborted" tells the user nothing actionable.
@@ -213,7 +252,8 @@ export default withAuth(async (req, res, session) => {
         }
         return { ...item, ok: false, error: error instanceof Error ? error.message : "Unknown error" };
       }
-    })
+    },
+    ACTION_CONCURRENCY
   );
 
   const failures = results.filter((result) => !result.ok);

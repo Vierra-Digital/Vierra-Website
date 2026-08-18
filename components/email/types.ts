@@ -41,7 +41,6 @@ export type MessageRow = {
   references: string;
   unread: boolean;
   starred?: boolean;
-  threadCount?: number;
   tracked: boolean;
   trackingOpenCount?: number;
   trackingClickCount?: number;

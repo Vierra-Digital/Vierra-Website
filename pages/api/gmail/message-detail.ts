@@ -5,6 +5,8 @@ import { extractHeader, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
 import { scanHtmlForTrackers } from "@/lib/email/trackerDetection";
 import { senderAvatarSources, senderDomain } from "@/lib/email/senderAvatar";
+import { resolveBimiLogoUrl } from "@/lib/email/bimi";
+import { getCachedSenderPhoto, setCachedSenderPhoto } from "@/lib/gmail/senderPhotoCache";
 
 function decodeBase64Url(data: string) {
   const padded = data.replace(/-/g, "+").replace(/_/g, "/");
@@ -128,8 +130,6 @@ async function inlineCidImages(
   return html;
 }
 
-type ThreadMessageRow = ReturnType<typeof parseThreadMessage>;
-
 async function fetchWithAuthRetry(
   url: string,
   getToken: (forceRefresh?: boolean) => Promise<string | null>
@@ -188,37 +188,27 @@ export default withAuth(async (req, res, session) => {
   const payload = await response.json();
   const currentMessage = parseThreadMessage(payload);
 
-  let threadMessages = [currentMessage];
-  if (currentMessage.threadId) {
-    const threadResponse = await fetchWithAuthRetry(
-      `https://gmail.googleapis.com/gmail/v1/users/me/threads/${encodeURIComponent(currentMessage.threadId)}?format=full`,
+  // The reader shows the one message that was opened, so the thread is never fetched. It used to
+  // pull threads.get?format=full — every body and attachment part in the thread — and then discard
+  // all but this message, which is the most expensive way possible to render a single email.
+  //
+  // Resolve inline (cid:) images so signature logos and pasted images actually render.
+  const resolvedCurrent = {
+    ...currentMessage,
+    bodyHtml: await inlineCidImages(
+      currentMessage.id,
+      currentMessage.bodyHtml,
+      currentMessage.inlineParts,
       getToken
-    );
-    if (threadResponse?.ok) {
-      const threadPayload = await threadResponse.json();
-      const rawMessages = Array.isArray(threadPayload?.messages) ? threadPayload.messages : [];
-      const parsedMessages = rawMessages
-        .map(parseThreadMessage)
-        .filter((message: ThreadMessageRow) => Boolean(message.id));
-      if (parsedMessages.length > 0) {
-        threadMessages = parsedMessages.sort((a: ThreadMessageRow, b: ThreadMessageRow) => a.timestamp - b.timestamp);
-      }
-    }
-  }
-
-  // Resolve inline (cid:) images so signature logos and pasted images actually render. Done per
-  // message and in parallel across the thread; each message degrades independently.
-  threadMessages = await Promise.all(
-    threadMessages.map(async (message: ThreadMessageRow) => ({
-      ...message,
-      bodyHtml: await inlineCidImages(message.id, message.bodyHtml, message.inlineParts, getToken),
-    }))
-  );
-  const resolvedCurrent =
-    threadMessages.find((message: ThreadMessageRow) => message.id === currentMessage.id) ?? currentMessage;
+    ),
+  };
+  const threadMessages = [resolvedCurrent];
 
   let senderPhotoUrl = "";
   const senderEmail = parseAddressFromHeader(currentMessage.fromRaw);
+  // The sender's own DNS-published logo. Independent of the contact lookups below, so it is started
+  // here and awaited once, rather than adding another round trip in front of the reader.
+  const bimiPromise = resolveBimiLogoUrl(senderDomain(senderEmail));
   if (senderEmail && senderEmail.includes("@")) {
     const trySearchContacts = async () => {
       const peopleQuery = encodeURIComponent(senderEmail);
@@ -264,8 +254,29 @@ export default withAuth(async (req, res, session) => {
       return "";
     };
 
-    senderPhotoUrl = (await trySearchContacts()) || (await tryPeopleConnections()) || "";
+    // Cached first: the reader response blocks on this lookup, and the same senders recur constantly.
+    const now = Date.now();
+    const cached = getCachedSenderPhoto(accountEmail, senderEmail, now);
+    if (cached !== undefined) {
+      senderPhotoUrl = cached;
+    } else {
+      // Concurrently, not in sequence: independent reads that the reader's response waits on.
+      // Priority is applied to the settled results, not to whichever answered first.
+      //
+      // Only saved contacts are searched. Google's "other contacts" (people corresponded with but
+      // never saved) cannot supply a photo at all — readMask there accepts just emailAddresses,
+      // metadata, names and phoneNumbers, so asking for photos returns 400. A personal address that
+      // is not a saved contact has no photo we are able to fetch from anywhere.
+      const [saved, connections] = await Promise.all([
+        trySearchContacts().catch(() => ""),
+        tryPeopleConnections().catch(() => ""),
+      ]);
+      senderPhotoUrl = saved || connections || "";
+      setCachedSenderPhoto(accountEmail, senderEmail, senderPhotoUrl, now);
+    }
   }
+
+  const senderBimiLogoUrl = await bimiPromise;
 
   res.status(200).json({
     bodyText: currentMessage.bodyText || payload?.snippet || "",
@@ -282,7 +293,7 @@ export default withAuth(async (req, res, session) => {
     // Ordered avatar sources (contact photo → Gravatar → company favicon). Built here so the md5
     // stays on the server: importing node:crypto into the panel would ship a polyfill to the
     // browser for one hash. The client walks these on image error, then falls back to initials.
-    senderAvatarSources: senderEmail ? senderAvatarSources(senderEmail, senderPhotoUrl) : [],
+    senderAvatarSources: senderEmail ? senderAvatarSources(senderEmail, senderPhotoUrl, senderBimiLogoUrl) : [],
     threadMessages,
     // Authoritative tracker scan (DOM-free) so the "tracker blocked" badge is consistent with the
     // client's own detection and available without client-side rendering.
