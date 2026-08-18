@@ -20,11 +20,6 @@ const SCOPES = [
   // to an explanatory note until then.
   "https://www.googleapis.com/auth/postmaster.readonly",
   "https://www.googleapis.com/auth/contacts.readonly",
-  // "Other contacts" — addresses corresponded with but never saved. This is where Gmail sources
-  // most sender profile photos; saved contacts alone covered almost none, so avatars fell through
-  // to initials for nearly every message. Mailboxes connected before this scope 403 on that lookup
-  // and fall back gracefully, so it only needs a reconnect to start working.
-  "https://www.googleapis.com/auth/contacts.other.readonly",
   "https://www.googleapis.com/auth/calendar.readonly",
   // Create booking events on the host's calendar. Accounts connected before this scope
   // was added keep read-only; the meeting booker falls back to emailed .ics invites for them.

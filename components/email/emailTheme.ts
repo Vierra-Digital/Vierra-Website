@@ -28,27 +28,7 @@ export const BRAND_LOGO = {
   mark: "/assets/vierra-v-2d.png",
 } as const;
 
-/** Core palette. Prefer these over inline hex so a brand tweak is a one-line change. */
-export const COLORS = {
-  brand: "#701CC0",
-  brandDeep: "#5E17A8",
-  brandLight: "#8B3BEE",
-  canvas: "#18042a",
-  ink: "#1E1B2E",
-  inkMuted: "#4A465C",
-  textMuted: "#6B7280",
-  textSubtle: "#847FA0",
-  hairline: "#EDEAF3",
-  border: "#E5E7EB",
-} as const;
-
-/** Brand hero gradient (from the V logo). Use for primary CTAs. */
-export const BRAND_GRADIENT = "linear-gradient(120deg,#7A17C5 0%,#A620AE 52%,#C42B9F 100%)";
-
 /* ── Surfaces ───────────────────────────────────────────────────────────────────────────── */
-
-/** Chrome surface (side rail) — a hair off-white so it reads as chrome vs. the content. */
-export const GLASS_CHROME = "bg-[#FAFAFB] border border-[#EBEAF0]";
 
 /** Content surface (list, reader, cards) — solid white for maximum readability on dense mail. */
 export const GLASS_SURFACE = "bg-white border border-[#EBEAF0]";
@@ -60,12 +40,6 @@ export const GLASS_MODAL =
 /** Modal scrim — a clear dim so the dialog stands apart from the panel behind it. */
 export const GLASS_SCRIM = "bg-[#14101E]/55";
 
-/** Soft elevation used across cards/panels. */
-export const SHADOW_SM = "shadow-[0_2px_12px_-4px_rgba(46,16,80,0.14)]";
-
-/** Hairline divider between sections/rows. */
-export const HAIRLINE = "border-[#EDEAF3]";
-
 /* ── Buttons ────────────────────────────────────────────────────────────────────────────── */
 
 /** Square icon-only button (toolbars, row actions). The panel's most repeated control. */
@@ -75,10 +49,6 @@ export const ICON_BUTTON =
 /** Icon button on a white toolbar (same shape, explicit white ground). */
 export const ICON_BUTTON_SOLID =
   "p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50";
-
-/** Borderless round icon button (compose chrome, Gmail-style). */
-export const ICON_BUTTON_GHOST =
-  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]";
 
 /** Primary action. */
 export const BUTTON_PRIMARY =
@@ -92,14 +62,6 @@ export const BUTTON_SECONDARY =
 export const BUTTON_DANGER_OUTLINE =
   "rounded-xl border border-red-200 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50";
 
-/** Small paging / compact control. */
-export const BUTTON_COMPACT =
-  "rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-1 text-xs text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50";
-
-/** Destructive action. */
-export const BUTTON_DANGER =
-  "inline-flex items-center justify-center gap-2 rounded-lg bg-[#DC2626] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#B91C1C] disabled:opacity-50";
-
 /* ── Forms ──────────────────────────────────────────────────────────────────────────────── */
 
 /** Field label sitting above an input. */
@@ -108,10 +70,6 @@ export const FIELD_LABEL = "mb-1 block text-sm font-medium text-[#374151]";
 /** Text input / textarea / select. */
 export const FIELD_INPUT =
   "w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#1E1B2E] placeholder-[#9CA3AF] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]";
-
-/** Inline search box (list toolbars). */
-export const FIELD_SEARCH =
-  "rounded-lg border border-transparent bg-white px-3 py-1.5 flex items-center gap-2 shadow-sm transition focus-within:ring-2 focus-within:ring-[#701CC0]";
 
 /* ── Typography ─────────────────────────────────────────────────────────────────────────── */
 
@@ -122,27 +80,6 @@ export const TEXT_MUTED = "text-sm text-[#6B7280]";
 export const TEXT_STRONG = "font-medium text-[#1E1B2E]";
 
 /* ── Data display ───────────────────────────────────────────────────────────────────────── */
-
-/** Uppercase micro-label used for table headers and stat captions. */
-export const LABEL_MICRO = "text-[11px] font-semibold uppercase tracking-wide text-[#847FA0]";
-
-/** Table header cell. */
-export const TABLE_HEAD_CELL = "pb-2 text-left text-[10.5px] font-semibold uppercase tracking-wide text-[#847FA0]";
-
-/** Table body row (hairline rule above). */
-export const TABLE_ROW = "border-t border-[#F2EFF8]";
-
-/** Pill/chip for statuses and tags. */
-export const CHIP = "rounded-md px-2 py-1 text-xs font-medium";
-
-/** Tonal chip variants, keyed by intent. */
-export const CHIP_TONE = {
-  brand: "bg-[#F5EFFF] text-[#701CC0]",
-  success: "bg-[#ECFDF5] text-[#047857]",
-  warning: "bg-[#FFFBEB] text-[#B45309]",
-  danger: "bg-[#FEF2F2] text-[#B91C1C]",
-  neutral: "bg-[#F4F2F8] text-[#5B5670]",
-} as const;
 
 /** Inline alert banners. */
 export const ALERT = {

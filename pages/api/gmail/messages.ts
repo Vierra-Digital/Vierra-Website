@@ -42,8 +42,6 @@ type MessageRow = {
   replyTo: string;
   messageIdHeader: string;
   references: string;
-  /** Used to split a Gmail thread into real conversations; some clients set this without References. */
-  inReplyTo: string;
   unread: boolean;
   starred?: boolean;
   tracked: boolean;
@@ -172,9 +170,6 @@ async function fetchGmailMessage(accessToken: string, id: string) {
   params.append("metadataHeaders", "Date");
   params.append("metadataHeaders", "Message-ID");
   params.append("metadataHeaders", "References");
-  // Names the one message a reply directly answers. Without it we can only guess the immediate
-  // parent from the tail of References, which is why conversation splitting needs it requested here.
-  params.append("metadataHeaders", "In-Reply-To");
   const response = await fetchWithRetry(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?${params.toString()}`,
     {
@@ -279,7 +274,6 @@ export default withAuth(async (req, res, session) => {
             const date = extractHeader(headers, "Date") || "";
             const messageIdHeader = extractHeader(headers, "Message-ID") || "";
             const references = extractHeader(headers, "References") || "";
-            const inReplyTo = extractHeader(headers, "In-Reply-To") || "";
             const timestamp = Number(msg.internalDate || 0) || Date.parse(date) || 0;
             const unread = Array.isArray(msg.labelIds) ? msg.labelIds.includes("UNREAD") : false;
             const starred = Array.isArray(msg.labelIds) ? msg.labelIds.includes("STARRED") : false;
@@ -299,7 +293,6 @@ export default withAuth(async (req, res, session) => {
               replyTo,
               messageIdHeader,
               references,
-              inReplyTo,
               unread,
               starred,
               tracked: false,
@@ -381,7 +374,6 @@ export default withAuth(async (req, res, session) => {
         replyTo: "",
         messageIdHeader: draft.in_reply_to || "",
         references: draft.references || "",
-        inReplyTo: draft.in_reply_to || "",
         unread: false,
         tracked: false,
         isComposeDraft: true,

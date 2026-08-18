@@ -130,8 +130,6 @@ async function inlineCidImages(
   return html;
 }
 
-type ThreadMessageRow = ReturnType<typeof parseThreadMessage>;
-
 async function fetchWithAuthRetry(
   url: string,
   getToken: (forceRefresh?: boolean) => Promise<string | null>
@@ -190,38 +188,21 @@ export default withAuth(async (req, res, session) => {
   const payload = await response.json();
   const currentMessage = parseThreadMessage(payload);
 
-  let threadMessages = [currentMessage];
-  if (currentMessage.threadId) {
-    const threadResponse = await fetchWithAuthRetry(
-      `https://gmail.googleapis.com/gmail/v1/users/me/threads/${encodeURIComponent(currentMessage.threadId)}?format=full`,
+  // The reader shows the one message that was opened, so the thread is never fetched. It used to
+  // pull threads.get?format=full — every body and attachment part in the thread — and then discard
+  // all but this message, which is the most expensive way possible to render a single email.
+  //
+  // Resolve inline (cid:) images so signature logos and pasted images actually render.
+  const resolvedCurrent = {
+    ...currentMessage,
+    bodyHtml: await inlineCidImages(
+      currentMessage.id,
+      currentMessage.bodyHtml,
+      currentMessage.inlineParts,
       getToken
-    );
-    if (threadResponse?.ok) {
-      const threadPayload = await threadResponse.json();
-      const rawMessages = Array.isArray(threadPayload?.messages) ? threadPayload.messages : [];
-      const parsedMessages = rawMessages
-        .map(parseThreadMessage)
-        .filter((message: ThreadMessageRow) => Boolean(message.id));
-      if (parsedMessages.length > 0) {
-        threadMessages = parsedMessages.sort((a: ThreadMessageRow, b: ThreadMessageRow) => a.timestamp - b.timestamp);
-      }
-    }
-  }
-
-  // The list is one row per message, so the reader shows that one message. Returning the whole
-  // Gmail thread here is what made two separate emails look like one no matter how the list grouped.
-  threadMessages = threadMessages.filter((message: ThreadMessageRow) => message.id === currentMessage.id);
-
-  // Resolve inline (cid:) images so signature logos and pasted images actually render. Done per
-  // message and in parallel across the thread; each message degrades independently.
-  threadMessages = await Promise.all(
-    threadMessages.map(async (message: ThreadMessageRow) => ({
-      ...message,
-      bodyHtml: await inlineCidImages(message.id, message.bodyHtml, message.inlineParts, getToken),
-    }))
-  );
-  const resolvedCurrent =
-    threadMessages.find((message: ThreadMessageRow) => message.id === currentMessage.id) ?? currentMessage;
+    ),
+  };
+  const threadMessages = [resolvedCurrent];
 
   let senderPhotoUrl = "";
   const senderEmail = parseAddressFromHeader(currentMessage.fromRaw);
@@ -273,52 +254,24 @@ export default withAuth(async (req, res, session) => {
       return "";
     };
 
-    /**
-     * Google's "other contacts": people you have corresponded with but never saved. Saved contacts
-     * cover only a handful of senders, which is why almost every message fell through to initials —
-     * this is the list Gmail itself draws most sender photos from.
-     *
-     * Needs the contacts.other.readonly scope; a mailbox connected before that scope was added
-     * simply 403s here and we fall through, so it degrades rather than erroring.
-     */
-    const tryOtherContacts = async () => {
-      const query = encodeURIComponent(senderEmail);
-      const peopleResponse = await fetchWithAuthRetry(
-        `https://people.googleapis.com/v1/otherContacts:search?query=${query}&readMask=names,emailAddresses,photos&pageSize=10`,
-        getToken
-      );
-      if (!peopleResponse?.ok) return "";
-      const peoplePayload = await peopleResponse.json();
-      const results = Array.isArray(peoplePayload?.results) ? peoplePayload.results : [];
-      for (const result of results) {
-        const person = result?.person;
-        const emails = Array.isArray(person?.emailAddresses)
-          ? person.emailAddresses.map((entry: any) => String(entry?.value || "").toLowerCase()).filter(Boolean)
-          : [];
-        if (!emails.includes(senderEmail)) continue;
-        const photo = Array.isArray(person?.photos)
-          ? person.photos.find((entry: any) => entry?.url && !entry?.default) || person.photos.find((entry: any) => entry?.url)
-          : null;
-        if (typeof photo?.url === "string" && photo.url.trim()) return photo.url.trim();
-      }
-      return "";
-    };
-
     // Cached first: the reader response blocks on this lookup, and the same senders recur constantly.
     const now = Date.now();
     const cached = getCachedSenderPhoto(accountEmail, senderEmail, now);
     if (cached !== undefined) {
       senderPhotoUrl = cached;
     } else {
-      // Concurrently, not in sequence — these are independent reads and the old chain paid for up to
-      // three round trips back to back before the reader could render anything. Priority order is
-      // still honoured by picking from the settled results rather than by whichever answered first.
-      const [saved, other, connections] = await Promise.all([
+      // Concurrently, not in sequence: independent reads that the reader's response waits on.
+      // Priority is applied to the settled results, not to whichever answered first.
+      //
+      // Only saved contacts are searched. Google's "other contacts" (people corresponded with but
+      // never saved) cannot supply a photo at all — readMask there accepts just emailAddresses,
+      // metadata, names and phoneNumbers, so asking for photos returns 400. A personal address that
+      // is not a saved contact has no photo we are able to fetch from anywhere.
+      const [saved, connections] = await Promise.all([
         trySearchContacts().catch(() => ""),
-        tryOtherContacts().catch(() => ""),
         tryPeopleConnections().catch(() => ""),
       ]);
-      senderPhotoUrl = saved || other || connections || "";
+      senderPhotoUrl = saved || connections || "";
       setCachedSenderPhoto(accountEmail, senderEmail, senderPhotoUrl, now);
     }
   }

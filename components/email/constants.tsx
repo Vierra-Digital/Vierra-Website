@@ -85,11 +85,4 @@ export function orderModules<T extends { key: ModuleKey }>(items: T[], order: st
  * search. See fetchMailboxCounts in pages/api/gmail/counts.ts.
  */
 export const BADGE_MODULES = new Set<ModuleKey>(["inbox", "drafts", "spam", "starred"]);
-export const BADGE_MAILBOXES: Array<"inbox" | "sent" | "drafts" | "archive" | "spam" | "trash"> = [
-  "inbox",
-  "sent",
-  "drafts",
-  "archive",
-  "spam",
-  "trash",
-];
+

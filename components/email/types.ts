@@ -39,11 +39,8 @@ export type MessageRow = {
   replyTo: string;
   messageIdHeader: string;
   references: string;
-  /** Optional: some clients set In-Reply-To without References, so conversation splitting reads both. */
-  inReplyTo?: string;
   unread: boolean;
   starred?: boolean;
-  threadCount?: number;
   tracked: boolean;
   trackingOpenCount?: number;
   trackingClickCount?: number;
