@@ -191,6 +191,13 @@ const MailboxEmpty: React.FC = () => (
 // request-body limit) so oversized sends fail fast with a clear message instead of an opaque 413.
 const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 
+/**
+ * Cap on a mailbox action (trash, archive, move…). Comfortably above a normal Gmail round trip but
+ * well under the serverless function limit, so a stalled upstream surfaces as a clear message
+ * rather than a spinner that never ends.
+ */
+const ACTION_TIMEOUT_MS = 15_000;
+
 /** How many mailbox views to keep in the message cache (each is up to PAGE_SIZE rows). */
 const MESSAGE_CACHE_LIMIT = 12;
 
@@ -2364,7 +2371,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }));
       if (items.length === 0 && composeDraftRows.length === 0) return;
       const isReadToggle = action === "markRead" || action === "markUnread";
-      if (!isReadToggle && actionInFlightRef.current) return;
+      if (!isReadToggle && actionInFlightRef.current) {
+        // Silently returning here is why a second delete "did nothing" while the first was still
+        // in flight. Say so instead.
+        setActionError("Still finishing the last action — one moment.");
+        return;
+      }
       if (!isReadToggle) actionInFlightRef.current = true;
 
       setActionError("");
@@ -2435,11 +2447,30 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
         let results: any[] = [];
         if (items.length > 0) {
-          const response = await fetch("/api/gmail/actions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action, items }),
-          });
+          // Bounded: an unbounded fetch can hang for minutes, and while it hangs the in-flight
+          // guard below silently swallows every further click. Failing fast frees the guard and
+          // surfaces a real message instead.
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), ACTION_TIMEOUT_MS);
+          let response: Response;
+          try {
+            response = await fetch("/api/gmail/actions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action, items }),
+              signal: controller.signal,
+            });
+          } catch (error) {
+            if ((error as Error)?.name === "AbortError") {
+              // The optimistic removal is now unverified, so resync rather than leave the list lying.
+              invalidateMessagesCache();
+              loadMessagesRef.current();
+              throw new Error("Gmail is taking too long to respond. Nothing was lost — try again.");
+            }
+            throw error;
+          } finally {
+            clearTimeout(timeout);
+          }
           const payload = await response.json().catch(() => ({}));
           if (!response.ok && response.status !== 207) {
             throw new Error(payload?.message || "Action failed.");
