@@ -5,7 +5,7 @@ import { extractHeader, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
 import { scanHtmlForTrackers } from "@/lib/email/trackerDetection";
 import { senderAvatarSources, senderDomain } from "@/lib/email/senderAvatar";
-import { conversationFor } from "@/lib/gmail/conversations";
+import { resolveBimiLogoUrl } from "@/lib/email/bimi";
 import { getCachedSenderPhoto, setCachedSenderPhoto } from "@/lib/gmail/senderPhotoCache";
 
 function decodeBase64Url(data: string) {
@@ -208,10 +208,9 @@ export default withAuth(async (req, res, session) => {
     }
   }
 
-  // Show exactly the conversation the clicked list row represents. The list splits a Gmail thread
-  // into reference-linked conversations, so without the same split here, opening either row would
-  // stitch the whole thread back together and the message would still look merged.
-  threadMessages = conversationFor(threadMessages, currentMessage.id);
+  // The list is one row per message, so the reader shows that one message. Returning the whole
+  // Gmail thread here is what made two separate emails look like one no matter how the list grouped.
+  threadMessages = threadMessages.filter((message: ThreadMessageRow) => message.id === currentMessage.id);
 
   // Resolve inline (cid:) images so signature logos and pasted images actually render. Done per
   // message and in parallel across the thread; each message degrades independently.
@@ -226,6 +225,9 @@ export default withAuth(async (req, res, session) => {
 
   let senderPhotoUrl = "";
   const senderEmail = parseAddressFromHeader(currentMessage.fromRaw);
+  // The sender's own DNS-published logo. Independent of the contact lookups below, so it is started
+  // here and awaited once, rather than adding another round trip in front of the reader.
+  const bimiPromise = resolveBimiLogoUrl(senderDomain(senderEmail));
   if (senderEmail && senderEmail.includes("@")) {
     const trySearchContacts = async () => {
       const peopleQuery = encodeURIComponent(senderEmail);
@@ -321,6 +323,8 @@ export default withAuth(async (req, res, session) => {
     }
   }
 
+  const senderBimiLogoUrl = await bimiPromise;
+
   res.status(200).json({
     bodyText: currentMessage.bodyText || payload?.snippet || "",
     bodyHtml: resolvedCurrent.bodyHtml || "",
@@ -336,7 +340,7 @@ export default withAuth(async (req, res, session) => {
     // Ordered avatar sources (contact photo → Gravatar → company favicon). Built here so the md5
     // stays on the server: importing node:crypto into the panel would ship a polyfill to the
     // browser for one hash. The client walks these on image error, then falls back to initials.
-    senderAvatarSources: senderEmail ? senderAvatarSources(senderEmail, senderPhotoUrl) : [],
+    senderAvatarSources: senderEmail ? senderAvatarSources(senderEmail, senderPhotoUrl, senderBimiLogoUrl) : [],
     threadMessages,
     // Authoritative tracker scan (DOM-free) so the "tracker blocked" badge is consistent with the
     // client's own detection and available without client-side rendering.
