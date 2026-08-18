@@ -62,6 +62,7 @@ import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEdit
 import { printComposeContent } from "@/components/email/printCompose";
 import { getJson } from "@/lib/email/panelApi";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
+import SenderAvatar from "@/components/email/SenderAvatar";
 import { groupConversations } from "@/lib/gmail/conversations";
 import {
   BRAND_LOGO,
@@ -1658,7 +1659,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       setMessages((prev) => prev.filter((m) => !affected.has(`${m.accountEmail}::${m.id}`)));
       setSelectedRows([]);
       invalidateMessagesCache();
-      await loadMailboxCounts();
+      // Not awaited: the rows are already gone from the view, so holding the button disabled until
+      // the badge numbers come back only makes the action feel slower than it was.
+      void loadMailboxCounts();
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Could not unstar the selected messages.");
     } finally {
@@ -4860,19 +4863,26 @@ ${sourceText}`;
                                     </span>
                                   </span>
 
-                                  {/* Sender */}
+                                  {/* Sender — avatar then name. The avatar is what makes a row
+                                      scannable by person; the list had none before. */}
                                   <span
-                                    className={`min-w-0 truncate text-[13px] ${
+                                    className={`flex min-w-0 items-center gap-2 text-[13px] ${
                                       message.unread ? "font-semibold text-white" : "font-normal text-[#A8A2C0]"
                                     }`}
                                   >
                                     {message.isComposeDraft ? (
-                                      <>
+                                      <span className="min-w-0 truncate">
                                         <span className="mr-1 font-medium text-[#F87171]">(Draft)</span>
                                         {draftSenderLabel ? <span>{draftSenderLabel}</span> : null}
-                                      </>
+                                      </span>
                                     ) : (
-                                      senderOrTo
+                                      <>
+                                        <SenderAvatar
+                                          email={parseMailboxAddress(activeModule === "sent" ? message.toRaw || message.to : message.fromRaw || message.from).email}
+                                          initials={getInitials(activeModule === "sent" ? message.toRaw || message.to : message.fromRaw || message.from)}
+                                        />
+                                        <span className="min-w-0 truncate">{senderOrTo}</span>
+                                      </>
                                     )}
                                   </span>
 
