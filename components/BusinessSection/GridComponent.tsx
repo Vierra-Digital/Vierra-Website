@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
-import { motion } from "framer-motion"
+import { m as motion } from "framer-motion"
 
 // 6x6 grid; `true` marks a visible (filled) cell.
 const gridLayout = [

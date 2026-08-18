@@ -3,6 +3,7 @@ import type { AppProps } from "next/app";
 import Head from "next/head";
 import Script from "next/script";
 import { useRouter } from "next/router";
+import { LazyMotion, domAnimation } from "framer-motion";
 import { SessionProvider } from "@/lib/session-client";
 import ConsentBanner from "@/components/ConsentBanner";
 
@@ -20,7 +21,9 @@ export default function App({ Component, pageProps }: AppProps) {
 
   return (
     <SessionProvider>
-      <>
+      {/* strict: throws if any component under here uses the full `motion` import
+          instead of the `m` alias — catches anything the migration missed. */}
+      <LazyMotion features={domAnimation} strict>
         <Head>
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <link rel="icon" href="/favicon.ico" />
@@ -51,7 +54,7 @@ export default function App({ Component, pageProps }: AppProps) {
             </Script>
           </>
         )}
-      </>
+      </LazyMotion>
     </SessionProvider>
   );
 }

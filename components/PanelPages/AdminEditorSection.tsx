@@ -6,7 +6,7 @@ import { FiCheck } from "react-icons/fi"
 import { FiSearch, FiFilter, FiPlus, FiTrash2 } from "react-icons/fi"
 import { inter } from "@/lib/fonts";
 import Image from "next/image"
-import { motion } from "framer-motion"
+import { m as motion } from "framer-motion"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import Modal from "@/components/ui/Modal"

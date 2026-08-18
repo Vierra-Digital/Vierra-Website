@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from "react"
 import { bricolage, inter } from "@/lib/fonts";
 import Image from "next/image"
 import dynamic from "next/dynamic"
-import { motion, useScroll, useTransform } from "framer-motion"
+import { m as motion, useScroll, useTransform } from "framer-motion"
 import { ArrowUpRight, Sparkles } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Header } from "@/components/Header"
