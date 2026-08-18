@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, type ReactNode } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { m as motion, AnimatePresence } from "framer-motion"
 import Image from "next/image"
 import { bricolage, inter } from "@/lib/fonts";
 import { ArrowUpRight } from "lucide-react"

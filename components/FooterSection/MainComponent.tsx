@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
+import { m as motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { bricolage, inter, figtree } from "@/lib/fonts";
 import { ArrowUpRight } from "lucide-react";
 import CheckItem from "./CheckItem";

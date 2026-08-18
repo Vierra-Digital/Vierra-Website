@@ -2,7 +2,7 @@
 import { TrendingUp } from "lucide-react"
 import { bricolage, inter } from "@/lib/fonts";
 import { useEffect, useState, useRef } from "react"
-import { motion, animate, useInView } from "framer-motion"
+import { m as motion, animate, useInView } from "framer-motion"
 
 
 const cardVar = {

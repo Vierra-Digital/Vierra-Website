@@ -1,6 +1,6 @@
 import React from "react";
 import Image from "next/image";
-import { motion } from "framer-motion";
+import { m as motion } from "framer-motion";
 
 /**
  * The full-screen branded loading state (dark canvas, drifting grid + starfield, white

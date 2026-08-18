@@ -3,7 +3,7 @@ import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import { getBlogCatalog } from "@/lib/blog"
 import { Header } from "@/components/Header";
-import { motion } from "framer-motion";
+import { m as motion } from "framer-motion";
 import { Search, ChevronRight } from "lucide-react";
 import Footer from "@/components/FooterSection/Footer";
 import { GetStaticProps } from "next";

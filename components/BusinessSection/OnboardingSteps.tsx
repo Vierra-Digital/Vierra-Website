@@ -5,7 +5,7 @@
 // reliably and never "fade" — except TAM Sort & Mining, which reuses the real
 // WebGL Brand Universe sphere. Each animation is designed to fill its parent.
 import { useEffect, useRef, useState } from "react"
-import { motion, AnimatePresence, useSpring, useInView } from "framer-motion"
+import { m as motion, AnimatePresence, useSpring, useInView } from "framer-motion"
 import dynamic from "next/dynamic"
 import { inter } from "@/lib/fonts";
 import { SiGmail } from "react-icons/si"
