@@ -57,7 +57,6 @@ export default withAuth(async (req, res, session) => {
       }),
     ]);
 
-    res.setHeader("Cache-Control", "private, max-age=15");
     res.status(200).json({
       contacts: contacts.map((contact) => ({
         ...serializeContact(contact),

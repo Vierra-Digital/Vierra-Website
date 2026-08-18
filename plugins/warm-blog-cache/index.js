@@ -12,14 +12,8 @@
 // It is intentionally best-effort: any failure is logged and swallowed so a slow
 // or unreachable page can never fail the deploy.
 
-const REQUEST_TIMEOUT_MS = 15_000; // per page; cold regen + cold DB can be slow
-// Warming ran sequentially over up to 30 posts, which was ~50s of billed build time — about a
-// third of the whole production build. Traffic is heavily concentrated on the newest posts, and
-// anything not warmed here simply regenerates on its first visit (the pre-existing behaviour), so
-// warming fewer pages with a little concurrency costs a fraction of the minutes for nearly all of
-// the benefit.
-const MAX_POSTS = 8;
-const WARM_CONCURRENCY = 4;
+const REQUEST_TIMEOUT_MS = 25_000; // per page; cold regen + cold DB can be slow
+const MAX_POSTS = 30; // bound the work as the post count grows
 
 async function warm(url) {
   const controller = new AbortController();
@@ -86,20 +80,13 @@ module.exports = {
     try {
       await warm(`${base}/blog`);
       const slugs = await discoverSlugs(base);
-      console.log(`warm-blog-cache: warming ${slugs.length} post(s), ${WARM_CONCURRENCY} at a time`);
-      // Bounded concurrency rather than one-at-a-time: even with connection_limit=1 serializing the
-      // DB, requests still overlap on function cold-start and network, so wall time drops sharply.
-      // The cap keeps it from bursting the cold function.
-      const startedAt = Date.now();
-      const queue = [...slugs];
-      await Promise.all(
-        Array.from({ length: Math.min(WARM_CONCURRENCY, queue.length) }, async () => {
-          for (let slug = queue.shift(); slug !== undefined; slug = queue.shift()) {
-            await warm(`${base}/blog/${slug}`);
-          }
-        })
-      );
-      console.log(`warm-blog-cache: done in ${Date.now() - startedAt}ms`);
+      console.log(`warm-blog-cache: warming ${slugs.length} post(s)`);
+      // Sequential: connection_limit=1 serializes DB work anyway, and this is
+      // gentler on the cold function than a burst of parallel requests.
+      for (const slug of slugs) {
+        await warm(`${base}/blog/${slug}`);
+      }
+      console.log("warm-blog-cache: done");
     } catch (err) {
       // Never fail the deploy over cache warming.
       console.log(`warm-blog-cache: non-fatal error: ${err && err.message}`);

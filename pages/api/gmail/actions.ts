@@ -34,40 +34,22 @@ function normalizeItems(input: unknown): ActionItem[] {
     .filter((item) => item.accountEmail && item.messageId);
 }
 
-/**
- * Per-request cap on a single Gmail call. Without it one stalled upstream request holds the whole
- * serverless invocation until the platform kills it, which surfaces to the client as an opaque
- * 502 after a long wait instead of a usable error.
- */
-const GMAIL_CALL_TIMEOUT_MS = 10_000;
-
-/** fetch with a hard timeout, so a hung Gmail request fails fast and reports why. */
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), GMAIL_CALL_TIMEOUT_MS);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 async function callGmailAction(accessToken: string, action: ActionType, messageId: string) {
   const encodedId = encodeURIComponent(messageId);
   if (action === "deletePermanently") {
-    return fetchWithTimeout(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}`, {
+    return fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${accessToken}` },
     });
   }
   if (action === "trash" || action === "moveToTrash") {
-    return fetchWithTimeout(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/trash`, {
+    return fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/trash`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
     });
   }
   if (action === "untrash") {
-    return fetchWithTimeout(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/untrash`, {
+    return fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/untrash`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -94,7 +76,7 @@ async function callGmailAction(accessToken: string, action: ActionType, messageI
     body.removeLabelIds = ["STARRED"];
   }
 
-  return fetchWithTimeout(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/modify`, {
+  return fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/modify`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -206,11 +188,6 @@ export default withAuth(async (req, res, session) => {
         }
         return { ...item, ok: true };
       } catch (error) {
-        // A timeout aborts only this item's call, so the rest of the batch still reports normally.
-        // Name it explicitly — "The operation was aborted" tells the user nothing actionable.
-        if ((error as Error)?.name === "AbortError") {
-          return { ...item, ok: false, error: "Gmail didn't respond in time. The message was not changed." };
-        }
         return { ...item, ok: false, error: error instanceof Error ? error.message : "Unknown error" };
       }
     })

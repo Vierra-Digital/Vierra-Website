@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import Cropper from "react-easy-crop";
 import type { Area } from "@/lib/cropImage";
 import { getCroppedImg } from "@/lib/cropImage";

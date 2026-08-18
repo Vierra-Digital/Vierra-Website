@@ -1,12 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { modifyMessageLabels, getOrCreateLabelId, createGmailDraft, gmailGet } from "@/lib/gmail/gmailApi";
+import { modifyMessageLabels, getOrCreateLabelId, createGmailDraft } from "@/lib/gmail/gmailApi";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { sendEmailCore } from "@/lib/gmail/sendCore";
 import { artemisGenerate, artemisConfigured } from "@/lib/ai/artemis";
 import { notifyDiscordEmbed, notifyCampaignReply, discordConfigured } from "@/lib/notify/discord";
 import { addToDnc } from "@/lib/campaigns/dnc";
-import { bumpCampaignStat } from "@/lib/campaigns/campaignStats";
-import { looksLikeBounce, parseDeliveryStatus, extractDsnParts } from "@/lib/gmail/dsn";
 import type { InboundMessage, InboundContext } from "@/lib/gmail/inboundTypes";
 
 /** True for automated/bulk mail we must never auto-reply to (prevents mail loops). */
@@ -118,56 +116,6 @@ export async function maybeSendVacationReply(msg: InboundMessage, ctx: InboundCo
     create: { email_account_setting_id: setting.id, sender_email: sender, last_sent_at: now },
     update: { last_sent_at: now, updated_at: now },
   });
-}
-
-/**
- * Record hard bounces from delivery-status notifications (RFC 3464).
- *
- * Until this existed, bounces were only ever reported for Brevo-sent campaigns (via its webhook) —
- * Gmail sends reported zero, so "Bounces" in the analytics deliverability panel was always 0 and
- * dead addresses kept receiving the rest of a sequence.
- *
- * Permanent (5.x.x) failures suppress the contact and add it to the DNC list; transient (4.x.x)
- * ones are left alone because the sending side retries them. Best-effort throughout: a bounce we
- * can't attribute is simply not recorded.
- */
-export async function maybeRecordBounce(msg: InboundMessage, ctx: InboundContext): Promise<void> {
-  if (!looksLikeBounce(msg.headers, msg.fromEmail)) return;
-
-  // The inbound loop fetches headers only; pull the body just for suspected bounces (rare).
-  const { ok, data } = await gmailGet(ctx.accessToken, `/messages/${encodeURIComponent(msg.id)}?format=full`);
-  if (!ok || !data || typeof data !== "object") return;
-  const { deliveryStatus } = extractDsnParts((data as { payload?: unknown }).payload);
-  const recipients = parseDeliveryStatus(deliveryStatus).filter((r) => r.permanent);
-  if (recipients.length === 0) return;
-
-  // Same fail-closed scoping as reply matching: bounces return to the sending mailbox, so only
-  // campaigns sent FROM this account may match. No resolvable account means no reliable scope.
-  const accountId = await resolveAccountId(msg.userId, msg.accountEmail);
-  if (!accountId) return;
-
-  for (const recipient of recipients) {
-    const contact = await prisma.campaignContact.findFirst({
-      where: {
-        contact_email: recipient.email,
-        // A contact already skipped/failed needs no further action.
-        queue_status: { notIn: ["skipped", "failed"] },
-        campaigns: { account_id: accountId },
-      },
-      orderBy: { enrolled_at: "desc" },
-      select: { id: true, campaign_id: true },
-    });
-    if (!contact) continue;
-
-    // Stop the sequence for this address, and record why.
-    await prisma.campaignContact.update({
-      where: { id: contact.id },
-      data: { queue_status: "skipped", skip_reason: "bounce", next_send_at: null },
-    });
-    await bumpCampaignStat(contact.campaign_id, "bounces");
-    // Suppress future sends to a permanently-failing address across the whole mailbox.
-    await addToDnc(contact.campaign_id, recipient.email, "bounce").catch(() => {});
-  }
 }
 
 /** Retrieve lightweight context (prior threads with this sender, contact info) to ground the draft. */

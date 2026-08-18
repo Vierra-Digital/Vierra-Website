@@ -17,9 +17,8 @@ Full-stack marketing site, internal **admin/staff panel**, **client portal**, a 
 9. [Panel sections](#panel-sections)
 10. [Database (Prisma)](#database-prisma)
 11. [Key integrations](#key-integrations)
-12. [Testing](#testing)
-13. [Deployment (Netlify)](#deployment-netlify)
-14. [Security notes](#security-notes)
+12. [Deployment (Netlify)](#deployment-netlify)
+13. [Security notes](#security-notes)
 
 ---
 
@@ -70,16 +69,8 @@ Vierra-Website/
 | `lib/ga4Client.ts` | GA4 Data API auth (OAuth refresh token) |
 | `lib/api/oauth.ts` | OAuth state-cookie helpers & shared Google client credentials |
 | `lib/stripe.ts` | Stripe SDK instance |
-| `lib/emailSender.ts` | SMTP sending for transactional mail (shared card shell + CTA helpers) |
+| `lib/emailSender.ts` | SMTP sending for transactional mail |
 | `lib/manus.ts` | Manus AI API (LinkedIn/outreach content) |
-| `lib/gmail/dsn.ts` | RFC 3464 bounce (delivery-status) parsing — hard vs. transient failures |
-| `lib/email/postmaster.ts` | Google Postmaster Tools: spam-complaint rate, domain reputation |
-| `lib/email/panelApi.ts` | Shared client request handlers for the email panel (JSON, errors, query strings) |
-| `lib/email/sanitize.ts` | Canonical sanitizer for rich email HTML |
-| `lib/email/trackerDetection.ts` | Open-tracker/beacon detection in inbound HTML |
-| `lib/batch.ts` | `mapInBatches` — bounded-concurrency helper for independent writes |
-| `components/email/emailTheme.ts` | **Styling guide** for the email panel (surfaces, buttons, fields, chips) |
-| `components/ui/BrandLoadingScreen.tsx` | Shared branded loading screen (login + email panel) |
 
 ---
 
@@ -136,8 +127,6 @@ npm run create-client
 | `build` | `next build` | Production build |
 | `start` | `next start` | Run production build locally |
 | `lint` | `next lint` | ESLint |
-| `test` | `vitest run` | Unit tests |
-| `test:coverage` | `vitest run --coverage` | Unit tests with the coverage gate |
 | `db:migrate` | `prisma migrate deploy` | Apply pending migrations |
 | `db:generate` | `prisma generate` | Regenerate Prisma Client |
 | `db:push` | `prisma db push` | Sync schema without migration files |
@@ -311,18 +300,6 @@ All live under `pages/api/`. Unless noted, routes expect an authenticated sessio
 | GET | `/api/dashboard/upcoming-meetings` | Next meetings from Google Calendar (Gmail OAuth) |
 | GET | `/api/dashboard/website-visits` | GA4 visit chart data |
 
-### Deliverability
-
-| Route | Purpose |
-|-------|---------|
-| `GET /api/email/domain-auth` | Live DNS check of SPF / DKIM / DMARC per sending domain |
-| `GET /api/email/postmaster` | Google Postmaster Tools: spam rate, reputation, Gmail-observed auth pass rates |
-
-Requires the `postmaster.readonly` OAuth scope (reconnect each mailbox after adding it) **and** each
-domain verified at [postmaster.google.com](https://postmaster.google.com). Google publishes with a
-1–2 day lag and only above a daily volume threshold, so an empty panel is often correct — the API
-distinguishes "not authorized" from "no data" so the UI can say which.
-
 ### Gmail / email platform
 
 | Method | Path | Description |
@@ -488,34 +465,6 @@ Some schema changes are applied **out-of-band** as hand-written SQL in `prisma/m
 
 ---
 
-## Testing
-
-Unit tests run on pure, import-safe modules only (no Next server, Prisma, or network — DB and
-`fetch` are mocked where needed).
-
-```bash
-npm run test              # run the suite
-npm run test:coverage     # run with the coverage gate
-```
-
-- Specs live in `tests/*.test.ts`.
-- `vitest.config.ts` scopes the coverage `include` list to modules that actually have tests, so the
-  threshold is a real gate rather than being diluted toward zero by the whole app. **Add new modules
-  to that list as their specs land** — otherwise they are not protected by the gate.
-- CI (`.github/workflows/ci.yml`) runs `prisma generate` → `tsc --noEmit` → `next lint` →
-  `test:coverage`.
-
-### Two gotchas
-
-- **`jsx` in `tsconfig.json` is `preserve` on purpose.** `next build` / `next lint` rewrite that key
-  (Next compiles JSX itself), so committing anything else produces a phantom diff on every build.
-  Vitest therefore owns its own JSX transform via `oxc` in `vitest.config.ts` — don't make the test
-  runner depend on the tsconfig value again.
-- **Run `npx prisma generate` after pulling a schema change**, or `tsc` fails locally against a
-  stale client while CI (which always regenerates) passes.
-
----
-
 ## Deployment (Netlify)
 
 - Config: [`netlify.toml`](./netlify.toml)
@@ -523,22 +472,6 @@ npm run test:coverage     # run with the coverage gate
 - Publish: `.next` (Next.js Netlify plugin)
 - Set all production env vars in the Netlify UI (mirror `.env.example`)
 - `NEXTAUTH_URL` must match the deployed origin (e.g. `https://vierradev.com`)
-
-### Build minutes
-
-Netlify bills per build minute in **every** context, and runs a deploy preview on each push to each
-open PR, so two controls exist:
-
-- **[`netlify-ignore.sh`](./netlify-ignore.sh)** (wired via `ignore` in `netlify.toml`) skips the
-  build when every changed path is non-deployable (tests, CI config, docs). It **fails open** —
-  anything it doesn't recognise still builds.
-- **`plugins/warm-blog-cache`** warms the blog ISR cache post-deploy. It runs inside the billed
-  build, so it is capped (newest 8 posts, 4 concurrently); anything unwarmed regenerates on first
-  visit.
-
-Avoid reintroducing dynamic `fs`/`path` access in API routes without a static prefix or a
-`/*turbopackIgnore: true*/` annotation — Turbopack otherwise traces the **whole project** into the
-server bundle, inflating every deploy.
 
 ### Scheduled functions (cron)
 

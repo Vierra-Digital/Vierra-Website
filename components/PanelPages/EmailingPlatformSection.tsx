@@ -30,7 +30,6 @@ import {
   FiMail,
   FiMaximize2,
   FiMinimize2,
-  FiMoreVertical,
   FiMove,
   FiPlus,
   FiRefreshCw,
@@ -63,8 +62,8 @@ import { printComposeContent } from "@/components/email/printCompose";
 import { getJson } from "@/lib/email/panelApi";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
 import {
-  BRAND_LOGO,
-  ICON_BUTTON, ICON_BUTTON_SOLID, FIELD_LABEL, ALERT,
+  BRAND_GRADIENT, BRAND_LOGO,
+  ICON_BUTTON, ICON_BUTTON_SOLID, ICON_BUTTON_GHOST, FIELD_LABEL, ALERT,
 } from "@/components/email/emailTheme";
 import {
   PAGE_SIZE,
@@ -75,6 +74,7 @@ import {
   MODULES,
   orderModules,
   BADGE_MODULES,
+  BADGE_MAILBOXES,
 } from "@/components/email/constants";
 import type {
   ModuleKey,
@@ -191,29 +191,8 @@ const MailboxEmpty: React.FC = () => (
 // request-body limit) so oversized sends fail fast with a clear message instead of an opaque 413.
 const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 
-/**
- * Cap on a mailbox action (trash, archive, move…). Comfortably above a normal Gmail round trip but
- * well under the serverless function limit, so a stalled upstream surfaces as a clear message
- * rather than a spinner that never ends.
- */
-const ACTION_TIMEOUT_MS = 15_000;
-
 /** How many mailbox views to keep in the message cache (each is up to PAGE_SIZE rows). */
 const MESSAGE_CACHE_LIMIT = 12;
-
-/**
- * Compose footer icon button. Gmail's composer is one row of quiet, chrome-less icons with a
- * single solid Send — so an "on" toggle (Confidential, Receipt, a set schedule) reads as a soft
- * brand-tinted disc rather than an outlined box, which is what made the old bar look blocky.
- */
-const composeIconClass = (active = false) =>
-  `inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors duration-150 disabled:pointer-events-none disabled:opacity-35 ${
-    active ? "bg-[#701CC0]/18 text-[#C8A6F5]" : "text-[#9C95B8] hover:bg-white/[0.07] hover:text-[#E7E2F5]"
-  }`;
-
-/** Row in the compose "More options" menu. */
-const composeMenuItemClass =
-  "flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] font-medium text-[#D8D3EA] transition-colors duration-150 hover:bg-white/[0.06] disabled:pointer-events-none disabled:opacity-40";
 
 const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   initialSelectedAccounts = [],
@@ -229,8 +208,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   /** Ids already sent for scanning, so a page never re-scans rows it has seen. */
   const scannedIdsRef = useRef<Set<string>>(new Set());
   /** messageId → tracker verdict. Filled in just after the list paints (see the scan effect). */
-  /** Index into the sender's ordered avatar candidates; advanced on each image error. */
-  const [senderAvatarIndex, setSenderAvatarIndex] = useState(0);
   const [messageTrackers, setMessageTrackers] = useState<
     Record<string, { tracked: boolean; count: number; vendors: string[]; hasAttachment?: boolean }>
   >({});
@@ -305,12 +282,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [composeTemplates, setComposeTemplates] = useState<
     Array<{ id: string; name: string; subject: string | null; bodyHtml: string | null; bodyText: string | null }>
   >([]);
+  const [composeTemplateMenuOpen, setComposeTemplateMenuOpen] = useState(false);
   // Set when a brand-new compose opens (openNewCompose) so the signatures effect appends the
   // account's default signature once — never on replies/drafts (their body is pre-filled).
   const composeInsertDefaultSigRef = useRef(false);
   const [composeSignatures, setComposeSignatures] = useState<
     Array<{ id: string; name: string; signatureHtml: string | null; signatureText: string | null; isDefault: boolean }>
   >([]);
+  const [composeSignatureMenuOpen, setComposeSignatureMenuOpen] = useState(false);
   const [saveTemplateModalOpen, setSaveTemplateModalOpen] = useState(false);
   const [newLabelModalOpen, setNewLabelModalOpen] = useState(false);
   const [newLabelName, setNewLabelName] = useState("");
@@ -320,8 +299,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   /** Set below; lets applyAction re-sync after a partial failure without a cyclic dep. */
   const loadMessagesRef = useRef<() => void>(() => {});
   const [labelToDelete, setLabelToDelete] = useState<{ id: string; name: string } | null>(null);
-  /** Open when the trash button is about to hard-delete (Spam/Trash) — that has no undo. */
-  const [confirmHardDelete, setConfirmHardDelete] = useState(false);
   const [labelToRename, setLabelToRename] = useState<{ id: string; name: string } | null>(null);
   const [renamingLabel, setRenamingLabel] = useState(false);
   const [deletingLabel, setDeletingLabel] = useState(false);
@@ -333,9 +310,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [composeFormattingToolbarOpen, setComposeFormattingToolbarOpen] = useState(false);
   const [composeAccountEmail, setComposeAccountEmail] = useState("");
   const [composeFrom, setComposeFrom] = useState("");
-  const [composeAliases, setComposeAliases] = useState<
-    Array<{ email: string; displayName: string; isPrimary: boolean; accountEmail: string }>
-  >([]);
+  const [composeAliases, setComposeAliases] = useState<Array<{ email: string; displayName: string; isPrimary: boolean }>>([]);
   const [composeThreadId, setComposeThreadId] = useState("");
   const [composeInReplyTo, setComposeInReplyTo] = useState("");
   const [composeReferences, setComposeReferences] = useState("");
@@ -344,8 +319,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   /** Scheduled send: ISO-ish `datetime-local` value; empty = send now. */
   const [scheduleAt, setScheduleAt] = useState("");
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  /** Compose overflow menu (Gmail's "⋮ More options") — holds the insert/print actions. */
-  const [composeMoreOpen, setComposeMoreOpen] = useState(false);
   /** Confidential mode: send an access-controlled link instead of the raw body. */
   const [confidentialOn, setConfidentialOn] = useState(false);
   const [confidentialExpiry, setConfidentialExpiry] = useState<"1d" | "1w" | "1m" | "never">("1w");
@@ -411,7 +384,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [contactsTotalCount, setContactsTotalCount] = useState(0);
   const [contactsTags, setContactsTags] = useState<ContactTag[]>([]);
   const [contactSearch, setContactSearch] = useState("");
-  const [debouncedContactSearch, setDebouncedContactSearch] = useState("");
   const [contactTagFilter, setContactTagFilter] = useState("");
   const [contactSourceFilter, setContactSourceFilter] = useState<"" | "MANUAL" | "GMAIL" | "CSV">("");
   const [contactFilterOpen, setContactFilterOpen] = useState(false);
@@ -536,26 +508,20 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // (latest message represents the thread) with a message count. Compose drafts
   // and thread-less messages pass through individually.
   const conversationRows = useMemo(() => {
-    // One row per Gmail thread — deliberately Gmail's own conversation boundary.
-    //
-    // Two earlier attempts tried to be cleverer than Gmail and both misfired: keying on "does it
-    // have References?" split an original from its reply (8 conversations rendered as 9 rows), and
-    // keying on the References root could merge messages Gmail keeps in separate threads. Matching
-    // threadId means the panel's grouping and counts agree with the Gmail UI you compare against.
     const byThread = new Map<string, MessageRow & { threadCount: number }>();
     const rows: Array<MessageRow & { threadCount: number }> = [];
     for (const message of filteredMessages) {
-      // Local compose drafts have no Gmail thread, so they always stand alone.
-      if (!message.threadId || message.isComposeDraft) {
+      const threadId = message.threadId;
+      if (!threadId || message.isComposeDraft) {
         rows.push({ ...message, threadCount: 1 });
         continue;
       }
-      const existing = byThread.get(message.threadId);
+      const existing = byThread.get(threadId);
       if (existing) {
         existing.threadCount += 1;
       } else {
         const row = { ...message, threadCount: 1 };
-        byThread.set(message.threadId, row);
+        byThread.set(threadId, row);
         rows.push(row);
       }
     }
@@ -565,8 +531,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // Lightweight pre-send deliverability lint — proactive warnings shown in the composer.
   // Deliverability guardrail (#2): check the sending domain's SPF/DMARC when compose opens.
   const [composeDeliverability, setComposeDeliverability] = useState<{ spfOk: boolean; dmarcOk: boolean } | null>(null);
-  /** Rows per mailbox page. PAGE_SIZE is the default; Settings → Layout can override it. */
-  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE);
   useEffect(() => {
     let cancelled = false;
     fetch("/api/gmail/nav-layout")
@@ -575,7 +539,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         if (cancelled || !d) return;
         if (Array.isArray(d.hiddenModules)) setHiddenModules(d.hiddenModules);
         if (Array.isArray(d.moduleOrder)) setModuleOrder(d.moduleOrder);
-        if (Number.isFinite(Number(d.pageSize)) && Number(d.pageSize) > 0) setPageSize(Number(d.pageSize));
       })
       .catch(() => {});
     return () => {
@@ -641,13 +604,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   }, [messages, rowKey, selectedRows, selectedMessage]);
 
   const hasSelectedEmails = selectedRows.length > 0;
-  /**
-   * Mailboxes where the trash button hard-deletes instead of moving to Trash — matching Gmail,
-   * where Spam and Trash both delete outright. Needs the restricted https://mail.google.com/
-   * scope (gmail.modify can only trash); accounts connected before that scope was requested
-   * get the "reconnect" error from the actions API until they reauthorize.
-   */
-  const deletesPermanently = activeModule === "trash" || activeModule === "spam";
   /** Any unread in the selection (all-unread or mixed) → offer "Mark As Read".
       Only when every selected email is already read do we offer "Mark As Unread". */
   const selectionHasUnread =
@@ -798,12 +754,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         limit: String(CONTACTS_PAGE_SIZE),
         page: String(contactCurrentPage),
       });
-      if (debouncedContactSearch) query.set("search", debouncedContactSearch);
+      if (contactSearch.trim()) query.set("search", contactSearch.trim());
       if (contactTagFilter) query.set("tagIds", contactTagFilter);
       if (contactSourceFilter) query.set("source", contactSourceFilter);
-      // no-store: this reloads right after create/edit/delete/tag writes, and the
-      // server's Cache-Control on this endpoint would otherwise serve the pre-write list.
-      const response = await fetch(`/api/contacts?${query.toString()}`, { cache: "no-store" });
+      const response = await fetch(`/api/contacts?${query.toString()}`);
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload?.message || "Failed to load contacts.");
@@ -824,7 +778,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     } finally {
       setContactsLoading(false);
     }
-  }, [activeModule, contactCurrentPage, debouncedContactSearch, contactSourceFilter, contactTagFilter, step]);
+  }, [activeModule, contactCurrentPage, contactSearch, contactSourceFilter, contactTagFilter, step]);
 
   const createContact = async () => {
     const firstName = addContactForm.firstName.trim();
@@ -1439,17 +1393,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       )
       .replace(/\n/g, "<br>");
 
-  /**
-   * Domain of the message being read, so images the sender hosts on its own domain aren't scored as
-   * third-party. Without this the client stripped legitimate sender-hosted images and its count
-   * disagreed with the server's authoritative scan.
-   */
-  const readerSenderDomain = useMemo(() => {
-    const fromRaw = selectedMessageDetail?.fromRaw || selectedMessage?.fromRaw || selectedMessage?.from || "";
-    const email = parseMailboxAddress(fromRaw).email;
-    return (email.split("@")[1] || "").trim().toLowerCase();
-  }, [selectedMessageDetail, selectedMessage]);
-
   const isTrackerPixel = (img: HTMLImageElement, srcValue: string) =>
     scoreTrackerImage({
       src: srcValue,
@@ -1457,7 +1400,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       height: img.getAttribute("height"),
       style: img.getAttribute("style"),
       alt: img.getAttribute("alt"),
-      senderDomain: readerSenderDomain,
     }).tracked;
 
   const detectTrackers = (rawHtml: string): { count: number; vendors: string[] } => {
@@ -1527,10 +1469,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       img.style.maxWidth = "100%";
       img.style.height = "auto";
       img.loading = "lazy";
-      img.decoding = "async";
-      // Many sender CDNs reject requests carrying a cross-site referrer, which is a common cause of
-      // email images silently failing to load. Ask the browser not to send one.
-      img.referrerPolicy = "no-referrer";
     });
     parsed.querySelectorAll<HTMLAnchorElement>("a").forEach((link) => {
       link.target = "_blank";
@@ -1620,23 +1558,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         throw new Error(payload?.message || "Failed to load mailbox counts.");
       }
       const counts = payload?.counts || {};
-      const next = {
+      setMailboxCounts({
         inbox: Number(counts.inbox || 0),
         sent: Number(counts.sent || 0),
         drafts: Number(counts.drafts || 0),
         archive: Number(counts.archive || 0),
         spam: Number(counts.spam || 0),
         trash: Number(counts.trash || 0),
-        // Was missing, so mailboxCounts.starred stayed undefined and the badge never rendered
-        // even though the API returns it.
-        starred: Number(counts.starred || 0),
-      };
-      setMailboxCounts(next);
-      // Sidebar badges render from this. They used to be counted off the first page of each
-      // mailbox, which silently capped every badge at PAGE_SIZE — an inbox with 80 unread read
-      // as 50. These are Gmail's own totals, so they're both correct and cheap. Local mark
-      // read/unread still adjusts the number optimistically between refreshes.
-      setModuleUnreadBadges(next);
+      });
     } catch {
       setMailboxCounts(EMPTY_COUNTS);
     } finally {
@@ -1648,37 +1577,73 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     loadMailboxCounts();
   }, [loadMailboxCounts]);
 
-  /**
-   * Unstar every selected message. The Starred view is a label view, so removing the star is the
-   * meaningful bulk action there (Move To / Archive are hidden for it). Rows are dropped from the
-   * list optimistically since they no longer belong in this view, then counts are refreshed.
-   */
-  const unstarSelected = useCallback(async () => {
-    const selected = conversationRows.filter((message) => selectedRows.includes(rowKey(message)));
-    if (selected.length === 0) return;
-    const items = selected.map((message) => ({ accountEmail: message.accountEmail, messageId: message.id }));
-    const affected = new Set(items.map((i) => `${i.accountEmail}::${i.messageId}`));
-    setActionLoading(true);
-    try {
-      const response = await fetch("/api/gmail/actions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "unstar", items }),
+  const loadUnreadBadges = useCallback(async () => {
+    if (step !== "client" || selectedAccounts.length === 0) {
+      setModuleUnreadBadges({
+        inbox: 0,
+        sent: 0,
+        drafts: 0,
+        archive: 0,
+        spam: 0,
+        trash: 0,
       });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload?.message || "Could not unstar the selected messages.");
-      }
-      setMessages((prev) => prev.filter((m) => !affected.has(`${m.accountEmail}::${m.id}`)));
-      setSelectedRows([]);
-      invalidateMessagesCache();
-      await loadMailboxCounts();
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Could not unstar the selected messages.");
-    } finally {
-      setActionLoading(false);
+      return;
     }
-  }, [conversationRows, selectedRows, rowKey, invalidateMessagesCache, loadMailboxCounts]);
+    try {
+      const results = await Promise.all(
+        BADGE_MAILBOXES.map(async (mailbox) => {
+          const query = new URLSearchParams({
+            mailbox,
+            accounts: selectedAccounts.join(","),
+            limit: String(PAGE_SIZE),
+            page: "1",
+          });
+          const response = await fetch(`/api/gmail/messages?${query.toString()}`);
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) return [mailbox, 0] as const;
+          const rows: MessageRow[] = Array.isArray(payload?.messages) ? payload.messages : [];
+          // This fetch already pulled the full first page for every standard mailbox — warm
+          // loadMessages's cache with it (identical query shape for a plain tab switch: page
+          // resets to 1, search/label are cleared) so the FIRST visit to that tab also paints
+          // instantly instead of showing the loading spinner. No extra network requests; this
+          // data was previously fetched here just to count unread and then discarded.
+          const cacheKey = query.toString();
+          messagesCacheRef.current.delete(cacheKey);
+          messagesCacheRef.current.set(cacheKey, {
+            messages: rows,
+            accountErrors: Array.isArray(payload?.accountErrors) ? payload.accountErrors : [],
+            hasNextPage: Boolean(payload?.hasNextPage),
+          });
+          if (messagesCacheRef.current.size > MESSAGE_CACHE_LIMIT) {
+            const oldest = messagesCacheRef.current.keys().next().value;
+            if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
+          }
+          return [mailbox, rows.filter((row) => row.unread).length] as const;
+        })
+      );
+      const next: ModuleUnreadBadgeCounts = {
+        inbox: 0,
+        sent: 0,
+        drafts: 0,
+        archive: 0,
+        spam: 0,
+        trash: 0,
+      };
+      for (const [mailbox, count] of results) {
+        next[mailbox] = count;
+      }
+      setModuleUnreadBadges(next);
+    } catch {
+      setModuleUnreadBadges({
+        inbox: 0,
+        sent: 0,
+        drafts: 0,
+        archive: 0,
+        spam: 0,
+        trash: 0,
+      });
+    }
+  }, [selectedAccounts, step]);
 
   const loadMessages = useCallback(async () => {
     const requestId = ++loadMessagesRequestRef.current;
@@ -1693,7 +1658,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     const query = new URLSearchParams({
       mailbox,
       accounts: activeLabelId ? selectedAccounts[0] || "" : selectedAccounts.join(","),
-      limit: String(pageSize),
+      limit: String(PAGE_SIZE),
       page: String(currentPage),
     });
     if (activeLabelId) query.set("labelId", activeLabelId);
@@ -1721,6 +1686,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         throw new Error(payload?.message || "Failed to load Gmail messages.");
       }
       const nextMessages = Array.isArray(payload?.messages) ? payload.messages : [];
+      const unreadCount = nextMessages.filter((message: MessageRow) => message.unread).length;
       const nextAccountErrors = Array.isArray(payload?.accountErrors) ? payload.accountErrors : [];
       const nextHasNextPage = Boolean(payload?.hasNextPage);
       // Bounded LRU-ish cache: re-inserting moves the key to the end, and we evict the oldest.
@@ -1734,6 +1700,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         const oldest = messagesCacheRef.current.keys().next().value;
         if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
       }
+      setModuleUnreadBadges((prev) => ({ ...prev, [mailbox as keyof ModuleUnreadBadgeCounts]: unreadCount }));
       setMessages(nextMessages);
       setAccountErrors(nextAccountErrors);
       setHasNextPage(nextHasNextPage);
@@ -1748,13 +1715,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       if (requestId !== loadMessagesRequestRef.current) return;
       setMessages([]);
       setHasNextPage(false);
+      setModuleUnreadBadges((prev) => ({ ...prev, [mailbox as keyof ModuleUnreadBadgeCounts]: 0 }));
       setAccountErrors([]);
       setMessagesError(error instanceof Error ? error.message : "Failed to load Gmail messages.");
     } finally {
       if (requestId !== loadMessagesRequestRef.current) return;
       setMessagesLoading(false);
     }
-  }, [activeModule, activeLabelId, canLoadMessages, currentPage, debouncedSearch, pageSize, selectedAccounts, step]);
+  }, [activeModule, activeLabelId, canLoadMessages, currentPage, debouncedSearch, selectedAccounts, step]);
 
   useEffect(() => {
     loadMessagesRef.current = () => void loadMessages();
@@ -1814,22 +1782,25 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   }, [debouncedSearch]);
 
   useEffect(() => {
+    // Defer the unread-badge fetch (6 mailbox scans) so it doesn't compete with the
+    // active mailbox load for Gmail rate limit/bandwidth — the visible inbox paints first.
+    const t = setTimeout(() => {
+      loadUnreadBadges();
+    }, 800);
+    return () => clearTimeout(t);
+  }, [loadUnreadBadges]);
+
+  useEffect(() => {
     if (step === "client" && activeModule === "contacts") {
       loadContactTags();
       loadContactVisibility();
     }
   }, [activeModule, loadContactTags, loadContactVisibility, step]);
 
-  // Debounce the contacts search box so typing doesn't fire a request per keystroke.
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedContactSearch(contactSearch.trim()), 400);
-    return () => clearTimeout(t);
-  }, [contactSearch]);
-
   useEffect(() => {
     if (step !== "client" || activeModule !== "contacts") return;
     setContactCurrentPage(1);
-  }, [activeModule, debouncedContactSearch, contactSourceFilter, contactTagFilter, step]);
+  }, [activeModule, contactSearch, contactSourceFilter, contactTagFilter, step]);
 
   useEffect(() => {
     if (contactCurrentPage <= contactsTotalPages) return;
@@ -1902,29 +1873,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // linked conversation and switch to the reader. Matches by threadId and opens whichever
   // message in that thread is loaded — the reader then renders the full chain (threadMessages
   // from message-detail). Runs once when a row from the target thread appears.
-  // Clear the avatar-failure flag whenever a different message is opened, so one sender's dead
-  // photo URL doesn't suppress every later sender's picture. Keyed on the id so it covers every
-  // path that opens a message (list click, deep link, thread navigation).
-  useEffect(() => {
-    setSenderAvatarIndex(0);
-  }, [selectedMessageId]);
-
-  /**
-   * Current avatar URL for the open message's sender: the Google Contacts photo when one exists,
-   * then Gravatar, then the company favicon. Empty once every candidate has errored, which is the
-   * signal to render the initials avatar. Contacts-only lookup meant most senders had no photo at
-   * all, which is why pictures appeared not to load.
-   */
-  const senderAvatar = useMemo(() => {
-    const sources = selectedMessageDetail?.senderAvatarSources ?? [];
-    if (sources.length === 0) {
-      // Older payloads carry only the single contact photo.
-      const legacy = selectedMessageDetail?.senderPhotoUrl || "";
-      return senderAvatarIndex === 0 && legacy ? { url: legacy, kind: "photo" as const } : null;
-    }
-    return sources[senderAvatarIndex] ?? null;
-  }, [selectedMessageDetail, senderAvatarIndex]);
-
   useEffect(() => {
     if (deepLinkAppliedRef.current || !initialOpenThreadId) return;
     const row = messages.find((m) => m.threadId === initialOpenThreadId);
@@ -1963,9 +1911,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         items: [{ accountEmail: selectedMessage.accountEmail, messageId: selectedMessage.id }],
       }),
     })
-      .then(() => loadMailboxCounts())
+      .then(() => Promise.all([loadMailboxCounts(), loadUnreadBadges()]))
       .catch(() => null);
-  }, [selectedMessage, viewMode, loadMailboxCounts]);
+  }, [selectedMessage, viewMode, loadMailboxCounts, loadUnreadBadges]);
 
   /** Fetch a message's detail into the cache. Shared by the reader and hover prefetch. */
   const fetchDetailInto = useCallback(async (accountEmail: string, messageId: string) => {
@@ -1990,7 +1938,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         messageIdHeader: payload?.messageIdHeader,
         references: payload?.references,
         senderPhotoUrl: typeof payload?.senderPhotoUrl === "string" ? payload.senderPhotoUrl : "",
-          senderAvatarSources: Array.isArray(payload?.senderAvatarSources) ? payload.senderAvatarSources : [],
         threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
         trackers:
           payload?.trackers && typeof payload.trackers.count === "number"
@@ -2041,7 +1988,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             typeof payload?.messageIdHeader === "string" ? payload.messageIdHeader : selectedMessage.messageIdHeader,
           references: typeof payload?.references === "string" ? payload.references : selectedMessage.references,
           senderPhotoUrl: typeof payload?.senderPhotoUrl === "string" ? payload.senderPhotoUrl : "",
-          senderAvatarSources: Array.isArray(payload?.senderAvatarSources) ? payload.senderAvatarSources : [],
           threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
           trackers:
             payload?.trackers && typeof payload.trackers.count === "number"
@@ -2143,13 +2089,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
   const flushDraftsNow = useCallback(() => {
     if (!sendingCompose && isComposeOpen && effectiveComposeDraftStorageKey) {
-      // Recipients or a subject with no body still count — closing after typing only a
-      // "To" used to discard it, which reads as the composer losing your work.
       const hasComposeContent =
         composeBody.trim() ||
-        composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim() ||
-        composeTo.trim() ||
-        composeSubject.trim();
+        composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim();
       if (hasComposeContent) {
         void saveLocalDraft(
           effectiveComposeDraftStorageKey,
@@ -2380,12 +2322,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }));
       if (items.length === 0 && composeDraftRows.length === 0) return;
       const isReadToggle = action === "markRead" || action === "markUnread";
-      if (!isReadToggle && actionInFlightRef.current) {
-        // Silently returning here is why a second delete "did nothing" while the first was still
-        // in flight. Say so instead.
-        setActionError("Still finishing the last action — one moment.");
-        return;
-      }
+      if (!isReadToggle && actionInFlightRef.current) return;
       if (!isReadToggle) actionInFlightRef.current = true;
 
       setActionError("");
@@ -2410,29 +2347,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
           })
           .filter(Boolean) as MessageRow[]
       );
-      // Invalidate the per-view message cache for EVERY action, not just ones taken from the
-      // reader. Deleting straight from the list left the cached page intact, so the next
-      // revalidate repainted the row that had just been removed — the "delete didn't work the
-      // first time, worked on the second" symptom. Clearing it up front means no later paint can
-      // resurrect a message this action already removed.
-      invalidateMessagesCache();
       if (action !== "markRead" && action !== "markUnread") {
         setSelectedRows([]);
-        // Leave the reader now, not after Gmail answers. Acting on an open message used to
-        // hold the reader open for the whole round trip, so deleting felt like it hung before
-        // dropping back to the list — even though the row had already gone from the list
-        // underneath. The message is gone either way; the reconcile below only corrects rows.
-        setViewMode("list");
-        setSelectedMessageId("");
-        setSelectedMessageDetail(null);
-      } else if (action === "markUnread") {
-        // Marking unread from the reader means "I'm not done with this" — staying on the open
-        // message contradicts that, and the reader would immediately re-mark it read. Drop back
-        // to the list so the row is visibly unread again. markRead stays put: you're reading it.
-        setSelectedRows([]);
-        setViewMode("list");
-        setSelectedMessageId("");
-        setSelectedMessageDetail(null);
+        // The destination mailbox's cached page is now out of date.
+        invalidateMessagesCache();
       }
       try {
         if (
@@ -2456,30 +2374,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
         let results: any[] = [];
         if (items.length > 0) {
-          // Bounded: an unbounded fetch can hang for minutes, and while it hangs the in-flight
-          // guard below silently swallows every further click. Failing fast frees the guard and
-          // surfaces a real message instead.
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), ACTION_TIMEOUT_MS);
-          let response: Response;
-          try {
-            response = await fetch("/api/gmail/actions", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action, items }),
-              signal: controller.signal,
-            });
-          } catch (error) {
-            if ((error as Error)?.name === "AbortError") {
-              // The optimistic removal is now unverified, so resync rather than leave the list lying.
-              invalidateMessagesCache();
-              loadMessagesRef.current();
-              throw new Error("Gmail is taking too long to respond. Nothing was lost — try again.");
-            }
-            throw error;
-          } finally {
-            clearTimeout(timeout);
-          }
+          const response = await fetch("/api/gmail/actions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action, items }),
+          });
           const payload = await response.json().catch(() => ({}));
           if (!response.ok && response.status !== 207) {
             throw new Error(payload?.message || "Action failed.");
@@ -2553,15 +2452,18 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             })
             .filter(Boolean) as MessageRow[];
 
+          const unreadCount = next.filter((message) => message.unread).length;
+          setModuleUnreadBadges((prevBadges) =>
+            activeModule in prevBadges ? { ...prevBadges, [activeModule]: unreadCount } : prevBadges
+          );
           return next;
         });
 
         setSelectedRows([]);
-        // Not awaited: the list is already correct optimistically, so blocking the action's
-        // completion on a counts round trip only kept the toolbar spinner up. Badges are
-        // Gmail's own totals now, so deriving them from the visible page here would also have
-        // re-capped them at one page's worth.
-        void loadMailboxCounts();
+        setViewMode("list");
+        setSelectedMessageId("");
+        setSelectedMessageDetail(null);
+        await Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "Action failed.");
       } finally {
@@ -2569,7 +2471,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         setActionLoading(false);
       }
     },
-    [activeModule, invalidateMessagesCache, loadMailboxCounts, rowKey, selectedMessageRows, selectedRows]
+    [activeModule, invalidateMessagesCache, loadMailboxCounts, loadUnreadBadges, rowKey, selectedMessageRows, selectedRows]
   );
 
 
@@ -2608,7 +2510,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       removeRowsLocally(rows);
       showSentToast("Snoozed");
       invalidateMessagesCache();
-      void Promise.all([loadMessages(), loadMailboxCounts()]);
+      void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Failed to snooze.");
     } finally {
@@ -2778,7 +2680,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         }
         // Update in place — the moved rows just leave the list. No mailbox re-fetch.
         removeRowsLocally(rows);
-        void loadMailboxCounts();
+        void Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
       } catch {
         /* transient — the list refresh below/next poll reconciles */
       }
@@ -2788,6 +2690,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       activeModule,
       applyLabelToSelection,
       loadMailboxCounts,
+      loadUnreadBadges,
       removeRowsLocally,
     ]
   );
@@ -2833,7 +2736,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         if (activeModule === "inbox") await archiveRowsQuietly(rows);
         removeRowsLocally(rows);
         if (viewMode === "message") setViewMode("list");
-        void loadMailboxCounts();
+        void Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
       }
       return;
     }
@@ -2855,7 +2758,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, items }),
     })
-      .then(() => loadMailboxCounts())
+      .then(() => Promise.all([loadMailboxCounts(), loadUnreadBadges()]))
       .catch(() => setActionError("Failed to move the message."));
   };
 
@@ -2980,7 +2883,7 @@ ${sourceText}`;
       showSentToast("Message Sent");
       setInlineComposeMode(null);
       invalidateMessagesCache();
-      void Promise.all([loadMessages(), loadMailboxCounts()]);
+      void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
       setDetailError("");
       setSelectedMessageDetail(null);
     } catch (error) {
@@ -3044,8 +2947,7 @@ ${sourceText}`;
     setComposeBody("");
     setComposeBodyHtml("");
     setComposeAttachments([]);
-    setComposeMoreOpen(false);
-    setArtemisRewriteOpen(false);
+    setComposeTemplateMenuOpen(false);
     setComposeFormattingToolbarOpen(false);
     setScheduleAt("");
     setScheduleOpen(false);
@@ -3086,58 +2988,22 @@ ${sourceText}`;
     loadLabels();
   }, [loadLabels]);
 
-  /**
-   * Load send-as identities for every connected mailbox, not just the active one.
-   *
-   * These used to be fetched for composeAccountEmail alone, which made aliases undiscoverable:
-   * opening compose on a mailbox with no aliases showed none, and the only way to reach an
-   * alias on another mailbox was to already know it was there and switch accounts first. Now
-   * every address the user can legitimately send from is in the list up front, each tagged with
-   * the mailbox that owns it (Gmail rejects sending as an alias through a mailbox that doesn't).
-   */
-  const composeAliasAccountsKey = useMemo(
-    () => (selectedAccounts.length > 0 ? selectedAccounts : connectedAccounts.map((a) => a.email)).join(","),
-    [selectedAccounts, connectedAccounts]
-  );
+  // Load verified send-as aliases for the composing account (for the From selector).
   useEffect(() => {
-    if (!isComposeOpen) return;
-    const accounts = composeAliasAccountsKey.split(",").filter(Boolean);
-    if (accounts.length === 0) return;
+    if (!isComposeOpen || !composeAccountEmail) return;
     let cancelled = false;
-    Promise.all(
-      accounts.map(async (accountEmail) => {
-        const response = await fetch(`/api/gmail/send-as?accountEmail=${encodeURIComponent(accountEmail)}`);
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(`${accountEmail}: ${payload?.message || "failed to load send-as addresses"}`);
-        }
-        const aliases: Array<{ email: string; displayName: string; isPrimary: boolean }> = Array.isArray(
-          payload?.aliases
-        )
-          ? payload.aliases
-          : [];
-        return aliases.map((alias) => ({ ...alias, accountEmail }));
+    setComposeFrom(composeAccountEmail);
+    fetch(`/api/gmail/send-as?accountEmail=${encodeURIComponent(composeAccountEmail)}`)
+      .then((response) => response.json())
+      .then((payload) => {
+        if (!cancelled) setComposeAliases(Array.isArray(payload?.aliases) ? payload.aliases : []);
       })
-    )
-      .then((perAccount) => {
-        if (!cancelled) setComposeAliases(perAccount.flat());
-      })
-      // A failure used to be indistinguishable from "this account has no aliases" — both ended
-      // as an empty list — so a broken fetch looked like the feature not existing.
-      .catch((error: unknown) => {
-        if (cancelled) return;
-        setComposeAliases([]);
-        setComposeError(
-          `Couldn't load your send-as addresses: ${error instanceof Error ? error.message : "unknown error"}`
-        );
+      .catch(() => {
+        if (!cancelled) setComposeAliases([]);
       });
     return () => {
       cancelled = true;
     };
-  }, [isComposeOpen, composeAliasAccountsKey]);
-
-  useEffect(() => {
-    if (isComposeOpen && composeAccountEmail) setComposeFrom(composeAccountEmail);
   }, [isComposeOpen, composeAccountEmail]);
 
   const openLabel = (label: { id: string; name: string }) => {
@@ -3398,9 +3264,9 @@ ${sourceText}`;
       setRequestReceipt(false);
       if (activeModule === "sent" || activeModule === "drafts") {
         invalidateMessagesCache();
-        void Promise.all([loadMessages(), loadMailboxCounts()]);
+        void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
       } else {
-        void loadMailboxCounts();
+        void Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
       }
     } catch (error) {
       setComposeError(error instanceof Error ? error.message : "Failed to send email.");
@@ -3426,17 +3292,7 @@ ${sourceText}`;
   // running would send a message the user just tried to abort (and could clobber a fresh draft).
   const closeCompose = () => {
     cancelUndoSend();
-    // The autosave is debounced 450ms and its cleanup cancels the pending write, so closing
-    // right after a keystroke dropped those edits. Flush synchronously first, then resync the
-    // Drafts badge so the count reflects a draft created by this close.
-    flushDraftsNow();
     setIsComposeOpen(false);
-    void loadMailboxCounts();
-    // Closing a compose can create, update or empty a draft, so the cached Drafts page is now
-    // stale. Only the badge was refreshed before, which left the Drafts LIST showing the old
-    // contents until a manual refresh. Drop the cache and, if that list is on screen, refetch it.
-    invalidateMessagesCache();
-    if (activeModule === "drafts") void loadMessages();
   };
 
   // Undo-send: hold the message for a short window with an Undo affordance, then actually send.
@@ -3598,7 +3454,7 @@ ${sourceText}`;
         value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       setComposeBodyHtml(`<p>${esc(raw).replace(/\n/g, "<br />")}</p>`);
     }
-    setComposeMoreOpen(false);
+    setComposeTemplateMenuOpen(false);
   };
 
   // Append a chosen signature to the end of the current body (unlike templates, which replace it).
@@ -3612,7 +3468,7 @@ ${sourceText}`;
         : `<p>${escSig(sig.signatureText || "").replace(/\n/g, "<br />")}</p>`;
     setComposeBodyHtml((prev) => `${prev || ""}<p><br /></p>${sigHtml}`);
     setComposeBody((prev) => `${(prev || "").replace(/\s+$/, "")}\n\n${sig.signatureText || ""}`.trim());
-    setComposeMoreOpen(false);
+    setComposeSignatureMenuOpen(false);
   };
 
   const handlePrintCompose = () => {
@@ -3644,14 +3500,8 @@ ${sourceText}`;
       return Number.isFinite(draftCount) && draftCount > 0 ? draftCount : 0;
     }
     if (!BADGE_MODULES.has(moduleKey)) return 0;
-    // Starred isn't a mailbox we page through, so its unread count comes from the label totals
-    // rather than from the currently-loaded page of rows.
-    if (moduleKey === "starred") {
-      const starredUnread = Number(mailboxCounts.starred || 0);
-      return Number.isFinite(starredUnread) && starredUnread > 0 ? starredUnread : 0;
-    }
-    const countMap: Record<string, number> = moduleUnreadBadges as unknown as Record<string, number>;
-    const count = countMap[moduleKey];
+    const countMap: Record<"inbox" | "sent" | "drafts" | "archive" | "spam" | "trash", number> = moduleUnreadBadges;
+    const count = countMap[moduleKey as keyof typeof countMap];
     return Number.isFinite(count) && count > 0 ? count : 0;
   };
 
@@ -4178,7 +4028,7 @@ ${sourceText}`;
                                     type="button"
                                     onClick={() => {
                                       invalidateMessagesCache();
-                                      void Promise.all([loadMessages(), loadMailboxCounts()]);
+                                      void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
                                     }}
                                     disabled={messagesLoading}
                                     className={`${ICON_BUTTON_SOLID} email-tip`}
@@ -4187,22 +4037,6 @@ ${sourceText}`;
                                   >
                                     <MdRefresh className={`h-[18px] w-[18px] ${messagesLoading ? "motion-safe:animate-spin" : ""}`} />
                                   </button>
-                                  {/* Starred-only: the useful action here is removing the star. Placed
-                                      between Refresh and Trash, replacing Move To / Archive — moving a
-                                      starred message out of the view it lives in was disorienting, and
-                                      Starred is a label view rather than a mailbox. */}
-                                  {activeModule === "starred" && hasSelectedEmails ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => void unstarSelected()}
-                                      disabled={actionLoading}
-                                      className={`${ICON_BUTTON_SOLID} email-tip`}
-                                      aria-label="Unstar"
-                                      data-tip="Unstar"
-                                    >
-                                      <FiStar className="h-4 w-4 fill-[#F5A623]" />
-                                    </button>
-                                  ) : null}
                                   {/* Spam-only: restore to the inbox and tell Gmail it isn't spam. */}
                                   {activeModule === "spam" && hasSelectedEmails ? (
                                     <button
@@ -4221,9 +4055,9 @@ ${sourceText}`;
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
+                                    onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
                                     className={`${ICON_BUTTON_SOLID} email-tip`}
-                                    data-tip={deletesPermanently ? "Delete Permanently" : "Move To Trash"}
+                                    data-tip={activeModule === "trash" ? "Delete Permanently" : "Move To Trash"}
                                   >
                                     <FiTrash2 className="w-4 h-4" />
                                   </button>
@@ -4247,7 +4081,7 @@ ${sourceText}`;
                                       </button>
                                     </>
                                   ) : null}
-                                  {activeModule !== "drafts" && activeModule !== "starred" ? (
+                                  {activeModule !== "drafts" ? (
                                     <div ref={moveListMenuRef} className="relative">
                                       <button
                                         type="button"
@@ -4300,22 +4134,16 @@ ${sourceText}`;
                                       ) : null}
                                     </div>
                                   ) : null}
-                                  {/* Archive is hidden in Starred for the same reason as Move To:
-                                      Starred is a label view, so archiving from it just makes the
-                                      message vanish from where you were working. Unstar is the
-                                      meaningful action and sits by Refresh. */}
                                   {activeModule !== "drafts" ? (
                                     <>
-                                      {activeModule !== "starred" ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                                          className={`${ICON_BUTTON_SOLID} email-tip`}
-                                          data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
-                                        >
-                                          <FiArchive className="w-4 h-4" />
-                                        </button>
-                                      ) : null}
+                                      <button
+                                        type="button"
+                                        onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
+                                        className={`${ICON_BUTTON_SOLID} email-tip`}
+                                        data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
+                                      >
+                                        <FiArchive className="w-4 h-4" />
+                                      </button>
                                       <div ref={snoozeMenuRef} className="relative">
                                         <button
                                           type="button"
@@ -4852,10 +4680,10 @@ ${sourceText}`;
                                         message.tracked
                                           ? outboundTip
                                           : incomingTracker?.tracked
-                                            ? `Incoming Tracker · ${
+                                            ? `Incoming tracker · ${
                                                 incomingTracker.vendors.length
                                                   ? incomingTracker.vendors.join(", ")
-                                                  : `${incomingTracker.count} Beacon${incomingTracker.count === 1 ? "" : "s"}`
+                                                  : `${incomingTracker.count} beacon${incomingTracker.count === 1 ? "" : "s"}`
                                               }`
                                             : undefined
                                       }
@@ -5024,10 +4852,7 @@ ${sourceText}`;
                               </div>
                             ) : null}
                           </div>
-                          {/* Starred is a label view, not a mailbox — moving a message out of it
-                              (Archive included) was disorienting, so the whole menu is hidden there
-                              to match the list toolbar. */}
-                          <div ref={moveMessageMenuRef} className={`relative ${activeModule === "starred" ? "hidden" : ""}`}>
+                          <div ref={moveMessageMenuRef} className="relative">
                             <button
                               type="button"
                               onClick={() => setMoveMenuOpen((prev) => (prev === "message" ? null : "message"))}
@@ -5077,21 +4902,19 @@ ${sourceText}`;
                               </div>
                             ) : null}
                           </div>
-                          {activeModule !== "starred" ? (
-                            <button
-                              type="button"
-                              onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                              className={ICON_BUTTON}
-                              title={activeModule === "archive" ? "Unarchive" : "Archive"}
-                            >
-                              <FiArchive className="w-4 h-4" />
-                            </button>
-                          ) : null}
                           <button
                             type="button"
-                            onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
+                            onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
                             className={ICON_BUTTON}
-                            title={deletesPermanently ? "Delete Permanently" : "Trash"}
+                            title={activeModule === "archive" ? "Unarchive" : "Archive"}
+                          >
+                            <FiArchive className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
+                            className={ICON_BUTTON}
+                            title={activeModule === "trash" ? "Delete Permanently" : "Trash"}
                           >
                             <FiTrash2 className="w-4 h-4" />
                           </button>
@@ -5115,29 +4938,17 @@ ${sourceText}`;
                       </div>
 
                       {selectedMessage ? (
-                        <div className="flex-1 overflow-y-auto px-6 pt-5 pb-10">
+                        <div className="flex-1 overflow-y-auto px-6 pb-0 pt-5">
                           <h2 className="text-[22px] font-semibold tracking-tight text-[#1E1B2E]">{selectedMessage.subject || "(No Subject)"}</h2>
                           <div className="mt-4 flex items-start gap-3">
-                            {senderAvatar ? (
-                              // Deliberately a plain <img>, not next/image: the optimizer rejects any
-                              // host absent from images.remotePatterns (Google serves contact photos
-                              // from lh3.googleusercontent.com), and those URLs 403 when a referrer
-                              // is sent. onError advances to the next candidate — contact photo,
-                              // Gravatar, then company favicon — and initials show once they run out.
-                              /* eslint-disable-next-line @next/next/no-img-element */
-                              <img
-                                key={senderAvatar.url}
-                                src={senderAvatar.url}
-                                alt=""
+                            {selectedMessageDetail?.senderPhotoUrl ? (
+                              <Image
+                                src={selectedMessageDetail.senderPhotoUrl}
+                                alt="Sender"
                                 width={40}
                                 height={40}
-                                referrerPolicy="no-referrer"
-                                loading="eager"
-                                decoding="async"
-                                onError={() => setSenderAvatarIndex((i) => i + 1)}
-                                className={`h-10 w-10 shrink-0 rounded-full border border-[#E5E7EB] bg-white ${
-                                  senderAvatar.kind === "logo" ? "object-contain p-1.5" : "object-cover"
-                                }`}
+                                unoptimized
+                                className="w-10 h-10 rounded-full object-cover border border-[#E5E7EB]"
                               />
                             ) : (
                               <div className="w-10 h-10 rounded-full bg-[#ECE3FF] text-[#5B21B6] border border-[#E5E7EB] flex items-center justify-center text-sm font-semibold">
@@ -5153,12 +4964,12 @@ ${sourceText}`;
                                   selectedMessageDetail?.trackers ?? detectTrackers(selectedMessageDetail?.bodyHtml || "");
                                 if (trackers === 0) return null;
                                 const label = vendors.length
-                                  ? `${vendors.slice(0, 2).join(", ")}${vendors.length > 2 ? ` +${vendors.length - 2}` : ""} Tracker${trackers === 1 ? "" : "s"} Blocked`
-                                  : `${trackers} Tracker${trackers === 1 ? "" : "s"} Blocked`;
+                                  ? `${vendors.slice(0, 2).join(", ")}${vendors.length > 2 ? ` +${vendors.length - 2}` : ""} tracker blocked`
+                                  : `${trackers} tracker${trackers === 1 ? "" : "s"} blocked`;
                                 return (
                                   <p>
                                     <span
-                                      className="-ml-2 inline-flex items-center gap-1.5 rounded-md bg-[#F5EFFF] px-2 py-0.5 text-[11px] font-semibold text-[#701CC0]"
+                                      className="inline-flex items-center gap-1.5 rounded-md bg-[#F5EFFF] px-2 py-0.5 text-[11px] font-semibold text-[#701CC0]"
                                       title={
                                         vendors.length
                                           ? `Detected ${vendors.join(", ")} tracking. Remote pixels were blocked, so the sender can't tell you opened this.`
@@ -5623,7 +5434,7 @@ ${sourceText}`;
         <div
           className={
             composeExpanded
-              ? "fixed inset-0 z-[120] flex items-center justify-center bg-black/45 backdrop-blur-sm p-4"
+              ? "fixed inset-0 z-[120] flex items-center justify-center bg-[#2E1050]/45 backdrop-blur-sm p-4"
               : "contents"
           }
           onClick={composeExpanded ? () => setComposeExpanded(false) : undefined}
@@ -5641,7 +5452,7 @@ ${sourceText}`;
           >
             <div className="compose-hud-header flex shrink-0 cursor-default items-center justify-between gap-2 px-4 py-2.5">
               <p className="min-w-0 flex-1 truncate pr-2 text-sm font-semibold text-white">
-                {composeThreadId ? "Reply" : "New Message"}
+                {composeThreadId ? "Reply" : "New message"}
               </p>
               <div className="flex shrink-0 items-center">
                 <button
@@ -5657,7 +5468,6 @@ ${sourceText}`;
                   type="button"
                   onClick={closeCompose}
                   className="rounded-full p-2 text-white/90 hover:bg-white/15"
-                  title="Close"
                   aria-label="Close compose"
                 >
                   <FiX className="h-5 w-5" />
@@ -5670,26 +5480,23 @@ ${sourceText}`;
                 className={`flex min-h-0 flex-1 flex-col px-0 ${
                   composeExpanded
                     ? "overflow-hidden"
-                    : `max-h-[min(66vh,580px)] overflow-y-auto ${COMPOSE_NEUTRAL_SCROLLBAR}`
+                    : `max-h-[min(52vh,440px)] overflow-y-auto ${COMPOSE_NEUTRAL_SCROLLBAR}`
                 }`}
               >
                 <div className="shrink-0 px-3">
-                  <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
+                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
                     <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">From</span>
                     <div className="relative min-w-0">
                       <select
                         value={composeFrom || composeAccountEmail}
                         onChange={(event) => {
                           const value = event.target.value;
-                          setComposeFrom(value);
                           if (composeFromOptions.includes(value)) {
                             setComposeAccountEmail(value);
-                            return;
+                            setComposeFrom(value);
+                          } else {
+                            setComposeFrom(value);
                           }
-                          // An alias only sends through the mailbox that owns it — picking one
-                          // has to move the sending account too, or Gmail rejects the send.
-                          const owner = composeAliases.find((alias) => alias.email === value)?.accountEmail;
-                          if (owner) setComposeAccountEmail(owner);
                         }}
                         className="min-w-0 w-full cursor-pointer appearance-none border-0 bg-transparent py-1.5 pl-0 pr-7 text-sm text-[#1E1B2E] outline-none focus:ring-0"
                       >
@@ -5699,11 +5506,10 @@ ${sourceText}`;
                           </option>
                         ))}
                         {composeAliases
-                          // Drop the primaries — they're already listed above as accounts.
-                          .filter((alias) => !composeFromOptions.includes(alias.email))
+                          .filter((alias) => !composeFromOptions.includes(alias.email) && alias.email !== composeAccountEmail)
                           .map((alias) => (
-                            <option key={`${alias.accountEmail}::${alias.email}`} value={alias.email}>
-                              {alias.displayName ? `${alias.displayName} <${alias.email}>` : alias.email}
+                            <option key={alias.email} value={alias.email}>
+                              {alias.displayName ? `${alias.displayName} <${alias.email}>` : alias.email} (alias)
                             </option>
                           ))}
                       </select>
@@ -5714,7 +5520,7 @@ ${sourceText}`;
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
+                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
                     <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">To</span>
                     <div className="flex min-w-0 items-center gap-2">
                       <input
@@ -5751,7 +5557,7 @@ ${sourceText}`;
                   </div>
 
                   {showCc ? (
-                    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
+                    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
                       <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Cc</span>
                       <input
                         value={composeCc}
@@ -5763,7 +5569,7 @@ ${sourceText}`;
                   ) : null}
 
                   {showBcc ? (
-                    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
+                    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
                       <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Bcc</span>
                       <input
                         value={composeBcc}
@@ -5774,7 +5580,7 @@ ${sourceText}`;
                     </div>
                   ) : null}
 
-                  <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
+                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
                     <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Subject</span>
                     <input
                       value={composeSubject}
@@ -5799,7 +5605,7 @@ ${sourceText}`;
                       setComposeBodyHtml(html);
                       setComposeBody(text);
                     }}
-                    minHeightClass={composeExpanded ? "min-h-0 flex-1" : "min-h-[280px]"}
+                    minHeightClass={composeExpanded ? "min-h-0 flex-1" : "min-h-[140px]"}
                     className={composeExpanded ? "min-h-0 flex-1 flex flex-col overflow-hidden" : ""}
                     showToolbar={composeFormattingToolbarOpen}
                   />
@@ -5868,8 +5674,8 @@ ${sourceText}`;
                     {composeSuccess}
                   </div>
                 ) : null}
-                <div className="compose-actions flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-0.5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex min-w-0 flex-wrap items-center gap-3">
                     <button
                       type="button"
                       onClick={handleSendCompose}
@@ -5891,9 +5697,16 @@ ${sourceText}`;
                         title="Schedule send"
                         aria-label="Schedule send"
                         aria-pressed={scheduleOpen || Boolean(scheduleAt)}
-                        className={composeIconClass(Boolean(scheduleAt) || scheduleOpen)}
+                        className={`inline-flex min-h-9 items-center gap-1.5 rounded border px-2.5 text-sm font-medium transition ${
+                          scheduleAt
+                            ? "border-[#701CC0] bg-[#F5EFFF] text-[#701CC0]"
+                            : "border-[#DEC9F6] text-[#701CC0] hover:bg-[#F5EFFF]"
+                        }`}
                       >
-                        <FiClock className="h-[18px] w-[18px]" aria-hidden />
+                        <FiClock className="h-4 w-4" aria-hidden />
+                        {scheduleAt
+                          ? new Date(scheduleAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
+                          : "Schedule"}
                       </button>
                       {scheduleOpen ? (
                         <div className="absolute bottom-full left-0 z-[130] mb-1 w-72 rounded-lg border border-[#EAE5F4] bg-white p-3 shadow-lg">
@@ -5945,9 +5758,14 @@ ${sourceText}`;
                         title="Confidential mode"
                         aria-label="Confidential mode"
                         aria-pressed={confidentialOn}
-                        className={composeIconClass(confidentialOn || confidentialOpen)}
+                        className={`inline-flex min-h-9 items-center gap-1.5 rounded border px-2.5 text-sm font-medium transition ${
+                          confidentialOn
+                            ? "border-[#701CC0] bg-[#F5EFFF] text-[#701CC0]"
+                            : "border-[#DEC9F6] text-[#701CC0] hover:bg-[#F5EFFF]"
+                        }`}
                       >
-                        <FiLock className="h-[18px] w-[18px]" aria-hidden />
+                        <FiLock className="h-4 w-4" aria-hidden />
+                        Confidential
                       </button>
                       {confidentialOpen ? (
                         <div className="absolute bottom-full left-0 z-[130] mb-1 w-72 rounded-lg border border-[#EAE5F4] bg-white p-3 shadow-lg">
@@ -6005,40 +5823,39 @@ ${sourceText}`;
                       title="Request read receipt"
                       aria-label="Request read receipt"
                       aria-pressed={requestReceipt}
-                      className={composeIconClass(requestReceipt)}
+                      className={`inline-flex min-h-9 items-center gap-1.5 rounded border px-2.5 text-sm font-medium transition ${
+                        requestReceipt
+                          ? "border-[#701CC0] bg-[#F5EFFF] text-[#701CC0]"
+                          : "border-[#DEC9F6] text-[#701CC0] hover:bg-[#F5EFFF]"
+                      }`}
                     >
-                      <FiCheckSquare className="h-[18px] w-[18px]" aria-hidden />
+                      <FiCheckSquare className="h-4 w-4" aria-hidden />
+                      Receipt
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleArtemisDraft}
+                      disabled={artemisDrafting}
+                      title="Draft with Artemis AI"
+                      aria-label="Draft with Artemis AI"
+                      className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded px-3 text-sm font-semibold text-white transition disabled:opacity-50"
+                      style={{ backgroundImage: BRAND_GRADIENT }}
+                    >
+                      <FiZap className="h-4 w-4" aria-hidden />
+                      {artemisDrafting ? "Drafting…" : "Artemis"}
                     </button>
                     <div className="relative shrink-0">
                       <button
                         type="button"
                         onClick={() => setArtemisRewriteOpen((open) => !open)}
-                        disabled={artemisDrafting}
-                        title="Artemis AI"
-                        aria-label="Artemis AI"
-                        aria-expanded={artemisRewriteOpen}
-                        className={composeIconClass(artemisRewriteOpen || artemisDrafting)}
+                        disabled={artemisDrafting || !composeBody.trim()}
+                        title="Rewrite with Artemis"
+                        className="inline-flex min-h-9 items-center gap-1 rounded border border-[#DEC9F6] px-2.5 text-sm font-medium text-[#701CC0] hover:bg-[#F5EFFF] disabled:opacity-40"
                       >
-                        <FiZap className={`h-[18px] w-[18px] ${artemisDrafting ? "animate-pulse" : ""}`} aria-hidden />
+                        <FiZap className="h-3.5 w-3.5" aria-hidden /> Rewrite
                       </button>
                       {artemisRewriteOpen ? (
-                        <div className="compose-menu absolute bottom-full left-0 z-[130] mb-2 w-52">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setArtemisRewriteOpen(false);
-                              void handleArtemisDraft();
-                            }}
-                            disabled={artemisDrafting}
-                            className={composeMenuItemClass}
-                          >
-                            <FiZap className="h-4 w-4 shrink-0" aria-hidden />
-                            {artemisDrafting ? "Drafting…" : "Draft for me"}
-                          </button>
-                          <div className="my-1 h-px bg-white/[0.07]" />
-                          <p className="px-3 pb-1 pt-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-[#7C7695]">
-                            Rewrite
-                          </p>
+                        <div className="email-menu absolute bottom-full left-0 z-[130] mb-1.5 w-44">
                           {([
                             ["shorten", "Make shorter"],
                             ["expand", "Expand"],
@@ -6050,8 +5867,7 @@ ${sourceText}`;
                               key={mode}
                               type="button"
                               onClick={() => handleArtemisRewrite(mode)}
-                              disabled={artemisDrafting || !composeBody.trim()}
-                              className={composeMenuItemClass}
+                              className="email-menu-item block w-full px-2.5 py-[7px] text-left text-[12.5px] font-medium"
                             >
                               {label}
                             </button>
@@ -6059,11 +5875,16 @@ ${sourceText}`;
                         </div>
                       ) : null}
                     </div>
-                    <div className="relative flex min-w-0 items-center gap-0.5">
+                    <span className="inline-block h-6 w-px shrink-0 self-center bg-[#EAE5F4]" aria-hidden />
+                    <div className="relative flex min-w-0 flex-wrap items-center gap-0.5">
                       <button
                         type="button"
                         onClick={() => setComposeFormattingToolbarOpen((open) => !open)}
-                        className={composeIconClass(composeFormattingToolbarOpen)}
+                        className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
+                          composeFormattingToolbarOpen
+                            ? "bg-[#e8eaed] text-[#1E1B2E]"
+                            : "text-[#5f6368] hover:bg-[#f1f3f4]"
+                        }`}
                         title="Formatting options"
                         aria-label="Formatting options"
                         aria-pressed={composeFormattingToolbarOpen}
@@ -6073,17 +5894,26 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => composeAttachInputRef.current?.click()}
-                        className={composeIconClass()}
+                        className={ICON_BUTTON_GHOST}
                         title="Attach files"
                         aria-label="Attach files"
                       >
                         <FiPaperclip className="h-[18px] w-[18px]" aria-hidden />
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setSignModalOpen(true)}
+                        className={ICON_BUTTON_GHOST}
+                        title="Request signature"
+                        aria-label="Request signature"
+                      >
+                        <FiFeather className="h-[18px] w-[18px]" aria-hidden />
+                      </button>
                       <div className="relative shrink-0">
                         <button
                           type="button"
                           onClick={toggleBookingMenu}
-                          className={composeIconClass(bookingMenuOpen)}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
                           title="Insert booking link"
                           aria-label="Insert booking link"
                           aria-expanded={bookingMenuOpen}
@@ -6091,9 +5921,9 @@ ${sourceText}`;
                           <FiCalendar className="h-[18px] w-[18px]" aria-hidden />
                         </button>
                         {bookingMenuOpen ? (
-                          <div className="compose-menu absolute bottom-full left-0 z-[130] mb-2 w-64">
+                          <div className="absolute bottom-full left-0 z-20 mb-1 w-64 rounded-lg border border-[#E5E7EB] bg-white py-1 shadow-lg">
                             {composeBookingLinks.length === 0 ? (
-                              <p className="px-3 py-2 text-xs leading-relaxed text-[#8C86A6]">
+                              <p className="px-3 py-2 text-xs text-[#847FA0]">
                                 No active booking links. Create one in Settings → Meeting booking.
                               </p>
                             ) : (
@@ -6102,7 +5932,7 @@ ${sourceText}`;
                                   key={l.id}
                                   type="button"
                                   onClick={() => insertBookingLink(l.slug, l.title)}
-                                  className={`${composeMenuItemClass} truncate`}
+                                  className="block w-full truncate px-3 py-2 text-left text-sm text-[#374151] hover:bg-[#F5EFFF] hover:text-[#701CC0]"
                                 >
                                   {l.title}
                                 </button>
@@ -6114,7 +5944,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => composeEditorRef.current?.promptInsertLink()}
-                        className={composeIconClass()}
+                        className={ICON_BUTTON_GHOST}
                         title="Insert link"
                         aria-label="Insert link"
                       >
@@ -6123,124 +5953,100 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => composeEditorRef.current?.promptInsertImage()}
-                        className={composeIconClass()}
+                        className={ICON_BUTTON_GHOST}
                         title="Insert image"
                         aria-label="Insert image"
                       >
                         <FiImage className="h-[18px] w-[18px]" aria-hidden />
                       </button>
-                      {/* Gmail keeps its second-tier actions behind one "More options" button rather
-                          than a second row of controls — templates, signatures, print and the
-                          signature request live here so the bar stays a single line. */}
-                      <div className="relative shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setComposeMoreOpen((open) => !open)}
-                          className={composeIconClass(composeMoreOpen)}
-                          title="More options"
-                          aria-label="More options"
-                          aria-expanded={composeMoreOpen}
-                        >
-                          <FiMoreVertical className="h-[18px] w-[18px]" aria-hidden />
-                        </button>
-                        {composeMoreOpen ? (
-                          <div className="compose-menu absolute bottom-full left-0 z-[130] mb-2 max-h-[min(60vh,22rem)] w-60 overflow-y-auto">
-                            <p className="px-3 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-[#7C7695]">
-                              Templates
-                            </p>
-                            {composeTemplates.length === 0 ? (
-                              <p className="px-3 pb-1.5 text-xs text-[#8C86A6]">No templates yet</p>
-                            ) : (
-                              composeTemplates.map((template) => (
-                                <button
-                                  key={template.id}
-                                  type="button"
-                                  className={`${composeMenuItemClass} truncate`}
-                                  onClick={() => {
-                                    setComposeMoreOpen(false);
-                                    applyComposeTemplate(template.id);
-                                  }}
-                                >
-                                  <FiFileText className="h-4 w-4 shrink-0" aria-hidden />
-                                  <span className="truncate">{template.name}</span>
-                                </button>
-                              ))
-                            )}
-                            <button
-                              type="button"
-                              className={`${composeMenuItemClass} text-[#C8A6F5]`}
-                              onClick={() => {
-                                setComposeMoreOpen(false);
-                                setSaveTemplateName("");
-                                setSaveTemplateModalOpen(true);
-                              }}
-                            >
-                              <FiPlus className="h-4 w-4 shrink-0" aria-hidden />
-                              Save as template…
-                            </button>
-
-                            <div className="my-1 h-px bg-white/[0.07]" />
-                            <p className="px-3 pb-1 pt-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-[#7C7695]">
-                              Signatures
-                            </p>
-                            {composeSignatures.length === 0 ? (
-                              <p className="px-3 pb-1.5 text-xs text-[#8C86A6]">No signatures yet</p>
-                            ) : (
-                              composeSignatures.map((sig) => (
-                                <button
-                                  key={sig.id}
-                                  type="button"
-                                  className={`${composeMenuItemClass} truncate`}
-                                  onClick={() => {
-                                    setComposeMoreOpen(false);
-                                    applyComposeSignature(sig.id);
-                                  }}
-                                >
-                                  <FiEdit3 className="h-4 w-4 shrink-0" aria-hidden />
-                                  <span className="truncate">
-                                    {sig.name}
-                                    {sig.isDefault ? " (default)" : ""}
-                                  </span>
-                                </button>
-                              ))
-                            )}
-
-                            <div className="my-1 h-px bg-white/[0.07]" />
-                            <button
-                              type="button"
-                              className={composeMenuItemClass}
-                              onClick={() => {
-                                setComposeMoreOpen(false);
-                                setSignModalOpen(true);
-                              }}
-                            >
-                              <FiFeather className="h-4 w-4 shrink-0" aria-hidden />
-                              Request signature
-                            </button>
-                            <button
-                              type="button"
-                              className={composeMenuItemClass}
-                              onClick={() => {
-                                setComposeMoreOpen(false);
-                                handlePrintCompose();
-                              }}
-                            >
-                              <FiPrinter className="h-4 w-4 shrink-0" aria-hidden />
-                              Print
-                            </button>
-                          </div>
-                        ) : null}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={handlePrintCompose}
+                        className={ICON_BUTTON_GHOST}
+                        title="Print"
+                        aria-label="Print"
+                      >
+                        <FiPrinter className="h-[18px] w-[18px]" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setComposeTemplateMenuOpen((open) => !open)}
+                        className={ICON_BUTTON_GHOST}
+                        title="Load template"
+                        aria-label="Load template"
+                        aria-expanded={composeTemplateMenuOpen}
+                      >
+                        <FiFileText className="h-[18px] w-[18px]" aria-hidden />
+                      </button>
+                      {composeTemplateMenuOpen ? (
+                        <div className="absolute left-0 top-full z-[130] mt-1 max-h-56 w-56 overflow-y-auto rounded-md border border-[#EAE5F4] bg-white py-1 shadow-lg">
+                          {composeTemplates.length === 0 ? (
+                            <div className="px-3 py-2 text-xs text-[#5f6368]">No templates yet</div>
+                          ) : (
+                            composeTemplates.map((template) => (
+                              <button
+                                key={template.id}
+                                type="button"
+                                className="block w-full truncate px-3 py-2 text-left text-sm text-[#1E1B2E] hover:bg-[#f1f3f4]"
+                                onClick={() => applyComposeTemplate(template.id)}
+                              >
+                                {template.name}
+                              </button>
+                            ))
+                          )}
+                          <div className="border-t border-[#e8eaed]" />
+                          <button
+                            type="button"
+                            className="block w-full px-3 py-2 text-left text-sm font-medium text-[#701CC0] hover:bg-[#f1f3f4]"
+                            onClick={() => {
+                              setComposeTemplateMenuOpen(false);
+                              setSaveTemplateName("");
+                              setSaveTemplateModalOpen(true);
+                            }}
+                          >
+                            Save as template…
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setComposeSignatureMenuOpen((open) => !open)}
+                        className={ICON_BUTTON_GHOST}
+                        title="Insert signature"
+                        aria-label="Insert signature"
+                        aria-expanded={composeSignatureMenuOpen}
+                      >
+                        <FiEdit3 className="h-[18px] w-[18px]" aria-hidden />
+                      </button>
+                      {composeSignatureMenuOpen ? (
+                        <div className="absolute left-0 top-full z-[130] mt-1 max-h-56 w-56 overflow-y-auto rounded-md border border-[#EAE5F4] bg-white py-1 shadow-lg">
+                          {composeSignatures.length === 0 ? (
+                            <div className="px-3 py-2 text-xs text-[#5f6368]">No signatures yet</div>
+                          ) : (
+                            composeSignatures.map((sig) => (
+                              <button
+                                key={sig.id}
+                                type="button"
+                                className="block w-full truncate px-3 py-2 text-left text-sm text-[#1E1B2E] hover:bg-[#f1f3f4]"
+                                onClick={() => applyComposeSignature(sig.id)}
+                              >
+                                {sig.name}
+                                {sig.isDefault ? " (default)" : ""}
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={closeCompose}
-                    className={composeIconClass()}
-                    title="Discard draft"
-                    aria-label="Discard draft"
+                    className="shrink-0 rounded px-3 py-1.5 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
                   >
-                    <FiTrash2 className="h-[18px] w-[18px]" aria-hidden />
+                    Discard
                   </button>
                 </div>
               </div>
@@ -6458,30 +6264,6 @@ ${sourceText}`;
           setContactToDelete(null);
         }}
         onConfirm={confirmDeleteContact}
-      />
-      <ConfirmActionModal
-        isOpen={confirmHardDelete}
-        title="Delete Permanently"
-        message={
-          <>
-            {selectedRows.length > 1 ? (
-              <>
-                Permanently delete <span className="font-semibold text-white">{selectedRows.length} emails</span>?
-              </>
-            ) : (
-              <>Permanently delete this email?</>
-            )}{" "}
-            They will not go to Trash and this cannot be undone.
-          </>
-        }
-        confirmLabel="Delete Permanently"
-        danger
-        dark
-        onCancel={() => setConfirmHardDelete(false)}
-        onConfirm={() => {
-          setConfirmHardDelete(false);
-          void applyAction("deletePermanently");
-        }}
       />
       <ConfirmActionModal
         isOpen={Boolean(labelToDelete)}

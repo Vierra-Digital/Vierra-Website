@@ -65,7 +65,6 @@ export default withAuth(async (req, res, session) => {
   const leadStatusCounts = Object.fromEntries(leadStatusGroups.map((g) => [g.lead_status, g._count]));
   const repliedCount = contactTotal - (leadStatusCounts["no_response"] ?? 0);
 
-  res.setHeader("Cache-Control", "private, max-age=30");
   res.status(200).json({
     daily,
     totals: { emailsSent: totalSent, opens: totalOpens, clicks: totalClicks, contacts: contactTotal, replied: repliedCount },

@@ -1088,8 +1088,6 @@ model EmailNavPreference {
   hidden_modules String[]
   /** Custom left-nav order (module keys). Empty = built-in MODULES order. */
   module_order   String[]
-  /** Rows per mailbox page. Null = built-in PAGE_SIZE. */
-  page_size      Int?
   updated_at     DateTime @default(now()) @db.Timestamptz(6)
 
   @@map("email_nav_preferences")

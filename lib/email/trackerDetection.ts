@@ -216,19 +216,6 @@ export function scoreTrackerImage(input: {
     reasons.push("tiny");
   }
 
-  // Anything declaring a dimension above beacon size is visible content, not a pixel. Read from
-  // width/height attributes or an inline style; 32px is comfortably above every real beacon.
-  const VISIBLE_MIN_PX = 33;
-  const styleDimPx = (prop: "width" | "height"): number => {
-    const match = style.match(new RegExp(`${prop}\\s*:\\s*(\\d+(?:\\.\\d+)?)px`));
-    return match ? Number(match[1]) : 0;
-  };
-  const declaredVisible =
-    Number(w) >= VISIBLE_MIN_PX ||
-    Number(h) >= VISIBLE_MIN_PX ||
-    styleDimPx("width") >= VISIBLE_MIN_PX ||
-    styleDimPx("height") >= VISIBLE_MIN_PX;
-
   // H4 — hidden / off-screen.
   if (/display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0|left\s*:\s*-\d{3,}px/.test(style)) {
     score += 2;
@@ -261,14 +248,6 @@ export function scoreTrackerImage(input: {
   // Known CDN with no vendor hit → almost certainly a logo/hero/spacer, not a beacon.
   if (isCdn && !vendor) {
     return { tracked: false, vendor: null, confidence: "low", score: 0, reasons: ["cdn"] };
-  }
-
-  // A beacon is invisible by definition. An image that declares clearly-visible dimensions is
-  // content — a signature logo, a hero — so heuristics alone must not remove it. Without this,
-  // a hosted logo scored third-party(+1) + random-token(+2) = 3 and got stripped from the reader.
-  // A vendor-pattern hit still wins, since that is direct evidence rather than inference.
-  if (declaredVisible && !vendor) {
-    return { tracked: false, vendor: null, confidence: "low", score: 0, reasons: ["visible-dimensions"] };
   }
 
   const confidence: TrackerVerdict["confidence"] = score >= 5 ? "high" : score >= 3 ? "medium" : "low";

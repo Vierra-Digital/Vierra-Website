@@ -83,9 +83,7 @@ export default function RootLayoutClient({
       storeAnalyticsData(result);
     };
     validateAnalytics();
-    // Matches the 24h cache TTL in checkAnalyticsStatus (lib/analytics.ts) — no
-    // point waking up hourly just to no-op against a cache that's still valid.
-    const intervalId = setInterval(validateAnalytics, 24 * 60 * 60 * 1000);
+    const intervalId = setInterval(validateAnalytics, 3600000);
     return () => clearInterval(intervalId);
   }, []);
   useEffect(() => {

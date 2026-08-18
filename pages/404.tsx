@@ -1,4 +1,5 @@
 "use client"
+import React from "react"
 import { bricolage, inter } from "@/lib/fonts";
 import { motion } from "framer-motion"
 import Link from "next/link"

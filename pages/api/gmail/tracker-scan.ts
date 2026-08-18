@@ -3,8 +3,6 @@ import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { asStr } from "@/lib/api/parsing";
 import { scanHtmlForTrackers } from "@/lib/email/trackerDetection";
-import { senderDomain } from "@/lib/email/senderAvatar";
-import { extractHeader, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 
 /**
  * Batched tracker scan for a page of the message list.
@@ -114,10 +112,7 @@ export default withAuth(
         );
         if (!response.ok) return [id, null] as const;
         const payload = await response.json();
-        // Same reason as message-detail: sender-hosted images must not be scored as third-party.
-        const fromHeader = extractHeader(payload?.payload?.headers, "From") || "";
-        const fromDomain = senderDomain(parseAddressFromHeader(fromHeader) || "");
-        const verdict = scanHtmlForTrackers(extractHtml(payload?.payload), fromDomain);
+        const verdict = scanHtmlForTrackers(extractHtml(payload?.payload));
         // Attachment presence rides along on the same fetch — the list request uses
         // format=metadata and can't see parts, so this is the cheapest place to learn it.
         return [

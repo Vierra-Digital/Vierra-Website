@@ -17,7 +17,6 @@ export default withAuth(async (req, res, session) => {
       },
       orderBy: { created_at: "desc" },
     });
-    res.setHeader("Cache-Control", "private, max-age=15");
     res.status(200).json({ campaigns: campaigns.map(serializeCampaign) });
     return;
   }

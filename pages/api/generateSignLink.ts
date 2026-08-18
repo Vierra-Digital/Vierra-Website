@@ -45,7 +45,7 @@ export default async function handler(
     }
 
     if (pdfFile.mimetype !== "application/pdf") {
-      if (tempPdfPath && fs.existsSync(/*turbopackIgnore: true*/ tempPdfPath)) fs.unlinkSync(tempPdfPath)
+      if (tempPdfPath && fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath)
       return res
         .status(400)
         .json({ message: "Invalid file type. Only PDF is allowed." })
@@ -60,7 +60,7 @@ export default async function handler(
         }
         const hasSignature = parsed.some((f: { type?: string }) => f.type === "signature")
         if (!hasSignature) {
-          if (tempPdfPath && fs.existsSync(/*turbopackIgnore: true*/ tempPdfPath)) fs.unlinkSync(tempPdfPath)
+          if (tempPdfPath && fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath)
           return res.status(400).json({ message: "At least one signature field is required." })
         }
         for (const f of parsed) {
@@ -95,7 +95,7 @@ export default async function handler(
         }]
       }
     } catch {
-      if (tempPdfPath && fs.existsSync(/*turbopackIgnore: true*/ tempPdfPath)) fs.unlinkSync(tempPdfPath)
+      if (tempPdfPath && fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath)
       return res.status(400).json({ message: "Invalid coordinates or fields format." })
     }
 
@@ -106,10 +106,10 @@ export default async function handler(
       throw new Error("Temporary PDF path is null.")
     }
 
-    const pdfContent = fs.readFileSync(/*turbopackIgnore: true*/ tempPdfPath);
+    const pdfContent = fs.readFileSync(tempPdfPath);
     const pdfBase64 = pdfContent.toString('base64');
 
-    if (tempPdfPath && fs.existsSync(/*turbopackIgnore: true*/ tempPdfPath)) {
+    if (tempPdfPath && fs.existsSync(tempPdfPath)) {
       fs.unlinkSync(tempPdfPath);
     }
     tempPdfPath = null;
@@ -131,7 +131,7 @@ export default async function handler(
     if (error instanceof Error) {
       console.error("[generate-sign-link] Error processing PDF upload:", error)
 
-      if (tempPdfPath && fs.existsSync(/*turbopackIgnore: true*/ tempPdfPath)) {
+      if (tempPdfPath && fs.existsSync(tempPdfPath)) {
         try {
           fs.unlinkSync(tempPdfPath)
         } catch (cleanupError) {

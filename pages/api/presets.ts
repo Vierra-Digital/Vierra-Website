@@ -7,8 +7,8 @@ import { PRESETS } from "@/lib/presets"
 function presetPdfExists(preset: { pdfPath: string }): boolean {
   const cwd = process.cwd()
   const pathsToTry = [
-    path.join(/*turbopackIgnore: true*/ cwd, preset.pdfPath),
-    path.join(/*turbopackIgnore: true*/ cwd, preset.pdfPath.replace("data/presets/", "public/presets/")),
+    path.join(cwd, preset.pdfPath),
+    path.join(cwd, preset.pdfPath.replace("data/presets/", "public/presets/")),
   ]
   return pathsToTry.some((p) => fs.existsSync(p))
 }

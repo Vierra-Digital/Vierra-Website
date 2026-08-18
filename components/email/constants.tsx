@@ -5,13 +5,11 @@ import { FiInbox, FiMail, FiSend, FiUsers, FiArchive, FiTrash2, FiKey, FiCheckSq
 import type { ModuleKey, MailboxCounts } from "@/components/email/types";
 
 /**
- * Rows per mailbox page. Each row costs a metadata messages.get, so this is also the biggest
- * lever on how long a mailbox takes to appear — 50 rows is 50 round trips before the list can
- * render. It's a deliberate trade for a full page of mail; the prefetch that used to run this
- * same query across six mailboxes on load was dropped when the sidebar badges moved to the
- * counts endpoint, which paid most of that cost back.
+ * Rows per mailbox page. Each row costs a metadata messages.get, so this is the single
+ * biggest lever on how long a mailbox takes to appear — 50 meant fifty round trips before
+ * the list could render. 25 fills the viewport with room to spare and halves that.
  */
-export const PAGE_SIZE = 50;
+export const PAGE_SIZE = 25;
 export const CONTACTS_PAGE_SIZE = 50;
 
 /** Neutral scrollbar; overrides global purple `::-webkit-scrollbar` in app/globals.css for compose UI. */
@@ -38,7 +36,6 @@ export const EMPTY_COUNTS: MailboxCounts = {
   archive: 0,
   spam: 0,
   trash: 0,
-  starred: 0,
 };
 
 export const MODULES: Array<{ key: ModuleKey; label: string; icon: React.ReactNode }> = [
@@ -78,13 +75,7 @@ export function orderModules<T extends { key: ModuleKey }>(items: T[], order: st
     .map(({ item }) => item);
 }
 
-/**
- * Which sidebar entries carry a number, matching Gmail: unread for Inbox and Spam, total for
- * Drafts. Sent and Archive used to badge too — Sent showed an "unread sent mail" count that
- * meant nothing, and Archive isn't a Gmail label so its number was a guess from a negated
- * search. See fetchMailboxCounts in pages/api/gmail/counts.ts.
- */
-export const BADGE_MODULES = new Set<ModuleKey>(["inbox", "drafts", "spam", "starred"]);
+export const BADGE_MODULES = new Set<ModuleKey>(["inbox", "sent", "drafts", "archive", "spam"]);
 export const BADGE_MAILBOXES: Array<"inbox" | "sent" | "drafts" | "archive" | "spam" | "trash"> = [
   "inbox",
   "sent",

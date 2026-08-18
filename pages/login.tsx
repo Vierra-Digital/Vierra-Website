@@ -11,37 +11,20 @@ import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 
-/**
- * Turn Supabase's auth error into something the user can act on.
- *
- * Every branch used to return the same "check your email and password" line, which is actively
- * misleading for the most common real cause: accounts here can be created WITHOUT a password
- * (admin invite / client onboarding call createSupabaseAuthUser with no password, and the user is
- * meant to set one via the reset link). Supabase reports that as plain "Invalid login credentials",
- * indistinguishable from a typo — so someone who never had a password was told to check the
- * password they don't have. Now the message names that possibility and points at the reset flow.
- */
 function resolveCredentialErrorMessage(rawError?: string | null) {
   const normalized = (rawError || "").toLowerCase();
-
-  if (normalized.includes("email not confirmed")) {
-    return "This email hasn't been confirmed yet. Use “Forgot password?” below to confirm it and set a password.";
+  if (!normalized) return "We couldn't sign you in. Check your email and password, then try again.";
+  if (normalized.includes("credentialssignin")) {
+    return "We couldn't sign you in. Check your email and password, then try again.";
   }
-  if (normalized.includes("too many") || normalized.includes("rate limit")) {
-    return "Too many attempts. Wait a minute, then try again.";
-  }
-  if (normalized.includes("invalid login credentials") || normalized.includes("invalid") || normalized.includes("credentialssignin")) {
-    // Covers both a wrong password and an account that has never had one set.
-    return "That email and password didn’t match. If you’ve never set a password on this account — or an admin created it for you — use “Forgot password?” below to set one.";
+  if (normalized.includes("invalid")) {
+    return "We couldn't sign you in. Check your email and password, then try again.";
   }
   if (normalized.includes("password")) {
-    return "That password didn’t work. Use “Forgot password?” below to reset it.";
+    return "We couldn't sign you in. Check your email and password, then try again.";
   }
   if (normalized.includes("email")) {
-    return "We couldn’t sign you in with that email. Check it for typos, or use “Forgot password?” below.";
-  }
-  if (!normalized) {
-    return "We couldn’t sign you in. Check your email and password, then try again.";
+    return "We couldn't sign you in. Check your email and password, then try again.";
   }
   return "Sign-in is temporarily unavailable. Please try again in a moment.";
 }
@@ -80,12 +63,13 @@ const AnimatedBackground = () => (
 );
 
 const LoginPage = () => {
-  const [mode, setMode] = useState<"password" | "forgotPassword">("password");
+  const [mode, setMode] = useState<"password" | "magicLink" | "forgotPassword">("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [resetLinkSent, setResetLinkSent] = useState(false);
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -143,6 +127,36 @@ const LoginPage = () => {
     }
   };
 
+  const handleMagicLinkSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (isSubmitting) return;
+    setError("");
+    setIsSubmitting(true);
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email: email.trim().toLowerCase(),
+        options: {
+          // Only existing accounts may sign in this way — a magic link should
+          // never double as an account-creation path.
+          shouldCreateUser: false,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+
+      if (!otpError) {
+        setMagicLinkSent(true);
+      } else {
+        setError("We couldn't send a sign-in link. Check your email and try again.");
+      }
+    } catch {
+      setError("Sign-in is temporarily unavailable. Please try again in a moment.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleForgotPasswordSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isSubmitting) return;
@@ -167,9 +181,10 @@ const LoginPage = () => {
     }
   };
 
-  const switchMode = (next: "password" | "forgotPassword") => {
+  const switchMode = (next: "password" | "magicLink" | "forgotPassword") => {
     setMode(next);
     setError("");
+    setMagicLinkSent(false);
     setResetLinkSent(false);
   };
 
@@ -203,10 +218,10 @@ const LoginPage = () => {
               />
             </h1>
 
-            {mode === "forgotPassword" && resetLinkSent ? (
+            {(mode === "magicLink" && magicLinkSent) || (mode === "forgotPassword" && resetLinkSent) ? (
               <div className="space-y-4">
                 <div className="rounded-xl border border-white/12 bg-white/5 px-3 py-2.5 text-center text-sm text-white/80">
-                  Check your inbox for a password reset link.
+                  Check your inbox for a {mode === "magicLink" ? "sign-in link" : "password reset link"}.
                 </div>
                 <button
                   type="button"
@@ -219,7 +234,7 @@ const LoginPage = () => {
             ) : (
               <form
                 onSubmit={
-                  mode === "password" ? handleSubmit : handleForgotPasswordSubmit
+                  mode === "password" ? handleSubmit : mode === "magicLink" ? handleMagicLinkSubmit : handleForgotPasswordSubmit
                 }
                 noValidate
                 className="space-y-4"
@@ -259,9 +274,19 @@ const LoginPage = () => {
 
                 {mode === "password" && (
                   <div>
-                    <label htmlFor="password" className={`mb-1.5 block text-sm font-medium text-white/80 ${inter.className}`}>
-                      Password
-                    </label>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <label htmlFor="password" className={`block text-sm font-medium text-white/80 ${inter.className}`}>
+                        Password
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => switchMode("forgotPassword")}
+                        disabled={isSubmitting}
+                        className={`text-xs text-white/50 hover:text-white/90 transition-colors disabled:opacity-60 ${inter.className}`}
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
                     <div className="login-field">
                       <Lock className="login-field__icon" size={18} aria-hidden="true" />
                       <input
@@ -313,18 +338,20 @@ const LoginPage = () => {
                     </>
                   ) : mode === "password" ? (
                     "Sign in"
+                  ) : mode === "magicLink" ? (
+                    "Email me a sign-in link"
                   ) : (
-                    "Send Reset Link"
+                    "Send reset link"
                   )}
                 </button>
 
                 <button
                   type="button"
-                  onClick={() => switchMode(mode === "password" ? "forgotPassword" : "password")}
+                  onClick={() => switchMode(mode === "password" ? "magicLink" : "password")}
                   disabled={isSubmitting}
                   className={`w-full text-center text-sm text-white/60 hover:text-white/90 transition-colors disabled:opacity-60 ${inter.className}`}
                 >
-                  {mode === "password" ? "Forgot password?" : "Back to password sign-in"}
+                  {mode === "password" ? "Email me a sign-in link instead" : "Back to password sign-in"}
                 </button>
               </form>
             )}

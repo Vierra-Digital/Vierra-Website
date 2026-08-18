@@ -46,8 +46,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const cwd = process.cwd()
   const pathsToTry = [
-    path.join(/*turbopackIgnore: true*/ cwd, preset.pdfPath),
-    path.join(/*turbopackIgnore: true*/ cwd, preset.pdfPath.replace("data/presets/", "public/presets/")),
+    path.join(cwd, preset.pdfPath),
+    path.join(cwd, preset.pdfPath.replace("data/presets/", "public/presets/")),
   ]
   const pdfFullPath = pathsToTry.find((p) => fs.existsSync(p))
   if (!pdfFullPath) {

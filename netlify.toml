@@ -5,11 +5,6 @@
   # needs the generated client; schema changes are applied to the DB directly.
   command = "npx prisma generate && npm run build"
   publish = ".next"
-  # Skip the build entirely when a push cannot change the deployed site (tests, CI config, docs).
-  # Netlify bills per build minute in every context and runs a deploy preview on every push to
-  # every open PR, so those pushes were each costing a full build for no deployable difference.
-  # The script fails open: anything it does not recognise as non-deployable still builds.
-  ignore = "bash netlify-ignore.sh"
 
 [build.environment]
   NODE_OPTIONS = "--max-old-space-size=4096"

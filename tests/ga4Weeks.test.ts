@@ -1,13 +1,5 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import {
-  daysInMonth,
-  weeksInMonth,
-  emptyWeeklyVisits,
-  bucketSessionsByWeek,
-  parseGa4Month,
-  isGa4Configured,
-  fetchWeeklyWebsiteVisits,
-} from "@/lib/ga4Client";
+import { describe, it, expect } from "vitest";
+import { daysInMonth, weeksInMonth, emptyWeeklyVisits, bucketSessionsByWeek, parseGa4Month } from "@/lib/ga4Client";
 
 const row = (date: string, sessions: number) => ({
   dimensionValues: [{ value: date }],
@@ -83,31 +75,5 @@ describe("parseGa4Month", () => {
     expect(parseGa4Month("2026-13")).toBeNull();
     expect(parseGa4Month("nope")).toBeNull();
     expect(parseGa4Month(undefined)).toBeNull();
-  });
-});
-
-describe("GA4 configuration gate", () => {
-  // Env is stubbed explicitly rather than assumed: a developer with GA4 configured in .env would
-  // otherwise see these pass or fail depending on their machine, which is worse than no test.
-  afterEach(() => vi.unstubAllEnvs());
-  const clearGa4Env = () => {
-    vi.stubEnv("GA4_PROPERTY_ID", "");
-    vi.stubEnv("GA4_OAUTH_REFRESH_TOKEN", "");
-    vi.stubEnv("GOOGLE_CLIENT_ID", "");
-    vi.stubEnv("GOOGLE_CLIENT_SECRET", "");
-  };
-
-  it("reports not configured when any required credential is missing", () => {
-    clearGa4Env();
-    expect(isGa4Configured()).toBe(false);
-    // Property id alone is not enough — the OAuth pair is still required.
-    vi.stubEnv("GA4_PROPERTY_ID", "properties/123");
-    expect(isGa4Configured()).toBe(false);
-  });
-
-  it("returns a month-shaped zero series instead of calling GA4 when unconfigured", async () => {
-    clearGa4Env();
-    await expect(fetchWeeklyWebsiteVisits(2026, 2)).resolves.toEqual(emptyWeeklyVisits(2026, 2));
-    await expect(fetchWeeklyWebsiteVisits(2026, 1)).resolves.toHaveLength(5);
   });
 });

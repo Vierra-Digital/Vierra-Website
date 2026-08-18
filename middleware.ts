@@ -39,15 +39,10 @@ export async function middleware(req: NextRequest) {
   // Refresh the Supabase session cookie on every matched request — required by
   // @supabase/ssr so expiring tokens get renewed before any page/route reads them.
   let refreshed = NextResponse.next({ request: req });
-
-  // Machine-facing routes carry no session and render no user content, so skip the auth round trip:
-  // one less network call per crawler/agent hit, and no exposure to a Supabase blip.
-  const skipAuthRefresh = pathname === "/llms.txt" || pathname.endsWith(".md");
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!skipAuthRefresh && supabaseUrl && supabaseAnonKey) {
-    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
       cookies: {
         getAll() {
           return req.cookies.getAll();
@@ -58,17 +53,9 @@ export async function middleware(req: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) => refreshed.cookies.set(name, value, options));
         },
       },
-    });
-    try {
-      await supabase.auth.getUser();
-    } catch {
-      // A refresh failure (Supabase unreachable or paused, transient 5xx, malformed cookie) must
-      // never break the request. This call was unguarded and runs on every non-API route —
-      // including /login — so an auth-service blip could surface as an error on the very page
-      // needed to sign back in. Falling through leaves existing cookies untouched and lets the
-      // page decide how to handle a missing session.
     }
-  }
+  );
+  await supabase.auth.getUser();
 
   // /llms.txt — index of Markdown mirrors for AI agents and tools.
   if (pathname === "/llms.txt") {

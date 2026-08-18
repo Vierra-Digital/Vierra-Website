@@ -176,7 +176,6 @@ export default withAuth(async (req, res, session) => {
       },
     ]
 
-    res.setHeader("Cache-Control", "private, max-age=20")
     res.status(200).json({ stats })
   } catch (error) {
     console.error("/api/dashboard/stats error", error)

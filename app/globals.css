@@ -915,10 +915,7 @@ input[type="search"]::-ms-clear:hover {
 
 /* Rendered message body. The sender's HTML keeps its own styling; these are guardrails so
    long URLs, oversized media and cramped spacing don't break the reader. */
-/* Full width of the reader. A 74ch measure is the right call for a column of prose, but the
-   reader is already a bounded pane inside the panel, so capping it again left the text ending
-   partway across a mostly-empty card. */
-.email-shell .email-body { max-width: 100%; word-break: break-word; overflow-wrap: anywhere; }
+.email-shell .email-body { max-width: 74ch; word-break: break-word; overflow-wrap: anywhere; }
 .email-shell .email-body img { max-width: 100%; height: auto; }
 .email-shell .email-body a { color: #5B21B6; text-decoration: underline; text-underline-offset: 2px; }
 .email-shell .email-body p { margin: 0 0 0.85em; }
@@ -992,169 +989,56 @@ input[type="search"]::-ms-clear:hover {
 }
 
 /* ── Compose window ────────────────────────────────────────────────────────────
-   Gmail's composer is one continuous dark surface: no header slab, no boxed
-   fields, no boxed body, and a single row of quiet icons with one solid Send.
-   The previous pass tried to reach that by neutralising buttons through
-   [title*="…"] selectors — brittle, and it still left two rows of controls.
-   The markup now uses real icon buttons, so this layer only has to set the
-   surface, the hairlines and the field typography. */
+   Was a stack of boxes: bordered field rows, a bordered body, and a wall of
+   outlined buttons. Gmail's compose is mostly chrome-less — hairline field rows,
+   one solid Send, and small icon buttons — which is what this reproduces. */
 
-.compose-hud {
-  /* One deep surface, lifted off the page by shadow rather than outlined by a border. */
-  background: #17122A !important;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 16px;
-  box-shadow:
-    0 2px 8px rgba(8, 4, 20, 0.4),
-    0 32px 64px -20px rgba(8, 4, 20, 0.85);
-}
-/* The inner wrappers ship bg-white from the light-theme markup. */
-.compose-hud > div,
-.compose-hud .bg-white { background: transparent !important; }
+.compose-hud { border: 1px solid rgba(0, 0, 0, 0.10); border-radius: 12px; }
 
-/* Header: part of the same surface. A hairline, not a coloured bar. */
-.compose-hud-header {
-  background: transparent;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  color: #F3F0FB;
-  padding-top: 10px;
-  padding-bottom: 10px;
-}
-.compose-hud-header p { font-size: 12.5px; letter-spacing: 0.015em; color: #EDE9F8; }
-.compose-hud-header button { color: #9C95B8; border-radius: 9999px; padding: 6px; }
-.compose-hud-header button:hover { background: rgba(255, 255, 255, 0.07); color: #F3F0FB; }
-.compose-hud-header button svg { width: 15px; height: 15px; }
+/* Header: flat brand bar rather than a saturated gradient slab. */
+.compose-hud-header { background: #2A1148; color: #FFFFFF; }
+.compose-hud-header button { color: rgba(255, 255, 255, 0.85); }
+.compose-hud-header button:hover { color: #FFFFFF; }
 
-/* The rich editor ships its own bordered card — inside the composer the body is
-   just the surface, with the field hairline above it doing the separating. */
-.compose-hud .rounded-md.border,
-.compose-hud [class*="rounded-md"][class*="border-[#EAE5F4]"] {
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-}
-/* …but its formatting toolbar is a real strip, so it keeps a hairline. */
-.compose-hud .bg-\[\#F6F3FD\] {
-  background: rgba(255, 255, 255, 0.035) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
-  border-radius: 8px;
-}
-.compose-hud .bg-\[\#F6F3FD\] button { color: #C3BCD8 !important; }
-.compose-hud .bg-\[\#F6F3FD\] button:hover { background: rgba(255, 255, 255, 0.08) !important; color: #F3F0FB !important; }
-
-/* Field rows: hairlines only, and the label sits quiet against the value. */
-.compose-hud .border-b { border-color: rgba(255, 255, 255, 0.055) !important; }
-.compose-hud .border-t { border-color: rgba(255, 255, 255, 0.055) !important; }
+/* Field rows: hairline separators, no boxes. */
 .compose-hud input:not([type="checkbox"]):not([type="radio"]),
-.compose-hud select,
-.compose-hud [contenteditable="true"],
-.compose-hud textarea {
+.compose-hud select {
   border: 0 !important;
   border-radius: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
-  color: #EDE9F8 !important;
 }
 .compose-hud input:focus,
-.compose-hud select:focus,
-.compose-hud [contenteditable="true"]:focus { outline: none !important; box-shadow: none !important; }
-.compose-hud input::placeholder { color: #6F6989 !important; }
-/* "From" / "To" / "Subject" labels. */
-.compose-hud span.text-\[\#5f6368\] { color: #837CA0 !important; font-size: 12px; }
-.compose-hud select option { background: #17122A; color: #EDE9F8; }
-/* Field + body text one step down from the panel's default, so the taller body
-   reads as room to write rather than as oversized chrome. */
-.compose-hud input:not([type="checkbox"]):not([type="radio"]),
-.compose-hud select,
-.compose-hud [contenteditable="true"] { font-size: 13px !important; }
-.compose-hud .grid { padding-top: 3px !important; padding-bottom: 3px !important; }
-.compose-hud button.text-\[\#701CC0\] { font-size: 12px; }
+.compose-hud select:focus { outline: none !important; box-shadow: none !important; }
 
-/* Footer: smaller discs and icons than the toolbars elsewhere in the panel —
-   this row sits inside a 572px card and should read as quiet, not as chrome. */
-.compose-actions button svg { width: 16px; height: 16px; }
-.compose-actions > div > div > button,
-.compose-actions > button,
-.compose-actions > div > button:not(.bg-\[\#701CC0\]) { height: 32px; width: 32px; }
-
-/* Send: the one solid element, and the only thing carrying the brand. */
-.compose-hud button.bg-\[\#701CC0\] {
-  background: linear-gradient(120deg, #7A17C5 0%, #9B1FB4 100%) !important;
-  border-radius: 9999px;
-  min-height: 32px;
-  padding-left: 20px;
-  padding-right: 20px;
-  margin-right: 4px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  box-shadow: 0 6px 18px -6px rgba(122, 23, 197, 0.7);
-  transition: filter 140ms ease, box-shadow 140ms ease;
-}
-.compose-hud button.bg-\[\#701CC0\]:hover:not(:disabled) {
-  filter: brightness(1.09);
-  box-shadow: 0 8px 22px -6px rgba(122, 23, 197, 0.85);
-}
-.compose-hud button.bg-\[\#701CC0\]:disabled { box-shadow: none; }
-
-/* Floating menus raised off the composer surface, matching the panel's other cards. */
-.compose-menu {
-  background: #241C3E;
-  border-radius: 12px;
-  padding: 5px 0;
-  box-shadow:
-    0 2px 6px rgba(8, 4, 20, 0.4),
-    0 20px 42px -14px rgba(8, 4, 20, 0.9);
-}
-/* The schedule / confidential popovers still use light-theme utility classes. */
-.compose-hud .bg-white.shadow-lg,
-.compose-hud .bg-white.p-3 {
-  background: #241C3E !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  border-radius: 12px;
-  color: #EDE9F8;
-}
-.compose-hud .bg-white.shadow-lg label,
-.compose-hud .bg-white.p-3 label,
-.compose-hud .bg-white.p-3 span { color: #EDE9F8 !important; }
-.compose-hud .bg-white.p-3 p { color: #A29CBB !important; }
-.compose-hud .bg-white.p-3 input[type="datetime-local"],
-.compose-hud .bg-white.p-3 input[type="text"],
-.compose-hud .bg-white.p-3 select {
-  background: rgba(255, 255, 255, 0.04) !important;
-  border: 1px solid rgba(255, 255, 255, 0.09) !important;
-  border-radius: 8px !important;
-  padding: 7px 10px !important;
-  color: #EDE9F8 !important;
-}
-/* Attachment chips. */
-.compose-hud .bg-\[\#f8f9fa\] {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border-color: rgba(255, 255, 255, 0.09) !important;
-  color: #DCD7EC !important;
+/* The body area loses its box; the divider above it does the separating. */
+.compose-hud [contenteditable="true"],
+.compose-hud textarea {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
 }
 
-/* ── Settings skeleton ─────────────────────────────────────────────────────────
-   Placeholder blocks for the email settings shell while its data loads. A soft
-   sheen rather than a pulse, so a dozen of them on screen reads as one surface
-   settling instead of a dozen things blinking. */
-.settings-skeleton {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.045) 0%,
-    rgba(255, 255, 255, 0.09) 50%,
-    rgba(255, 255, 255, 0.045) 100%
-  );
-  background-size: 200% 100%;
-  animation: settings-skeleton-sheen 1.5s ease-in-out infinite;
+/* Action bar: one solid Send pill, everything else compact and quiet. */
+.compose-hud button.bg-\[\#701CC0\] { border-radius: 9999px; padding-left: 22px; padding-right: 22px; }
+.compose-hud button[title="Schedule send"],
+.compose-hud button[aria-label="Schedule send"],
+.compose-hud button[title*="Confidential"],
+.compose-hud button[title*="Receipt"],
+.compose-hud button[title*="Artemis"],
+.compose-hud button[title*="Rewrite"] {
+  border-color: transparent !important;
+  background: transparent !important;
+  color: #5B5670 !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
 }
-
-@keyframes settings-skeleton-sheen {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-/* Respect a reduced-motion preference: keep the placeholder, drop the movement. */
-@media (prefers-reduced-motion: reduce) {
-  .settings-skeleton { animation: none; background: rgba(255, 255, 255, 0.06); }
+.compose-hud button[title="Schedule send"]:hover,
+.compose-hud button[title*="Confidential"]:hover,
+.compose-hud button[title*="Receipt"]:hover,
+.compose-hud button[title*="Artemis"]:hover,
+.compose-hud button[title*="Rewrite"]:hover {
+  background: #F3F0FA !important;
+  color: #701CC0 !important;
 }

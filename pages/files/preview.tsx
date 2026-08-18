@@ -1,3 +1,4 @@
+import React from "react"
 import Head from "next/head"
 import { requireSession } from "@/lib/auth"
 import type { GetServerSideProps } from "next"

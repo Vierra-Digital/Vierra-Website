@@ -82,15 +82,11 @@ export const ICON_BUTTON_GHOST =
 
 /** Primary action. */
 export const BUTTON_PRIMARY =
-  "inline-flex items-center justify-center rounded-xl bg-[#701CC0] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex items-center justify-center gap-2 rounded-lg bg-[#701CC0] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#5E17A8] disabled:opacity-50 disabled:cursor-not-allowed";
 
 /** Secondary / neutral action. */
 export const BUTTON_SECONDARY =
-  "inline-flex items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-3 py-1.5 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F9FAFB]";
-
-/** Outlined destructive action (inline row controls). */
-export const BUTTON_DANGER_OUTLINE =
-  "rounded-xl border border-red-200 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50";
+  "inline-flex items-center justify-center gap-2 rounded-lg border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F9FAFB] disabled:opacity-50 disabled:cursor-not-allowed";
 
 /** Small paging / compact control. */
 export const BUTTON_COMPACT =
@@ -107,7 +103,7 @@ export const FIELD_LABEL = "mb-1 block text-sm font-medium text-[#374151]";
 
 /** Text input / textarea / select. */
 export const FIELD_INPUT =
-  "w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#1E1B2E] placeholder-[#9CA3AF] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]";
+  "w-full rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#1E1B2E] outline-none transition focus:border-transparent focus:ring-2 focus:ring-[#701CC0]";
 
 /** Inline search box (list toolbars). */
 export const FIELD_SEARCH =

@@ -7,7 +7,6 @@ import {
   maybeSendVacationReply,
   maybeAutoDraft,
   maybeHandleMdn,
-  maybeRecordBounce,
   maybeReplyIntelligence,
   maybeNotifyDiscord,
 } from "@/lib/gmail/inboundActions";
@@ -208,7 +207,7 @@ async function processAccount(
       }
       if (!claimed) continue; // already processed by another tick/run — don't re-run its hooks
       // Each hook is best-effort and must not throw; guard anyway.
-      for (const hook of [applyFilters, maybeSendVacationReply, maybeAutoDraft, maybeHandleMdn, maybeRecordBounce]) {
+      for (const hook of [applyFilters, maybeSendVacationReply, maybeAutoDraft, maybeHandleMdn]) {
         try {
           await hook(message, ctx);
         } catch {
