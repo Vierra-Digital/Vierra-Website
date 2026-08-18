@@ -21,7 +21,7 @@ export function sanitizeConfidentialHtml(html: string): string {
  * not hard DRM.
  */
 
-export const CONFIDENTIAL_EXPIRY_OPTIONS = [
+const CONFIDENTIAL_EXPIRY_OPTIONS = [
   { value: "1d", label: "1 day", ms: 24 * 60 * 60 * 1000 },
   { value: "1w", label: "1 week", ms: 7 * 24 * 60 * 60 * 1000 },
   { value: "1m", label: "1 month", ms: 30 * 24 * 60 * 60 * 1000 },

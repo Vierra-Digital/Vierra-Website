@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import { rootDomain } from "@/lib/email/bimi";
 
 /**
  * Ordered avatar sources for an email sender.
@@ -79,13 +80,24 @@ export type SenderAvatarSource = { url: string; kind: "photo" | "logo" };
  * favicon as a logo lets the UI contain it with padding instead of cropping it to a circle — a
  * cropped, stretched favicon is what made these look poor even when they loaded.
  */
-export function senderAvatarSources(email: string, contactPhotoUrl?: string | null): SenderAvatarSource[] {
+export function senderAvatarSources(
+  email: string,
+  contactPhotoUrl?: string | null,
+  bimiLogoUrl?: string | null
+): SenderAvatarSource[] {
   const trimmedEmail = (email || "").trim();
   const hasAddress = trimmedEmail.includes("@");
+  const domain = senderDomain(trimmedEmail);
+  // Bulk senders mail from a subdomain (email.apple.com, e.notion.so) that has no favicon of its
+  // own while the registrable root does. Without this the best-known brands showed no logo at all.
+  const root = domain ? rootDomain(domain) : "";
   const sources: SenderAvatarSource[] = [
     { url: (contactPhotoUrl || "").trim(), kind: "photo" },
+    // The sender's own published logo outranks anything we infer about them.
+    { url: (bimiLogoUrl || "").trim(), kind: "logo" },
     { url: hasAddress ? gravatarUrl(trimmedEmail, 160) : "", kind: "photo" },
     { url: hasAddress ? faviconUrl(trimmedEmail, 128) : "", kind: "logo" },
+    { url: root && root !== domain ? faviconUrl(`x@${root}`, 128) : "", kind: "logo" },
   ];
   const seen = new Set<string>();
   return sources.filter((source) => {
