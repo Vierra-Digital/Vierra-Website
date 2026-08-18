@@ -39,6 +39,7 @@ interface BoardMember {
   name: string | null;
   email: string | null;
   position: string | null;
+  image: boolean;
 }
 
 interface ProjectTask {
@@ -606,7 +607,7 @@ export default function ProjectManagement() {
                                           title={m.name || m.email || ""}
                                         >
                                           <ProfileImage
-                                            src={`/api/admin/getUserImage?userId=${m.id}`}
+                                            src={m.image ? `/api/admin/getUserImage?userId=${m.id}` : null}
                                             alt={m.name || ""}
                                             name={m.name || m.email || "?"}
                                             size={24}
@@ -893,7 +894,7 @@ function AddTaskModal({
                           className="rounded border-[#E5E7EB] text-[#701CC0] focus:ring-[#701CC0]"
                         />
                         <ProfileImage
-                          src={`/api/admin/getUserImage?userId=${m.id}`}
+                          src={m.image ? `/api/admin/getUserImage?userId=${m.id}` : null}
                           alt={m.name || ""}
                           name={m.name || m.email || "?"}
                           size={24}
@@ -1069,7 +1070,7 @@ function TaskDetailModal({
                     title={`${m.name || m.email}${m.position ? ` · ${m.position}` : ""}`}
                   >
                     <ProfileImage
-                      src={`/api/admin/getUserImage?userId=${m.id}`}
+                      src={m.image ? `/api/admin/getUserImage?userId=${m.id}` : null}
                       alt={m.name || ""}
                       name={m.name || m.email || "?"}
                       size={32}
@@ -1382,7 +1383,7 @@ function EditTaskModal({
                         className="rounded border-[#E5E7EB] text-[#701CC0] focus:ring-[#701CC0]"
                       />
                       <ProfileImage
-                        src={`/api/admin/getUserImage?userId=${m.id}`}
+                        src={m.image ? `/api/admin/getUserImage?userId=${m.id}` : null}
                         alt={m.name || ""}
                         name={m.name || m.email || "?"}
                         size={24}

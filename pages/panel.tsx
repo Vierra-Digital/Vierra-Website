@@ -4,6 +4,7 @@ import { inter } from "@/lib/fonts";
 import Image from "next/image"
 import ProfileImage from "@/components/ProfileImage"
 import { profileImageSrc } from "@/lib/profileImage"
+import { getInitialUserProfile } from "@/lib/profileImage.server"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
@@ -77,9 +78,11 @@ const UserSettingsPage = dynamic(() => import("@/components/UserSettingsPage"), 
 
 type PanelPageProps = {
   initialUserRole: "admin" | "staff"
+  initialUserName: string | null
+  initialImageVersion: number | string
 }
 
-const PanelPage = ({ initialUserRole }: PanelPageProps) => {
+const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: PanelPageProps) => {
   const router = useRouter()
   const [showSettings, setShowSettings] = useState(false)
   const [currentSection, setCurrentSection] = useState(0);
@@ -87,8 +90,8 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
   const { data: session } = useSession()
   const [isAddClientOpen, setIsAddClientOpen] = useState(false)
   const [clientRefreshTrigger, setClientRefreshTrigger] = useState(0)
-  const [currentUserName, setCurrentUserName] = useState<string | null>(null)
-  const [imageVersion, setImageVersion] = useState<number>(0)
+  const [currentUserName, setCurrentUserName] = useState<string | null>(initialUserName)
+  const [imageVersion, setImageVersion] = useState<number | string>(initialImageVersion)
   const [isClientViewMode, setIsClientViewMode] = useState(false)
   const [viewModeSection, setViewModeSection] = useState<0 | 1 | 2 | 3>(0)
   const [viewClient, setViewClient] = useState<{ id: string; name: string; email: string } | null>(null)
@@ -505,9 +508,12 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   if (session.user.role !== "staff" && session.user.role !== "admin") {
     return { redirect: { destination: "/onboarding/start", permanent: false } }
   }
+  const profile = await getInitialUserProfile(session.user.id)
   return {
     props: {
       initialUserRole: (session.user as any).role as "admin" | "staff",
+      initialUserName: profile.name,
+      initialImageVersion: profile.imageVersion,
     },
   }
 }

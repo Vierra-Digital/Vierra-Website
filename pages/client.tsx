@@ -4,6 +4,7 @@ import { inter } from "@/lib/fonts";
 import Image from "next/image"
 import ProfileImage from "@/components/ProfileImage"
 import { profileImageSrc } from "@/lib/profileImage"
+import { getInitialUserProfile } from "@/lib/profileImage.server"
 import Link from "next/link"
 import { FiLogOut, FiFolder } from "react-icons/fi"
 import { AiOutlineAppstore } from "react-icons/ai"
@@ -28,14 +29,19 @@ const LinkedInContextSection = dynamic(
 )
 
 
-const ClientPage = () => {
+type ClientPageProps = {
+  initialUserName: string | null
+  initialImageVersion: number | string
+}
+
+const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) => {
   const router = useRouter()
   const [showSettings, setShowSettings] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [currentSection, setCurrentSection] = useState(0)
   const { data: session, status } = useSession()
-  const [currentUserName, setCurrentUserName] = useState<string | null>(null)
-  const [imageVersion, setImageVersion] = useState<number>(0)
+  const [currentUserName, setCurrentUserName] = useState<string | null>(initialUserName)
+  const [imageVersion, setImageVersion] = useState<number | string>(initialImageVersion)
 
   useEffect(() => {
     fetchCurrentUser()
@@ -265,7 +271,13 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     return { redirect: { destination: "/panel", permanent: false } }
   }
 
-  return { props: {} }
+  const profile = await getInitialUserProfile(session.user.id)
+  return {
+    props: {
+      initialUserName: profile.name,
+      initialImageVersion: profile.imageVersion,
+    },
+  }
 }
 
 export default ClientPage
