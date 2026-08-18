@@ -14,6 +14,7 @@ import {
   useLockBodyScroll,
   formatPhone,
 } from "@/components/ui/modalForm";
+import AuditBookingStep from "@/components/audit/AuditBookingStep";
 
 
 interface ModalProps {
@@ -39,7 +40,9 @@ const EMPTY_FORM: FormState = {
   desiredRevenue: "",
 };
 
-const TOTAL_STEPS = 2;
+// 3 steps: contact info, business info, then the required booking calendar (AuditBookingStep)
+// as the final step — same numbered progression as the rest of the form, not a bolt-on modal.
+const TOTAL_STEPS = 3;
 
 const REVENUE_OPTIONS = [
   { value: "$10k - $25k", label: "$10k - $25k" },
@@ -76,10 +79,17 @@ function caretForDigits(formatted: string, digitCount: number): number {
   return formatted.length;
 }
 
+// 'active' = steps 1-3 (contact info, business info, then the required booking calendar —
+// step 3 is AuditBookingStep). No skip path out of step 3 — it's required, and a missing/
+// unavailable booking link is currently swallowed inside AuditBookingStep itself rather than
+// bouncing back up here (see the TODO in that file). 'done' = a time was booked.
+type ModalPhase = "active" | "done";
+
 export function Modal({ isOpen, onClose }: ModalProps) {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<FormState>(EMPTY_FORM);
-  const [submitted, setSubmitted] = useState(false);
+  const [phase, setPhase] = useState<ModalPhase>("active");
+  const [bookedWhen, setBookedWhen] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useLockBodyScroll(isOpen);
@@ -88,7 +98,8 @@ export function Modal({ isOpen, onClose }: ModalProps) {
     if (isOpen) {
       setStep(1);
       setFormData(EMPTY_FORM);
-      setSubmitted(false);
+      setPhase("active");
+      setBookedWhen("");
       setSubmitting(false);
       track("lead_form_open");
     }
@@ -154,10 +165,16 @@ export function Modal({ isOpen, onClose }: ModalProps) {
     });
   const prevStep = () => setStep((s) => Math.max(1, s - 1));
 
+  // Fires on the step-2 "Continue" — sends the lead notification, then advances to step 3
+  // (the booking calendar) rather than closing the form out.
   const handleSubmit = async () => {
     if (submitting || !step1Valid || !step2Valid) return;
     setSubmitting(true);
     try {
+      // Internal lead notification only — this endpoint never sends a "you're confirmed"
+      // auto-reply for this flow (see pages/api/sendEmail.ts). That confirmation comes solely
+      // from the booking API once a real time is picked in step 3; a lead who never gets that
+      // far intentionally gets no confirmation email at all, since none was actually booked.
       const response = await fetch("/api/sendEmail", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -167,8 +184,9 @@ export function Modal({ isOpen, onClose }: ModalProps) {
         alert("Failed to submit the form. Please try again.");
         return;
       }
-      setSubmitted(true);
       track("generate_lead");
+      setStep(3);
+      track("audit_booking_shown");
     } catch (error) {
       console.error("Error submitting form:", error);
       alert("An error occurred. Please try again.");
@@ -177,9 +195,37 @@ export function Modal({ isOpen, onClose }: ModalProps) {
     }
   };
 
+  const bookingNotes = [
+    formData.website ? `Website: ${formData.website}` : "",
+    formData.monthlyRevenue ? `Monthly revenue: ${formData.monthlyRevenue}` : "",
+    formData.desiredRevenue ? `Desired revenue (12mo): ${formData.desiredRevenue}` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const handleBooked = (when: string) => {
+    setBookedWhen(when);
+    setPhase("done");
+    track("audit_booking_confirmed");
+  };
+
+  // A booked meeting IS the "meeting booked" signal (the Booking row created by
+  // handleBooked's POST, visible in the existing booking system same as any other booking) —
+  // no separate ad-hoc notification needed here. "Held" (attendance) tracking is likewise
+  // just the existing meeting-tracking implementation, unchanged.
+  //
+  // No "booking link unavailable" fallback either — AuditBookingStep swallows a missing/empty
+  // link into its own empty-calendar state and offers a "send us your availability" note
+  // instead (see AuditBookingStep.tsx), rather than bouncing the modal to a different screen.
+
   if (!isOpen) return null;
 
   const progress = (step / TOTAL_STEPS) * 100;
+  // No skip path out of step 3 (the booking calendar) — an accidental dismissal (outside
+  // click or an Escape press, which is even easier to hit by accident) shouldn't be able to
+  // discard a selected slot the way it can on steps 1-2. The header's X button is left
+  // unguarded on purpose — that's a deliberate close, not an accidental one.
+  const guardAccidentalClose = phase === "done" || step < 3;
 
   return (
     <ModalShell
@@ -187,10 +233,11 @@ export function Modal({ isOpen, onClose }: ModalProps) {
       zIndexClass="z-[200]"
       backdropClassName="bg-[#0F0F14]/70 backdrop-blur-md"
       cardClassName={`relative flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-[0_30px_80px_-28px_rgba(26,16,51,0.55)] ${inter.className}`}
-      closeOnBackdrop={true}
+      closeOnBackdrop={guardAccidentalClose}
+      closeOnEscape={guardAccidentalClose}
       label="Book your free audit"
     >
-      {!submitted && (
+      {phase === "active" && (
         <div className="px-7 pt-5 sm:px-10">
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#701CC0]/10">
             <motion.div
@@ -203,8 +250,8 @@ export function Modal({ isOpen, onClose }: ModalProps) {
         </div>
       )}
 
-      {submitted ? (
-        <SuccessView onClose={onClose} />
+      {phase === "done" ? (
+        <SuccessView onClose={onClose} bookedWhen={bookedWhen} />
       ) : (
         <>
           {/* Header */}
@@ -214,7 +261,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                 Free Audit · Step {step} of {TOTAL_STEPS}
               </p>
               <h2 className={`mt-2 text-2xl font-semibold tracking-tight text-[#1A1033] sm:text-[1.7rem] ${bricolage.className}`}>
-                Free Audit Call
+                {step === 3 ? "Book Your Call" : "Free Audit Call"}
               </h2>
             </div>
             <button
@@ -329,57 +376,64 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                     </div>
                   </>
                 )}
+
+                {step === 3 && (
+                  <AuditBookingStep
+                    prefill={{ name: formData.fullName, email: formData.email, notes: bookingNotes }}
+                    onBooked={handleBooked}
+                  />
+                )}
               </motion.div>
             </AnimatePresence>
           </div>
 
-          {/* Footer */}
-          <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#1A1033]/10 px-7 py-4 sm:px-10">
-            {step > 1 ? (
-              <button
-                onClick={prevStep}
-                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium text-[#6B6480] transition-colors hover:text-[#1A1033]"
-              >
-                <FiArrowLeft className="h-4 w-4" /> Back
-              </button>
-            ) : (
-              <span />
-            )}
-
-            {step < TOTAL_STEPS ? (
-              <PrimaryButton
-                onClick={nextStep}
-                disabled={step === 1 && !step1Valid}
-              >
-                Continue
-                <motion.span
-                  animate={{ x: [0, 4, 0] }}
-                  transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+          {/* Footer — steps 1-2 only. Step 3's confirm action lives inside
+              AuditBookingStep itself, next to the selected time. */}
+          {step < 3 && (
+            <div className="mt-2 flex items-center justify-between gap-3 border-t border-[#1A1033]/10 px-7 py-4 sm:px-10">
+              {step > 1 ? (
+                <button
+                  onClick={prevStep}
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium text-[#6B6480] transition-colors hover:text-[#1A1033]"
                 >
-                  <FiArrowRight className="h-4 w-4" />
-                </motion.span>
-              </PrimaryButton>
-            ) : (
-              <PrimaryButton onClick={handleSubmit} disabled={submitting || !step1Valid || !step2Valid}>
-                {submitting ? "Submitting..." : "Submit"}
-                {!submitting && (
+                  <FiArrowLeft className="h-4 w-4" /> Back
+                </button>
+              ) : (
+                <span />
+              )}
+
+              {step === 1 ? (
+                <PrimaryButton onClick={nextStep} disabled={!step1Valid}>
+                  Continue
                   <motion.span
                     animate={{ x: [0, 4, 0] }}
                     transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
                   >
                     <FiArrowRight className="h-4 w-4" />
                   </motion.span>
-                )}
-              </PrimaryButton>
-            )}
-          </div>
+                </PrimaryButton>
+              ) : (
+                <PrimaryButton onClick={handleSubmit} disabled={submitting || !step1Valid || !step2Valid}>
+                  {submitting ? "Submitting..." : "Continue"}
+                  {!submitting && (
+                    <motion.span
+                      animate={{ x: [0, 4, 0] }}
+                      transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      <FiArrowRight className="h-4 w-4" />
+                    </motion.span>
+                  )}
+                </PrimaryButton>
+              )}
+            </div>
+          )}
         </>
       )}
     </ModalShell>
   );
 }
 
-const SuccessView: React.FC<{ onClose: () => void }> = ({ onClose }) => (
+const SuccessView: React.FC<{ onClose: () => void; bookedWhen?: string }> = ({ onClose, bookedWhen }) => (
   <div className="relative flex flex-col items-center px-6 py-12 text-center sm:px-10">
     <button
       onClick={onClose}
@@ -413,10 +467,12 @@ const SuccessView: React.FC<{ onClose: () => void }> = ({ onClose }) => (
       </svg>
     </motion.div>
     <h2 className={`text-2xl font-semibold tracking-tight text-[#1A1033] ${bricolage.className}`}>
-      Free Audit Claimed
+      {bookedWhen ? "You're Booked" : "Free Audit Claimed"}
     </h2>
     <p className="mx-auto mt-2 max-w-sm text-[15px] leading-7 text-[#6B6480]">
-      We’ve received your details and our team will be in touch within 24 hours.
+      {bookedWhen
+        ? `See you ${bookedWhen}. A calendar invite and video link are on their way to your inbox.`
+        : "We’ve received your details and our team will be in touch within 24 hours."}
     </p>
     <motion.button
       type="button"
