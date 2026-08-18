@@ -62,6 +62,7 @@ import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEdit
 import { printComposeContent } from "@/components/email/printCompose";
 import { getJson } from "@/lib/email/panelApi";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
+import { groupConversations } from "@/lib/gmail/conversations";
 import {
   BRAND_LOGO,
   ICON_BUTTON, ICON_BUTTON_SOLID, FIELD_LABEL, ALERT,
@@ -535,30 +536,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // (latest message represents the thread) with a message count. Compose drafts
   // and thread-less messages pass through individually.
   const conversationRows = useMemo(() => {
-    // One row per Gmail thread — deliberately Gmail's own conversation boundary.
+    // Split each Gmail thread into reference-linked conversations.
     //
-    // Two earlier attempts tried to be cleverer than Gmail and both misfired: keying on "does it
-    // have References?" split an original from its reply (8 conversations rendered as 9 rows), and
-    // keying on the References root could merge messages Gmail keeps in separate threads. Matching
-    // threadId means the panel's grouping and counts agree with the Gmail UI you compare against.
-    const byThread = new Map<string, MessageRow & { threadCount: number }>();
-    const rows: Array<MessageRow & { threadCount: number }> = [];
-    for (const message of filteredMessages) {
-      // Local compose drafts have no Gmail thread, so they always stand alone.
-      if (!message.threadId || message.isComposeDraft) {
-        rows.push({ ...message, threadCount: 1 });
-        continue;
-      }
-      const existing = byThread.get(message.threadId);
-      if (existing) {
-        existing.threadCount += 1;
-      } else {
-        const row = { ...message, threadCount: 1 };
-        byThread.set(message.threadId, row);
-        rows.push(row);
-      }
-    }
-    return rows;
+    // Gmail's threadId also groups messages that merely share a subject and participants, so two
+    // unrelated emails from one sender collapsed into a single row and one of them was hidden.
+    // Grouping only where In-Reply-To / References actually links two messages separates those,
+    // while a genuine original + reply still collapses into one row with a count. Union is confined
+    // to a single thread, so a repeated quoted Message-ID can never bridge two threads.
+    return groupConversations(filteredMessages, (message) => Boolean(message.isComposeDraft || !message.threadId));
   }, [filteredMessages]);
 
   // Lightweight pre-send deliverability lint — proactive warnings shown in the composer.
@@ -1539,7 +1524,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const loadGmailConnections = useCallback(async () => {
     setGmailLoading(true);
     try {
-      const response = await fetch("/api/gmail/status");
+      // Both together: these reads are independent, and this pair gates the whole panel opening —
+      // waiting for status before even asking for preferences cost a full round trip of blank screen.
+      const [response, prefRes] = await Promise.all([
+        fetch("/api/gmail/status"),
+        fetch("/api/gmail/account-preferences").catch(() => null),
+      ]);
       if (!response.ok) {
         setGmailAccounts([]);
         setSelectedAccounts([]);
@@ -1562,8 +1552,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       // Accounts default to enabled; only accounts explicitly disabled in settings are excluded.
       const disabled = new Set<string>();
       try {
-        const prefRes = await fetch("/api/gmail/account-preferences");
-        if (prefRes.ok) {
+        if (prefRes?.ok) {
           const prefData = await prefRes.json();
           for (const pref of Array.isArray(prefData?.preferences) ? prefData.preferences : []) {
             if (pref?.enabled === false && typeof pref?.accountEmail === "string") disabled.add(pref.accountEmail.toLowerCase());

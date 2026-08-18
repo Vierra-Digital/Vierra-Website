@@ -5,6 +5,8 @@ import { extractHeader, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
 import { scanHtmlForTrackers } from "@/lib/email/trackerDetection";
 import { senderAvatarSources, senderDomain } from "@/lib/email/senderAvatar";
+import { conversationFor } from "@/lib/gmail/conversations";
+import { getCachedSenderPhoto, setCachedSenderPhoto } from "@/lib/gmail/senderPhotoCache";
 
 function decodeBase64Url(data: string) {
   const padded = data.replace(/-/g, "+").replace(/_/g, "/");
@@ -206,6 +208,11 @@ export default withAuth(async (req, res, session) => {
     }
   }
 
+  // Show exactly the conversation the clicked list row represents. The list splits a Gmail thread
+  // into reference-linked conversations, so without the same split here, opening either row would
+  // stitch the whole thread back together and the message would still look merged.
+  threadMessages = conversationFor(threadMessages, currentMessage.id);
+
   // Resolve inline (cid:) images so signature logos and pasted images actually render. Done per
   // message and in parallel across the thread; each message degrades independently.
   threadMessages = await Promise.all(
@@ -264,7 +271,54 @@ export default withAuth(async (req, res, session) => {
       return "";
     };
 
-    senderPhotoUrl = (await trySearchContacts()) || (await tryPeopleConnections()) || "";
+    /**
+     * Google's "other contacts": people you have corresponded with but never saved. Saved contacts
+     * cover only a handful of senders, which is why almost every message fell through to initials —
+     * this is the list Gmail itself draws most sender photos from.
+     *
+     * Needs the contacts.other.readonly scope; a mailbox connected before that scope was added
+     * simply 403s here and we fall through, so it degrades rather than erroring.
+     */
+    const tryOtherContacts = async () => {
+      const query = encodeURIComponent(senderEmail);
+      const peopleResponse = await fetchWithAuthRetry(
+        `https://people.googleapis.com/v1/otherContacts:search?query=${query}&readMask=names,emailAddresses,photos&pageSize=10`,
+        getToken
+      );
+      if (!peopleResponse?.ok) return "";
+      const peoplePayload = await peopleResponse.json();
+      const results = Array.isArray(peoplePayload?.results) ? peoplePayload.results : [];
+      for (const result of results) {
+        const person = result?.person;
+        const emails = Array.isArray(person?.emailAddresses)
+          ? person.emailAddresses.map((entry: any) => String(entry?.value || "").toLowerCase()).filter(Boolean)
+          : [];
+        if (!emails.includes(senderEmail)) continue;
+        const photo = Array.isArray(person?.photos)
+          ? person.photos.find((entry: any) => entry?.url && !entry?.default) || person.photos.find((entry: any) => entry?.url)
+          : null;
+        if (typeof photo?.url === "string" && photo.url.trim()) return photo.url.trim();
+      }
+      return "";
+    };
+
+    // Cached first: the reader response blocks on this lookup, and the same senders recur constantly.
+    const now = Date.now();
+    const cached = getCachedSenderPhoto(accountEmail, senderEmail, now);
+    if (cached !== undefined) {
+      senderPhotoUrl = cached;
+    } else {
+      // Concurrently, not in sequence — these are independent reads and the old chain paid for up to
+      // three round trips back to back before the reader could render anything. Priority order is
+      // still honoured by picking from the settled results rather than by whichever answered first.
+      const [saved, other, connections] = await Promise.all([
+        trySearchContacts().catch(() => ""),
+        tryOtherContacts().catch(() => ""),
+        tryPeopleConnections().catch(() => ""),
+      ]);
+      senderPhotoUrl = saved || other || connections || "";
+      setCachedSenderPhoto(accountEmail, senderEmail, senderPhotoUrl, now);
+    }
   }
 
   res.status(200).json({

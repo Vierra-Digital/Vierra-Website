@@ -42,6 +42,8 @@ type MessageRow = {
   replyTo: string;
   messageIdHeader: string;
   references: string;
+  /** Used to split a Gmail thread into real conversations; some clients set this without References. */
+  inReplyTo: string;
   unread: boolean;
   starred?: boolean;
   tracked: boolean;
@@ -274,6 +276,7 @@ export default withAuth(async (req, res, session) => {
             const date = extractHeader(headers, "Date") || "";
             const messageIdHeader = extractHeader(headers, "Message-ID") || "";
             const references = extractHeader(headers, "References") || "";
+            const inReplyTo = extractHeader(headers, "In-Reply-To") || "";
             const timestamp = Number(msg.internalDate || 0) || Date.parse(date) || 0;
             const unread = Array.isArray(msg.labelIds) ? msg.labelIds.includes("UNREAD") : false;
             const starred = Array.isArray(msg.labelIds) ? msg.labelIds.includes("STARRED") : false;
@@ -293,6 +296,7 @@ export default withAuth(async (req, res, session) => {
               replyTo,
               messageIdHeader,
               references,
+              inReplyTo,
               unread,
               starred,
               tracked: false,
@@ -374,6 +378,7 @@ export default withAuth(async (req, res, session) => {
         replyTo: "",
         messageIdHeader: draft.in_reply_to || "",
         references: draft.references || "",
+        inReplyTo: draft.in_reply_to || "",
         unread: false,
         tracked: false,
         isComposeDraft: true,
