@@ -198,20 +198,32 @@ function GridComponent() {
             return (
               <div key={key} className="w-[45px] h-[45px] sm:w-[55px] sm:h-[55px] md:w-[80px] md:h-[80px] z-10">
                 <div className="group relative flex h-full w-full items-center justify-center">
-                  {/* The box frame — this is what enlarges on hover (the icon stays put). */}
-                  <div
-                    className={`absolute inset-0 rounded-xl border transition-all duration-300 ease-out group-hover:scale-[1.12] group-hover:border-[#701CC0]/40 group-hover:shadow-[0_6px_18px_-8px_rgba(112,28,192,0.35)] ${
-                      showIcon
-                        ? "border-transparent bg-white shadow-[0_8px_22px_-10px_rgba(17,24,39,0.35)]"
-                        : "border-[#C4C2D6] bg-transparent"
-                    }`}
-                  >
-                    {/* Empty-state marker — inner circle, fades out when a logo shows. */}
-                    <span
-                      className={`absolute left-1/2 top-1/2 h-1/3 w-1/3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#AEACC4] transition-opacity duration-300 ${
+                  {/* The box frame — this is what enlarges on hover (the icon stays put).
+                      Border/background/shadow no longer transition directly (animating
+                      those forces main-thread paint on every one of this grid's ~15
+                      auto-cycling activations); instead two fully-styled layers crossfade
+                      via opacity, and hover's border/shadow lives in its own opacity
+                      layer — all three inputs are GPU-composited now, only the scale
+                      transform below still animates a "real" property. */}
+                  <div className="absolute inset-0 transition-transform duration-300 ease-out group-hover:scale-[1.12]">
+                    <div
+                      className={`absolute inset-0 rounded-xl border border-[#C4C2D6] transition-opacity duration-300 ease-out ${
                         showIcon ? "opacity-0" : "opacity-100"
                       }`}
+                    >
+                      {/* Empty-state marker — inner circle, fades out when a logo shows. */}
+                      <span
+                        className={`absolute left-1/2 top-1/2 h-1/3 w-1/3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#AEACC4] transition-opacity duration-300 ${
+                          showIcon ? "opacity-0" : "opacity-100"
+                        }`}
+                      />
+                    </div>
+                    <div
+                      className={`absolute inset-0 rounded-xl border border-transparent bg-white shadow-[0_8px_22px_-10px_rgba(17,24,39,0.35)] transition-opacity duration-300 ease-out ${
+                        showIcon ? "opacity-100" : "opacity-0"
+                      }`}
                     />
+                    <div className="absolute inset-0 rounded-xl border border-[#701CC0]/40 shadow-[0_6px_18px_-8px_rgba(112,28,192,0.35)] opacity-0 transition-opacity duration-300 ease-out group-hover:opacity-100" />
                   </div>
                   {/* Icon sits above the frame and does NOT scale on hover. */}
                   {icon && (
