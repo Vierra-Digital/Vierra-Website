@@ -64,7 +64,7 @@ import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
 import { buildReplyReferences } from "@/lib/email/threading";
 import {
   BRAND_LOGO,
-  ICON_BUTTON, ICON_BUTTON_SOLID, FIELD_LABEL, ALERT,
+  ICON_BUTTON, ICON_BUTTON_SOLID, FIELD_LABEL, ALERT, REPLY_ACTION_BUTTON,
 } from "@/components/email/emailTheme";
 import {
   PAGE_SIZE,
@@ -4995,47 +4995,11 @@ ${sourceText}`;
                           <FiChevronsRight className="w-4 h-4 rotate-180" />
                           Back
                         </button>
-                        <div className="flex items-center gap-2">
-                          {/* Reply group leads, then every shared action in the same order as the
+                        <div className="flex flex-wrap items-center gap-1">
+                          {/* Every shared action in the same order as the
                               list toolbar (star, spam, trash, read, move, archive, snooze), so the
                               two toolbars are not two different sequences of the same icons.
                               Reader-only actions (label, block) come last. */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void openReplyCompose();
-                            }}
-                            className={`${ICON_BUTTON} email-tip`}
-                            aria-label="Reply"
-                            data-tip="Reply"
-                          >
-                            <FiCornerUpLeft className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void openReplyAllCompose();
-                            }}
-                            className={`${ICON_BUTTON} email-tip`}
-                            aria-label="Reply All"
-                            data-tip="Reply All"
-                          >
-                            <FiUsers className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void openForwardCompose();
-                            }}
-                            className={`${ICON_BUTTON} email-tip`}
-                            aria-label="Forward"
-                            data-tip="Forward"
-                          >
-                            <FiSend className="w-4 h-4" />
-                          </button>
-
-                          <span className="mx-0.5 h-5 w-px bg-current opacity-15" aria-hidden />
-
                           {/* Star was only ever on the list row, so an open message could not be
                               starred without going back. In Starred this is the unstar the list
                               offers in the same position. */}
@@ -5175,7 +5139,7 @@ ${sourceText}`;
                             ) : null}
                           </div>
 
-                          <span className="mx-0.5 h-5 w-px bg-current opacity-15" aria-hidden />
+                          <span className="mx-1 h-5 w-px bg-current opacity-15" aria-hidden />
 
                           {/* Label: ref-scoped like every other menu here. It previously had no ref,
                               so clicking outside it or changing view left it hanging open, and it was
@@ -5295,16 +5259,56 @@ ${sourceText}`;
                                   <div key={`${threadMessage.id || index}`} className="email-body-card rounded-2xl border border-white/70 bg-white/70 p-5">
                                     {threadMessage.bodyHtml ? (
                                       <div
-                                        className="email-body text-[14px] leading-[1.65] text-[#2C313A]"
+                                        className="email-body text-[14px] leading-[1.65]"
                                         dangerouslySetInnerHTML={{ __html: sanitizeHtml(threadMessage.bodyHtml) }}
                                       />
                                     ) : (
-                                      <div className="email-body whitespace-pre-wrap text-[14px] leading-[1.65] text-[#2C313A]">
+                                      <div className="email-body whitespace-pre-wrap text-[14px] leading-[1.65]">
                                         {threadMessage.bodyText || threadMessage.snippet || "No message content available."}
                                       </div>
                                     )}
                                   </div>
                                 ))}
+
+                                {/* Reply / Reply all / Forward sit with the message, the way Gmail
+                                    puts them at the foot of the conversation rather than in the
+                                    window chrome — the reply you are about to write belongs to this
+                                    message, so the control for it belongs next to it. Hidden while a
+                                    composer is open, since the composer already is that action. */}
+                                {!inlineComposeMode ? (
+                                  <div className="flex flex-wrap items-center gap-2 pt-3">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void openReplyCompose();
+                                      }}
+                                      className={REPLY_ACTION_BUTTON}
+                                    >
+                                      <FiCornerUpLeft className="h-4 w-4" aria-hidden />
+                                      Reply
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void openReplyAllCompose();
+                                      }}
+                                      className={REPLY_ACTION_BUTTON}
+                                    >
+                                      <FiUsers className="h-4 w-4" aria-hidden />
+                                      Reply all
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void openForwardCompose();
+                                      }}
+                                      className={REPLY_ACTION_BUTTON}
+                                    >
+                                      <FiSend className="h-4 w-4" aria-hidden />
+                                      Forward
+                                    </button>
+                                  </div>
+                                ) : null}
 
                                 {inlineComposeMode ? (
                                   /* Inline reply, shaped the way Gmail's is: one recipient line, the
@@ -5398,9 +5402,9 @@ ${sourceText}`;
                                             !inlineComposeTo.trim() ||
                                             (!inlineComposeIntroText.trim() && !inlineComposeBodyText.trim())
                                           }
-                                          /* Same shape as the main composer's Send: a rectangle,
-                                             not a pill, so the two send buttons read as one control. */
-                                          className="inline-flex min-h-9 shrink-0 items-center gap-2 rounded bg-[#701CC0] px-4 text-sm font-medium text-white hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
+                                          /* Identical to the main composer's Send, so the two are
+                                             one control appearing in two places. */
+                                          className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md bg-[#701CC0] px-6 text-sm font-semibold text-white hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
                                         >
                                           <FiSend className="h-4 w-4" aria-hidden />
                                           {inlineComposeSending ? "Sending…" : "Send"}
@@ -5997,7 +6001,7 @@ ${sourceText}`;
                         !composeHasMeaningfulBody ||
                         !composeAccountEmail
                       }
-                      className="inline-flex min-h-9 shrink-0 items-center rounded bg-[#701CC0] px-4 text-sm font-medium text-white hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
+                      className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md bg-[#701CC0] px-6 text-sm font-semibold text-white hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
                     >
                       {sendingCompose ? "Sending…" : scheduleAt ? "Schedule send" : "Send"}
                     </button>

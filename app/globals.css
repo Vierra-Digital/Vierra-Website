@@ -443,8 +443,16 @@ input[type="search"]::-ms-clear:hover {
   --mail-border: #2B2340;
   --mail-text: #EDEBF5;
   --mail-text-muted: #A29CBB;
-  /* The message sheet: light enough for sender HTML, tinted toward the panel's purple. */
-  --mail-sheet: #F6F3FC;
+  /* The message sheet.
+     Sender HTML is authored for a light background, so this has to stay light — but white was
+     glaring against the dark panel and the previous near-white (#F6F3FC) was too faint to change
+     that. A real lavender drops the sheet's luminance by about a fifth, which is what actually
+     reduces the glare, while dark text on it still clears WCAG AA by a wide margin. */
+  --mail-sheet: #E8E2F4;
+  /* Body text on that sheet: a dark plum rather than pure black, so the page is not maximum
+     contrast in both directions. Applies only where the sender set no colour of its own — we
+     cannot override a sender's styles without also destroying their intended ones. */
+  --mail-sheet-ink: #241F35;
 }
 
 /* ── Surfaces ─────────────────────────────────────────────────────────────── */
@@ -525,7 +533,8 @@ input[type="search"]::-ms-clear:hover {
 /* The sender's own HTML keeps its light card — see note above. */
 .email-shell .email-body-card {
   background-color: var(--mail-sheet);
-  border-color: #E4DEF2;
+  border-color: #D9D0EE;
+  color: var(--mail-sheet-ink);
 }
 
 /* ── Email panel: connected shell (rail + content as one surface) ──────────── */
@@ -699,7 +708,7 @@ input[type="search"]::-ms-clear:hover {
    clears WCAG AA comfortably. */
 .email-shell .email-body-card {
   background-color: var(--mail-sheet) !important;
-  border: 1px solid rgba(112, 28, 192, 0.1) !important;
+  border: 1px solid rgba(112, 28, 192, 0.14) !important;
   border-radius: 14px;
   box-shadow: 0 10px 30px -18px rgba(0, 0, 0, 0.8);
 }
