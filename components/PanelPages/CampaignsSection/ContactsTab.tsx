@@ -33,6 +33,7 @@ const ContactsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<CampaignContact | null>(null);
   const [timelineEmail, setTimelineEmail] = useState<string | null>(null);
@@ -42,7 +43,7 @@ const ContactsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
     try {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("leadStatus", statusFilter);
-      if (search) params.set("search", search);
+      if (debouncedSearch) params.set("search", debouncedSearch);
       const res = await fetch(`/api/campaigns/${campaignId}/contacts?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to load contacts");
       const data = await res.json();
@@ -56,9 +57,14 @@ const ContactsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
   };
 
   useEffect(() => {
+    const handle = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(handle);
+  }, [search]);
+
+  useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId, statusFilter, search]);
+  }, [campaignId, statusFilter, debouncedSearch]);
 
   const totalCount = Object.values(statusCounts).reduce((a, b) => a + b, 0);
 
