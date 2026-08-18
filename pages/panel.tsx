@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Head from "next/head"
 import { inter } from "@/lib/fonts";
 import Image from "next/image"
@@ -80,11 +80,28 @@ type PanelPageProps = {
   initialUserRole: "admin" | "staff"
 }
 
+// Maps a kept-alive panel section to the data domain in /api/panel/section-versions that
+// backs it, so a change on the server (by this admin in another tab, or a different admin
+// entirely) can force that one section to remount and refetch instead of showing what it
+// last loaded. Sections not listed here (Dashboard, Clients, Ltv Calculator, Sign Pdf) either
+// already refetch on their own (Clients' refreshTrigger) or have no server-mutated backing data.
+const SECTION_VERSION_DOMAIN: Record<number, string> = {
+  2: "team",
+  5: "outreach",
+  6: "projects",
+  7: "blog",
+  8: "team",
+  10: "files",
+}
+
 const PanelPage = ({ initialUserRole }: PanelPageProps) => {
   const router = useRouter()
   const [showSettings, setShowSettings] = useState(false)
   const [currentSection, setCurrentSection] = useState(0);
   const [visitedSections, setVisitedSections] = useState<Set<number>>(() => new Set([0]))
+  const [sectionEpoch, setSectionEpoch] = useState<Record<number, number>>({})
+  const lastSectionVersionsRef = useRef<Record<string, string>>({})
+  const visitedSectionsRef = useRef<Set<number>>(new Set([0]))
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const { data: session } = useSession()
   const [isAddClientOpen, setIsAddClientOpen] = useState(false)
@@ -106,6 +123,65 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
   useEffect(() => {
     setVisitedSections((prev) => (prev.has(currentSection) ? prev : new Set(prev).add(currentSection)))
   }, [currentSection])
+
+  useEffect(() => {
+    visitedSectionsRef.current = visitedSections
+  }, [visitedSections])
+
+  const hasVersionedSection = useCallback(
+    (sections: Set<number>) => Array.from(sections).some((s) => s in SECTION_VERSION_DOMAIN),
+    []
+  )
+
+  const checkSectionVersions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/panel/section-versions", { cache: "no-store" })
+      if (!res.ok) return
+      const data: Record<string, string> = await res.json()
+      const changedDomains = new Set<string>()
+      for (const [domain, version] of Object.entries(data)) {
+        const prev = lastSectionVersionsRef.current[domain]
+        if (prev !== undefined && prev !== version) changedDomains.add(domain)
+        lastSectionVersionsRef.current[domain] = version
+      }
+      if (changedDomains.size === 0) return
+      setSectionEpoch((prev) => {
+        const next = { ...prev }
+        Object.entries(SECTION_VERSION_DOMAIN).forEach(([sectionKey, domain]) => {
+          if (changedDomains.has(domain)) {
+            const sectionNum = Number(sectionKey)
+            next[sectionNum] = (next[sectionNum] || 0) + 1
+          }
+        })
+        return next
+      })
+    } catch {
+      // Best-effort staleness check; keep showing whatever's already loaded on failure.
+    }
+  }, [])
+
+  // Only worth hitting the DB for staff who have actually visited a section backed by
+  // /api/panel/section-versions — most sections (Dashboard, Clients, Ltv Calculator, Sign
+  // Pdf) either don't need it or already refetch on their own, and most staff never touch
+  // Team/Files/Outreach/Projects/Blog in a given session at all.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden && hasVersionedSection(visitedSectionsRef.current)) checkSectionVersions()
+    }
+    document.addEventListener("visibilitychange", handleVisibility)
+    return () => document.removeEventListener("visibilitychange", handleVisibility)
+  }, [checkSectionVersions, hasVersionedSection])
+
+  useEffect(() => {
+    // Runs on the *first* visit too (not just revisits): checkSectionVersions() is a no-op
+    // the first time it sees a domain (nothing to diff against yet), but it still records
+    // that domain's baseline version. Skipping the first visit would mean the baseline gets
+    // captured one visit too late — the first revisit would silently adopt whatever changed
+    // in the meantime as the new "no change" baseline instead of detecting it.
+    if (currentSection in SECTION_VERSION_DOMAIN) {
+      checkSectionVersions()
+    }
+  }, [currentSection, checkSectionVersions])
 
   useEffect(() => {
     if (!router.isReady) return;
@@ -430,7 +506,7 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
                         </div>
                       )}
                       {visitedSections.has(2) && (
-                        <div style={{ display: currentSection === 2 ? undefined : "none" }}>
+                        <div key={`section-2-${sectionEpoch[2] || 0}`} style={{ display: currentSection === 2 ? undefined : "none" }}>
                           <TeamPanelSection userRole={resolvedUserRole} />
                         </div>
                       )}
@@ -440,22 +516,26 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
                         </div>
                       )}
                       {visitedSections.has(5) && (
-                        <div style={{ display: currentSection === 5 ? undefined : "none" }}>
+                        <div key={`section-5-${sectionEpoch[5] || 0}`} style={{ display: currentSection === 5 ? undefined : "none" }}>
                           <OutreachSection />
                         </div>
                       )}
                       {visitedSections.has(6) && (
-                        <div style={{ display: currentSection === 6 ? undefined : "none" }}>
+                        <div key={`section-6-${sectionEpoch[6] || 0}`} style={{ display: currentSection === 6 ? undefined : "none" }}>
                           <ProjectManagement />
                         </div>
                       )}
                       {visitedSections.has(7) && (
-                        <div className="w-full pb-24" style={{ display: currentSection === 7 ? undefined : "none" }}>
+                        <div
+                          key={`section-7-${sectionEpoch[7] || 0}`}
+                          className="w-full pb-24"
+                          style={{ display: currentSection === 7 ? undefined : "none" }}
+                        >
                           <BlogEditorSection />
                         </div>
                       )}
                       {visitedSections.has(8) && !isStaff && (
-                        <div style={{ display: currentSection === 8 ? undefined : "none" }}>
+                        <div key={`section-8-${sectionEpoch[8] || 0}`} style={{ display: currentSection === 8 ? undefined : "none" }}>
                           <AdminEditorSection />
                         </div>
                       )}
@@ -465,7 +545,7 @@ const PanelPage = ({ initialUserRole }: PanelPageProps) => {
                         </div>
                       )}
                       {visitedSections.has(10) && (
-                        <div style={{ display: currentSection === 10 ? undefined : "none" }}>
+                        <div key={`section-10-${sectionEpoch[10] || 0}`} style={{ display: currentSection === 10 ? undefined : "none" }}>
                           <FilesSection />
                         </div>
                       )}
