@@ -50,6 +50,16 @@ export const ICON_BUTTON =
 export const ICON_BUTTON_SOLID =
   "p-2 rounded-lg border border-[#E5E7EB] bg-white text-[#374151] hover:bg-[#F3F4F6] disabled:opacity-50";
 
+/**
+ * Reply / Reply all / Forward at the foot of an open message.
+ *
+ * Labelled rather than icon-only, because these sit with the message content instead of in a
+ * toolbar where a row of glyphs is the convention. Outlined, so they read as available actions
+ * without competing with the composer's filled Send.
+ */
+export const REPLY_ACTION_BUTTON =
+  "inline-flex items-center gap-2 rounded-full border border-[#D8CFEA] bg-white px-4 py-1.5 text-[13px] font-medium text-[#4C1191] transition-colors hover:bg-[#F4F1FA]";
+
 /** Primary action. */
 export const BUTTON_PRIMARY =
   "inline-flex items-center justify-center rounded-xl bg-[#701CC0] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50";

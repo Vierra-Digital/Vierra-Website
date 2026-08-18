@@ -9,10 +9,6 @@
  * Pure module (no imports) so it can be unit-tested standalone.
  */
 
-// A notable executive/founder, with a link to their LinkedIn profile (direct
-// when Wikidata has the handle, else a name search).
-type KeyPerson = { name: string; role: string; url: string };
-
 // Firmographics we can pull KEYLESSLY from the page's schema.org / JSON-LD.
 // (Verified funding amounts + website traffic need a paid provider like Harmonic
 // or SimilarWeb — not available without a key.)
@@ -23,7 +19,6 @@ type OrgProfile = {
   location: string | null;
   revenue: string | null;
   ceo: string | null;
-  people: KeyPerson[]; // key executives/founders with LinkedIn links
   source: string | null; // where the firmographics came from (e.g. "Wikidata", "schema.org")
 };
 
@@ -216,7 +211,7 @@ function extractEmails(html: string, domain: string): string[] {
 
 /** Keyless firmographics from schema.org / JSON-LD Organization blocks on the page. */
 function extractOrgProfile(html: string): OrgProfile {
-  const out: OrgProfile = { industry: null, employees: null, founded: null, location: null, revenue: null, ceo: null, people: [], source: null };
+  const out: OrgProfile = { industry: null, employees: null, founded: null, location: null, revenue: null, ceo: null, source: null };
   const blocks = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi) || [];
   const nodes: Record<string, unknown>[] = [];
   const collect = (d: unknown) => {
@@ -323,41 +318,7 @@ async function fetchWikidata(name: string, domain: string): Promise<Partial<OrgP
   const hq = val(matched, "hqLabel");
   const ceo = val(matched, "ceoLabel");
 
-  // 3) Key people: CEO (P169), founder (P112), chairperson (P488), board members
-  // (P3320), and directors/managers (P1037) — a broader leadership set than just
-  // the CEO. Link each to LinkedIn via P6634 when present, else a name search.
-  const people: KeyPerson[] = [];
-  const itemUri = val(matched, "item");
-  const qid = itemUri ? itemUri.split("/").pop() : null;
-  if (qid && /^Q\d+$/.test(qid)) {
-    const pq =
-      `SELECT ?role ?personLabel ?linkedin WHERE {` +
-      ` { wd:${qid} wdt:P169 ?person. BIND("CEO" AS ?role) }` +
-      ` UNION { wd:${qid} wdt:P112 ?person. BIND("Founder" AS ?role) }` +
-      ` UNION { wd:${qid} wdt:P488 ?person. BIND("Chair" AS ?role) }` +
-      ` UNION { wd:${qid} wdt:P1037 ?person. BIND("Director" AS ?role) }` +
-      ` UNION { wd:${qid} wdt:P3320 ?person. BIND("Board member" AS ?role) }` +
-      ` OPTIONAL { ?person wdt:P6634 ?linkedin. }` +
-      ` SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } LIMIT 20`;
-    const pdata = await getJson(`https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(pq)}`);
-    const prows: any[] = pdata?.results?.bindings || [];
-    const seen = new Set<string>();
-    for (const r of prows) {
-      const nlabel = val(r, "personLabel");
-      if (!nlabel || /^Q\d+$/.test(nlabel) || seen.has(nlabel)) continue;
-      seen.add(nlabel);
-      const li = val(r, "linkedin");
-      people.push({
-        name: nlabel,
-        role: val(r, "role") || "",
-        url: li
-          ? `https://www.linkedin.com/in/${li}`
-          : `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(nlabel)}`,
-      });
-    }
-  }
-
-  if (!employees && !inception && !revenue && !industry && !hq && !ceo && !people.length) return null;
+  if (!employees && !inception && !revenue && !industry && !hq && !ceo) return null;
 
   return {
     industry: industry,
@@ -366,7 +327,6 @@ async function fetchWikidata(name: string, domain: string): Promise<Partial<OrgP
     location: hq,
     revenue: revenue ? "$" + Number(revenue).toLocaleString() : null,
     ceo: ceo,
-    people,
     source: "Wikidata",
   };
 }
@@ -806,7 +766,6 @@ async function getCompanyContext(input: string): Promise<CompanyContext | null> 
     profile.location = profile.location || wd.location || null;
     profile.revenue = profile.revenue || wd.revenue || null;
     profile.ceo = profile.ceo || wd.ceo || null;
-    if (wd.people && wd.people.length) profile.people = wd.people;
     if (!profile.source && (wd.industry || wd.employees || wd.founded || wd.location || wd.revenue || wd.ceo)) profile.source = "Wikidata";
     else if (profile.source && wd.source && (wd.industry || wd.employees)) profile.source = "schema.org + Wikidata";
   }

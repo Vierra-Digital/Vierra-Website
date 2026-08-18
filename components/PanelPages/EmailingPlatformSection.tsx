@@ -61,9 +61,10 @@ import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEdit
 import { printComposeContent } from "@/components/email/printCompose";
 import { getJson } from "@/lib/email/panelApi";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
+import { buildReplyReferences } from "@/lib/email/threading";
 import {
   BRAND_LOGO,
-  ICON_BUTTON, ICON_BUTTON_SOLID, FIELD_LABEL, ALERT,
+  ICON_BUTTON, ICON_BUTTON_SOLID, FIELD_LABEL, ALERT, REPLY_ACTION_BUTTON,
 } from "@/components/email/emailTheme";
 import {
   PAGE_SIZE,
@@ -476,6 +477,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const snoozeMenuRef = useRef<HTMLDivElement | null>(null);
   const [snoozeMenuOpen, setSnoozeMenuOpen] = useState(false);
   const moveMessageMenuRef = useRef<HTMLDivElement | null>(null);
+  const labelMenuRef = useRef<HTMLDivElement | null>(null);
   const contactFilterMenuRef = useRef<HTMLDivElement | null>(null);
   const inlineComposeRef = useRef<HTMLDivElement | null>(null);
   const editContactModalRef = useRef<HTMLDivElement | null>(null);
@@ -1866,11 +1868,30 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     };
   }, [snoozeMenuOpen]);
 
+  // Label menu dismisses on an outside click, exactly as Move To and Snooze do. It had no ref at
+  // all, so it stayed open until its own button was clicked again.
+  useEffect(() => {
+    if (!labelMenuOpen) return;
+    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
+      const targetNode = event.target as Node | null;
+      if (!targetNode) return;
+      if (labelMenuRef.current?.contains(targetNode)) return;
+      setLabelMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+    };
+  }, [labelMenuOpen]);
+
   // Any change of context (mailbox, label, opening a message, paging) closes open menus —
   // they used to survive navigation and hang over the new view.
   useEffect(() => {
     setMoveMenuOpen(null);
     setSnoozeMenuOpen(false);
+    setLabelMenuOpen(false);
   }, [activeModule, activeLabelId, viewMode, selectedMessageId, currentPage]);
 
   useEffect(() => {
@@ -2888,7 +2909,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setInlineComposePreviewHtml("");
     setInlineComposeThreadId(selectedMessage.threadId || latest?.threadId || "");
     setInlineComposeInReplyTo(latest?.messageIdHeader || selectedMessage.messageIdHeader || "");
-    setInlineComposeReferences(latest?.references || selectedMessage.references || "");
+    setInlineComposeReferences(
+      buildReplyReferences(
+        latest?.references || selectedMessage.references,
+        latest?.messageIdHeader || selectedMessage.messageIdHeader
+      )
+    );
     setInlineComposeError("");
     setInlineComposeSuccess("");
   };
@@ -2910,7 +2936,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setInlineComposePreviewHtml("");
     setInlineComposeThreadId(selectedMessage.threadId || latest?.threadId || "");
     setInlineComposeInReplyTo(latest?.messageIdHeader || selectedMessage.messageIdHeader || "");
-    setInlineComposeReferences(latest?.references || selectedMessage.references || "");
+    setInlineComposeReferences(
+      buildReplyReferences(
+        latest?.references || selectedMessage.references,
+        latest?.messageIdHeader || selectedMessage.messageIdHeader
+      )
+    );
     setInlineComposeError("");
     setInlineComposeSuccess("");
   };
@@ -4973,85 +5004,61 @@ ${sourceText}`;
                           <FiChevronsRight className="w-4 h-4 rotate-180" />
                           Back
                         </button>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-1">
+                          {/* Every shared action in the same order as the
+                              list toolbar (star, spam, trash, read, move, archive, snooze), so the
+                              two toolbars are not two different sequences of the same icons.
+                              Reader-only actions (label, block) come last. */}
+                          {/* Star was only ever on the list row, so an open message could not be
+                              starred without going back. In Starred this is the unstar the list
+                              offers in the same position. */}
+                          {selectedMessage ? (
+                            <button
+                              type="button"
+                              onClick={() => void toggleStar(selectedMessage)}
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label={selectedMessage.starred ? "Unstar" : "Star"}
+                              data-tip={selectedMessage.starred ? "Unstar" : "Star"}
+                            >
+                              <FiStar className={`w-4 h-4 ${selectedMessage.starred ? "fill-[#F5A623] text-[#F5A623]" : ""}`} />
+                            </button>
+                          ) : null}
                           <button
                             type="button"
-                            onClick={() => {
-                              void openReplyCompose();
-                            }}
-                            className={ICON_BUTTON}
-                            aria-label="Reply"
-                            title="Reply"
+                            onClick={() => applyAction(spamActionType)}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label={spamActionTitle}
+                            data-tip={spamActionTitle}
                           >
-                            <FiCornerUpLeft className="w-4 h-4" />
+                            <FiAlertCircle className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              void openReplyAllCompose();
-                            }}
-                            className={ICON_BUTTON}
-                            aria-label="Reply All"
-                            title="Reply All"
+                            onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label={deletesPermanently ? "Delete Permanently" : "Move To Trash"}
+                            data-tip={deletesPermanently ? "Delete Permanently" : "Move To Trash"}
                           >
-                            <FiUsers className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void openForwardCompose();
-                            }}
-                            className={ICON_BUTTON}
-                            aria-label="Forward"
-                            title="Forward"
-                          >
-                            <FiSend className="w-4 h-4" />
+                            <FiTrash2 className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
                             onClick={() => applyAction("markUnread")}
-                            className={ICON_BUTTON}
-                            title="Mark As Unread"
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label="Mark As Unread"
+                            data-tip="Mark As Unread"
                           >
                             <FiMail className="w-4 h-4" />
                           </button>
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={() => setLabelMenuOpen((open) => !open)}
-                              className={ICON_BUTTON}
-                              title="Label"
-                              aria-label="Label"
-                            >
-                              <FiTag className="w-4 h-4" />
-                            </button>
-                            {labelMenuOpen ? (
-                              <div className="absolute right-0 top-[calc(100%+6px)] z-20 max-h-64 min-w-[180px] overflow-y-auto rounded-lg border border-[#E5E7EB] bg-white shadow-lg py-1">
-                                {labels.length === 0 ? (
-                                  <div className="px-3 py-2 text-sm text-[#847FA0]">No labels yet.</div>
-                                ) : (
-                                  labels.map((label) => (
-                                    <button
-                                      key={`apply-${label.id}`}
-                                      type="button"
-                                      onClick={() => applyLabelToMessage(label.id)}
-                                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-[#374151] hover:bg-[#F3F4F6]"
-                                    >
-                                      <FiTag className="h-3.5 w-3.5 text-[#847FA0]" /> {label.name}
-                                    </button>
-                                  ))
-                                )}
-                              </div>
-                            ) : null}
-                          </div>
                           {/* Hidden wherever moving between mailboxes is meaningless — see
                               allowsMailboxMoves. */}
                           <div ref={moveMessageMenuRef} className={`relative ${allowsMailboxMoves ? "" : "hidden"}`}>
                             <button
                               type="button"
                               onClick={() => setMoveMenuOpen((prev) => (prev === "message" ? null : "message"))}
-                              className={ICON_BUTTON}
-                              title="Move To"
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label="Move To"
+                              data-tip="Move To"
                             >
                               <FiMove className="w-4 h-4" />
                             </button>
@@ -5100,33 +5107,88 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                              className={ICON_BUTTON}
-                              title={activeModule === "archive" ? "Unarchive" : "Archive"}
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label={activeModule === "archive" ? "Unarchive" : "Archive"}
+                              data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
                             >
                               <FiArchive className="w-4 h-4" />
                             </button>
                           ) : null}
-                          <button
-                            type="button"
-                            onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
-                            className={ICON_BUTTON}
-                            title={deletesPermanently ? "Delete Permanently" : "Trash"}
-                          >
-                            <FiTrash2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => applyAction(spamActionType)}
-                            className={ICON_BUTTON}
-                            title={spamActionTitle}
-                          >
-                            <FiAlertCircle className="w-4 h-4" />
-                          </button>
+                          {/* Snooze existed only on the list, so an open message had to be closed to
+                              snooze it. Same presets, same menu, same dismissal. */}
+                          <div ref={snoozeMenuRef} className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setSnoozeMenuOpen((open) => !open)}
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label="Snooze"
+                              data-tip="Snooze"
+                            >
+                              <FiClock className="w-4 h-4" />
+                            </button>
+                            {snoozeMenuOpen ? (
+                              <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 w-44">
+                                {(
+                                  [
+                                    ["later", "Later today"],
+                                    ["tomorrow", "Tomorrow"],
+                                    ["nextweek", "Next week"],
+                                  ] as const
+                                ).map(([preset, label]) => (
+                                  <button
+                                    key={preset}
+                                    type="button"
+                                    onClick={() => snoozeSelected(preset)}
+                                    className="email-menu-item block w-full px-2.5 py-[7px] text-left text-[12.5px] font-medium"
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <span className="mx-1 h-5 w-px bg-current opacity-15" aria-hidden />
+
+                          {/* Label: ref-scoped like every other menu here. It previously had no ref,
+                              so clicking outside it or changing view left it hanging open, and it was
+                              styled by hand instead of with the shared menu classes. */}
+                          <div ref={labelMenuRef} className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setLabelMenuOpen((open) => !open)}
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label="Label"
+                              data-tip="Label"
+                            >
+                              <FiTag className="w-4 h-4" />
+                            </button>
+                            {labelMenuOpen ? (
+                              <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 max-h-64 min-w-[180px] overflow-y-auto">
+                                {labels.length === 0 ? (
+                                  <div className="px-2.5 py-[7px] text-[12.5px] text-[#847FA0]">No labels yet.</div>
+                                ) : (
+                                  labels.map((label) => (
+                                    <button
+                                      key={`apply-${label.id}`}
+                                      type="button"
+                                      onClick={() => applyLabelToMessage(label.id)}
+                                      className="email-menu-item flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[12.5px] font-medium"
+                                    >
+                                      <FiTag className="h-3.5 w-3.5 shrink-0" />
+                                      <span className="truncate">{label.name}</span>
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
                           <button
                             type="button"
                             onClick={blockSelectedSender}
-                            className={ICON_BUTTON}
-                            title={selectedBlockedEntry ? "Unblock Sender" : "Block Sender"}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label={selectedBlockedEntry ? "Unblock Sender" : "Block Sender"}
+                            data-tip={selectedBlockedEntry ? "Unblock Sender" : "Block Sender"}
                           >
                             <FiX className="w-4 h-4" />
                           </button>
@@ -5206,117 +5268,165 @@ ${sourceText}`;
                                   <div key={`${threadMessage.id || index}`} className="email-body-card rounded-2xl border border-white/70 bg-white/70 p-5">
                                     {threadMessage.bodyHtml ? (
                                       <div
-                                        className="email-body text-[14px] leading-[1.65] text-[#2C313A]"
+                                        className="email-body text-[14px] leading-[1.65]"
                                         dangerouslySetInnerHTML={{ __html: sanitizeHtml(threadMessage.bodyHtml) }}
                                       />
                                     ) : (
-                                      <div className="email-body whitespace-pre-wrap text-[14px] leading-[1.65] text-[#2C313A]">
+                                      <div className="email-body whitespace-pre-wrap text-[14px] leading-[1.65]">
                                         {threadMessage.bodyText || threadMessage.snippet || "No message content available."}
                                       </div>
                                     )}
                                   </div>
                                 ))}
 
+                                {/* Reply / Reply all / Forward sit with the message, the way Gmail
+                                    puts them at the foot of the conversation rather than in the
+                                    window chrome — the reply you are about to write belongs to this
+                                    message, so the control for it belongs next to it. Hidden while a
+                                    composer is open, since the composer already is that action. */}
+                                {!inlineComposeMode ? (
+                                  <div className="flex flex-wrap items-center gap-2 pt-3">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void openReplyCompose();
+                                      }}
+                                      className={REPLY_ACTION_BUTTON}
+                                    >
+                                      <FiCornerUpLeft className="h-4 w-4" aria-hidden />
+                                      Reply
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void openReplyAllCompose();
+                                      }}
+                                      className={REPLY_ACTION_BUTTON}
+                                    >
+                                      <FiUsers className="h-4 w-4" aria-hidden />
+                                      Reply all
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void openForwardCompose();
+                                      }}
+                                      className={REPLY_ACTION_BUTTON}
+                                    >
+                                      <FiSend className="h-4 w-4" aria-hidden />
+                                      Forward
+                                    </button>
+                                  </div>
+                                ) : null}
+
                                 {inlineComposeMode ? (
+                                  /* Inline reply, shaped the way Gmail's is: one recipient line, the
+                                     message, then Send. No uppercase field labels and no stacked
+                                     boxes — a reply already has its recipient and its subject, so
+                                     presenting them as a form to fill in is noise.
+
+                                     Authored light-first (bg-white, text-[#1E1B2E]) like the rest of
+                                     the panel, because the dark theme remaps those classes. The
+                                     previous version set its background with a gradient utility,
+                                     which the dark layer does not remap — so the card stayed white
+                                     while its text was remapped to near-white and became illegible. */
                                   <div ref={inlineComposeRef} className="pt-3">
-                                    <div className="rounded-2xl border border-[#E8EAEF] bg-gradient-to-b from-[#FAFBFF] to-white p-4 shadow-[0_4px_24px_-8px_rgba(15,23,42,0.08)] ring-1 ring-black/[0.03]">
-                                      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                                        <div className="flex items-center gap-2.5 min-w-0">
-                                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#701CC0]/10 text-[#701CC0]">
-                                            <FiCornerUpLeft className="h-4 w-4" />
-                                          </div>
-                                          <div className="min-w-0">
-                                            <p className="text-[15px] font-semibold text-[#1E1B2E] leading-tight">
-                                              {inlineComposeMode === "forward"
-                                                ? "Forward"
-                                                : inlineComposeMode === "replyAll"
-                                                  ? "Reply all"
-                                                  : "Reply"}
-                                            </p>
-                                            <p className="text-xs text-[#6B7280] mt-0.5">Compose below the thread</p>
-                                          </div>
-                                        </div>
-                                        <span className="inline-flex items-center rounded-full bg-[#701CC0]/8 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-[#5B21B6]">
-                                          Draft
+                                    <div className="rounded-2xl border border-[#E5E7EB] bg-white shadow-sm">
+                                      {/* Recipient line: editable, but reads as a line of text. */}
+                                      <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
+                                        <span className="shrink-0 text-[13px] text-[#6B7280]">
+                                          {inlineComposeMode === "forward" ? "To" : "Reply to"}
+                                        </span>
+                                        <input
+                                          value={inlineComposeTo}
+                                          onChange={(event) => setInlineComposeTo(event.target.value)}
+                                          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none placeholder:text-[#9CA3AF]"
+                                          placeholder="name@email.com"
+                                          aria-label={inlineComposeMode === "forward" ? "To" : "Reply to"}
+                                        />
+                                        <span className="shrink-0 text-[11px] uppercase tracking-wide text-[#9CA3AF]">
+                                          {inlineComposeMode === "replyAll"
+                                            ? "Reply all"
+                                            : inlineComposeMode === "forward"
+                                              ? "Forward"
+                                              : "Reply"}
                                         </span>
                                       </div>
-                                      <div className="space-y-3">
-                                        <div>
-                                          <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
-                                            {inlineComposeMode === "forward" ? "To" : "Replying to"}
-                                          </label>
-                                          <input
-                                            value={inlineComposeTo}
-                                            onChange={(event) => setInlineComposeTo(event.target.value)}
-                                            className="w-full rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-2.5 text-sm text-[#1E1B2E] outline-none transition placeholder:text-[#9CA3AF] focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
-                                            placeholder="name@email.com"
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
-                                            Subject
-                                          </label>
+
+                                      {/* Subject only when forwarding. A reply inherits the thread's
+                                          subject, as in Gmail; offering it as a field here invites
+                                          breaking the thread. */}
+                                      {inlineComposeMode === "forward" ? (
+                                        <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
+                                          <span className="shrink-0 text-[13px] text-[#6B7280]">Subject</span>
                                           <input
                                             value={inlineComposeSubject}
                                             onChange={(event) => setInlineComposeSubject(event.target.value)}
-                                            className="w-full rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-2.5 text-sm text-[#1E1B2E] outline-none transition focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
+                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none"
+                                            aria-label="Subject"
                                           />
                                         </div>
-                                        <div>
-                                          <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
-                                            Message
-                                          </label>
-                                          <textarea
-                                            value={inlineComposeIntroText}
-                                            onChange={(event) => setInlineComposeIntroText(event.target.value)}
-                                            rows={5}
-                                            className="w-full min-h-[120px] resize-y rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-3 text-sm text-[#1E1B2E] outline-none transition placeholder:text-[#9CA3AF] focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
-                                            placeholder="Write your message…"
+                                      ) : null}
+
+                                      <textarea
+                                        value={inlineComposeIntroText}
+                                        onChange={(event) => setInlineComposeIntroText(event.target.value)}
+                                        rows={6}
+                                        className="block w-full resize-y border-0 bg-transparent px-4 py-3 text-[14px] leading-[1.6] text-[#1E1B2E] outline-none placeholder:text-[#9CA3AF]"
+                                        placeholder="Write your reply…"
+                                        aria-label="Message"
+                                      />
+
+                                      {inlineComposeMode === "forward" && inlineComposePreviewHtml ? (
+                                        <div className="mx-4 mb-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3">
+                                          <p className="mb-2 text-[11px] uppercase tracking-wide text-[#6B7280]">
+                                            Forwarded message
+                                          </p>
+                                          <div
+                                            className="max-h-48 overflow-y-auto text-sm leading-6 text-[#374151]"
+                                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(inlineComposePreviewHtml) }}
                                           />
                                         </div>
-                                        {inlineComposeMode === "forward" && inlineComposePreviewHtml ? (
-                                          <div className="rounded-xl border border-[#E8EAEF] bg-[#F9FAFB] p-3">
-                                            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
-                                              Forwarded content
-                                            </p>
-                                            <div
-                                              className="text-sm text-[#374151] leading-6 max-h-48 overflow-y-auto"
-                                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(inlineComposePreviewHtml) }}
-                                            />
-                                          </div>
-                                        ) : null}
-                                        {inlineComposeError ? (
-                                          <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
-                                            {inlineComposeError}
-                                          </div>
-                                        ) : null}
-                                        {inlineComposeSuccess ? (
-                                          <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-                                            {inlineComposeSuccess}
-                                          </div>
-                                        ) : null}
-                                        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#EEF0F6] pt-4">
-                                          <button
-                                            type="button"
-                                            onClick={() => setInlineComposeMode(null)}
-                                            className="rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#F9FAFB]"
-                                          >
-                                            Cancel
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={sendInlineCompose}
-                                            disabled={
-                                              inlineComposeSending ||
-                                              !inlineComposeTo.trim() ||
-                                              (!inlineComposeIntroText.trim() && !inlineComposeBodyText.trim())
-                                            }
-                                            className="inline-flex items-center gap-2 rounded-xl bg-[#701CC0] px-5 py-2 text-sm font-semibold text-white shadow-md shadow-[#701CC0]/25 transition hover:bg-[#5f17a5] disabled:pointer-events-none disabled:opacity-45"
-                                          >
-                                            <FiSend className="h-4 w-4" />
-                                            {inlineComposeSending ? "Sending…" : "Send"}
-                                          </button>
-                                        </div>
+                                      ) : null}
+
+                                      {inlineComposeError ? (
+                                        <p className="mx-4 mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                                          {inlineComposeError}
+                                        </p>
+                                      ) : null}
+                                      {inlineComposeSuccess ? (
+                                        <p className="mx-4 mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                                          {inlineComposeSuccess}
+                                        </p>
+                                      ) : null}
+
+                                      {/* Send leads on the left, as in Gmail; discard is an icon
+                                          rather than a button competing with it. */}
+                                      <div className="flex items-center gap-3 px-4 pb-3">
+                                        <button
+                                          type="button"
+                                          onClick={sendInlineCompose}
+                                          disabled={
+                                            inlineComposeSending ||
+                                            !inlineComposeTo.trim() ||
+                                            (!inlineComposeIntroText.trim() && !inlineComposeBodyText.trim())
+                                          }
+                                          /* Identical to the main composer's Send, so the two are
+                                             one control appearing in two places. */
+                                          className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md bg-[#701CC0] px-6 text-sm font-semibold text-white hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
+                                        >
+                                          <FiSend className="h-4 w-4" aria-hidden />
+                                          {inlineComposeSending ? "Sending…" : "Send"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setInlineComposeMode(null)}
+                                          className="email-tip rounded p-2 text-[#6B7280] transition hover:text-[#1E1B2E]"
+                                          data-tip="Discard reply"
+                                          aria-label="Discard reply"
+                                        >
+                                          <FiTrash2 className="h-4 w-4" aria-hidden />
+                                        </button>
                                       </div>
                                     </div>
                                   </div>
@@ -5900,7 +6010,7 @@ ${sourceText}`;
                         !composeHasMeaningfulBody ||
                         !composeAccountEmail
                       }
-                      className="inline-flex min-h-9 shrink-0 items-center rounded bg-[#701CC0] px-4 text-sm font-medium text-white hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
+                      className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md bg-[#701CC0] px-6 text-sm font-semibold text-white hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
                     >
                       {sendingCompose ? "Sending…" : scheduleAt ? "Schedule send" : "Send"}
                     </button>
