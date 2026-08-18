@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { EMAIL_REGEX } from "@/lib/utils";
 import { track } from "@/lib/track";
 import { bricolage, inter } from "@/lib/fonts";
-import { motion, AnimatePresence } from "framer-motion";
+import { m as motion, AnimatePresence } from "framer-motion";
 import { FiX, FiArrowLeft, FiArrowRight } from "react-icons/fi";
 import ModalShell from "@/components/ui/Modal";
 import {

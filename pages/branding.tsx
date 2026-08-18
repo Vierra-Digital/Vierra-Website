@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { m as motion } from 'framer-motion';
 import { bricolage, inter, figtree } from "@/lib/fonts";
 import Head from 'next/head';
 import Image from 'next/image';

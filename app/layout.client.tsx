@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useReportWebVitals } from "next/web-vitals";
+import { LazyMotion, domAnimation } from "framer-motion";
 import ConsentBanner from "@/components/ConsentBanner";
 import {
   initializeAnalytics,
@@ -110,9 +111,13 @@ export default function RootLayoutClient({
   }, []);
 
   return (
-    <div className="antialiased">
-      {children}
-      <ConsentBanner />
-    </div>
+    // strict: throws if any component under here uses the full `motion` import
+    // instead of the `m` alias — catches anything the framer-motion migration missed.
+    <LazyMotion features={domAnimation} strict>
+      <div className="antialiased">
+        {children}
+        <ConsentBanner />
+      </div>
+    </LazyMotion>
   );
 }

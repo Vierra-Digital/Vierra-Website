@@ -1,6 +1,6 @@
 "use client"
 import { bricolage, inter } from "@/lib/fonts";
-import { motion } from "framer-motion"
+import { m as motion } from "framer-motion"
 import Link from "next/link"
 import { Home } from "lucide-react"
 import { Button } from "@/components/ui/button"
