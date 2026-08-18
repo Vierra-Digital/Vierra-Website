@@ -61,6 +61,7 @@ import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEdit
 import { printComposeContent } from "@/components/email/printCompose";
 import { getJson } from "@/lib/email/panelApi";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
+import { buildReplyReferences } from "@/lib/email/threading";
 import {
   BRAND_LOGO,
   ICON_BUTTON, ICON_BUTTON_SOLID, FIELD_LABEL, ALERT,
@@ -2879,7 +2880,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setInlineComposePreviewHtml("");
     setInlineComposeThreadId(selectedMessage.threadId || latest?.threadId || "");
     setInlineComposeInReplyTo(latest?.messageIdHeader || selectedMessage.messageIdHeader || "");
-    setInlineComposeReferences(latest?.references || selectedMessage.references || "");
+    setInlineComposeReferences(
+      buildReplyReferences(
+        latest?.references || selectedMessage.references,
+        latest?.messageIdHeader || selectedMessage.messageIdHeader
+      )
+    );
     setInlineComposeError("");
     setInlineComposeSuccess("");
   };
@@ -2901,7 +2907,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setInlineComposePreviewHtml("");
     setInlineComposeThreadId(selectedMessage.threadId || latest?.threadId || "");
     setInlineComposeInReplyTo(latest?.messageIdHeader || selectedMessage.messageIdHeader || "");
-    setInlineComposeReferences(latest?.references || selectedMessage.references || "");
+    setInlineComposeReferences(
+      buildReplyReferences(
+        latest?.references || selectedMessage.references,
+        latest?.messageIdHeader || selectedMessage.messageIdHeader
+      )
+    );
     setInlineComposeError("");
     setInlineComposeSuccess("");
   };
@@ -5209,105 +5220,111 @@ ${sourceText}`;
                                 ))}
 
                                 {inlineComposeMode ? (
+                                  /* Inline reply, shaped the way Gmail's is: one recipient line, the
+                                     message, then Send. No uppercase field labels and no stacked
+                                     boxes — a reply already has its recipient and its subject, so
+                                     presenting them as a form to fill in is noise.
+
+                                     Authored light-first (bg-white, text-[#1E1B2E]) like the rest of
+                                     the panel, because the dark theme remaps those classes. The
+                                     previous version set its background with a gradient utility,
+                                     which the dark layer does not remap — so the card stayed white
+                                     while its text was remapped to near-white and became illegible. */
                                   <div ref={inlineComposeRef} className="pt-3">
-                                    <div className="rounded-2xl border border-[#E8EAEF] bg-gradient-to-b from-[#FAFBFF] to-white p-4 shadow-[0_4px_24px_-8px_rgba(15,23,42,0.08)] ring-1 ring-black/[0.03]">
-                                      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                                        <div className="flex items-center gap-2.5 min-w-0">
-                                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#701CC0]/10 text-[#701CC0]">
-                                            <FiCornerUpLeft className="h-4 w-4" />
-                                          </div>
-                                          <div className="min-w-0">
-                                            <p className="text-[15px] font-semibold text-[#1E1B2E] leading-tight">
-                                              {inlineComposeMode === "forward"
-                                                ? "Forward"
-                                                : inlineComposeMode === "replyAll"
-                                                  ? "Reply all"
-                                                  : "Reply"}
-                                            </p>
-                                            <p className="text-xs text-[#6B7280] mt-0.5">Compose below the thread</p>
-                                          </div>
-                                        </div>
-                                        <span className="inline-flex items-center rounded-full bg-[#701CC0]/8 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-[#5B21B6]">
-                                          Draft
+                                    <div className="rounded-2xl border border-[#E5E7EB] bg-white shadow-sm">
+                                      {/* Recipient line: editable, but reads as a line of text. */}
+                                      <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
+                                        <span className="shrink-0 text-[13px] text-[#6B7280]">
+                                          {inlineComposeMode === "forward" ? "To" : "Reply to"}
+                                        </span>
+                                        <input
+                                          value={inlineComposeTo}
+                                          onChange={(event) => setInlineComposeTo(event.target.value)}
+                                          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none placeholder:text-[#9CA3AF]"
+                                          placeholder="name@email.com"
+                                          aria-label={inlineComposeMode === "forward" ? "To" : "Reply to"}
+                                        />
+                                        <span className="shrink-0 text-[11px] uppercase tracking-wide text-[#9CA3AF]">
+                                          {inlineComposeMode === "replyAll"
+                                            ? "Reply all"
+                                            : inlineComposeMode === "forward"
+                                              ? "Forward"
+                                              : "Reply"}
                                         </span>
                                       </div>
-                                      <div className="space-y-3">
-                                        <div>
-                                          <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
-                                            {inlineComposeMode === "forward" ? "To" : "Replying to"}
-                                          </label>
-                                          <input
-                                            value={inlineComposeTo}
-                                            onChange={(event) => setInlineComposeTo(event.target.value)}
-                                            className="w-full rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-2.5 text-sm text-[#1E1B2E] outline-none transition placeholder:text-[#9CA3AF] focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
-                                            placeholder="name@email.com"
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
-                                            Subject
-                                          </label>
+
+                                      {/* Subject only when forwarding. A reply inherits the thread's
+                                          subject, as in Gmail; offering it as a field here invites
+                                          breaking the thread. */}
+                                      {inlineComposeMode === "forward" ? (
+                                        <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
+                                          <span className="shrink-0 text-[13px] text-[#6B7280]">Subject</span>
                                           <input
                                             value={inlineComposeSubject}
                                             onChange={(event) => setInlineComposeSubject(event.target.value)}
-                                            className="w-full rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-2.5 text-sm text-[#1E1B2E] outline-none transition focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
+                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none"
+                                            aria-label="Subject"
                                           />
                                         </div>
-                                        <div>
-                                          <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
-                                            Message
-                                          </label>
-                                          <textarea
-                                            value={inlineComposeIntroText}
-                                            onChange={(event) => setInlineComposeIntroText(event.target.value)}
-                                            rows={5}
-                                            className="w-full min-h-[120px] resize-y rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-3 text-sm text-[#1E1B2E] outline-none transition placeholder:text-[#9CA3AF] focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
-                                            placeholder="Write your message…"
+                                      ) : null}
+
+                                      <textarea
+                                        value={inlineComposeIntroText}
+                                        onChange={(event) => setInlineComposeIntroText(event.target.value)}
+                                        rows={6}
+                                        className="block w-full resize-y border-0 bg-transparent px-4 py-3 text-[14px] leading-[1.6] text-[#1E1B2E] outline-none placeholder:text-[#9CA3AF]"
+                                        placeholder="Write your reply…"
+                                        aria-label="Message"
+                                      />
+
+                                      {inlineComposeMode === "forward" && inlineComposePreviewHtml ? (
+                                        <div className="mx-4 mb-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3">
+                                          <p className="mb-2 text-[11px] uppercase tracking-wide text-[#6B7280]">
+                                            Forwarded message
+                                          </p>
+                                          <div
+                                            className="max-h-48 overflow-y-auto text-sm leading-6 text-[#374151]"
+                                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(inlineComposePreviewHtml) }}
                                           />
                                         </div>
-                                        {inlineComposeMode === "forward" && inlineComposePreviewHtml ? (
-                                          <div className="rounded-xl border border-[#E8EAEF] bg-[#F9FAFB] p-3">
-                                            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
-                                              Forwarded content
-                                            </p>
-                                            <div
-                                              className="text-sm text-[#374151] leading-6 max-h-48 overflow-y-auto"
-                                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(inlineComposePreviewHtml) }}
-                                            />
-                                          </div>
-                                        ) : null}
-                                        {inlineComposeError ? (
-                                          <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
-                                            {inlineComposeError}
-                                          </div>
-                                        ) : null}
-                                        {inlineComposeSuccess ? (
-                                          <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-                                            {inlineComposeSuccess}
-                                          </div>
-                                        ) : null}
-                                        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#EEF0F6] pt-4">
-                                          <button
-                                            type="button"
-                                            onClick={() => setInlineComposeMode(null)}
-                                            className="rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#F9FAFB]"
-                                          >
-                                            Cancel
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={sendInlineCompose}
-                                            disabled={
-                                              inlineComposeSending ||
-                                              !inlineComposeTo.trim() ||
-                                              (!inlineComposeIntroText.trim() && !inlineComposeBodyText.trim())
-                                            }
-                                            className="inline-flex items-center gap-2 rounded-xl bg-[#701CC0] px-5 py-2 text-sm font-semibold text-white shadow-md shadow-[#701CC0]/25 transition hover:bg-[#5f17a5] disabled:pointer-events-none disabled:opacity-45"
-                                          >
-                                            <FiSend className="h-4 w-4" />
-                                            {inlineComposeSending ? "Sending…" : "Send"}
-                                          </button>
-                                        </div>
+                                      ) : null}
+
+                                      {inlineComposeError ? (
+                                        <p className="mx-4 mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                                          {inlineComposeError}
+                                        </p>
+                                      ) : null}
+                                      {inlineComposeSuccess ? (
+                                        <p className="mx-4 mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                                          {inlineComposeSuccess}
+                                        </p>
+                                      ) : null}
+
+                                      {/* Send leads on the left, as in Gmail; discard is an icon
+                                          rather than a button competing with it. */}
+                                      <div className="flex items-center gap-3 px-4 pb-3">
+                                        <button
+                                          type="button"
+                                          onClick={sendInlineCompose}
+                                          disabled={
+                                            inlineComposeSending ||
+                                            !inlineComposeTo.trim() ||
+                                            (!inlineComposeIntroText.trim() && !inlineComposeBodyText.trim())
+                                          }
+                                          className="inline-flex items-center gap-2 rounded-full bg-[#701CC0] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#5f17a5] disabled:pointer-events-none disabled:opacity-45"
+                                        >
+                                          <FiSend className="h-4 w-4" aria-hidden />
+                                          {inlineComposeSending ? "Sending…" : "Send"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setInlineComposeMode(null)}
+                                          className="email-tip rounded-full p-2 text-[#6B7280] transition hover:text-[#1E1B2E]"
+                                          data-tip="Discard reply"
+                                          aria-label="Discard reply"
+                                        >
+                                          <FiTrash2 className="h-4 w-4" aria-hidden />
+                                        </button>
                                       </div>
                                     </div>
                                   </div>
