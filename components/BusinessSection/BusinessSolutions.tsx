@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { bricolage, figtree } from "@/lib/fonts";
-import { motion } from "framer-motion"
+import { m as motion } from "framer-motion"
 import type { IconType } from "react-icons"
 import { FaLinkedin, FaComment, FaInstagram, FaFacebook, FaWhatsapp } from "react-icons/fa6"
 import { SiGmail } from "react-icons/si"

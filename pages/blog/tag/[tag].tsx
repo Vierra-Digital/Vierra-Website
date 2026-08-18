@@ -5,7 +5,7 @@ import { bricolage, inter } from "@/lib/fonts";
 import { getPostsByTag, getAllTags } from "@/lib/blog"
 import { Header } from "@/components/Header"
 import Footer from "@/components/FooterSection/Footer"
-import { motion } from "framer-motion"
+import { m as motion } from "framer-motion"
 import { ChevronRight } from "lucide-react"
 
 

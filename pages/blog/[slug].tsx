@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import { Header } from "@/components/Header";
-import { motion } from "framer-motion";
+import { m as motion } from "framer-motion";
 import Footer from "@/components/FooterSection/Footer";
 import SocialShareBar from "@/components/Blog/SocialShareBar";
 import AuthorBio from "@/components/Blog/AuthorBio";

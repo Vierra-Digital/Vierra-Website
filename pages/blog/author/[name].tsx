@@ -6,7 +6,7 @@ import { getPostsByAuthor, getAllAuthorNames } from "@/lib/blog"
 import { Header } from "@/components/Header"
 import Footer from "@/components/FooterSection/Footer"
 import { authorSameAs, getAuthorProfile } from "@/lib/authorProfiles"
-import { motion } from "framer-motion"
+import { m as motion } from "framer-motion"
 import { ChevronRight } from "lucide-react"
 import Image from "next/image"
 

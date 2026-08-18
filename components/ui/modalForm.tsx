@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { m as motion, AnimatePresence } from "framer-motion";
 import { FiChevronDown, FiCheck } from "react-icons/fi";
 
 /* Shared, theme-matched form controls used by the public modals

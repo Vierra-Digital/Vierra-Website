@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { EMAIL_REGEX } from "@/lib/utils";
 import { bricolage, inter } from "@/lib/fonts";
-import { motion, AnimatePresence } from "framer-motion";
+import { m as motion, AnimatePresence } from "framer-motion";
 import { FiUploadCloud, FiFileText, FiX, FiArrowLeft, FiArrowRight } from "react-icons/fi";
 import Modal from "@/components/ui/Modal";
 import {
