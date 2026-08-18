@@ -2,6 +2,7 @@
 
 import { bricolage, figtree } from "@/lib/fonts";
 import { useEffect, useRef, useState } from "react"
+
 import { m as motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion"
 import { OnboardingStepAnim, TamMiningAnim } from "./OnboardingSteps"
 

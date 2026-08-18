@@ -411,6 +411,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [contactsTotalCount, setContactsTotalCount] = useState(0);
   const [contactsTags, setContactsTags] = useState<ContactTag[]>([]);
   const [contactSearch, setContactSearch] = useState("");
+  const [debouncedContactSearch, setDebouncedContactSearch] = useState("");
   const [contactTagFilter, setContactTagFilter] = useState("");
   const [contactSourceFilter, setContactSourceFilter] = useState<"" | "MANUAL" | "GMAIL" | "CSV">("");
   const [contactFilterOpen, setContactFilterOpen] = useState(false);
@@ -781,10 +782,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         limit: String(CONTACTS_PAGE_SIZE),
         page: String(contactCurrentPage),
       });
-      if (contactSearch.trim()) query.set("search", contactSearch.trim());
+      if (debouncedContactSearch) query.set("search", debouncedContactSearch);
       if (contactTagFilter) query.set("tagIds", contactTagFilter);
       if (contactSourceFilter) query.set("source", contactSourceFilter);
-      const response = await fetch(`/api/contacts?${query.toString()}`);
+      // no-store: this reloads right after create/edit/delete/tag writes, and the
+      // server's Cache-Control on this endpoint would otherwise serve the pre-write list.
+      const response = await fetch(`/api/contacts?${query.toString()}`, { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload?.message || "Failed to load contacts.");
@@ -807,7 +810,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     } finally {
       if (!isStale()) setContactsLoading(false);
     }
-  }, [activeModule, contactCurrentPage, contactSearch, contactSourceFilter, contactTagFilter, step]);
+  }, [activeModule, contactCurrentPage, debouncedContactSearch, contactSourceFilter, contactTagFilter, step]);
 
   const createContact = async () => {
     const firstName = addContactForm.firstName.trim();
@@ -1814,10 +1817,16 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     }
   }, [activeModule, loadContactTags, loadContactVisibility, step]);
 
+  // Debounce the contacts search box so typing doesn't fire a request per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedContactSearch(contactSearch.trim()), 400);
+    return () => clearTimeout(t);
+  }, [contactSearch]);
+
   useEffect(() => {
     if (step !== "client" || activeModule !== "contacts") return;
     setContactCurrentPage(1);
-  }, [activeModule, contactSearch, contactSourceFilter, contactTagFilter, step]);
+  }, [activeModule, debouncedContactSearch, contactSourceFilter, contactTagFilter, step]);
 
   useEffect(() => {
     if (contactCurrentPage <= contactsTotalPages) return;
