@@ -166,6 +166,7 @@ export default function ConnectPage({ dashboardHref, initialImageVersion }: Page
                   email: session?.user?.email ?? "test@vierra.com",
                   image: profileImageSrc(imageVersion) ?? null,
                 }}
+                userRole="user"
                 onImageUpdate={async () => {
                   const r = await fetch("/api/profile/getUser")
                   if (r.ok) {

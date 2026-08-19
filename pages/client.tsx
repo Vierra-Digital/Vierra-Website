@@ -206,6 +206,7 @@ const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) =
                   email: session?.user?.email || "",
                   image: profileImageSrc(imageVersion),
                 }}
+                userRole="user"
                 onNameUpdate={setCurrentUserName}
                 onImageUpdate={async () => {
                   const r = await fetch("/api/profile/getUser")
