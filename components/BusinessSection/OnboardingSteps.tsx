@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from "react"
 import { m as motion, AnimatePresence, useSpring, useInView } from "framer-motion"
 import dynamic from "next/dynamic"
+import Image from "next/image"
 import { inter } from "@/lib/fonts";
 import { SiGmail } from "react-icons/si"
 import { FaLinkedin, FaInstagram, FaWhatsapp, FaCommentSms, FaLinkedinIn, FaFacebookF, FaGoogle, FaPaperPlane } from "react-icons/fa6"
@@ -156,8 +157,7 @@ function OnboardModuleAnim() {
         {/* Main column */}
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex items-center justify-between border-b border-[#E5E7EB] bg-white px-4 py-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/assets/vierra-logo-black.png" alt="Vierra" width={39} height={16} className="h-4 w-auto object-contain" />
+            <Image src="/assets/vierra-logo-black.png" alt="Vierra" width={39} height={16} className="h-4 w-auto object-contain" />
             <span className="flex items-center gap-1.5 text-[9px] text-[#6B7280]">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500" /> Session active
             </span>
@@ -722,8 +722,7 @@ function MeetingBookingAnim() {
               <motion.div key="calendly" className="absolute inset-0 flex" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, x: -30 }} transition={{ duration: 0.4 }}>
                 {/* Left: meeting info + mini month */}
                 <div className="w-[45%] border-r border-[#E5E7EB] p-4">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/assets/vierra-logo-black.png" alt="Vierra" width={35} height={14} className="h-3.5 w-auto object-contain" />
+                  <Image src="/assets/vierra-logo-black.png" alt="Vierra" width={35} height={14} className="h-3.5 w-auto object-contain" />
                   <div className="mt-2 text-[15px] font-bold text-[#111827]">Strategy Call</div>
                   <div className="mt-1 text-[10px] text-[#6B7280]">30 min · Video call</div>
                   <div className="mt-3 text-[9px] font-semibold text-[#374151]">{bMonth} {bYear}</div>
@@ -811,8 +810,7 @@ function MeetingBookingAnim() {
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     transition={{ delay: 0.6, type: "spring", stiffness: 220, damping: 16 }}
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/assets/vierra-logo-black.png" alt="Vierra" width={35} height={14} className="mx-auto h-3.5 w-auto object-contain" />
+                    <Image src="/assets/vierra-logo-black.png" alt="Vierra" width={35} height={14} className="mx-auto h-3.5 w-auto object-contain" />
                     <motion.div
                       className="mx-auto mt-3 flex h-10 w-10 items-center justify-center rounded-full bg-[#22C55E]"
                       initial={{ scale: 0 }}
