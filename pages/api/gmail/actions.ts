@@ -4,6 +4,7 @@ import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { prisma } from "@/lib/prisma";
 import { asStr } from "@/lib/api/parsing";
 import { mapInBatches } from "@/lib/batch";
+import { invalidateGmailListCache } from "@/lib/gmail/messageListCache";
 
 type ActionType =
   | "trash"
@@ -265,6 +266,15 @@ export default withAuth(async (req, res, session) => {
     },
     ACTION_CONCURRENCY
   );
+
+  // Any of these actions change what a mailbox view would return (read state, labels, presence),
+  // so the cached list window for the affected account is stale the moment this succeeds.
+  const succeededAccounts = new Set(results.filter((result) => result.ok).map((result) => result.accountEmail));
+  for (const accountEmail of succeededAccounts) {
+    const owner = ownerMap.get(accountEmail);
+    const tokenEmail = tokenEmailMap.get(accountEmail) || accountEmail;
+    if (owner) invalidateGmailListCache(owner, tokenEmail);
+  }
 
   const failures = results.filter((result) => !result.ok);
   if (action === "deletePermanently" && results.length > 0) {

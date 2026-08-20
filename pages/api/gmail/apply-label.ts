@@ -2,6 +2,7 @@ import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { asStr } from "@/lib/api/parsing";
+import { invalidateGmailListCache } from "@/lib/gmail/messageListCache";
 
 export default withAuth(
   async (req, res, session) => {
@@ -85,6 +86,7 @@ export default withAuth(
       res.status(502).json({ message: text || "Failed to update label." });
       return;
     }
+    invalidateGmailListCache(access.ownerUserId, access.tokenEmail);
     res.status(200).json({ ok: true });
   },
   { methods: ["POST"] }
