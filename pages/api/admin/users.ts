@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { createSupabaseAuthUser } from "@/lib/supabase/admin";
+import { createSupabaseAuthUser, updateSupabaseAuthUserEmail } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -105,9 +105,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
       if (!target) return res.status(404).json({ message: "User not found" });
 
+      const normalizedEmail = email !== undefined ? String(email).trim().toLowerCase() : undefined;
+      // Sync Supabase Auth first — if it fails, bail out before touching Prisma so the two
+      // never disagree about which email is current (Supabase Auth is the login/reset source
+      // of truth; see updateSupabaseAuthUserEmail).
+      if (normalizedEmail !== undefined) {
+        await updateSupabaseAuthUserEmail(String(id), normalizedEmail);
+      }
+
       const userUpdateData: Record<string, unknown> = {};
       if (name !== undefined) userUpdateData.name = name;
-      if (email !== undefined) userUpdateData.email = email;
+      if (normalizedEmail !== undefined) userUpdateData.email = normalizedEmail;
       if (Object.keys(userUpdateData).length > 0) {
         await prisma.user.update({ where: { id: String(id) }, data: userUpdateData });
       }

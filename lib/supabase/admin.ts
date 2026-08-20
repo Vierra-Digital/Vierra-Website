@@ -38,3 +38,20 @@ export async function createSupabaseAuthUser(email: string, password?: string) {
   }
   return data.user;
 }
+
+/**
+ * Updates the email on an existing Supabase Auth identity. Must be called whenever a
+ * user's email changes anywhere else (e.g. the Prisma `users.email` column) — Supabase
+ * Auth is the source of truth for login and for `auth.admin.generateLink({ type: "recovery" })`,
+ * so letting it drift out of sync locks the user out under their new email and breaks
+ * password-reset lookups.
+ */
+export async function updateSupabaseAuthUserEmail(userId: string, email: string) {
+  const { error } = await getSupabaseAdmin().auth.admin.updateUserById(userId, {
+    email,
+    email_confirm: true,
+  });
+  if (error) {
+    throw new Error(error.message || "Failed to update Supabase auth user email");
+  }
+}
