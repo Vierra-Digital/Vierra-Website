@@ -7,6 +7,9 @@ import { toBase64Url, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 import { createSmtpTransport, requireSmtpCredentials } from "@/lib/email/smtp";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { asStr } from "@/lib/api/parsing";
+import { escapeHtml } from "@/lib/utils";
+
+export { escapeHtml };
 
 /**
  * Reusable email send core — extracted from pages/api/gmail/send.ts so it can be
@@ -48,15 +51,6 @@ function splitRecipients(value: string) {
 function ensureReplyPrefix(subject: string) {
   if (/^re:/i.test(subject.trim())) return subject.trim();
   return `Re: ${subject.trim() || "(No Subject)"}`;
-}
-
-export function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function linkifyText(value: string) {
