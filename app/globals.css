@@ -537,6 +537,20 @@ input[type="search"]::-ms-clear:hover {
   color: var(--mail-sheet-ink);
 }
 
+/* Reply / Reply all / Forward at the foot of an open message.
+   Colours belong here, not in Tailwind arbitrary values: the ones used before (#4C1191 text,
+   #D8CFEA border) are not part of the dark remap above, so they rendered dark-purple text inside a
+   bright light border on the dark sheet. Driven by the palette tokens, they cannot drift again. */
+.email-shell .email-reply-action {
+  background-color: var(--mail-surface-2);
+  border: 1px solid var(--mail-border);
+  color: #C9AEFF;
+}
+.email-shell .email-reply-action:hover {
+  background-color: var(--mail-surface-3);
+  color: #E2D2FF;
+}
+
 /* ── Email panel: connected shell (rail + content as one surface) ──────────── */
 
 /* Left rail. Translucent over the shell's brand glow (glassmorphic), separated from
