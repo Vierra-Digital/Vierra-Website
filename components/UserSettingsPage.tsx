@@ -17,6 +17,7 @@ interface UserSettingsPageProps {
   onImageUpdate?: () => void | Promise<void>;
   onClose?: () => void;
   variant?: "panel" | "dark";
+  userRole?: string | null;
 }
 
 type GmailAccountConnection = {
@@ -59,7 +60,7 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
   );
 }
 
-const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate, onImageUpdate, onClose, variant = "panel" }) => {
+const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate, onImageUpdate, onClose, variant = "panel", userRole: userRoleProp = null }) => {
   const [name, setName] = useState(user.name || "");
   const [isEditingName, setIsEditingName] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -82,7 +83,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   });
   const [passwordFieldErrors, setPasswordFieldErrors] = useState<Record<string, string>>({});
   const [isPasswordChangeSuccess, setIsPasswordChangeSuccess] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(userRoleProp);
   const [socialConnections, setSocialConnections] = useState({
     facebook: false,
     linkedin: false,
@@ -106,6 +107,10 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   }, [user.name]);
 
   useEffect(() => {
+    if (userRoleProp) setUserRole(userRoleProp);
+  }, [userRoleProp]);
+
+  useEffect(() => {
     const loadSettings = async () => {
       try {
         const response = await fetch("/api/profile/getSettings");
@@ -126,13 +131,13 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     setSocialLoading(true);
     try {
       const [userRes, fbRes, liRes, gaRes] = await Promise.all([
-        fetch("/api/profile/getUser"),
+        userRoleProp ? null : fetch("/api/profile/getUser"),
         fetch("/api/facebook/status"),
         fetch("/api/linkedin/status"),
         fetch("/api/googleads/status"),
       ]);
 
-      if (userRes.ok) {
+      if (userRes?.ok) {
         const userData = await userRes.json();
         setUserRole(userData?.role || null);
       }
@@ -255,6 +260,30 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     loadSocialConnections();
     loadGmailConnections();
     loadDetectedCalendars();
+  }, []);
+
+  // Keep the role-gated sections (Gmail, calendars, social) in sync with an admin
+  // changing this user's role elsewhere, without waiting on a full page reload.
+  useEffect(() => {
+    let cancelled = false;
+    const syncRole = async () => {
+      try {
+        const response = await fetch("/api/profile/getRole");
+        if (!response.ok || cancelled) return;
+        const data = await response.json();
+        const freshRole = typeof data?.role === "string" ? data.role : null;
+        setUserRole((prev) => (prev === freshRole ? prev : freshRole));
+      } catch (error) {
+        console.error("Failed to sync role:", error);
+      }
+    };
+
+    if (!userRoleProp) syncRole();
+    const intervalId = setInterval(syncRole, 20000);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
   }, []);
 
   useEffect(() => {

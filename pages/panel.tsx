@@ -469,6 +469,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                   email: session?.user?.email || "test@vierra.com",
                   image: profileImageSrc(imageVersion),
                 }}
+                userRole={resolvedUserRole}
                 onNameUpdate={setCurrentUserName}
                 onImageUpdate={async () => {
                   const r = await fetch("/api/profile/getUser")
