@@ -160,12 +160,15 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     }
   };
 
-  const loadGmailConnections = async () => {
-    setGmailLoading(true);
+  const loadGmailConnections = async (options?: { silent?: boolean }) => {
+    const silent = !!options?.silent;
+    if (!silent) setGmailLoading(true);
     try {
       const response = await fetch("/api/gmail/status");
       if (!response.ok) {
-        setGmailAccounts([]);
+        // A background poll hiccup shouldn't blank out an already-loaded list — only the
+        // user-initiated (non-silent) load treats a bad response as "no accounts".
+        if (!silent) setGmailAccounts([]);
         return;
       }
 
@@ -180,9 +183,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       );
     } catch (error) {
       console.error("Failed to load Gmail connections:", error);
-      setGmailAccounts([]);
+      if (!silent) setGmailAccounts([]);
     } finally {
-      setGmailLoading(false);
+      if (!silent) setGmailLoading(false);
     }
   };
 
@@ -284,6 +287,16 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       cancelled = true;
       clearInterval(intervalId);
     };
+  }, []);
+
+  // Periodically recheck Gmail connection status in the background (no dedicated push
+  // webhook from Google — /api/gmail/status already re-validates/refreshes each token, so
+  // polling it surfaces a revoked/expired grant without the user having to hit Refresh).
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      loadGmailConnections({ silent: true });
+    }, 60000);
+    return () => clearInterval(intervalId);
   }, []);
 
   useEffect(() => {
