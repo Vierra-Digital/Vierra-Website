@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getAccessibleGmailAccounts, getGmailAliasAccounts } from "@/lib/email/mailboxAccess";
+import { getAccessibleGmailAccounts, getGmailAliasAccounts, selectFetchAccounts } from "@/lib/email/mailboxAccess";
 import { asQueryStr } from "@/lib/api/parsing";
 import { buildAliasScopeQuery } from "@/lib/gmail/gmailApi";
 
@@ -120,22 +120,15 @@ export default withAuth(async (req, res, session) => {
   // it just lets granted shared inboxes contribute to the unread badges.
   const accessible = await getAccessibleGmailAccounts(userId);
 
-  type CountAccount = { email: string; ownerUserId: string; aliasOfEmail?: string };
-  let accountRows: CountAccount[] = accessible;
-  if (selectedEmails.length) {
-    const accessibleEmails = new Set(accessible.map((row) => row.email));
-    const direct: CountAccount[] = accessible.filter((row) => selectedEmails.includes(row.email));
-    // A selected address that isn't a connected account may be a verified send-as alias, whose
-    // mail lives in the owning account. Without this its badges were simply blank.
-    const unresolved = selectedEmails.filter((email) => !accessibleEmails.has(email));
-    let aliasRows: CountAccount[] = [];
-    if (unresolved.length) {
-      aliasRows = (await getGmailAliasAccounts(userId))
-        .filter((alias) => unresolved.includes(alias.email))
-        .map((alias) => ({ email: alias.email, ownerUserId: alias.ownerUserId, aliasOfEmail: alias.viaAccountEmail }));
-    }
-    accountRows = [...direct, ...aliasRows];
-  }
+  // Same selection the message list uses, so a badge can never describe a different set of
+  // mailboxes than the list it sits next to.
+  const accountRows = selectFetchAccounts(
+    accessible,
+    selectedEmails.some((email) => !accessible.some((row) => row.email === email))
+      ? await getGmailAliasAccounts(userId)
+      : [],
+    selectedEmails
+  );
 
   let selectedAccountIds: string[] = [];
   if (selectedEmails.length > 0) {

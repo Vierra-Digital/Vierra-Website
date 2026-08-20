@@ -16,7 +16,7 @@ vi.mock("@/lib/gmail/gmailApi", () => ({ fetchSendAsAliases: vi.fn() }));
 import { prisma } from "@/lib/prisma";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { fetchSendAsAliases } from "@/lib/gmail/gmailApi";
-import { getGmailAliasAccounts, resolveMailboxOwner } from "@/lib/email/mailboxAccess";
+import { getGmailAliasAccounts, resolveMailboxOwner, selectFetchAccounts } from "@/lib/email/mailboxAccess";
 
 const platformFindMany = prisma.platformToken.findMany as unknown as Mock;
 const platformFindFirst = prisma.platformToken.findFirst as unknown as Mock;
@@ -130,5 +130,54 @@ describe("resolveMailboxOwner — alias fallback", () => {
     grantFindMany.mockResolvedValue([]);
 
     expect(await resolveMailboxOwner(freshUser(), "nobody@nowhere.com")).toBeNull();
+  });
+});
+
+describe("selectFetchAccounts", () => {
+  const accessible = [
+    { email: "real@company.com", ownerUserId: "u1" },
+    { email: "other@company.com", ownerUserId: "u1" },
+  ];
+  const aliases = [
+    { email: "hello@brand.com", ownerUserId: "u1", viaAccountEmail: "real@company.com" },
+  ];
+
+  it("reads every accessible account when nothing is selected", () => {
+    expect(selectFetchAccounts(accessible, aliases, []).map((r) => r.email)).toEqual([
+      "real@company.com",
+      "other@company.com",
+    ]);
+  });
+
+  it("skips an alias whose parent is also being read", () => {
+    // The bug: the panel selects every connected account and aliases are listed among them, so the
+    // alias's mail came back twice — once from the parent's unscoped fetch, once from the alias's
+    // scoped one — showing messages twice and inflating the sidebar badge.
+    const rows = selectFetchAccounts(accessible, aliases, ["real@company.com", "hello@brand.com"]);
+    expect(rows.map((r) => r.email)).toEqual(["real@company.com"]);
+  });
+
+  it("reads an alias on its own when its parent is not selected", () => {
+    const rows = selectFetchAccounts(accessible, aliases, ["hello@brand.com"]);
+    expect(rows).toEqual([
+      { email: "hello@brand.com", ownerUserId: "u1", aliasOfEmail: "real@company.com" },
+    ]);
+  });
+
+  it("ignores a selected address that is neither accessible nor an alias", () => {
+    expect(selectFetchAccounts(accessible, aliases, ["stranger@elsewhere.com"])).toEqual([]);
+  });
+
+  it("prefers the real account when an address is both accessible and listed as an alias", () => {
+    const overlapping = [
+      { email: "other@company.com", ownerUserId: "u1", viaAccountEmail: "real@company.com" },
+    ];
+    const rows = selectFetchAccounts(accessible, overlapping, ["other@company.com"]);
+    expect(rows).toEqual([{ email: "other@company.com", ownerUserId: "u1" }]);
+  });
+
+  it("matches selections case-insensitively", () => {
+    const rows = selectFetchAccounts(accessible, aliases, ["Real@Company.com"]);
+    expect(rows.map((r) => r.email)).toEqual(["real@company.com"]);
   });
 });
