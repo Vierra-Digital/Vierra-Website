@@ -95,15 +95,20 @@ export default withAuth(async (req, res, session) => {
       create: { user_id: userId, account_email: accountEmail, account_id: accountId, ...settingData },
       update: settingData,
     });
-    // Sync tracking flags across all of this user's mailbox settings.
-    await prisma.emailAccountSetting.updateMany({
-      where: { user_id: userId },
-      data: {
-        tracking_enabled: Boolean(req.body?.trackingEnabled),
-        open_tracking_enabled: Boolean(req.body?.openTrackingEnabled ?? true),
-        click_tracking_enabled: Boolean(req.body?.clickTrackingEnabled ?? true),
-      },
-    });
+    // Apply the whole set across every mailbox this user has, not just the tracking flags.
+    //
+    // The panel is one account with a primary inbox and brand accounts added onto it, so these are
+    // the user's preferences rather than each mailbox's: previously, changing the reply-notification
+    // toggle or the out-of-office on the selected mailbox left every other inbox on its old value,
+    // with nothing on screen saying so. The vacation responder is included deliberately — an
+    // out-of-office that only covered whichever inbox happened to be selected is a worse surprise
+    // than one that covers all of them. Pass applyToSelectedOnly to opt a single mailbox out.
+    if (req.body?.applyToSelectedOnly !== true) {
+      await prisma.emailAccountSetting.updateMany({
+        where: { user_id: userId },
+        data: settingData,
+      });
+    }
     res.status(200).json({ settings: serializeSettings(updated) });
     return;
   }

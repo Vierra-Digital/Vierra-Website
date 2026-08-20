@@ -1555,17 +1555,30 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
       // Accounts default to enabled; only accounts explicitly disabled in settings are excluded.
       const disabled = new Set<string>();
+      let primary = "";
       try {
         if (prefRes?.ok) {
           const prefData = await prefRes.json();
           for (const pref of Array.isArray(prefData?.preferences) ? prefData.preferences : []) {
-            if (pref?.enabled === false && typeof pref?.accountEmail === "string") disabled.add(pref.accountEmail.toLowerCase());
+            const email = typeof pref?.accountEmail === "string" ? pref.accountEmail.toLowerCase() : "";
+            if (!email) continue;
+            if (pref?.enabled === false) disabled.add(email);
+            if (pref?.isPrimary === true) primary = email;
           }
         }
       } catch {
-        /* default to all enabled */
+        /* default to all enabled, no primary */
       }
-      const enabledConnected = connected.filter((email) => !disabled.has(email.toLowerCase()));
+      // The main inbox leads every list of accounts, so the panel opens on it and it reads as the
+      // account's own mailbox rather than one of several in arbitrary order.
+      if (primary) {
+        const byPrimaryFirst = (a: GmailAccountConnection, b: GmailAccountConnection) =>
+          Number(b.email.toLowerCase() === primary) - Number(a.email.toLowerCase() === primary);
+        setGmailAccounts([...normalized].sort(byPrimaryFirst));
+      }
+      const enabledConnected = connected
+        .filter((email) => !disabled.has(email.toLowerCase()))
+        .sort((a, b) => Number(b.toLowerCase() === primary) - Number(a.toLowerCase() === primary));
       const preselected = initialAccountsRef.current.filter((email) => connected.includes(email));
 
       // The full-page client opens with the chosen accounts (URL param) or all enabled;
@@ -5005,6 +5018,45 @@ ${sourceText}`;
                           Back
                         </button>
                         <div className="flex flex-wrap items-center gap-1">
+                          {/* The same three actions as at the foot of the message. Both places are
+                              wanted: the toolbar is where they are reached for out of habit, the
+                              foot is where they belong while reading. */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void openReplyCompose();
+                            }}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label="Reply"
+                            data-tip="Reply"
+                          >
+                            <FiCornerUpLeft className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void openReplyAllCompose();
+                            }}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label="Reply All"
+                            data-tip="Reply All"
+                          >
+                            <FiUsers className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void openForwardCompose();
+                            }}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label="Forward"
+                            data-tip="Forward"
+                          >
+                            <FiSend className="w-4 h-4" />
+                          </button>
+
+                          <span className="mx-1 h-5 w-px bg-current opacity-15" aria-hidden />
+
                           {/* Every shared action in the same order as the
                               list toolbar (star, spam, trash, read, move, archive, snooze), so the
                               two toolbars are not two different sequences of the same icons.

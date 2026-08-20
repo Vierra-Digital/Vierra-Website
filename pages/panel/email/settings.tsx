@@ -157,7 +157,11 @@ function SettingsSection({
         </div>
         {right ? <div className="shrink-0">{right}</div> : null}
       </div>
-      {children}
+      {/* One vertical rhythm for every section. Sections used to each choose their own
+          (space-y-2 in some, 3, 4 or 5 in others), so the gap between controls changed from
+          section to section and the page read as unevenly spaced. A section that still sets its
+          own spacing on a single wrapper child is unaffected. */}
+      <div className="space-y-4">{children}</div>
     </section>
   );
 }
@@ -421,6 +425,9 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [savingFilter, setSavingFilter] = useState(false);
   /** Per-account enabled flags for the panel (email -> enabled). Default enabled. */
   const [accountEnabled, setAccountEnabled] = useState<Record<string, boolean>>({});
+  /** The main inbox, lowercased. Every other connected mailbox is a brand account added onto it. */
+  const [primaryAccount, setPrimaryAccount] = useState("");
+  const [primaryError, setPrimaryError] = useState("");
   type DeliverabilityResult = {
     domain: string;
     googleManaged: boolean;
@@ -798,10 +805,15 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) return;
       const map: Record<string, boolean> = {};
+      let primary = "";
       for (const pref of Array.isArray(data?.preferences) ? data.preferences : []) {
-        if (typeof pref?.accountEmail === "string") map[pref.accountEmail.toLowerCase()] = pref.enabled !== false;
+        if (typeof pref?.accountEmail !== "string") continue;
+        const key = pref.accountEmail.toLowerCase();
+        map[key] = pref.enabled !== false;
+        if (pref?.isPrimary === true) primary = key;
       }
       setAccountEnabled(map);
+      setPrimaryAccount(primary);
     } catch {
       /* default to all enabled */
     }
@@ -1079,6 +1091,35 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       }
     });
   }, [connectedAccounts]);
+
+  /**
+   * Make one mailbox the main inbox.
+   *
+   * Optimistic, but reverted if the write fails: leaving the badge on a mailbox the server did not
+   * accept would misreport which inbox the panel actually opens on. A missing migration comes back
+   * as ok:false with a reason rather than as a silent success.
+   */
+  const makePrimaryAccount = async (email: string) => {
+    const key = email.toLowerCase();
+    const previous = primaryAccount;
+    setPrimaryAccount(key);
+    setPrimaryError("");
+    try {
+      const response = await fetch("/api/gmail/account-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountEmail: key, isPrimary: true }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.ok === false) {
+        setPrimaryAccount(previous);
+        setPrimaryError(payload?.message || "Could not set the main inbox.");
+      }
+    } catch {
+      setPrimaryAccount(previous);
+      setPrimaryError("Could not set the main inbox.");
+    }
+  };
 
   const toggleAccountEnabled = async (email: string, enabled: boolean) => {
     const key = email.toLowerCase();
@@ -1827,8 +1868,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 </div>
               </SettingsSection>
               <SettingsSection
-                title="Accounts"
-                description="Choose which connected Google accounts appear in the email panel."
+                title="Inboxes"
+                description="One mailbox is your main inbox; the rest are brand accounts added onto it. The main inbox leads the panel and is the account new mail opens on. Everything else on this page applies to every inbox at once."
                 icon={FiMail}
               >
                 {connectedAccounts.length === 0 ? (
@@ -1836,24 +1877,74 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 ) : (
                   <ul className="space-y-2">
                     {connectedAccounts.map((account) => {
-                      const enabled = accountEnabled[account.email.toLowerCase()] !== false;
+                      const key = account.email.toLowerCase();
+                      const enabled = accountEnabled[key] !== false;
+                      const isPrimary = primaryAccount === key;
                       return (
                         <li
                           key={account.email}
-                          className="flex items-center justify-between gap-3 rounded-xl border border-[#ECEAF1] bg-white p-3"
+                          className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 ${
+                            isPrimary ? "border-[#701CC0]/30 bg-[#F8F4FF]" : "border-[#ECEAF1] bg-white"
+                          }`}
                         >
                           <div className="flex min-w-0 items-center gap-3">
-                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F5EFFF] text-sm font-semibold text-[#701CC0]">
+                            <span
+                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+                                isPrimary ? "bg-[#701CC0] text-white" : "bg-[#F5EFFF] text-[#701CC0]"
+                              }`}
+                            >
                               {account.email.charAt(0).toUpperCase()}
                             </span>
-                            <span className="truncate text-sm font-medium text-[#1E1B2E]">{account.email}</span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-[#1E1B2E]">{account.email}</p>
+                              <p className="mt-0.5 text-[11px] text-[#6B7280]">
+                                {isPrimary ? "Main inbox" : "Brand account"}
+                              </p>
+                            </div>
                           </div>
-                          <Toggle checked={enabled} onChange={(v) => toggleAccountEnabled(account.email, v)} />
+                          <div className="flex shrink-0 items-center gap-3">
+                            {isPrimary ? (
+                              <span className="rounded-full bg-[#701CC0]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#4C1191]">
+                                Main
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => makePrimaryAccount(account.email)}
+                                className="rounded-md border border-[#E5E7EB] px-2.5 py-1 text-[11px] font-medium text-[#4A465C] transition-colors hover:bg-[#F4F1FA]"
+                              >
+                                Make main
+                              </button>
+                            )}
+                            <Toggle checked={enabled} onChange={(v) => toggleAccountEnabled(account.email, v)} />
+                          </div>
                         </li>
                       );
                     })}
                   </ul>
                 )}
+                {primaryError ? <p className="mt-3 text-xs text-red-600">{primaryError}</p> : null}
+                {sendAsAliases.length > 0 ? (
+                  <div className="mt-4 rounded-xl border border-[#ECEAF1] bg-[#FAFAFB] p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                      Send-as aliases
+                    </p>
+                    <p className="mt-1 text-xs text-[#6B7280]">
+                      Addresses you can send from through the inboxes above. Mail addressed to them arrives in the
+                      inbox that owns the alias.
+                    </p>
+                    <ul className="mt-2 flex flex-wrap gap-2">
+                      {sendAsAliases.map((alias) => (
+                        <li
+                          key={alias.email}
+                          className="rounded-full border border-[#E5E7EB] bg-white px-2.5 py-1 text-[11px] text-[#4A465C]"
+                        >
+                          {alias.email}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </SettingsSection>
 
               <SettingsSection

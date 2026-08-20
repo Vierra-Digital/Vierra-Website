@@ -1074,6 +1074,9 @@ model EmailAccountPreference {
   user_id       String   @db.Uuid
   account_email String
   enabled       Boolean  @default(true)
+  // The account's main inbox; every other mailbox is a brand account added onto it. At most one per
+  // user, enforced by a partial unique index (prisma/manual/20260820_email_account_primary.sql).
+  is_primary    Boolean  @default(false)
   created_at    DateTime @default(now()) @db.Timestamptz(6)
   updated_at    DateTime @default(now()) @db.Timestamptz(6)
 
