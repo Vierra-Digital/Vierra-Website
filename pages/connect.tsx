@@ -10,11 +10,12 @@ import type { GetServerSideProps } from "next"
 import { requireSession } from "@/lib/auth"
 import UserSettingsPage from "@/components/UserSettingsPage"
 import { profileImageSrc } from "@/lib/profileImage"
+import { getInitialUserProfile } from "@/lib/profileImage.server"
 
 
-type PageProps = { dashboardHref: string }
+type PageProps = { dashboardHref: string; initialImageVersion: number | string }
 
-export default function ConnectPage({ dashboardHref }: PageProps) {
+export default function ConnectPage({ dashboardHref, initialImageVersion }: PageProps) {
   const { data: session } = useSession()
   const router = useRouter()
   const [showSettings, setShowSettings] = useState(false)
@@ -23,7 +24,7 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
   const [liConnected, setLi] = useState(false)
   const [gaConnected, setGa] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [imageVersion, setImageVersion] = useState(0)
+  const [imageVersion, setImageVersion] = useState<number | string>(initialImageVersion)
 
   useEffect(() => {
     if (!session) return
@@ -165,6 +166,7 @@ export default function ConnectPage({ dashboardHref }: PageProps) {
                   email: session?.user?.email ?? "test@vierra.com",
                   image: profileImageSrc(imageVersion) ?? null,
                 }}
+                userRole="user"
                 onImageUpdate={async () => {
                   const r = await fetch("/api/profile/getUser")
                   if (r.ok) {
@@ -235,5 +237,11 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   if ((session.user as any).role !== "user") {
     return { redirect: { destination: "/panel", permanent: false } }
   }
-  return { props: { dashboardHref: role === "user" ? "/client" : "/panel" } }
+  const profile = await getInitialUserProfile(session.user.id)
+  return {
+    props: {
+      dashboardHref: role === "user" ? "/client" : "/panel",
+      initialImageVersion: profile.imageVersion,
+    },
+  }
 }
