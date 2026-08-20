@@ -370,7 +370,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                 <table className="w-full">
                                     <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
                                         <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">ID</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Name</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Email</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Password Reset</th>
@@ -382,7 +381,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                         {paginatedUsers.map((u) => {
                             return (
                                                 <tr key={u.id} className="hover:bg-purple-50">
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{u.id}</td>
                                                     <td className="px-4 py-4 text-sm font-medium text-[#111827]">{u.name ?? "-"}</td>
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{u.email ?? "-"}</td>
                                                     <td className="px-4 py-4">
@@ -627,7 +625,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                             value={name} 
                             onChange={(e) => handleFieldChange("name", e.target.value)} 
                             placeholder="Enter Name"
-                            className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
+                            className={`w-full rounded-lg border px-3 py-2 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0] ${
                                 fieldErrors.name ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB]'
                             }`}
                         />
@@ -643,7 +641,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                                 id="create-user-role"
                                 value={role} 
                                 onChange={(e) => handleFieldChange("role", e.target.value)} 
-                                className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 pr-10 text-sm bg-white outline-none focus:ring-2 focus:ring-[#701CC0] appearance-none"
+                                className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 pr-10 text-sm bg-white text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0] appearance-none"
                             >
                                 <option value="admin">Admin</option>
                                 <option value="staff">Staff</option>
@@ -667,7 +665,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                             value={email} 
                             onChange={(e) => handleFieldChange("email", e.target.value)} 
                             placeholder="Enter Email"
-                            className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
+                            className={`w-full rounded-lg border px-3 py-2 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0] ${
                                 fieldErrors.email || (email && !isValidEmail(email))
                                     ? 'border-red-500 bg-red-50' 
                                     : 'border-[#E5E7EB]'
@@ -689,7 +687,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                             value={password} 
                             onChange={(e) => handleFieldChange("password", e.target.value)} 
                             placeholder="Enter Password"
-                            className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#701CC0] ${
+                            className={`w-full rounded-lg border px-3 py-2 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0] ${
                                 fieldErrors.password ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB]'
                             }`}
                         />
