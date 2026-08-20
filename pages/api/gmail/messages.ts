@@ -5,6 +5,7 @@ import { getAccessibleGmailAccounts, getGmailAliasAccounts, selectFetchAccounts 
 import { extractHeader, buildAliasScopeQuery } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
 import { mapInBatches } from "@/lib/batch";
+import { getAccountBucket, getCacheEntry, freshCacheEntry, putCacheEntry, withListLock } from "@/lib/gmail/messageListCache";
 
 type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive" | "allmail" | "starred" | "important" | "scheduled";
 const OPEN_BASE_WINDOW_MS = 15_000;
@@ -134,8 +135,16 @@ function firstRecipient(text: string) {
   return first || cleaned;
 }
 
-async function fetchGmailList(accessToken: string, mailbox: Mailbox, maxResults: number, search?: string, labelId?: string) {
+async function fetchGmailList(
+  accessToken: string,
+  mailbox: Mailbox,
+  maxResults: number,
+  search?: string,
+  labelId?: string,
+  pageToken?: string
+) {
   const params = new URLSearchParams({ maxResults: String(maxResults) });
+  if (pageToken) params.set("pageToken", pageToken);
   const searchTerm = (search || "").trim();
   if (labelId) {
     // Viewing a custom label overrides the mailbox filter.
@@ -269,18 +278,7 @@ export default withAuth(async (req, res, session) => {
           ? `${buildAliasScopeQuery(account.email, aliasDirection)} ${searchQuery}`.trim()
           : searchQuery;
 
-        const loadAccountMessages = async (accessToken: string) => {
-          const list = await fetchGmailList(accessToken, mailbox, maxResults, effectiveSearch, labelIdFilter);
-          accountHasMore.push(Boolean(list.nextPageToken));
-          const ids = (list.messages || []).map((m) => m.id).filter(Boolean);
-          if (ids.length === 0) return [] as MessageRow[];
-
-          // Bounded, not all at once. A page can be 100 messages and several accounts load in
-          // parallel, so an unbounded fan-out is hundreds of concurrent Gmail calls — the same
-          // shape that returned "Too many concurrent requests for user" on bulk actions, except
-          // here it fails the whole list rather than a few items. Ten at a time is well inside
-          // Gmail's per-user limit and still saturates the round-trip latency.
-          const detailed = await mapInBatches(ids, (id) => fetchGmailMessage(accessToken, id), 10);
+        const mapDetailedMessages = (detailed: GmailMessageResponse[]): MessageRow[] => {
           const visibleDetailed =
             mailbox === "sent"
               ? detailed.filter((msg) => !(Array.isArray(msg.labelIds) && msg.labelIds.includes("TRASH")))
@@ -318,6 +316,57 @@ export default withAuth(async (req, res, session) => {
               tracked: false,
             } as MessageRow;
           });
+        };
+
+        // Cached per (owner+account, mailbox+label+search): a later page for the same view only
+        // fetches the incremental window (via Gmail's pageToken) instead of redoing everything
+        // already fetched for earlier pages of this view. See messageListCache.ts.
+        const cacheSubKey = `${mailbox}::${labelIdFilter}::${effectiveSearch}`;
+        const bucket = getAccountBucket(account.ownerUserId, tokenAccountEmail);
+        const lockKey = `${account.ownerUserId}::${tokenAccountEmail.toLowerCase()}::${cacheSubKey}`;
+
+        const loadAccountMessages = async (accessToken: string) => {
+          let entry = getCacheEntry<MessageRow>(bucket, cacheSubKey) || freshCacheEntry<MessageRow>();
+          if (entry.rows.length < maxResults && !entry.exhausted) {
+            // Serialized: a concurrent request for this same view (e.g. quick back/forward paging)
+            // must see this request's progress rather than growing the same entry independently —
+            // see withListLock in messageListCache.ts.
+            entry = await withListLock(lockKey, async () => {
+              // Re-read: the lock may have queued behind a request that already grew this entry
+              // far enough, in which case there's nothing left to fetch.
+              const current = getCacheEntry<MessageRow>(bucket, cacheSubKey) || entry;
+              const seenIds = new Set(current.rows.map((row) => row.id));
+              while (current.rows.length < maxResults && !current.exhausted) {
+                const needed = maxResults - current.rows.length;
+                const list = await fetchGmailList(accessToken, mailbox, needed, effectiveSearch, labelIdFilter, current.nextPageToken);
+                current.nextPageToken = list.nextPageToken;
+                if (!list.nextPageToken) current.exhausted = true;
+                // Gmail's pageToken pagination isn't guaranteed stable if the mailbox changes
+                // between pages, which can hand back an id this entry already has — drop it rather
+                // than let a duplicate corrupt the merged/sorted list downstream.
+                const ids = (list.messages || []).map((m) => m.id).filter((id) => id && !seenIds.has(id));
+                if (ids.length === 0) {
+                  if (!list.nextPageToken) break;
+                  continue;
+                }
+
+                // Bounded, not all at once. A page can be 100 messages and several accounts load in
+                // parallel, so an unbounded fan-out is hundreds of concurrent Gmail calls — the same
+                // shape that returned "Too many concurrent requests for user" on bulk actions, except
+                // here it fails the whole list rather than a few items. Ten at a time is well inside
+                // Gmail's per-user limit and still saturates the round-trip latency.
+                const detailed = await mapInBatches(ids, (id) => fetchGmailMessage(accessToken, id), 10);
+                for (const row of mapDetailedMessages(detailed)) {
+                  seenIds.add(row.id);
+                  current.rows.push(row);
+                }
+              }
+              putCacheEntry(bucket, cacheSubKey, current);
+              return current;
+            });
+          }
+          accountHasMore.push(!entry.exhausted);
+          return entry.rows.slice(0, maxResults);
         };
 
         try {
