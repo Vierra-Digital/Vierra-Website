@@ -40,15 +40,30 @@ export async function createSupabaseAuthUser(email: string, password?: string) {
 }
 
 /**
- * Deletes a Supabase Auth identity. Used to roll back a partially-failed
- * account creation (auth user created but the Prisma-side rows failed) and
- * when an admin deletes an app user, so the email isn't left permanently
- * stuck on an orphaned, unreachable Supabase identity. Errors are logged but
- * swallowed — callers use this as best-effort cleanup, not a critical path.
+ * Deletes a Supabase Auth identity. Used to roll back `createSupabaseAuthUser` when a later step
+ * (e.g. writing the Prisma row / company membership) fails, so we never strand an Auth identity
+ * with no corresponding app-side record.
  */
 export async function deleteSupabaseAuthUser(userId: string) {
   const { error } = await getSupabaseAdmin().auth.admin.deleteUser(userId);
   if (error) {
-    console.error("deleteSupabaseAuthUser", userId, error.message);
+    throw new Error(error.message || "Failed to delete Supabase auth user");
+  }
+}
+
+/**
+ * Updates the email on an existing Supabase Auth identity. Must be called whenever a
+ * user's email changes anywhere else (e.g. the Prisma `users.email` column) — Supabase
+ * Auth is the source of truth for login and for `auth.admin.generateLink({ type: "recovery" })`,
+ * so letting it drift out of sync locks the user out under their new email and breaks
+ * password-reset lookups.
+ */
+export async function updateSupabaseAuthUserEmail(userId: string, email: string) {
+  const { error } = await getSupabaseAdmin().auth.admin.updateUserById(userId, {
+    email,
+    email_confirm: true,
+  });
+  if (error) {
+    throw new Error(error.message || "Failed to update Supabase auth user email");
   }
 }
