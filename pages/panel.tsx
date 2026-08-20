@@ -123,6 +123,27 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
     fetchCurrentUser()
   }, [])
 
+  // Clients is the section admins land on most right after Dashboard, and its fetch is a
+  // single cheap indexed query — worth mounting (and fetching) immediately on login rather
+  // than waiting for the first click, same treatment as Settings. Gated on initialUserRole
+  // (known synchronously from SSR) rather than resolvedUserRole, which depends on the
+  // session hook resolving client-side first.
+  useEffect(() => {
+    if (initialUserRole === "admin") {
+      setVisitedSections((prev) => (prev.has(1) ? prev : new Set(prev).add(1)))
+    }
+  }, [initialUserRole])
+
+  // Staff Orbital is common but not the universal first click — warm it a couple seconds
+  // after login instead of competing with Dashboard/Settings/Clients for the same burst of
+  // initial requests.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setVisitedSections((prev) => (prev.has(2) ? prev : new Set(prev).add(2)))
+    }, 2000)
+    return () => clearTimeout(timer)
+  }, [])
+
   useEffect(() => {
     setVisitedSections((prev) => (prev.has(currentSection) ? prev : new Set(prev).add(currentSection)))
   }, [currentSection])
