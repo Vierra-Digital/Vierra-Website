@@ -13,6 +13,7 @@ import {
   escapeHtml,
   normalizeEmail,
   parseAttachments,
+  settingsLookupOrder,
 } from "@/lib/gmail/sendCore";
 
 describe("escapeHtml", () => {
@@ -89,5 +90,28 @@ describe("parseAttachments", () => {
     const r = parseAttachments([{ filename: "empty" }, { contentBase64: "" }]);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.parts).toHaveLength(0);
+  });
+});
+
+describe("settingsLookupOrder", () => {
+  it("asks the staff member who sent, then the mailbox owner", () => {
+    // The bug this covers: a delegate's saved settings never applied to anything they sent,
+    // because only the owner's row was read while the settings page showed theirs as saved.
+    expect(settingsLookupOrder("owner-1", "staff-2")).toEqual(["staff-2", "owner-1"]);
+  });
+
+  it("asks once when the sender owns the mailbox", () => {
+    expect(settingsLookupOrder("owner-1", "owner-1")).toEqual(["owner-1"]);
+  });
+
+  it("falls back to the owner when no acting staff member is given", () => {
+    // Cron and campaign senders run as the owner and pass nothing.
+    expect(settingsLookupOrder("owner-1")).toEqual(["owner-1"]);
+    expect(settingsLookupOrder("owner-1", "")).toEqual(["owner-1"]);
+  });
+
+  it("never returns the same user twice, so a row is not queried twice", () => {
+    const order = settingsLookupOrder("owner-1", "owner-1");
+    expect(new Set(order).size).toBe(order.length);
   });
 });

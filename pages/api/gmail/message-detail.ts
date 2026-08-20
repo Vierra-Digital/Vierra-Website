@@ -166,7 +166,7 @@ export default withAuth(async (req, res, session) => {
   const effectiveUserId = access.ownerUserId;
 
   const getToken = async (forceRefresh = false) => {
-    const tokenResult = await getValidGmailAccessToken(effectiveUserId, accountEmail, forceRefresh ? { forceRefresh: true } : undefined);
+    const tokenResult = await getValidGmailAccessToken(effectiveUserId, access.tokenEmail, forceRefresh ? { forceRefresh: true } : undefined);
     if (!tokenResult.ok) return null;
     return tokenResult.accessToken;
   };

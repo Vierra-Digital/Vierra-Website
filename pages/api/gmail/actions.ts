@@ -163,12 +163,18 @@ export default withAuth(async (req, res, session) => {
   // permission. Read-only grants (canSend false) resolve to null → their actions fail as "no
   // permission" rather than silently running against your own (missing) token.
   const ownerMap = new Map<string, string | null>();
+  // A send-as alias has no OAuth token of its own — its mail lives in the account that owns it, so
+  // the token has to be fetched for that address, not for the alias. Kept per requested account so
+  // the retry path below can look it up again.
+  const tokenEmailMap = new Map<string, string>();
   for (const accountEmail of uniqueAccounts) {
     const access = await resolveMailboxOwner(userId, accountEmail);
     const ownerUserId = access && access.canSend ? access.ownerUserId : null;
     ownerMap.set(accountEmail, ownerUserId);
+    const tokenEmail = access?.tokenEmail || accountEmail;
+    tokenEmailMap.set(accountEmail, tokenEmail);
     const tokenResult = ownerUserId
-      ? await getValidGmailAccessToken(ownerUserId, accountEmail)
+      ? await getValidGmailAccessToken(ownerUserId, tokenEmail)
       : { ok: false as const };
     tokenMap.set(accountEmail, tokenResult.ok ? tokenResult.accessToken : null);
   }
@@ -215,7 +221,11 @@ export default withAuth(async (req, res, session) => {
         for (let attempt = 0; ; attempt += 1) {
           let response = await callGmailAction(activeToken, action, item.messageId);
           if (response.status === 401) {
-            const refreshResult = await getValidGmailAccessToken(owner, item.accountEmail, { forceRefresh: true });
+            const refreshResult = await getValidGmailAccessToken(
+              owner,
+              tokenEmailMap.get(item.accountEmail) || item.accountEmail,
+              { forceRefresh: true }
+            );
             if (!refreshResult.ok) {
               return { ...item, ok: false, error: refreshResult.message };
             }
