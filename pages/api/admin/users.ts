@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { createSupabaseAuthUser } from "@/lib/supabase/admin";
+import { createSupabaseAuthUser, deleteSupabaseAuthUser, updateSupabaseAuthUserEmail } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -22,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               id: true,
               name: true,
               email: true,
-              user_preferences: { select: { time_zone: true, image_storage_key: true } },
+              user_preferences: { select: { time_zone: true, image_storage_key: true, image_updated_at: true } },
               clients_clients_user_idTousers: { select: { name: true } },
             },
           },
@@ -37,6 +37,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           name: u.name,
           email: u.email,
           image: Boolean(u.user_preferences?.image_storage_key),
+          imageVersion: u.user_preferences?.image_updated_at
+            ? u.user_preferences.image_updated_at.getTime()
+            : u.user_preferences?.image_storage_key
+              ? u.id
+              : 0,
           role: m.role,
           position: m.position ?? null,
           country: null,
@@ -64,21 +69,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!email || !newRole) {
       return res.status(400).json({ message: "email and role are required" });
     }
-    const roleToStore = String(newRole).toLowerCase() === "client" ? "staff" : String(newRole);
+    const roleToStore = String(newRole).toLowerCase();
+    if (roleToStore !== "admin" && roleToStore !== "staff") {
+      // Client accounts aren't created here — they need a `clients` row (business name, etc.)
+      // and are provisioned via Clients -> Add Client's onboarding-link flow instead.
+      return res.status(400).json({ message: "Use Clients -> Add Client to create a client account." });
+    }
     const normalizedEmail = String(email).trim().toLowerCase();
+
+    let authUserId: string | undefined;
     try {
       const authUser = await createSupabaseAuthUser(normalizedEmail, password ? String(password) : undefined);
-      const user = await prisma.user.create({
-        data: { id: authUser.id, name: name || null, email: normalizedEmail },
-        select: { id: true, name: true, email: true },
-      });
-      await prisma.companyMembership.create({
-        data: { company_id: companyId, user_id: authUser.id, role: roleToStore },
-      });
+      authUserId = authUser.id;
+
+      // The `on_auth_user_created` DB trigger already inserts a bare public.users row (id + email)
+      // the instant createSupabaseAuthUser's insert into auth.users commits, so this always finds
+      // a row waiting for it — upsert (fill in the name) rather than create (which would always
+      // collide on the id and fail). The user row and its company membership must land together —
+      // if the membership insert fails after the user row succeeds, we'd otherwise strand a user
+      // with no company, invisible to this list (which is scoped by membership) and blocking
+      // retry on this email.
+      const [user] = await prisma.$transaction([
+        prisma.user.upsert({
+          where: { id: authUser.id },
+          create: { id: authUser.id, name: name || null, email: normalizedEmail },
+          update: { name: name || null, email: normalizedEmail },
+          select: { id: true, name: true, email: true },
+        }),
+        prisma.companyMembership.create({
+          data: { company_id: companyId, user_id: authUser.id, role: roleToStore },
+        }),
+      ]);
       return res.status(201).json({ ...user, role: roleToStore });
     } catch (e: any) {
       console.error("admin/users POST", e);
-      const msg = e?.code === "P2002" ? "Email already exists" : "Failed to create user";
+      if (authUserId) {
+        // Roll back the Auth identity too, so a failed create doesn't strand an unreachable
+        // account and permanently block re-creating this user with the same email.
+        await deleteSupabaseAuthUser(authUserId).catch((cleanupErr) =>
+          console.error("admin/users POST rollback failed", authUserId, cleanupErr)
+        );
+      }
+      const target = Array.isArray(e?.meta?.target) ? e.meta.target.join(",") : String(e?.meta?.target ?? "");
+      const msg = e?.code === "P2002" && target.includes("email") ? "Email already exists" : "Failed to create user";
       return res.status(400).json({ message: msg });
     }
   }
@@ -105,9 +138,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
       if (!target) return res.status(404).json({ message: "User not found" });
 
+      const normalizedEmail = email !== undefined ? String(email).trim().toLowerCase() : undefined;
+      // Sync Supabase Auth first — if it fails, bail out before touching Prisma so the two
+      // never disagree about which email is current (Supabase Auth is the login/reset source
+      // of truth; see updateSupabaseAuthUserEmail).
+      if (normalizedEmail !== undefined) {
+        await updateSupabaseAuthUserEmail(String(id), normalizedEmail);
+      }
+
       const userUpdateData: Record<string, unknown> = {};
       if (name !== undefined) userUpdateData.name = name;
-      if (email !== undefined) userUpdateData.email = email;
+      if (normalizedEmail !== undefined) userUpdateData.email = normalizedEmail;
       if (Object.keys(userUpdateData).length > 0) {
         await prisma.user.update({ where: { id: String(id) }, data: userUpdateData });
       }

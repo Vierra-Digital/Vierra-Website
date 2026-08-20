@@ -47,6 +47,7 @@ interface TeamRow {
     name: string
     email: string
     image: any
+    imageVersion?: number | string
     position: string
     country: string
     company_email: string | null
@@ -234,6 +235,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 name: u.name,
                 email: u.email,
                 image: u.image,
+                imageVersion: u.imageVersion,
                 position: u.position,
                 country: u.country,
                 company_email: u.company_email,
@@ -576,7 +578,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                                 <td className="px-4 py-4">
                                                     <div className="flex items-center">
                                                         <ProfileImage
-                                                            src={r.image ? `/api/admin/getUserImage?userId=${r.id}&t=${Date.now()}` : null}
+                                                            src={r.image ? `/api/admin/getUserImage?userId=${r.id}&v=${r.imageVersion ?? 0}` : null}
                                                             name={r.name}
                                                             size={32}
                                                             alt={`${r.name}'s profile`}
