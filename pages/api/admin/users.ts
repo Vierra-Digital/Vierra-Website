@@ -22,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               id: true,
               name: true,
               email: true,
-              user_preferences: { select: { time_zone: true, image_storage_key: true } },
+              user_preferences: { select: { time_zone: true, image_storage_key: true, image_updated_at: true } },
               clients_clients_user_idTousers: { select: { name: true } },
             },
           },
@@ -37,6 +37,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           name: u.name,
           email: u.email,
           image: Boolean(u.user_preferences?.image_storage_key),
+          imageVersion: u.user_preferences?.image_updated_at
+            ? u.user_preferences.image_updated_at.getTime()
+            : u.user_preferences?.image_storage_key
+              ? u.id
+              : 0,
           role: m.role,
           position: m.position ?? null,
           country: null,
