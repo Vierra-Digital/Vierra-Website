@@ -462,7 +462,10 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
             </div>
           </div>
           <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden relative">
-            {showSettings ? (<>
+            {/* Mounted immediately on login (not lazily on first click) and kept mounted for the
+                rest of the session — matches the visitedSections pattern below — so switching to
+                Settings never re-triggers its getSettings/gmail/social/calendar fetches. */}
+            <div style={{ display: showSettings ? undefined : "none" }}>
               <UserSettingsPage
                 user={{
                   name: currentUserName,
@@ -481,10 +484,9 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                 onClose={() => setShowSettings(false)}
                 variant="panel"
               />
-            </>)
-              : (
-                <>
-                  {isClientViewMode ? (
+            </div>
+            <div style={{ display: showSettings ? "none" : undefined }}>
+              {isClientViewMode ? (
                     <>
                       {viewModeSection === 0 && <DashboardSection />}
                       {viewModeSection === 1 && (
@@ -555,10 +557,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                       )}
                     </>
                   )}
-                </>
-              )}
-
-
+            </div>
           </div>
         </div>
       </div>
