@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { asStr, queryAccountEmail } from "@/lib/api/parsing";
+import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 
 function serializeSettings(s: {
   id: string; account_id: string | null; tracking_enabled: boolean; open_tracking_enabled: boolean;
@@ -43,9 +44,21 @@ export default withAuth(async (req, res, session) => {
   if (req.method === "GET") {
     // Keyed by (user, account_email) so this works for Gmail (OAuth) accounts too, which have
     // no provider-account row / account_id.
-    const settings = await prisma.emailAccountSetting.findUnique({
+    //
+    // These are the requesting staff member's settings. On a shared mailbox, a staff member who has
+    // never configured anything inherits the owner's, which is what their sends actually use — so
+    // read that rather than showing defaults the send path would not honour.
+    let settings = await prisma.emailAccountSetting.findUnique({
       where: { user_id_account_email: { user_id: userId, account_email: accountEmail } },
     });
+    if (!settings) {
+      const access = await resolveMailboxOwner(userId, accountEmail);
+      if (access && access.ownerUserId !== userId) {
+        settings = await prisma.emailAccountSetting.findUnique({
+          where: { user_id_account_email: { user_id: access.ownerUserId, account_email: accountEmail } },
+        });
+      }
+    }
     res.status(200).json({
       settings: settings
         ? serializeSettings(settings)
@@ -95,7 +108,11 @@ export default withAuth(async (req, res, session) => {
       create: { user_id: userId, account_email: accountEmail, account_id: accountId, ...settingData },
       update: settingData,
     });
-    // Apply the whole set across every mailbox this user has, not just the tracking flags.
+    // Apply the whole set across every mailbox THIS STAFF MEMBER has, not just the tracking flags.
+    //
+    // Scoped by user_id, so it never reaches another staff member's rows: two people sharing a
+    // mailbox keep their own tracking, read-receipt and out-of-office choices, and a send uses the
+    // settings of whoever sent it (see sendEmailCore's actingUserId).
     //
     // The panel is one account with a primary inbox and brand accounts added onto it, so these are
     // the user's preferences rather than each mailbox's: previously, changing the reply-notification

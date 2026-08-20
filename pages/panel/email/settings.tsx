@@ -26,6 +26,7 @@ import {
   FiFileText,
   FiFilter,
   FiMail,
+  FiLock,
   FiMapPin,
   FiServer,
   FiSearch,
@@ -262,7 +263,7 @@ type PageProps = {
  */
 const SETTINGS_NAV: { group: string; items: string[] }[] = [
   { group: "Mailbox", items: ["Inbox layout", "Undo send", "Meeting booking"] },
-  { group: "Accounts & delivery", items: ["Accounts", "Shared inboxes", "Deliverability", "Gmail reputation (Postmaster)", "Domain mail (SMTP / IMAP / POP)"] },
+  { group: "Accounts & delivery", items: ["Inboxes", "Confidential messages", "Shared inboxes", "Deliverability", "Gmail reputation (Postmaster)", "Domain mail (SMTP / IMAP / POP)"] },
   { group: "Tracking", items: ["Email tracking", "Read receipts", "Reply notifications"] },
   { group: "Automation", items: ["Vacation responder", "Artemis AI", "Filters & rules"] },
   { group: "Content", items: ["Signatures", "Templates"] },
@@ -425,6 +426,18 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [savingFilter, setSavingFilter] = useState(false);
   /** Per-account enabled flags for the panel (email -> enabled). Default enabled. */
   const [accountEnabled, setAccountEnabled] = useState<Record<string, boolean>>({});
+  /**
+   * Confidential messages this user has sent.
+   *
+   * /api/gmail/confidential could already list and revoke these, but nothing called it: a
+   * confidential message could be sent and then never seen or recalled again.
+   */
+  const [confidentialMessages, setConfidentialMessages] = useState<
+    Array<{ id: string; subject: string | null; createdAt: string; expiresAt: string | null; revoked: boolean; views: number }>
+  >([]);
+  const [confidentialLoading, setConfidentialLoading] = useState(true);
+  const [confidentialError, setConfidentialError] = useState("");
+
   /** The main inbox, lowercased. Every other connected mailbox is a brand account added onto it. */
   const [primaryAccount, setPrimaryAccount] = useState("");
   const [primaryError, setPrimaryError] = useState("");
@@ -798,6 +811,36 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       /* ignore */
     }
   }, []);
+
+  const loadConfidential = useCallback(async () => {
+    try {
+      const response = await fetch("/api/gmail/confidential");
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) setConfidentialMessages(Array.isArray(data?.items) ? data.items : []);
+    } catch {
+      /* leave the list empty; the section says so */
+    } finally {
+      setConfidentialLoading(false);
+    }
+  }, []);
+
+  /** Revoke one. Optimistic, reverted on failure so the badge cannot claim a revoke that failed. */
+  const revokeConfidential = async (id: string) => {
+    setConfidentialError("");
+    const previous = confidentialMessages;
+    setConfidentialMessages((prev) => prev.map((m) => (m.id === id ? { ...m, revoked: true } : m)));
+    try {
+      const response = await fetch(`/api/gmail/confidential?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!response.ok) {
+        setConfidentialMessages(previous);
+        const payload = await response.json().catch(() => ({}));
+        setConfidentialError(payload?.message || "Could not revoke that message.");
+      }
+    } catch {
+      setConfidentialMessages(previous);
+      setConfidentialError("Could not revoke that message.");
+    }
+  };
 
   const loadAccountPrefs = useCallback(async () => {
     try {
@@ -1405,6 +1448,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         loadAiPrefs(),
         loadNavLayout(),
         loadMailboxGrants(),
+        loadConfidential(),
         loadCompanySettings(),
       ]);
       try {
@@ -1945,6 +1989,66 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     </ul>
                   </div>
                 ) : null}
+              </SettingsSection>
+
+              <SettingsSection
+                title="Confidential messages"
+                description="Messages you sent in confidential mode. Revoking one takes effect immediately — the recipient's link stops working, even if they opened it before."
+                icon={FiLock}
+              >
+                {confidentialLoading ? (
+                  <p className={TEXT_MUTED}>Loading…</p>
+                ) : confidentialMessages.length === 0 ? (
+                  <p className={TEXT_MUTED}>
+                    None sent yet. Confidential mode is in the composer — it replaces the body with a link to a
+                    page only the recipient can open.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {confidentialMessages.map((message) => {
+                      const expired = message.expiresAt !== null && new Date(message.expiresAt) < new Date();
+                      return (
+                        <li
+                          key={message.id}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#ECEAF1] bg-white p-3"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-[#1E1B2E]">
+                              {message.subject || "(No subject)"}
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-[#6B7280]">
+                              Sent {new Date(message.createdAt).toLocaleDateString()} ·{" "}
+                              {message.views} {message.views === 1 ? "view" : "views"}
+                              {message.expiresAt
+                                ? ` · ${expired ? "expired" : `expires ${new Date(message.expiresAt).toLocaleDateString()}`}`
+                                : " · no expiry"}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {message.revoked ? (
+                              <span className="rounded-full bg-red-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-red-700">
+                                Revoked
+                              </span>
+                            ) : expired ? (
+                              <span className="rounded-full bg-[#F3F4F6] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                                Expired
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => revokeConfidential(message.id)}
+                                className={btnDangerOutline}
+                              >
+                                Revoke access
+                              </button>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {confidentialError ? <p className="mt-1 text-xs text-red-600">{confidentialError}</p> : null}
               </SettingsSection>
 
               <SettingsSection

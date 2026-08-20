@@ -545,6 +545,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // Lightweight pre-send deliverability lint — proactive warnings shown in the composer.
   // Deliverability guardrail (#2): check the sending domain's SPF/DMARC when compose opens.
   const [composeDeliverability, setComposeDeliverability] = useState<{ spfOk: boolean; dmarcOk: boolean } | null>(null);
+  /**
+   * Recipients that failed verification (bad syntax, or a domain with no MX records).
+   *
+   * /api/gmail/verify-email has existed for a while with nothing calling it, so a typo in a
+   * recipient was only discovered by the bounce. Checked while composing, reported as a warning
+   * rather than a block — a valid address can still look unverifiable to a DNS lookup.
+   */
+  const [composeBadRecipients, setComposeBadRecipients] = useState<string[]>([]);
   /** Rows per mailbox page. PAGE_SIZE is the default; Settings → Layout can override it. */
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE);
   useEffect(() => {
@@ -562,6 +570,52 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       cancelled = true;
     };
   }, []);
+
+
+  // Verify recipients as they are typed. Debounced, because this runs a DNS lookup per address,
+  // and skipped entirely while the field is empty or the composer is shut.
+  useEffect(() => {
+    if (!isComposeOpen) {
+      setComposeBadRecipients([]);
+      return;
+    }
+    const addresses = composeTo
+      .split(/[,;]/)
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.includes("@"));
+    if (addresses.length === 0) {
+      setComposeBadRecipients([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      fetch("/api/gmail/verify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails: addresses.slice(0, 25) }),
+      })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((payload) => {
+          if (cancelled || !payload) return;
+          const results = Array.isArray(payload?.results) ? payload.results : [];
+          setComposeBadRecipients(
+            results
+              // "error" means the lookup itself failed (timeout, resolver trouble), which says
+              // nothing about the address — only report addresses actually judged bad.
+              .filter((entry: { valid?: boolean; reason?: string }) => entry?.valid === false && entry?.reason !== "error")
+              .map((entry: { email?: string }) => String(entry?.email || ""))
+              .filter(Boolean)
+          );
+        })
+        .catch(() => {
+          /* verification is advisory; never block composing on it */
+        });
+    }, 600);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [composeTo, isComposeOpen]);
 
   useEffect(() => {
     if (!isComposeOpen || !composeAccountEmail) {
@@ -601,12 +655,20 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     if (hits.length) {
       warnings.push(`Spam-trigger phrase${hits.length > 1 ? "s" : ""}: "${hits.slice(0, 3).join('", "')}".`);
     }
+    if (composeBadRecipients.length > 0) {
+      const shown = composeBadRecipients.slice(0, 3).join(", ");
+      warnings.push(
+        `Can't verify ${composeBadRecipients.length === 1 ? "recipient" : "recipients"}: ${shown}${
+          composeBadRecipients.length > 3 ? "…" : ""
+        } — the address or its domain looks wrong.`
+      );
+    }
     if (composeDeliverability && (!composeDeliverability.spfOk || !composeDeliverability.dmarcOk)) {
       const gaps = [!composeDeliverability.spfOk && "SPF", !composeDeliverability.dmarcOk && "DMARC"].filter(Boolean).join(" & ");
       warnings.push(`Sending domain is missing ${gaps} — this can hurt inbox placement (see Settings → Deliverability).`);
     }
     return warnings;
-  }, [composeSubject, composeBody, composeDeliverability]);
+  }, [composeSubject, composeBody, composeDeliverability, composeBadRecipients]);
 
   const rowKey = useCallback((message: MessageRow) => `${message.accountEmail}::${message.id}`, []);
 

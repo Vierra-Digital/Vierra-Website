@@ -139,7 +139,9 @@ export default withAuth(async (req, res, session) => {
     return;
   }
 
-  const result = await sendEmailCore(effectiveUserId, payload, baseUrl);
+  // effectiveUserId owns the mailbox (tokens, provider rows); userId is the staff member sending,
+  // whose own settings govern tracking and read receipts.
+  const result = await sendEmailCore(effectiveUserId, payload, baseUrl, userId);
   if (!result.ok) {
     res.status(result.status).json({ message: result.message });
     return;
