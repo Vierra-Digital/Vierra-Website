@@ -3,6 +3,6 @@
  * user has no image. Centralizes the `imageVersion > 0 ? ... : null` expression that
  * was repeated across the panel, client, and connect pages.
  */
-export function profileImageSrc(imageVersion: number | null | undefined): string | null {
-  return imageVersion && imageVersion > 0 ? `/api/profile/getImage?v=${imageVersion}` : null;
+export function profileImageSrc(imageVersion: number | string | null | undefined): string | null {
+  return imageVersion ? `/api/profile/getImage?v=${imageVersion}` : null;
 }
