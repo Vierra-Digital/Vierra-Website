@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getAccessibleGmailAccounts } from "@/lib/email/mailboxAccess";
+import { getAccessibleGmailAccounts, getGmailAliasAccounts } from "@/lib/email/mailboxAccess";
 
 type GmailConnection = {
   email: string;
@@ -72,6 +72,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     } catch (e) {
       console.error("gmail status: granted accounts", e);
+    }
+
+    // Append verified Gmail "send as" aliases (a domain address forwarded into Gmail, e.g. via
+    // Settings > Accounts > Send mail as) — they have no OAuth token of their own, but their mail
+    // lands in the owning account's inbox, so they should be selectable in the switcher too.
+    try {
+      const knownEmails = new Set(accounts.map((a) => a.email.toLowerCase()));
+      const aliasAccounts = await getGmailAliasAccounts(userId);
+      for (const alias of aliasAccounts) {
+        if (knownEmails.has(alias.email)) continue;
+        knownEmails.add(alias.email);
+        accounts.push({ email: alias.email, connected: true, expiresAt: null, reconnectReason: null });
+      }
+    } catch (e) {
+      console.error("gmail status: alias accounts", e);
     }
 
     res.status(200).json({
