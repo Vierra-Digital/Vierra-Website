@@ -1124,6 +1124,47 @@ model BookingLink {
   @@schema("public")
 }
 
+// DB cache for the dashboard's "Upcoming Meetings" card, refreshed on a schedule by
+// pages/api/dashboard/meetings-sync/dispatch.ts (see netlify/functions/sync-upcoming-meetings.ts)
+// instead of hitting the Google Calendar API on every dashboard load. Always the top 3
+// upcoming meetings for the user — see lib/dashboard/upcomingMeetings.ts.
+model DashboardUpcomingMeeting {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      String   @db.Uuid
+  event_id     String
+  title        String
+  organizer    String
+  start_at     DateTime @db.Timestamptz(6)
+  end_at       DateTime? @db.Timestamptz(6)
+  time_zone    String
+  meeting_link String
+  synced_at    DateTime @default(now()) @db.Timestamptz(6)
+  users        User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, event_id])
+  @@index([user_id, start_at], map: "idx_dashboard_upcoming_meetings_user_start")
+  @@map("dashboard_upcoming_meetings")
+  @@schema("public")
+}
+
+// One row per user — tracks whether their most recent meetings sync found a connected
+// calendar, and why not if it didn't (see IssueCode in lib/dashboard/upcomingMeetings.ts).
+// Existence of this row is also how the GET endpoint tells "never synced yet" (fall back to
+// an inline one-time sync) apart from "synced, but zero connected accounts."
+model DashboardMeetingsSyncStatus {
+  user_id         String   @id @db.Uuid
+  connected       Boolean  @default(false)
+  connected_email String?
+  needs_reconnect Boolean  @default(false)
+  issue_code      String   @default("none")
+  issue_message   String?
+  synced_at       DateTime @default(now()) @db.Timestamptz(6)
+  users           User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("dashboard_meetings_sync_status")
+  @@schema("public")
+}
+
 model Booking {
   id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   booking_link_id     String                @db.Uuid
@@ -1960,6 +2001,8 @@ model User {
   contact_field_visibility_settings                             ContactFieldVisibilitySetting[]
   contact_tags                                                  ContactTag[]
   contacts                                                      Contact[]
+  dashboard_upcoming_meetings                                   DashboardUpcomingMeeting[]
+  dashboard_meetings_sync_status                                DashboardMeetingsSyncStatus?
   email_blocked_senders                                         EmailBlockedSender[]
   lead_status_events                                            LeadStatusEvent[]
   email_compose_drafts                                          EmailComposeDraft[]
