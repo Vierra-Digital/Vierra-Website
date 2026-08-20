@@ -485,7 +485,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
     const [name, setName] = useState<string>("")
     const [email, setEmail] = useState<string>("")
     const [password, setPassword] = useState<string>("")
-    const [role, setRole] = useState<string>("user")
+    const [role, setRole] = useState<string>("staff")
     const [submitting, setSubmitting] = useState<boolean>(false)
     const [error, setError] = useState<string>("")
     const [showSuccess, setShowSuccess] = useState<boolean>(false)
@@ -647,12 +647,14 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                             >
                                 <option value="admin">Admin</option>
                                 <option value="staff">Staff</option>
-                                <option value="user">Client</option>
                             </select>
                             <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                                 <ChevronDown className="w-4 h-4 text-[#6B7280]" />
                             </div>
                         </div>
+                        <p className="mt-1 text-xs text-[#6B7280]">
+                            Need a client account? Use <span className="font-medium">Clients &rarr; Add Client</span> instead — clients set their own password via an onboarding link.
+                        </p>
                     </div>
 
                     <div className="md:col-span-2">

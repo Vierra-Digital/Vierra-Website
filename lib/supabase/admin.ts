@@ -40,6 +40,18 @@ export async function createSupabaseAuthUser(email: string, password?: string) {
 }
 
 /**
+ * Deletes a Supabase Auth identity. Used to roll back `createSupabaseAuthUser` when a later step
+ * (e.g. writing the Prisma row / company membership) fails, so we never strand an Auth identity
+ * with no corresponding app-side record.
+ */
+export async function deleteSupabaseAuthUser(userId: string) {
+  const { error } = await getSupabaseAdmin().auth.admin.deleteUser(userId);
+  if (error) {
+    throw new Error(error.message || "Failed to delete Supabase auth user");
+  }
+}
+
+/**
  * Updates the email on an existing Supabase Auth identity. Must be called whenever a
  * user's email changes anywhere else (e.g. the Prisma `users.email` column) — Supabase
  * Auth is the source of truth for login and for `auth.admin.generateLink({ type: "recovery" })`,
