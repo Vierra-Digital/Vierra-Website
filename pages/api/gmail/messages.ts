@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getAccessibleGmailAccounts } from "@/lib/email/mailboxAccess";
-import { extractHeader } from "@/lib/gmail/gmailApi";
+import { getAccessibleGmailAccounts, getGmailAliasAccounts, selectFetchAccounts } from "@/lib/email/mailboxAccess";
+import { extractHeader, buildAliasScopeQuery } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
+import { mapInBatches } from "@/lib/batch";
 
 type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive" | "allmail" | "starred" | "important" | "scheduled";
 const OPEN_BASE_WINDOW_MS = 15_000;
@@ -235,8 +236,14 @@ export default withAuth(async (req, res, session) => {
   // Accessible = owned + admin-granted (shared inboxes). Each carries the ownerUserId whose
   // token/data to use; for owned accounts ownerUserId === userId (identical to before).
   const accessibleAccounts = await getAccessibleGmailAccounts(userId);
-  const accountRows = accessibleAccounts.filter((row) =>
-    selectedEmails.length ? selectedEmails.includes(row.email) : true
+  // Selected accounts, plus any selected send-as alias resolved back to the account that holds its
+  // mail — and never an alias whose parent is already being read, which would return it twice.
+  const accountRows = selectFetchAccounts(
+    accessibleAccounts,
+    selectedEmails.some((email) => !accessibleAccounts.some((row) => row.email === email))
+      ? await getGmailAliasAccounts(userId)
+      : [],
+    selectedEmails
   );
 
   if (accountRows.length === 0) {
@@ -249,18 +256,31 @@ export default withAuth(async (req, res, session) => {
   const messagesByAccount = await Promise.all(
     accountRows.map(async (account) => {
       try {
-        const tokenResult = await getValidGmailAccessToken(account.ownerUserId, account.email);
+        const tokenAccountEmail = account.aliasOfEmail || account.email;
+        const tokenResult = await getValidGmailAccessToken(account.ownerUserId, tokenAccountEmail);
         if (!tokenResult.ok) {
           throw new Error(tokenResult.message);
         }
 
+        // An alias has no inbox of its own — it shares the owning account's, so scope the fetch
+        // to just the mail addressed to (or, for sent/drafts, sent from) that alias.
+        const aliasDirection = mailbox === "sent" || mailbox === "drafts" ? "from" : "to";
+        const effectiveSearch = account.aliasOfEmail
+          ? `${buildAliasScopeQuery(account.email, aliasDirection)} ${searchQuery}`.trim()
+          : searchQuery;
+
         const loadAccountMessages = async (accessToken: string) => {
-          const list = await fetchGmailList(accessToken, mailbox, maxResults, searchQuery, labelIdFilter);
+          const list = await fetchGmailList(accessToken, mailbox, maxResults, effectiveSearch, labelIdFilter);
           accountHasMore.push(Boolean(list.nextPageToken));
           const ids = (list.messages || []).map((m) => m.id).filter(Boolean);
           if (ids.length === 0) return [] as MessageRow[];
 
-          const detailed = await Promise.all(ids.map((id) => fetchGmailMessage(accessToken, id)));
+          // Bounded, not all at once. A page can be 100 messages and several accounts load in
+          // parallel, so an unbounded fan-out is hundreds of concurrent Gmail calls — the same
+          // shape that returned "Too many concurrent requests for user" on bulk actions, except
+          // here it fails the whole list rather than a few items. Ten at a time is well inside
+          // Gmail's per-user limit and still saturates the round-trip latency.
+          const detailed = await mapInBatches(ids, (id) => fetchGmailMessage(accessToken, id), 10);
           const visibleDetailed =
             mailbox === "sent"
               ? detailed.filter((msg) => !(Array.isArray(msg.labelIds) && msg.labelIds.includes("TRASH")))
@@ -304,7 +324,7 @@ export default withAuth(async (req, res, session) => {
           return await loadAccountMessages(tokenResult.accessToken);
         } catch (error) {
           if (!isAuthFailure(error)) throw error;
-          const refreshResult = await getValidGmailAccessToken(account.ownerUserId, account.email, { forceRefresh: true });
+          const refreshResult = await getValidGmailAccessToken(account.ownerUserId, tokenAccountEmail, { forceRefresh: true });
           if (!refreshResult.ok) {
             throw new Error(refreshResult.message);
           }

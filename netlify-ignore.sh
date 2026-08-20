@@ -32,7 +32,7 @@ fi
 # Paths that cannot affect the built site. Deliberately narrow — netlify.toml, package files,
 # next.config, the Prisma schema, and everything under app/ pages/ components/ lib/ public/ styles/
 # are all absent, so a change to any of them builds.
-NON_DEPLOYABLE='^(tests/|\.github/|\.vscode/|\.idea/|docs/|\.claude/|vitest\.config\.ts$|\.coderabbit\.yaml$|README\.md$|CONTRIBUTING\.md$|LICENSE$|\.gitignore$|netlify-ignore\.sh$|.*\.test\.ts$)'
+NON_DEPLOYABLE='^(tests/|\.github/|\.vscode/|\.idea/|docs/|\.claude/|vitest\.config\.mts$|\.coderabbit\.yaml$|README\.md$|CONTRIBUTING\.md$|LICENSE$|\.gitignore$|netlify-ignore\.sh$|.*\.test\.ts$)'
 
 while IFS= read -r file; do
   [ -z "$file" ] && continue

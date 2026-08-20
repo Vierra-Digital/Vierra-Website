@@ -1,5 +1,10 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // multiSchema is GA in the Prisma 6 CLI, so this is redundant for `prisma validate` and the CLI
+  // warns that it is deprecated. It is kept because the Prisma VS Code extension bundles its own
+  // engine: an extension older than the CLI still requires it for the datasource `schemas` key and
+  // the @@schema attributes, and without it flags every model in this file as an error.
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
@@ -1074,6 +1079,9 @@ model EmailAccountPreference {
   user_id       String   @db.Uuid
   account_email String
   enabled       Boolean  @default(true)
+  // The account's main inbox; every other mailbox is a brand account added onto it. At most one per
+  // user, enforced by a partial unique index (prisma/manual/20260820_email_account_primary.sql).
+  is_primary    Boolean  @default(false)
   created_at    DateTime @default(now()) @db.Timestamptz(6)
   updated_at    DateTime @default(now()) @db.Timestamptz(6)
 

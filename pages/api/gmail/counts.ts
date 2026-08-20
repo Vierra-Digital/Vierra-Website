@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getAccessibleGmailAccounts } from "@/lib/email/mailboxAccess";
+import { getAccessibleGmailAccounts, getGmailAliasAccounts, selectFetchAccounts } from "@/lib/email/mailboxAccess";
 import { asQueryStr } from "@/lib/api/parsing";
+import { buildAliasScopeQuery } from "@/lib/gmail/gmailApi";
 
 type GmailLabel = {
   messagesTotal?: number;
@@ -52,6 +53,42 @@ export function toBadgeCounts(inbox: GmailLabel, drafts: GmailLabel, spam: Gmail
   };
 }
 
+
+/**
+ * Badge counts for a send-as alias.
+ *
+ * An alias shares the owning account's mailbox, so labels.get — which is what gives every other
+ * mailbox its exact numbers — can only report the whole account. There is no per-alias label, so
+ * the only way to count just this address is a scoped search, and Gmail answers those with
+ * resultSizeEstimate: an estimate it rounds on large mailboxes. Alias badges are therefore
+ * approximate by necessity, while real accounts stay exact. Reported rather than hidden, because a
+ * roughly-right unread count is still what tells someone to go and look.
+ */
+async function fetchAliasCounts(accessToken: string, aliasEmail: string) {
+  const scope = buildAliasScopeQuery(aliasEmail, "to");
+  const estimate = async (query: string) => {
+    const params = new URLSearchParams({ q: query, maxResults: "1", fields: "resultSizeEstimate" });
+    const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`gmail label ALIAS failed ${response.status}: ${text}`);
+    }
+    const payload = (await response.json()) as { resultSizeEstimate?: number };
+    const value = Number(payload.resultSizeEstimate || 0);
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+  };
+  const [inbox, spam, starred] = await Promise.all([
+    estimate(`${scope} in:inbox is:unread`),
+    estimate(`${scope} in:spam is:unread`),
+    estimate(`${scope} is:starred is:unread`),
+  ]);
+  // Drafts are authored by the account, not addressed to the alias, so there is nothing
+  // alias-specific to count.
+  return { inbox, sent: 0, drafts: 0, spam, starred, archive: 0, trash: 0 };
+}
+
 async function fetchMailboxCounts(accessToken: string) {
   const [inbox, drafts, spam, starred] = await Promise.all([
     fetchLabel(accessToken, "INBOX"),
@@ -83,8 +120,14 @@ export default withAuth(async (req, res, session) => {
   // it just lets granted shared inboxes contribute to the unread badges.
   const accessible = await getAccessibleGmailAccounts(userId);
 
-  const accountRows = accessible.filter((row) =>
-    selectedEmails.length ? selectedEmails.includes(row.email) : true
+  // Same selection the message list uses, so a badge can never describe a different set of
+  // mailboxes than the list it sits next to.
+  const accountRows = selectFetchAccounts(
+    accessible,
+    selectedEmails.some((email) => !accessible.some((row) => row.email === email))
+      ? await getGmailAliasAccounts(userId)
+      : [],
+    selectedEmails
   );
 
   let selectedAccountIds: string[] = [];
@@ -126,20 +169,26 @@ export default withAuth(async (req, res, session) => {
   await Promise.all(
     accountRows.map(async (account) => {
       try {
-        const tokenResult = await getValidGmailAccessToken(account.ownerUserId, account.email);
+        // An alias has no token of its own; count against the account that owns it.
+        const tokenAccountEmail = account.aliasOfEmail || account.email;
+        const countsFor = (accessToken: string) =>
+          account.aliasOfEmail
+            ? fetchAliasCounts(accessToken, account.email)
+            : fetchMailboxCounts(accessToken);
+        const tokenResult = await getValidGmailAccessToken(account.ownerUserId, tokenAccountEmail);
         if (!tokenResult.ok) {
           throw new Error(tokenResult.message);
         }
         let counts: Awaited<ReturnType<typeof fetchMailboxCounts>>;
         try {
-          counts = await fetchMailboxCounts(tokenResult.accessToken);
+          counts = await countsFor(tokenResult.accessToken);
         } catch (error) {
           if (!isAuthError(error)) throw error;
-          const refreshResult = await getValidGmailAccessToken(account.ownerUserId, account.email, { forceRefresh: true });
+          const refreshResult = await getValidGmailAccessToken(account.ownerUserId, tokenAccountEmail, { forceRefresh: true });
           if (!refreshResult.ok) {
             throw new Error(refreshResult.message);
           }
-          counts = await fetchMailboxCounts(refreshResult.accessToken);
+          counts = await countsFor(refreshResult.accessToken);
         }
         aggregated.inbox += counts.inbox;
         aggregated.sent += counts.sent;

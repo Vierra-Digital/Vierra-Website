@@ -1,11 +1,16 @@
 import { defineConfig } from "vitest/config";
 import path from "node:path";
 
+// This file is .mts, not .ts, deliberately: it uses ESM syntax, and Vite loads a plain .ts config
+// as CommonJS. That mismatch is unsupported by Vite's `configLoader: "native"`, which is becoming
+// the default, and it warned on every test run. As ESM there is no __dirname, so the alias below
+// uses import.meta.dirname (Node >= 20.11).
+
 // Unit tests run against pure, import-safe modules only (no Next/Prisma/network). The "@/" alias
 // mirrors tsconfig ("@/*": ["./*"]) so tests import the same paths the app does.
 export default defineConfig({
   resolve: {
-    alias: { "@": path.resolve(__dirname) },
+    alias: { "@": path.resolve(import.meta.dirname) },
   },
   // Own the JSX transform here instead of inheriting tsconfig's "jsx".
   //

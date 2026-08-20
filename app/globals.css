@@ -444,11 +444,15 @@ input[type="search"]::-ms-clear:hover {
   --mail-text: #EDEBF5;
   --mail-text-muted: #A29CBB;
   /* The message sheet.
-     Sender HTML is authored for a light background, so this has to stay light — but white was
-     glaring against the dark panel and the previous near-white (#F6F3FC) was too faint to change
-     that. A real lavender drops the sheet's luminance by about a fifth, which is what actually
-     reduces the glare, while dark text on it still clears WCAG AA by a wide margin. */
-  --mail-sheet: #E8E2F4;
+     Near-white on purpose, and this is a correction: a strongly tinted sheet (#E8E2F4) cannot work
+     here. Measured against real messages, HTML email paints its own background — a marketing
+     template fills itself #FFFFFF, a build notification fills itself #101018 — so a tinted sheet
+     showed that block floating inside a mismatched coloured gutter, which is what made an opened
+     email look wrong. At #FAF9FC an email's own white is indistinguishable from the sheet, so the
+     two read as one surface, while it is still off-white rather than glaring.
+     The theme colour lives in the card's hairline and shadow and in the canvas around it, which is
+     chrome we control, rather than in the sheet the sender's markup competes with. */
+  --mail-sheet: #FAF9FC;
   /* Body text on that sheet: a dark plum rather than pure black, so the page is not maximum
      contrast in both directions. Applies only where the sender set no colour of its own — we
      cannot override a sender's styles without also destroying their intended ones. */
@@ -535,6 +539,20 @@ input[type="search"]::-ms-clear:hover {
   background-color: var(--mail-sheet);
   border-color: #D9D0EE;
   color: var(--mail-sheet-ink);
+}
+
+/* Reply / Reply all / Forward at the foot of an open message.
+   Colours belong here, not in Tailwind arbitrary values: the ones used before (#4C1191 text,
+   #D8CFEA border) are not part of the dark remap above, so they rendered dark-purple text inside a
+   bright light border on the dark sheet. Driven by the palette tokens, they cannot drift again. */
+.email-shell .email-reply-action {
+  background-color: var(--mail-surface-2);
+  border: 1px solid var(--mail-border);
+  color: #C9AEFF;
+}
+.email-shell .email-reply-action:hover {
+  background-color: var(--mail-surface-3);
+  color: #E2D2FF;
 }
 
 /* ── Email panel: connected shell (rail + content as one surface) ──────────── */
@@ -708,9 +726,13 @@ input[type="search"]::-ms-clear:hover {
    clears WCAG AA comfortably. */
 .email-shell .email-body-card {
   background-color: var(--mail-sheet) !important;
-  border: 1px solid rgba(112, 28, 192, 0.14) !important;
+  /* The frame carries the brand colour, not the sheet: a border and shadow cannot be overpainted
+     by the sender's markup, so the theme reads consistently no matter what the email does. */
+  border: 1px solid rgba(112, 28, 192, 0.22) !important;
   border-radius: 14px;
-  box-shadow: 0 10px 30px -18px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 10px 30px -18px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  /* Clips a self-painting background to the rounded corners instead of letting it square them off. */
+  overflow: hidden;
 }
 .email-shell .email-body-card,
 .email-shell .email-body-card * { color: #1F2937; }

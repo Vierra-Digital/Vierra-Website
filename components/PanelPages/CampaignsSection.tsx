@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { FiPlus, FiX, FiCheck, FiTrash2 } from "react-icons/fi";
 import { Inter } from "next/font/google";
 import Modal from "@/components/ui/Modal";
@@ -66,6 +66,34 @@ const CampaignsSection: React.FC = () => {
   const [campaignToDelete, setCampaignToDelete] = useState<Campaign | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [campaignSearch, setCampaignSearch] = useState("");
+  const [campaignStatusFilter, setCampaignStatusFilter] = useState("all");
+
+  /** Rows after the search box and status filter. */
+  const visibleCampaigns = useMemo(() => {
+    const query = campaignSearch.trim().toLowerCase();
+    return campaigns.filter((campaign) => {
+      if (campaignStatusFilter !== "all" && campaign.status !== campaignStatusFilter) return false;
+      if (!query) return true;
+      return `${campaign.name} ${campaign.accountEmail || ""} ${campaign.sendProvider}`
+        .toLowerCase()
+        .includes(query);
+    });
+  }, [campaigns, campaignSearch, campaignStatusFilter]);
+
+  /**
+   * Summary tiles. Derived from the loaded rows rather than fetched separately, so the numbers
+   * can never disagree with the table underneath them.
+   */
+  const campaignSummary = useMemo(
+    () => [
+      { label: "Active", value: campaigns.filter((c) => c.status === "active").length },
+      { label: "Draft", value: campaigns.filter((c) => c.status === "draft").length },
+      { label: "Paused", value: campaigns.filter((c) => c.status === "paused").length },
+      { label: "Contacts", value: campaigns.reduce((total, c) => total + (c.contactCount ?? 0), 0) },
+    ],
+    [campaigns]
+  );
 
   const deleteCampaign = async () => {
     if (!campaignToDelete || deleting) return;
@@ -119,14 +147,22 @@ const CampaignsSection: React.FC = () => {
   }
 
   return (
-    <div className="w-full h-full bg-white text-[#111014] flex flex-col">
-      <div className="flex-1 flex justify-center px-6 pt-2">
-        <div className="w-full max-w-6xl flex flex-col h-full">
-          <div className="w-full flex justify-between items-center mb-2">
-            <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Campaigns</h1>
+    <div className="w-full h-full bg-white text-[#111014] flex flex-col overflow-y-auto">
+      <div className="flex-1 flex justify-center px-6 pb-10">
+        <div className="w-full max-w-6xl flex flex-col">
+          {/* Header: one block with a single margin instead of a title carrying its own
+              mt-6/mb-6 inside a row that also set mb-2, which is what made the spacing here
+              read as arbitrary. */}
+          <div className="flex flex-wrap items-end justify-between gap-4 pt-8 pb-6">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight text-[#111827]">Campaigns</h1>
+              <p className="mt-1 text-sm text-[#6B7280]">
+                Sequenced outreach — steps, contacts and sending account per campaign.
+              </p>
+            </div>
             <button
               onClick={() => setShowNewCampaign(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium"
+              className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md bg-[#701CC0] px-5 text-sm font-semibold text-white hover:bg-[#5f17a5]"
             >
               <FiPlus className="w-4 h-4" />
               New Campaign
@@ -138,70 +174,133 @@ const CampaignsSection: React.FC = () => {
               <LoadingSpinner label="Loading campaigns..." />
             </div>
           ) : campaigns.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-sm text-gray-500 mb-3">No campaigns yet.</p>
+            <div className="rounded-2xl border border-dashed border-[#E5E7EB] bg-[#FAFAFB] px-6 py-16 text-center">
+              <p className="text-sm font-medium text-[#374151]">No campaigns yet</p>
+              <p className="mx-auto mt-1 max-w-sm text-sm text-[#6B7280]">
+                A campaign sends a sequence of steps to a list of contacts from one of your inboxes.
+              </p>
               <button
                 onClick={() => setShowNewCampaign(true)}
-                className="inline-flex items-center px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
+                className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-md bg-[#701CC0] px-5 text-sm font-semibold text-white hover:bg-[#5f17a5]"
               >
-                <FiPlus className="w-4 h-4 mr-2" />
+                <FiPlus className="w-4 h-4" />
                 New Campaign
               </button>
             </div>
           ) : (
-            <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB]">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                    <tr>
-                      {["Name", "Status", "Provider", "Steps", "Contacts", "Sender", "Created", ""].map((h) => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-[#E5E7EB]">
-                    {campaigns.map((c) => (
-                      <tr
-                        key={c.id}
-                        className="hover:bg-purple-50 cursor-pointer"
-                        onClick={() => setSelectedCampaignId(c.id)}
-                      >
-                        <td className="px-4 py-4 text-sm font-medium text-[#111827]">{c.name}</td>
-                        <td className="px-4 py-4 text-sm">
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${STATUS_STYLE[c.status]}`}>
-                            {STATUS_LABEL[c.status]}
-                          </span>
-                        </td>
-                        <td className="px-4 py-4 text-sm text-[#111827] capitalize">{c.sendProvider}</td>
-                        <td className="px-4 py-4 text-sm text-[#111827]">{c.stepCount ?? 0}</td>
-                        <td className="px-4 py-4 text-sm text-[#111827]">{c.contactCount ?? 0}</td>
-                        <td className="px-4 py-4 text-sm text-[#111827]">{c.accountEmail || "—"}</td>
-                        <td className="px-4 py-4 text-sm text-[#6B7280]">{new Date(c.createdAt).toLocaleDateString()}</td>
-                        <td className="px-4 py-4 text-sm text-right">
-                          {c.status === "draft" ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteError("");
-                                setCampaignToDelete(c);
-                              }}
-                              className="text-[#9CA3AF] hover:text-red-600"
-                              title="Delete campaign"
-                              aria-label={`Delete ${c.name}`}
-                            >
-                              <FiTrash2 className="w-4 h-4" />
-                            </button>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <>
+              {/* Summary of what is loaded. Derived from the same rows as the table, so it can
+                  never disagree with what is listed below it. */}
+              <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {campaignSummary.map((tile) => (
+                  <div key={tile.label} className="rounded-xl border border-[#ECEAF1] bg-white px-4 py-3">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-[#6B7280]">{tile.label}</p>
+                    <p className="mt-1 text-xl font-semibold tabular-nums text-[#111827]">{tile.value}</p>
+                  </div>
+                ))}
               </div>
-            </div>
+
+              {/* Search and status filter. With more than a handful of campaigns the table alone
+                  offered no way to narrow it. */}
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <input
+                  value={campaignSearch}
+                  onChange={(event) => setCampaignSearch(event.target.value)}
+                  placeholder="Search campaigns or sender…"
+                  aria-label="Search campaigns"
+                  className="min-w-0 flex-1 rounded-md border border-[#E5E7EB] px-3 py-2 text-sm text-[#111827] outline-none placeholder:text-[#9CA3AF] focus:ring-2 focus:ring-[#701CC0]/25"
+                />
+                <select
+                  value={campaignStatusFilter}
+                  onChange={(event) => setCampaignStatusFilter(event.target.value)}
+                  aria-label="Filter by status"
+                  className="rounded-md border border-[#E5E7EB] bg-white px-3 py-2 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0]/25"
+                >
+                  <option value="all">All statuses</option>
+                  {(Object.keys(STATUS_LABEL) as Campaign["status"][]).map((status) => (
+                    <option key={status} value={status}>
+                      {STATUS_LABEL[status]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="overflow-hidden rounded-2xl border border-[#ECEAF1] bg-white">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="border-b border-[#ECEAF1] bg-[#FAFAFB]">
+                      <tr>
+                        {[
+                          { label: "Name", align: "text-left" },
+                          { label: "Status", align: "text-left" },
+                          { label: "Provider", align: "text-left" },
+                          { label: "Steps", align: "text-right" },
+                          { label: "Contacts", align: "text-right" },
+                          { label: "Sender", align: "text-left" },
+                          { label: "Created", align: "text-left" },
+                          { label: "", align: "text-right" },
+                        ].map((column) => (
+                          <th
+                            key={column.label || "actions"}
+                            className={`px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#6B7280] ${column.align}`}
+                          >
+                            {column.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#F1EFF6]">
+                      {visibleCampaigns.map((c) => (
+                        <tr
+                          key={c.id}
+                          className="cursor-pointer transition-colors hover:bg-[#F8F4FF]"
+                          onClick={() => setSelectedCampaignId(c.id)}
+                        >
+                          <td className="px-4 py-3 text-sm font-medium text-[#111827]">{c.name}</td>
+                          <td className="px-4 py-3 text-sm">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLE[c.status]}`}
+                            >
+                              {STATUS_LABEL[c.status]}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm capitalize text-[#4A465C]">{c.sendProvider}</td>
+                          {/* Counts right-aligned and tabular so columns of digits line up. */}
+                          <td className="px-4 py-3 text-right text-sm tabular-nums text-[#111827]">{c.stepCount ?? 0}</td>
+                          <td className="px-4 py-3 text-right text-sm tabular-nums text-[#111827]">{c.contactCount ?? 0}</td>
+                          <td className="px-4 py-3 text-sm text-[#4A465C]">{c.accountEmail || "—"}</td>
+                          <td className="px-4 py-3 text-sm text-[#6B7280]">
+                            {new Date(c.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="px-4 py-3 text-right text-sm">
+                            {c.status === "draft" ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteError("");
+                                  setCampaignToDelete(c);
+                                }}
+                                className="rounded p-1.5 text-[#9CA3AF] transition-colors hover:bg-red-50 hover:text-red-600"
+                                title="Delete campaign"
+                                aria-label={`Delete ${c.name}`}
+                              >
+                                <FiTrash2 className="w-4 h-4" />
+                              </button>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {visibleCampaigns.length === 0 ? (
+                  <p className="px-4 py-10 text-center text-sm text-[#6B7280]">
+                    No campaigns match this search.
+                  </p>
+                ) : null}
+              </div>
+            </>
           )}
         </div>
       </div>

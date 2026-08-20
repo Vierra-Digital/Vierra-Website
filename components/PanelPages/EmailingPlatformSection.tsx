@@ -34,8 +34,6 @@ import {
   FiPlus,
   FiRefreshCw,
   FiChevronLeft,
-  FiInbox,
-  FiSlash,
   FiChevronRight,
   FiSearch,
   FiSend,
@@ -61,6 +59,7 @@ import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEdit
 import { printComposeContent } from "@/components/email/printCompose";
 import { getJson } from "@/lib/email/panelApi";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
+import MoveToMenu from "@/components/email/MoveToMenu";
 import { buildReplyReferences } from "@/lib/email/threading";
 import {
   BRAND_LOGO,
@@ -189,7 +188,16 @@ const MailboxEmpty: React.FC = () => (
 
 // Client-side cap on total compose attachment bytes. Kept conservative (below the server/platform
 // request-body limit) so oversized sends fail fast with a clear message instead of an opaque 413.
-const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+/**
+ * Total attachment bytes accepted before sending, measured decoded.
+ *
+ * The ceiling is the serverless request-body limit, not Gmail: API routes run as functions with a
+ * 6 MB payload cap, and base64 inflates a file by a third, so 4 MB of files is about 5.4 MB on the
+ * wire with room for the rest of the JSON. This was 20 MB — which encodes to roughly 27 MB — so a
+ * large attachment passed this check and then failed at the platform, surfacing as a bare
+ * "Failed to send." with nothing pointing at the size.
+ */
+const MAX_TOTAL_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 
 /**
  * Cap on a mailbox action (trash, archive, move…). Comfortably above a normal Gmail round trip but
@@ -358,6 +366,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const composeReadReceiptDefaultRef = useRef(false);
   const undoSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /**
+   * The message waiting out its undo window, as a request body.
+   *
+   * Undo used to live entirely in a setTimeout, and the unmount cleanup cleared it — so closing the
+   * tab or navigating away within the undo window (up to 30s) silently threw the email away. It was
+   * not queued anywhere and no draft survived it. Held here so it can be flushed on the way out.
+   */
+  const pendingSendBodyRef = useRef<string | null>(null);
   const [artemisDrafting, setArtemisDrafting] = useState(false);
   const [artemisRewriteOpen, setArtemisRewriteOpen] = useState(false);
   const [composeError, setComposeError] = useState("");
@@ -545,6 +561,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // Lightweight pre-send deliverability lint — proactive warnings shown in the composer.
   // Deliverability guardrail (#2): check the sending domain's SPF/DMARC when compose opens.
   const [composeDeliverability, setComposeDeliverability] = useState<{ spfOk: boolean; dmarcOk: boolean } | null>(null);
+  /**
+   * Recipients that failed verification (bad syntax, or a domain with no MX records).
+   *
+   * /api/gmail/verify-email has existed for a while with nothing calling it, so a typo in a
+   * recipient was only discovered by the bounce. Checked while composing, reported as a warning
+   * rather than a block — a valid address can still look unverifiable to a DNS lookup.
+   */
+  const [composeBadRecipients, setComposeBadRecipients] = useState<string[]>([]);
   /** Rows per mailbox page. PAGE_SIZE is the default; Settings → Layout can override it. */
   const [pageSize, setPageSize] = useState<number>(PAGE_SIZE);
   useEffect(() => {
@@ -562,6 +586,52 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       cancelled = true;
     };
   }, []);
+
+
+  // Verify recipients as they are typed. Debounced, because this runs a DNS lookup per address,
+  // and skipped entirely while the field is empty or the composer is shut.
+  useEffect(() => {
+    if (!isComposeOpen) {
+      setComposeBadRecipients([]);
+      return;
+    }
+    const addresses = composeTo
+      .split(/[,;]/)
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.includes("@"));
+    if (addresses.length === 0) {
+      setComposeBadRecipients([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      fetch("/api/gmail/verify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails: addresses.slice(0, 25) }),
+      })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((payload) => {
+          if (cancelled || !payload) return;
+          const results = Array.isArray(payload?.results) ? payload.results : [];
+          setComposeBadRecipients(
+            results
+              // "error" means the lookup itself failed (timeout, resolver trouble), which says
+              // nothing about the address — only report addresses actually judged bad.
+              .filter((entry: { valid?: boolean; reason?: string }) => entry?.valid === false && entry?.reason !== "error")
+              .map((entry: { email?: string }) => String(entry?.email || ""))
+              .filter(Boolean)
+          );
+        })
+        .catch(() => {
+          /* verification is advisory; never block composing on it */
+        });
+    }, 600);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [composeTo, isComposeOpen]);
 
   useEffect(() => {
     if (!isComposeOpen || !composeAccountEmail) {
@@ -601,12 +671,20 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     if (hits.length) {
       warnings.push(`Spam-trigger phrase${hits.length > 1 ? "s" : ""}: "${hits.slice(0, 3).join('", "')}".`);
     }
+    if (composeBadRecipients.length > 0) {
+      const shown = composeBadRecipients.slice(0, 3).join(", ");
+      warnings.push(
+        `Can't verify ${composeBadRecipients.length === 1 ? "recipient" : "recipients"}: ${shown}${
+          composeBadRecipients.length > 3 ? "…" : ""
+        } — the address or its domain looks wrong.`
+      );
+    }
     if (composeDeliverability && (!composeDeliverability.spfOk || !composeDeliverability.dmarcOk)) {
       const gaps = [!composeDeliverability.spfOk && "SPF", !composeDeliverability.dmarcOk && "DMARC"].filter(Boolean).join(" & ");
       warnings.push(`Sending domain is missing ${gaps} — this can hurt inbox placement (see Settings → Deliverability).`);
     }
     return warnings;
-  }, [composeSubject, composeBody, composeDeliverability]);
+  }, [composeSubject, composeBody, composeDeliverability, composeBadRecipients]);
 
   const rowKey = useCallback((message: MessageRow) => `${message.accountEmail}::${message.id}`, []);
 
@@ -1555,17 +1633,30 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
       // Accounts default to enabled; only accounts explicitly disabled in settings are excluded.
       const disabled = new Set<string>();
+      let primary = "";
       try {
         if (prefRes?.ok) {
           const prefData = await prefRes.json();
           for (const pref of Array.isArray(prefData?.preferences) ? prefData.preferences : []) {
-            if (pref?.enabled === false && typeof pref?.accountEmail === "string") disabled.add(pref.accountEmail.toLowerCase());
+            const email = typeof pref?.accountEmail === "string" ? pref.accountEmail.toLowerCase() : "";
+            if (!email) continue;
+            if (pref?.enabled === false) disabled.add(email);
+            if (pref?.isPrimary === true) primary = email;
           }
         }
       } catch {
-        /* default to all enabled */
+        /* default to all enabled, no primary */
       }
-      const enabledConnected = connected.filter((email) => !disabled.has(email.toLowerCase()));
+      // The main inbox leads every list of accounts, so the panel opens on it and it reads as the
+      // account's own mailbox rather than one of several in arbitrary order.
+      if (primary) {
+        const byPrimaryFirst = (a: GmailAccountConnection, b: GmailAccountConnection) =>
+          Number(b.email.toLowerCase() === primary) - Number(a.email.toLowerCase() === primary);
+        setGmailAccounts([...normalized].sort(byPrimaryFirst));
+      }
+      const enabledConnected = connected
+        .filter((email) => !disabled.has(email.toLowerCase()))
+        .sort((a, b) => Number(b.toLowerCase() === primary) - Number(a.toLowerCase() === primary));
       const preselected = initialAccountsRef.current.filter((email) => connected.includes(email));
 
       // The full-page client opens with the chosen accounts (URL param) or all enabled;
@@ -2895,11 +2986,19 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       .catch(() => setActionError("Failed to move the message."));
   };
 
-  const openReplyCompose = () => {
+  /**
+   * Open the inline composer as a reply, with everything a reply shares: the Re: subject, the
+   * threading headers, and a cleared body.
+   *
+   * Reply and Reply all differ only in the recipient list. They were two copies of this, which is
+   * why the References fix — the parent Message-ID that was missing from the chain — had to be
+   * applied twice and could have been applied to only one.
+   */
+  const beginInlineReply = (mode: "reply" | "replyAll", to: string) => {
     if (!selectedMessage) return;
     const latest = threadMessages[threadMessages.length - 1];
-    setInlineComposeMode("reply");
-    setInlineComposeTo(parseMailboxAddress(latest?.replyTo || selectedMessage.replyTo || selectedMessage.fromRaw || selectedMessage.from).email);
+    setInlineComposeMode(mode);
+    setInlineComposeTo(to);
     setInlineComposeSubject(
       /^re:/i.test(selectedMessage.subject || "") ? selectedMessage.subject : `Re: ${selectedMessage.subject || ""}`
     );
@@ -2919,31 +3018,29 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setInlineComposeSuccess("");
   };
 
+  /** The address a reply goes to: Reply-To when the sender set one, otherwise who it came from. */
+  const replyRecipient = () => {
+    if (!selectedMessage) return "";
+    const latest = threadMessages[threadMessages.length - 1];
+    return parseMailboxAddress(
+      latest?.replyTo || selectedMessage.replyTo || selectedMessage.fromRaw || selectedMessage.from
+    ).email;
+  };
+
+  const openReplyCompose = () => {
+    if (!selectedMessage) return;
+    beginInlineReply("reply", replyRecipient());
+  };
+
   const openReplyAllCompose = () => {
     if (!selectedMessage) return;
     const latest = threadMessages[threadMessages.length - 1];
-    const fromIdentity = parseMailboxAddress(latest?.replyTo || selectedMessage.replyTo || selectedMessage.fromRaw || selectedMessage.from);
     const toList = parseAddressList(latest?.toRaw || selectedMessage.toRaw || selectedMessage.to);
-    const uniqueEmails = Array.from(new Set([fromIdentity.email, ...toList.map((entry) => entry.email)].filter(Boolean)));
-    setInlineComposeMode("replyAll");
-    setInlineComposeTo(uniqueEmails.join(", "));
-    setInlineComposeSubject(
-      /^re:/i.test(selectedMessage.subject || "") ? selectedMessage.subject : `Re: ${selectedMessage.subject || ""}`
+    // Everyone on the original, deduped, with the sender first.
+    const uniqueEmails = Array.from(
+      new Set([replyRecipient(), ...toList.map((entry) => entry.email)].filter(Boolean))
     );
-    setInlineComposeIntroText("");
-    setInlineComposeBodyText("");
-    setInlineComposeBodyHtml("");
-    setInlineComposePreviewHtml("");
-    setInlineComposeThreadId(selectedMessage.threadId || latest?.threadId || "");
-    setInlineComposeInReplyTo(latest?.messageIdHeader || selectedMessage.messageIdHeader || "");
-    setInlineComposeReferences(
-      buildReplyReferences(
-        latest?.references || selectedMessage.references,
-        latest?.messageIdHeader || selectedMessage.messageIdHeader
-      )
-    );
-    setInlineComposeError("");
-    setInlineComposeSuccess("");
+    beginInlineReply("replyAll", uniqueEmails.join(", "));
   };
 
   const openForwardCompose = () => {
@@ -3319,68 +3416,53 @@ ${sourceText}`;
     setArtemisPromptOpen(true);
   };
 
-  const runArtemisDraft = async (intent: string) => {
-    if (!intent.trim() || artemisDrafting) return;
-    setArtemisPromptOpen(false);
+  /**
+   * Ask Artemis for body text and put the result in the composer.
+   *
+   * Drafting and rewriting were the same twenty lines twice over, differing only in the endpoint,
+   * the request body and the error wording — including their own private copies of the
+   * plain-text-to-HTML conversion, which is the part that would quietly diverge.
+   */
+  const runArtemis = async (endpoint: string, body: Record<string, unknown>, failureMessage: string) => {
     setArtemisDrafting(true);
     setComposeError("");
     try {
-      const response = await fetch("/api/ai/compose", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intent: intent.trim(), tone: getArtemisTone() }),
+        body: JSON.stringify(body),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.message || "Artemis couldn't draft that.");
+      if (!response.ok) throw new Error(payload?.message || failureMessage);
       const text = String(payload?.text || "").trim();
-      if (text) {
-        setComposeBody(text);
-        const esc = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        setComposeBodyHtml(`<p>${esc(text).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br />")}</p>`);
-      }
+      if (!text) return;
+      setComposeBody(text);
+      setComposeBodyHtml(`<p>${escapeHtml(text).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br />")}</p>`);
     } catch (error) {
       setComposeError(error instanceof Error ? error.message : "Artemis error.");
     } finally {
       setArtemisDrafting(false);
     }
+  };
+
+  const runArtemisDraft = async (intent: string) => {
+    if (!intent.trim() || artemisDrafting) return;
+    setArtemisPromptOpen(false);
+    await runArtemis("/api/ai/compose", { intent: intent.trim(), tone: getArtemisTone() }, "Artemis couldn't draft that.");
   };
 
   const handleArtemisRewrite = async (mode: string) => {
     setArtemisRewriteOpen(false);
     const current = (composeBody || "").trim();
     if (!current || artemisDrafting) return;
-    setArtemisDrafting(true);
-    setComposeError("");
-    try {
-      const response = await fetch("/api/ai/rewrite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: current, mode }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.message || "Artemis couldn't rewrite that.");
-      const text = String(payload?.text || "").trim();
-      if (text) {
-        setComposeBody(text);
-        const esc = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        setComposeBodyHtml(`<p>${esc(text).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br />")}</p>`);
-      }
-    } catch (error) {
-      setComposeError(error instanceof Error ? error.message : "Artemis error.");
-    } finally {
-      setArtemisDrafting(false);
-    }
+    await runArtemis("/api/ai/rewrite", { text: current, mode }, "Artemis couldn't rewrite that.");
   };
 
-  const performSendCompose = async () => {
-    setSendingCompose(true);
-    setComposeError("");
-    setComposeSuccess("");
-    try {
-      const response = await fetch("/api/gmail/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+  /**
+   * The send request body. Extracted so the undo window can hold the exact same payload and flush
+   * it if the page goes away mid-countdown.
+   */
+  const buildSendPayload = () => ({
           accountEmail: composeAccountEmail,
           from: composeFrom && composeFrom !== composeAccountEmail ? composeFrom : undefined,
           to: composeTo.trim(),
@@ -3405,7 +3487,19 @@ ${sourceText}`;
             contentType: a.contentType,
             contentBase64: a.contentBase64,
           })),
-        }),
+  });
+
+  const performSendCompose = async () => {
+    // Being sent now, so there is nothing left for the unload path to flush.
+    pendingSendBodyRef.current = null;
+    setSendingCompose(true);
+    setComposeError("");
+    setComposeSuccess("");
+    try {
+      const response = await fetch("/api/gmail/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildSendPayload()),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -3456,6 +3550,8 @@ ${sourceText}`;
   };
 
   const cancelUndoSend = () => {
+    // Undo is the one path that genuinely discards the pending send.
+    pendingSendBodyRef.current = null;
     if (undoSendTimeoutRef.current) {
       clearTimeout(undoSendTimeoutRef.current);
       undoSendTimeoutRef.current = null;
@@ -3518,6 +3614,7 @@ ${sourceText}`;
     }
     setComposeError("");
     setUndoCountdown(delay);
+    pendingSendBodyRef.current = JSON.stringify(buildSendPayload());
     undoSendTimeoutRef.current = setTimeout(() => {
       cancelUndoSend();
       void performSendCompose();
@@ -3527,8 +3624,50 @@ ${sourceText}`;
     }, 1000);
   };
 
+  /**
+   * Send anything still inside its undo window when the page goes away.
+   *
+   * sendBeacon is built for exactly this and survives unload, where a normal fetch is cancelled. It
+   * caps the payload at roughly 64KB, so a message with attachments can be too big to flush — in
+   * that case beforeunload asks the user to stay rather than losing it silently. The user pressed
+   * Send, so completing the send is the expected outcome of leaving; only undo cancels it.
+   */
   useEffect(() => {
+    const flushPendingSend = () => {
+      const body = pendingSendBodyRef.current;
+      if (!body) return true;
+      try {
+        const sent = navigator.sendBeacon?.(
+          "/api/gmail/send",
+          new Blob([body], { type: "application/json" })
+        );
+        if (sent) {
+          pendingSendBodyRef.current = null;
+          return true;
+        }
+      } catch {
+        /* fall through to reporting that it could not be flushed */
+      }
+      return false;
+    };
+
+    const handlePageHide = () => {
+      flushPendingSend();
+    };
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!pendingSendBodyRef.current) return;
+      if (flushPendingSend()) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      // Unmounting mid-countdown is a navigation away, not an undo: flush rather than drop.
+      flushPendingSend();
       if (undoSendTimeoutRef.current) clearTimeout(undoSendTimeoutRef.current);
       if (undoCountdownRef.current) clearInterval(undoCountdownRef.current);
     };
@@ -3568,7 +3707,8 @@ ${sourceText}`;
     const additionBytes = additions.reduce((sum, a) => sum + decodedBytes(a.contentBase64), 0);
     if (currentBytes + additionBytes > MAX_TOTAL_ATTACHMENT_BYTES) {
       setComposeError(
-        `Attachments exceed the ${Math.round(MAX_TOTAL_ATTACHMENT_BYTES / (1024 * 1024))} MB limit — remove some and try again.`
+        `Attachments exceed the ${Math.round(MAX_TOTAL_ATTACHMENT_BYTES / (1024 * 1024))} MB limit — ` +
+          `send a link instead, or split them across messages.`
       );
       return;
     }
@@ -4316,44 +4456,7 @@ ${sourceText}`;
                                         <FiMove className="w-4 h-4" />
                                       </button>
                                       {moveMenuOpen === "list" ? (
-                                        <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 min-w-[164px]">
-                                          {moveToOptions
-                                            .filter((option) => !option.value.startsWith("label:"))
-                                            .map((option) => (
-                                              <button
-                                                key={`list-move-${option.value}`}
-                                                type="button"
-                                                onClick={() => handleMoveToChange(option.value)}
-                                                className="email-menu-item flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[12.5px] font-medium"
-                                              >
-                                                {option.value === "inbox" ? <FiInbox className="h-3.5 w-3.5 shrink-0" /> : null}
-                                                {option.value === "archive" ? <FiArchive className="h-3.5 w-3.5 shrink-0" /> : null}
-                                                {option.value === "spam" ? <FiSlash className="h-3.5 w-3.5 shrink-0" /> : null}
-                                                {option.value === "trash" ? <FiTrash2 className="h-3.5 w-3.5 shrink-0" /> : null}
-                                                <span className="truncate">{option.label}</span>
-                                              </button>
-                                            ))}
-                                          {moveToOptions.some((option) => option.value.startsWith("label:")) ? (
-                                            <>
-                                              <div className="h-1.5" />
-                                              <div className="max-h-48 overflow-y-auto">
-                                                {moveToOptions
-                                                  .filter((option) => option.value.startsWith("label:"))
-                                                  .map((option) => (
-                                                    <button
-                                                      key={`list-move-${option.value}`}
-                                                      type="button"
-                                                      onClick={() => handleMoveToChange(option.value)}
-                                                      className="email-menu-item flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[12.5px] font-medium"
-                                                    >
-                                                      <FiTag className="h-3.5 w-3.5 shrink-0" />
-                                                      <span className="truncate">{option.label}</span>
-                                                    </button>
-                                                  ))}
-                                              </div>
-                                            </>
-                                          ) : null}
-                                        </div>
+                                        <MoveToMenu options={moveToOptions} onSelect={handleMoveToChange} keyPrefix="list-move" />
                                       ) : null}
                                     </div>
                                   ) : null}
@@ -5005,6 +5108,45 @@ ${sourceText}`;
                           Back
                         </button>
                         <div className="flex flex-wrap items-center gap-1">
+                          {/* The same three actions as at the foot of the message. Both places are
+                              wanted: the toolbar is where they are reached for out of habit, the
+                              foot is where they belong while reading. */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void openReplyCompose();
+                            }}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label="Reply"
+                            data-tip="Reply"
+                          >
+                            <FiCornerUpLeft className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void openReplyAllCompose();
+                            }}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label="Reply All"
+                            data-tip="Reply All"
+                          >
+                            <FiUsers className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void openForwardCompose();
+                            }}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label="Forward"
+                            data-tip="Forward"
+                          >
+                            <FiSend className="w-4 h-4" />
+                          </button>
+
+                          <span className="mx-1 h-5 w-px bg-current opacity-15" aria-hidden />
+
                           {/* Every shared action in the same order as the
                               list toolbar (star, spam, trash, read, move, archive, snooze), so the
                               two toolbars are not two different sequences of the same icons.
@@ -5063,44 +5205,7 @@ ${sourceText}`;
                               <FiMove className="w-4 h-4" />
                             </button>
                             {moveMenuOpen === "message" ? (
-                              <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 min-w-[164px]">
-                                {moveToOptions
-                                  .filter((option) => !option.value.startsWith("label:"))
-                                  .map((option) => (
-                                    <button
-                                      key={`message-move-${option.value}`}
-                                      type="button"
-                                      onClick={() => handleMoveToChange(option.value)}
-                                      className="email-menu-item flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[12.5px] font-medium"
-                                    >
-                                      {option.value === "inbox" ? <FiInbox className="h-3.5 w-3.5 shrink-0" /> : null}
-                                      {option.value === "archive" ? <FiArchive className="h-3.5 w-3.5 shrink-0" /> : null}
-                                      {option.value === "spam" ? <FiSlash className="h-3.5 w-3.5 shrink-0" /> : null}
-                                      {option.value === "trash" ? <FiTrash2 className="h-3.5 w-3.5 shrink-0" /> : null}
-                                      <span className="truncate">{option.label}</span>
-                                    </button>
-                                  ))}
-                                {moveToOptions.some((option) => option.value.startsWith("label:")) ? (
-                                  <>
-                                    <div className="h-1.5" />
-                                    <div className="max-h-48 overflow-y-auto">
-                                      {moveToOptions
-                                        .filter((option) => option.value.startsWith("label:"))
-                                        .map((option) => (
-                                          <button
-                                            key={`message-move-${option.value}`}
-                                            type="button"
-                                            onClick={() => handleMoveToChange(option.value)}
-                                            className="email-menu-item flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[12.5px] font-medium"
-                                          >
-                                            <FiTag className="h-3.5 w-3.5 shrink-0" />
-                                            <span className="truncate">{option.label}</span>
-                                          </button>
-                                        ))}
-                                    </div>
-                                  </>
-                                ) : null}
-                              </div>
+                              <MoveToMenu options={moveToOptions} onSelect={handleMoveToChange} keyPrefix="message-move" />
                             ) : null}
                           </div>
                           {allowsMailboxMoves ? (

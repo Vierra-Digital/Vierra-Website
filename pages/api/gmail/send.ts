@@ -17,6 +17,11 @@ import {
 // (ATTACHMENTS_MAX_BYTES = 24 MB decoded in sendCore) is ~32 MB once base64-encoded, plus the HTML
 // body — so raise the limit well above Next's 1 MB default, or legitimate sub-cap sends are rejected
 // with an opaque 413 before the handler (and its clearer error) ever runs.
+//
+// This is an upper bound, not the effective limit. Deployed on serverless functions the platform
+// rejects a request body over ~6 MB before this handler runs, which is why the composer caps
+// attachments at 4 MB decoded (MAX_TOTAL_ATTACHMENT_BYTES). Raising that to match the number here
+// would send requests the platform drops with nothing explaining why.
 export const config = { api: { bodyParser: { sizeLimit: "36mb" } } };
 
 function getPublicBaseUrl(req: NextApiRequest) {
@@ -139,7 +144,9 @@ export default withAuth(async (req, res, session) => {
     return;
   }
 
-  const result = await sendEmailCore(effectiveUserId, payload, baseUrl);
+  // effectiveUserId owns the mailbox (tokens, provider rows); userId is the staff member sending,
+  // whose own settings govern tracking and read receipts.
+  const result = await sendEmailCore(effectiveUserId, payload, baseUrl, userId);
   if (!result.ok) {
     res.status(result.status).json({ message: result.message });
     return;

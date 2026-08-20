@@ -26,6 +26,7 @@ import {
   FiFileText,
   FiFilter,
   FiMail,
+  FiLock,
   FiMapPin,
   FiServer,
   FiSearch,
@@ -157,7 +158,11 @@ function SettingsSection({
         </div>
         {right ? <div className="shrink-0">{right}</div> : null}
       </div>
-      {children}
+      {/* One vertical rhythm for every section. Sections used to each choose their own
+          (space-y-2 in some, 3, 4 or 5 in others), so the gap between controls changed from
+          section to section and the page read as unevenly spaced. A section that still sets its
+          own spacing on a single wrapper child is unaffected. */}
+      <div className="space-y-4">{children}</div>
     </section>
   );
 }
@@ -258,7 +263,7 @@ type PageProps = {
  */
 const SETTINGS_NAV: { group: string; items: string[] }[] = [
   { group: "Mailbox", items: ["Inbox layout", "Undo send", "Meeting booking"] },
-  { group: "Accounts & delivery", items: ["Accounts", "Shared inboxes", "Deliverability", "Gmail reputation (Postmaster)", "Domain mail (SMTP / IMAP / POP)"] },
+  { group: "Accounts & delivery", items: ["Inboxes", "Confidential messages", "Shared inboxes", "Deliverability", "Gmail reputation (Postmaster)", "Domain mail (SMTP / IMAP / POP)"] },
   { group: "Tracking", items: ["Email tracking", "Read receipts", "Reply notifications"] },
   { group: "Automation", items: ["Vacation responder", "Artemis AI", "Filters & rules"] },
   { group: "Content", items: ["Signatures", "Templates"] },
@@ -421,6 +426,27 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [savingFilter, setSavingFilter] = useState(false);
   /** Per-account enabled flags for the panel (email -> enabled). Default enabled. */
   const [accountEnabled, setAccountEnabled] = useState<Record<string, boolean>>({});
+  /**
+   * Confidential messages this user has sent.
+   *
+   * /api/gmail/confidential could already list and revoke these, but nothing called it: a
+   * confidential message could be sent and then never seen or recalled again.
+   */
+  const [confidentialMessages, setConfidentialMessages] = useState<
+    Array<{ id: string; subject: string | null; createdAt: string; expiresAt: string | null; revoked: boolean; views: number }>
+  >([]);
+  const [confidentialLoading, setConfidentialLoading] = useState(true);
+  const [confidentialError, setConfidentialError] = useState("");
+
+  /** The main inbox, lowercased. Every other connected mailbox is a brand account added onto it. */
+  const [primaryAccount, setPrimaryAccount] = useState("");
+  const [primaryError, setPrimaryError] = useState("");
+  /**
+   * Failures from the small inline actions on this page (revoking access, deleting or toggling a
+   * filter, hiding an inbox). These used to swallow the response entirely: the row vanished or the
+   * switch moved, and a save that never happened looked identical to one that did.
+   */
+  const [actionError, setActionError] = useState("");
   type DeliverabilityResult = {
     domain: string;
     googleManaged: boolean;
@@ -792,16 +818,51 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   }, []);
 
+  const loadConfidential = useCallback(async () => {
+    try {
+      const response = await fetch("/api/gmail/confidential");
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) setConfidentialMessages(Array.isArray(data?.items) ? data.items : []);
+    } catch {
+      /* leave the list empty; the section says so */
+    } finally {
+      setConfidentialLoading(false);
+    }
+  }, []);
+
+  /** Revoke one. Optimistic, reverted on failure so the badge cannot claim a revoke that failed. */
+  const revokeConfidential = async (id: string) => {
+    setConfidentialError("");
+    const previous = confidentialMessages;
+    setConfidentialMessages((prev) => prev.map((m) => (m.id === id ? { ...m, revoked: true } : m)));
+    try {
+      const response = await fetch(`/api/gmail/confidential?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!response.ok) {
+        setConfidentialMessages(previous);
+        const payload = await response.json().catch(() => ({}));
+        setConfidentialError(payload?.message || "Could not revoke that message.");
+      }
+    } catch {
+      setConfidentialMessages(previous);
+      setConfidentialError("Could not revoke that message.");
+    }
+  };
+
   const loadAccountPrefs = useCallback(async () => {
     try {
       const response = await fetch("/api/gmail/account-preferences");
       const data = await response.json().catch(() => ({}));
       if (!response.ok) return;
       const map: Record<string, boolean> = {};
+      let primary = "";
       for (const pref of Array.isArray(data?.preferences) ? data.preferences : []) {
-        if (typeof pref?.accountEmail === "string") map[pref.accountEmail.toLowerCase()] = pref.enabled !== false;
+        if (typeof pref?.accountEmail !== "string") continue;
+        const key = pref.accountEmail.toLowerCase();
+        map[key] = pref.enabled !== false;
+        if (pref?.isPrimary === true) primary = key;
       }
       setAccountEnabled(map);
+      setPrimaryAccount(primary);
     } catch {
       /* default to all enabled */
     }
@@ -989,13 +1050,30 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   };
 
+  /**
+   * Revoke a teammate's access to a mailbox.
+   *
+   * The row is removed only once the server confirms it. Removing it regardless — which is what
+   * this did — told an admin that access was revoked while the teammate still had it, which is the
+   * worst possible thing for this particular control to get wrong.
+   */
   const revokeGrant = async (id: string) => {
-    await fetch("/api/email/mailbox-grants", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    }).catch(() => null);
-    setMailboxGrants((prev) => prev.filter((g) => g.id !== id));
+    setActionError("");
+    try {
+      const response = await fetch("/api/email/mailbox-grants", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        setActionError(payload?.message || "Could not revoke that access. It is still in place.");
+        return;
+      }
+      setMailboxGrants((prev) => prev.filter((g) => g.id !== id));
+    } catch {
+      setActionError("Could not revoke that access. It is still in place.");
+    }
   };
 
   const createBookingLink = async (acknowledgeNoAttendanceAnalytics = false) => {
@@ -1080,14 +1158,53 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     });
   }, [connectedAccounts]);
 
+  /**
+   * Make one mailbox the main inbox.
+   *
+   * Optimistic, but reverted if the write fails: leaving the badge on a mailbox the server did not
+   * accept would misreport which inbox the panel actually opens on. A missing migration comes back
+   * as ok:false with a reason rather than as a silent success.
+   */
+  const makePrimaryAccount = async (email: string) => {
+    const key = email.toLowerCase();
+    const previous = primaryAccount;
+    setPrimaryAccount(key);
+    setPrimaryError("");
+    try {
+      const response = await fetch("/api/gmail/account-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountEmail: key, isPrimary: true }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.ok === false) {
+        setPrimaryAccount(previous);
+        setPrimaryError(payload?.message || "Could not set the main inbox.");
+      }
+    } catch {
+      setPrimaryAccount(previous);
+      setPrimaryError("Could not set the main inbox.");
+    }
+  };
+
   const toggleAccountEnabled = async (email: string, enabled: boolean) => {
     const key = email.toLowerCase();
+    setActionError("");
     setAccountEnabled((prev) => ({ ...prev, [key]: enabled }));
-    await fetch("/api/gmail/account-preferences", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountEmail: key, enabled }),
-    }).catch(() => null);
+    const revert = () => {
+      setAccountEnabled((prev) => ({ ...prev, [key]: !enabled }));
+      setActionError(`Could not ${enabled ? "show" : "hide"} ${key} in the panel.`);
+    };
+    try {
+      const response = await fetch("/api/gmail/account-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountEmail: key, enabled }),
+      });
+      if (!response.ok) revert();
+    } catch {
+      revert();
+    }
   };
 
   const createFilter = async () => {
@@ -1109,18 +1226,38 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   };
 
+  /** Removed from the list only once deleted, or a filter that still runs would look gone. */
   const deleteFilter = async (id: string) => {
-    await fetch(`/api/gmail/filters/${id}`, { method: "DELETE" }).catch(() => null);
-    setFilters((prev) => prev.filter((f) => f.id !== id));
+    setActionError("");
+    try {
+      const response = await fetch(`/api/gmail/filters/${id}`, { method: "DELETE" });
+      if (!response.ok) {
+        setActionError("Could not delete that filter — it is still active.");
+        return;
+      }
+      setFilters((prev) => prev.filter((f) => f.id !== id));
+    } catch {
+      setActionError("Could not delete that filter — it is still active.");
+    }
   };
 
   const toggleFilter = async (id: string, enabled: boolean) => {
+    setActionError("");
     setFilters((prev) => prev.map((f) => (f.id === id ? { ...f, enabled } : f)));
-    await fetch(`/api/gmail/filters/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled }),
-    }).catch(() => null);
+    const revert = () => {
+      setFilters((prev) => prev.map((f) => (f.id === id ? { ...f, enabled: !enabled } : f)));
+      setActionError(`Could not turn that filter ${enabled ? "on" : "off"}.`);
+    };
+    try {
+      const response = await fetch(`/api/gmail/filters/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!response.ok) revert();
+    } catch {
+      revert();
+    }
   };
 
   const saveSettings = async () => {
@@ -1364,6 +1501,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         loadAiPrefs(),
         loadNavLayout(),
         loadMailboxGrants(),
+        loadConfidential(),
         loadCompanySettings(),
       ]);
       try {
@@ -1538,8 +1676,11 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
           {connectedAccounts.length > 1 ? (
             <div className="ml-auto flex min-w-0 items-center gap-2">
               {switchingAccount ? <span className="shrink-0 text-xs text-[#9CA3AF]">Loading…</span> : null}
+              {/* Only signatures, templates and contact-field visibility belong to one address.
+                  Everything else on this page is the panel account's and applies to every inbox, so
+                  the label says which it is switching rather than implying it scopes the page. */}
               <label htmlFor="settings-account" className="shrink-0 text-xs text-[#847FA0]">
-                Editing
+                Signatures for
               </label>
               <select
                 id="settings-account"
@@ -1827,8 +1968,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 </div>
               </SettingsSection>
               <SettingsSection
-                title="Accounts"
-                description="Choose which connected Google accounts appear in the email panel."
+                title="Inboxes"
+                description="One mailbox is your main inbox; the rest are brand accounts added onto it. The main inbox leads the panel and is the account new mail opens on. Everything else on this page applies to every inbox at once."
                 icon={FiMail}
               >
                 {connectedAccounts.length === 0 ? (
@@ -1836,24 +1977,136 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 ) : (
                   <ul className="space-y-2">
                     {connectedAccounts.map((account) => {
-                      const enabled = accountEnabled[account.email.toLowerCase()] !== false;
+                      const key = account.email.toLowerCase();
+                      const enabled = accountEnabled[key] !== false;
+                      const isPrimary = primaryAccount === key;
                       return (
                         <li
                           key={account.email}
-                          className="flex items-center justify-between gap-3 rounded-xl border border-[#ECEAF1] bg-white p-3"
+                          className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 ${
+                            isPrimary ? "border-[#701CC0]/30 bg-[#F8F4FF]" : "border-[#ECEAF1] bg-white"
+                          }`}
                         >
                           <div className="flex min-w-0 items-center gap-3">
-                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F5EFFF] text-sm font-semibold text-[#701CC0]">
+                            <span
+                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+                                isPrimary ? "bg-[#701CC0] text-white" : "bg-[#F5EFFF] text-[#701CC0]"
+                              }`}
+                            >
                               {account.email.charAt(0).toUpperCase()}
                             </span>
-                            <span className="truncate text-sm font-medium text-[#1E1B2E]">{account.email}</span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-[#1E1B2E]">{account.email}</p>
+                              <p className="mt-0.5 text-[11px] text-[#6B7280]">
+                                {isPrimary ? "Main inbox" : "Brand account"}
+                              </p>
+                            </div>
                           </div>
-                          <Toggle checked={enabled} onChange={(v) => toggleAccountEnabled(account.email, v)} />
+                          <div className="flex shrink-0 items-center gap-3">
+                            {isPrimary ? (
+                              <span className="rounded-full bg-[#701CC0]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#4C1191]">
+                                Main
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => makePrimaryAccount(account.email)}
+                                className="rounded-md border border-[#E5E7EB] px-2.5 py-1 text-[11px] font-medium text-[#4A465C] transition-colors hover:bg-[#F4F1FA]"
+                              >
+                                Make main
+                              </button>
+                            )}
+                            <Toggle checked={enabled} onChange={(v) => toggleAccountEnabled(account.email, v)} />
+                          </div>
                         </li>
                       );
                     })}
                   </ul>
                 )}
+                {primaryError || actionError ? (
+                  <p className="mt-3 text-xs text-red-600">{primaryError || actionError}</p>
+                ) : null}
+                {sendAsAliases.length > 0 ? (
+                  <div className="mt-4 rounded-xl border border-[#ECEAF1] bg-[#FAFAFB] p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                      Send-as aliases
+                    </p>
+                    <p className="mt-1 text-xs text-[#6B7280]">
+                      Addresses you can send from through the inboxes above. Mail addressed to them arrives in the
+                      inbox that owns the alias.
+                    </p>
+                    <ul className="mt-2 flex flex-wrap gap-2">
+                      {sendAsAliases.map((alias) => (
+                        <li
+                          key={alias.email}
+                          className="rounded-full border border-[#E5E7EB] bg-white px-2.5 py-1 text-[11px] text-[#4A465C]"
+                        >
+                          {alias.email}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </SettingsSection>
+
+              <SettingsSection
+                title="Confidential messages"
+                description="Messages you sent in confidential mode. Revoking one takes effect immediately — the recipient's link stops working, even if they opened it before."
+                icon={FiLock}
+              >
+                {confidentialLoading ? (
+                  <p className={TEXT_MUTED}>Loading…</p>
+                ) : confidentialMessages.length === 0 ? (
+                  <p className={TEXT_MUTED}>
+                    None sent yet. Confidential mode is in the composer — it replaces the body with a link to a
+                    page only the recipient can open.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {confidentialMessages.map((message) => {
+                      const expired = message.expiresAt !== null && new Date(message.expiresAt) < new Date();
+                      return (
+                        <li
+                          key={message.id}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#ECEAF1] bg-white p-3"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-[#1E1B2E]">
+                              {message.subject || "(No subject)"}
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-[#6B7280]">
+                              Sent {new Date(message.createdAt).toLocaleDateString()} ·{" "}
+                              {message.views} {message.views === 1 ? "view" : "views"}
+                              {message.expiresAt
+                                ? ` · ${expired ? "expired" : `expires ${new Date(message.expiresAt).toLocaleDateString()}`}`
+                                : " · no expiry"}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {message.revoked ? (
+                              <span className="rounded-full bg-red-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-red-700">
+                                Revoked
+                              </span>
+                            ) : expired ? (
+                              <span className="rounded-full bg-[#F3F4F6] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                                Expired
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => revokeConfidential(message.id)}
+                                className={btnDangerOutline}
+                              >
+                                Revoke access
+                              </button>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {confidentialError ? <p className="mt-1 text-xs text-red-600">{confidentialError}</p> : null}
               </SettingsSection>
 
               <SettingsSection
@@ -2379,6 +2632,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   icon={FiUsers}
                 >
                   <div className="space-y-3">
+                    {actionError ? <p className="text-xs text-red-600">{actionError}</p> : null}
                     {mailboxGrants.length === 0 ? (
                       <p className={TEXT_MUTED}>No shared-inbox grants yet.</p>
                     ) : (
@@ -2466,7 +2720,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Email tracking"
-                description="Analytics for outbound mail. Applies to all your connected inboxes."
+                description="Open and click tracking on outbound mail. Applies to every inbox on this account."
                 icon={FiActivity}
               >
                 <div className="space-y-5">
@@ -2507,7 +2761,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Reply notifications"
-                description="Ping the team Discord when a real reply lands in this inbox. Set per inbox."
+                description="Ping the team Discord when a real reply lands. Applies to every inbox on this account."
                 icon={FiZap}
               >
                 <div className="flex items-center justify-between gap-4">
@@ -2526,7 +2780,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Read receipts"
-                description="Request a read receipt by default when composing from this inbox."
+                description="Request a read receipt by default when composing. Applies to every inbox on this account."
                 icon={FiMail}
               >
                 <div className="flex items-center justify-between gap-4">
@@ -2545,7 +2799,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Vacation responder"
-                description="Automatic reply while you are away, for the selected inbox."
+                description="Automatic reply while you are away. Applies to every inbox on this account — each reply goes out from whichever address received the message."
                 icon={FiCoffee}
               >
                 <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-5">
@@ -2622,6 +2876,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 icon={FiFilter}
               >
                 <div className="space-y-3">
+                  {actionError ? <p className="text-xs text-red-600">{actionError}</p> : null}
                   {filters.length === 0 ? (
                     <p className={TEXT_MUTED}>No filters yet.</p>
                   ) : (
