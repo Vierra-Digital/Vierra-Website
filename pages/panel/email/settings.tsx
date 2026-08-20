@@ -262,12 +262,24 @@ type PageProps = {
  * target list for the filter box.
  */
 const SETTINGS_NAV: { group: string; items: string[] }[] = [
-  { group: "Mailbox", items: ["Inbox layout", "Undo send", "Meeting booking"] },
-  { group: "Accounts & delivery", items: ["Inboxes", "Confidential messages", "Shared inboxes", "Deliverability", "Gmail reputation (Postmaster)", "Domain mail (SMTP / IMAP / POP)"] },
-  { group: "Tracking", items: ["Email tracking", "Read receipts", "Reply notifications"] },
+  { group: "Mailbox", items: ["Inbox layout", "Send mail as", "Undo send"] },
+  {
+    group: "Accounts & delivery",
+    items: [
+      "Inboxes",
+      "Confidential messages",
+      "Deliverability",
+      "Gmail reputation (Postmaster)",
+      "Campaign sending (CAN-SPAM)",
+      "Meeting booking",
+      "Shared inboxes",
+    ],
+  },
+  { group: "Tracking", items: ["Email tracking", "Reply notifications", "Read receipts"] },
   { group: "Automation", items: ["Vacation responder", "Artemis AI", "Filters & rules"] },
   { group: "Content", items: ["Signatures", "Templates"] },
   { group: "Contacts", items: ["Contact tags", "Contact field visibility", "Blocked senders"] },
+  { group: "Advanced", items: ["Domain mail (SMTP / IMAP / POP)"] },
 ];
 
 function SettingsNav({ filter }: { filter: string }) {
