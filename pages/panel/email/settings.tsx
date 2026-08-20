@@ -1676,8 +1676,11 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
           {connectedAccounts.length > 1 ? (
             <div className="ml-auto flex min-w-0 items-center gap-2">
               {switchingAccount ? <span className="shrink-0 text-xs text-[#9CA3AF]">Loading…</span> : null}
+              {/* Only signatures, templates and contact-field visibility belong to one address.
+                  Everything else on this page is the panel account's and applies to every inbox, so
+                  the label says which it is switching rather than implying it scopes the page. */}
               <label htmlFor="settings-account" className="shrink-0 text-xs text-[#847FA0]">
-                Editing
+                Signatures for
               </label>
               <select
                 id="settings-account"
@@ -2717,7 +2720,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Email tracking"
-                description="Analytics for outbound mail. Applies to all your connected inboxes."
+                description="Open and click tracking on outbound mail. Applies to every inbox on this account."
                 icon={FiActivity}
               >
                 <div className="space-y-5">
@@ -2758,7 +2761,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Reply notifications"
-                description="Ping the team Discord when a real reply lands in this inbox. Set per inbox."
+                description="Ping the team Discord when a real reply lands. Applies to every inbox on this account."
                 icon={FiZap}
               >
                 <div className="flex items-center justify-between gap-4">
@@ -2777,7 +2780,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Read receipts"
-                description="Request a read receipt by default when composing from this inbox."
+                description="Request a read receipt by default when composing. Applies to every inbox on this account."
                 icon={FiMail}
               >
                 <div className="flex items-center justify-between gap-4">
@@ -2796,7 +2799,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Vacation responder"
-                description="Automatic reply while you are away, for the selected inbox."
+                description="Automatic reply while you are away. Applies to every inbox on this account — each reply goes out from whichever address received the message."
                 icon={FiCoffee}
               >
                 <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-5">

@@ -108,24 +108,17 @@ export default withAuth(async (req, res, session) => {
       create: { user_id: userId, account_email: accountEmail, account_id: accountId, ...settingData },
       update: settingData,
     });
-    // Apply the whole set across every mailbox THIS STAFF MEMBER has, not just the tracking flags.
+    // Always account-wide, with no opt-out: these are the panel account's settings, so every inbox
+    // it owns carries the same values. Previously the write landed on whichever inbox happened to be
+    // selected and left the rest on their old values with nothing on screen saying so.
     //
     // Scoped by user_id, so it never reaches another staff member's rows: two people sharing a
-    // mailbox keep their own tracking, read-receipt and out-of-office choices, and a send uses the
-    // settings of whoever sent it (see sendEmailCore's actingUserId).
-    //
-    // The panel is one account with a primary inbox and brand accounts added onto it, so these are
-    // the user's preferences rather than each mailbox's: previously, changing the reply-notification
-    // toggle or the out-of-office on the selected mailbox left every other inbox on its old value,
-    // with nothing on screen saying so. The vacation responder is included deliberately — an
-    // out-of-office that only covered whichever inbox happened to be selected is a worse surprise
-    // than one that covers all of them. Pass applyToSelectedOnly to opt a single mailbox out.
-    if (req.body?.applyToSelectedOnly !== true) {
-      await prisma.emailAccountSetting.updateMany({
-        where: { user_id: userId },
-        data: settingData,
-      });
-    }
+    // mailbox keep their own choices, and a send uses the settings of whoever sent it (see
+    // sendEmailCore's actingUserId).
+    await prisma.emailAccountSetting.updateMany({
+      where: { user_id: userId },
+      data: settingData,
+    });
     res.status(200).json({ settings: serializeSettings(updated) });
     return;
   }
