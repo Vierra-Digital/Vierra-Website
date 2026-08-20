@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getAccessibleGmailAccounts } from "@/lib/email/mailboxAccess";
-import { extractHeader } from "@/lib/gmail/gmailApi";
+import { getAccessibleGmailAccounts, getGmailAliasAccounts } from "@/lib/email/mailboxAccess";
+import { extractHeader, buildAliasScopeQuery } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
 
 type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive" | "allmail" | "starred" | "important" | "scheduled";
@@ -235,9 +235,26 @@ export default withAuth(async (req, res, session) => {
   // Accessible = owned + admin-granted (shared inboxes). Each carries the ownerUserId whose
   // token/data to use; for owned accounts ownerUserId === userId (identical to before).
   const accessibleAccounts = await getAccessibleGmailAccounts(userId);
-  const accountRows = accessibleAccounts.filter((row) =>
-    selectedEmails.length ? selectedEmails.includes(row.email) : true
-  );
+  const accessibleEmails = new Set(accessibleAccounts.map((row) => row.email));
+  type FetchAccount = { email: string; ownerUserId: string; aliasOfEmail?: string };
+  let accountRows: FetchAccount[] = accessibleAccounts;
+
+  if (selectedEmails.length) {
+    const direct: FetchAccount[] = accessibleAccounts.filter((row) => selectedEmails.includes(row.email));
+    // Any selected email that isn't a directly-connected account may be a verified Gmail "send
+    // as" alias (a domain address forwarded into Gmail) — its mail lives in the owning account's
+    // inbox, not a mailbox of its own, so resolve it back to that account + token. Without this,
+    // selecting such an address matched nothing and returned a silently empty inbox.
+    const unresolved = selectedEmails.filter((email) => !accessibleEmails.has(email));
+    let aliasRows: FetchAccount[] = [];
+    if (unresolved.length) {
+      const aliasAccounts = await getGmailAliasAccounts(userId);
+      aliasRows = aliasAccounts
+        .filter((alias) => unresolved.includes(alias.email))
+        .map((alias) => ({ email: alias.email, ownerUserId: alias.ownerUserId, aliasOfEmail: alias.viaAccountEmail }));
+    }
+    accountRows = [...direct, ...aliasRows];
+  }
 
   if (accountRows.length === 0) {
     res.status(200).json({ messages: [], accountErrors: [] });
@@ -249,13 +266,21 @@ export default withAuth(async (req, res, session) => {
   const messagesByAccount = await Promise.all(
     accountRows.map(async (account) => {
       try {
-        const tokenResult = await getValidGmailAccessToken(account.ownerUserId, account.email);
+        const tokenAccountEmail = account.aliasOfEmail || account.email;
+        const tokenResult = await getValidGmailAccessToken(account.ownerUserId, tokenAccountEmail);
         if (!tokenResult.ok) {
           throw new Error(tokenResult.message);
         }
 
+        // An alias has no inbox of its own — it shares the owning account's, so scope the fetch
+        // to just the mail addressed to (or, for sent/drafts, sent from) that alias.
+        const aliasDirection = mailbox === "sent" || mailbox === "drafts" ? "from" : "to";
+        const effectiveSearch = account.aliasOfEmail
+          ? `${buildAliasScopeQuery(account.email, aliasDirection)} ${searchQuery}`.trim()
+          : searchQuery;
+
         const loadAccountMessages = async (accessToken: string) => {
-          const list = await fetchGmailList(accessToken, mailbox, maxResults, searchQuery, labelIdFilter);
+          const list = await fetchGmailList(accessToken, mailbox, maxResults, effectiveSearch, labelIdFilter);
           accountHasMore.push(Boolean(list.nextPageToken));
           const ids = (list.messages || []).map((m) => m.id).filter(Boolean);
           if (ids.length === 0) return [] as MessageRow[];
@@ -304,7 +329,7 @@ export default withAuth(async (req, res, session) => {
           return await loadAccountMessages(tokenResult.accessToken);
         } catch (error) {
           if (!isAuthFailure(error)) throw error;
-          const refreshResult = await getValidGmailAccessToken(account.ownerUserId, account.email, { forceRefresh: true });
+          const refreshResult = await getValidGmailAccessToken(account.ownerUserId, tokenAccountEmail, { forceRefresh: true });
           if (!refreshResult.ok) {
             throw new Error(refreshResult.message);
           }
