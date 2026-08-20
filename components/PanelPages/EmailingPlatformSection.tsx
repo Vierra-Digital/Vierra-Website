@@ -488,6 +488,20 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const invalidateMessagesCache = useCallback(() => {
     messagesCacheRef.current.clear();
   }, []);
+  /** Cache keys currently being prefetched, so a fast re-render doesn't fire the same fetch twice. */
+  const prefetchInFlightRef = useRef<Set<string>>(new Set());
+  const storeMessagesCache = useCallback(
+    (key: string, messages: MessageRow[], accountErrors: Array<{ accountEmail: string; message: string }>, hasNextPage: boolean) => {
+      // Bounded LRU-ish cache: re-inserting moves the key to the end, and we evict the oldest.
+      messagesCacheRef.current.delete(key);
+      messagesCacheRef.current.set(key, { messages, accountErrors, hasNextPage });
+      if (messagesCacheRef.current.size > MESSAGE_CACHE_LIMIT) {
+        const oldest = messagesCacheRef.current.keys().next().value;
+        if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
+      }
+    },
+    []
+  );
   const selectedMessageIdRef = useRef("");
   const moveListMenuRef = useRef<HTMLDivElement | null>(null);
   const snoozeMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1806,17 +1820,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       const nextMessages = Array.isArray(payload?.messages) ? payload.messages : [];
       const nextAccountErrors = Array.isArray(payload?.accountErrors) ? payload.accountErrors : [];
       const nextHasNextPage = Boolean(payload?.hasNextPage);
-      // Bounded LRU-ish cache: re-inserting moves the key to the end, and we evict the oldest.
-      messagesCacheRef.current.delete(cacheKey);
-      messagesCacheRef.current.set(cacheKey, {
-        messages: nextMessages,
-        accountErrors: nextAccountErrors,
-        hasNextPage: nextHasNextPage,
-      });
-      if (messagesCacheRef.current.size > MESSAGE_CACHE_LIMIT) {
-        const oldest = messagesCacheRef.current.keys().next().value;
-        if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
-      }
+      storeMessagesCache(cacheKey, nextMessages, nextAccountErrors, nextHasNextPage);
       // Self-heal the mark-read latch: anything Gmail still reports as unread must be markable
       // again, including messages marked unread from another client since this page loaded.
       for (const message of nextMessages as MessageRow[]) {
@@ -1832,6 +1836,33 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         setSelectedMessageDetail(null);
         setViewMode("list");
       }
+      // Quietly warm the next page in the background so paging forward feels instant — by the
+      // time the user clicks "next" the data is usually already sitting in the cache.
+      if (nextHasNextPage) {
+        const nextPageQuery = new URLSearchParams(query);
+        nextPageQuery.set("page", String(currentPage + 1));
+        const nextPageCacheKey = nextPageQuery.toString();
+        if (!messagesCacheRef.current.has(nextPageCacheKey) && !prefetchInFlightRef.current.has(nextPageCacheKey)) {
+          prefetchInFlightRef.current.add(nextPageCacheKey);
+          fetch(`/api/gmail/messages?${nextPageCacheKey}`)
+            .then((prefetchResponse) => prefetchResponse.json().catch(() => ({})))
+            .then((prefetchPayload) => {
+              // Don't let a slow prefetch resurrect stale data after the view moved on (mailbox
+              // switch, new search, or a mutating action that invalidated the cache).
+              if (requestId !== loadMessagesRequestRef.current) return;
+              const prefetchMessages = Array.isArray(prefetchPayload?.messages) ? prefetchPayload.messages : [];
+              const prefetchAccountErrors = Array.isArray(prefetchPayload?.accountErrors) ? prefetchPayload.accountErrors : [];
+              const prefetchHasNextPage = Boolean(prefetchPayload?.hasNextPage);
+              storeMessagesCache(nextPageCacheKey, prefetchMessages, prefetchAccountErrors, prefetchHasNextPage);
+            })
+            .catch(() => {
+              /* best-effort: a failed prefetch just means the next click loads normally */
+            })
+            .finally(() => {
+              prefetchInFlightRef.current.delete(nextPageCacheKey);
+            });
+        }
+      }
     } catch (error) {
       if (requestId !== loadMessagesRequestRef.current) return;
       setMessages([]);
@@ -1842,7 +1873,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       if (requestId !== loadMessagesRequestRef.current) return;
       setMessagesLoading(false);
     }
-  }, [activeModule, activeLabelId, canLoadMessages, currentPage, debouncedSearch, pageSize, selectedAccounts, step]);
+  }, [activeModule, activeLabelId, canLoadMessages, currentPage, debouncedSearch, pageSize, selectedAccounts, step, storeMessagesCache]);
 
   useEffect(() => {
     loadMessagesRef.current = () => void loadMessages();
