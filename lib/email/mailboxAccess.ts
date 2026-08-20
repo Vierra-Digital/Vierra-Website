@@ -130,6 +130,50 @@ export async function getGmailAliasAccounts(userId: string): Promise<GmailAliasA
   return out;
 }
 
+export type FetchAccount = { email: string; ownerUserId: string; aliasOfEmail?: string };
+
+/**
+ * Which mailboxes to actually read for a request, given what the caller selected.
+ *
+ * Selecting nothing means every accessible account. Otherwise: the selected accounts, plus any
+ * selected address that is a send-as alias resolved back to the account holding its mail.
+ *
+ * An alias is skipped when its parent account is also being read. The two share one Gmail mailbox
+ * and the alias query is a subset of the parent's, so reading both returns the alias's mail twice
+ * and counts it twice — which is exactly what made messages appear twice in the inbox and archive
+ * and the sidebar badge read far higher than the mailbox held. The panel selects every connected
+ * account and aliases are listed among them, so this is the normal case rather than an edge one.
+ *
+ * Pure, so both the message list and the badge counts can share it and be tested against it.
+ */
+export function selectFetchAccounts(
+  accessible: Array<{ email: string; ownerUserId: string }>,
+  aliases: GmailAliasAccount[],
+  selectedEmails: string[]
+): FetchAccount[] {
+  if (selectedEmails.length === 0) return accessible.map((row) => ({ ...row }));
+
+  const selected = new Set(selectedEmails.map((email) => email.toLowerCase()));
+  const direct = accessible.filter((row) => selected.has(row.email));
+  const accessibleEmails = new Set(accessible.map((row) => row.email));
+  const parentsBeingRead = new Set(direct.map((row) => row.email));
+
+  const aliasRows = aliases
+    .filter(
+      (alias) =>
+        selected.has(alias.email) &&
+        !accessibleEmails.has(alias.email) &&
+        !parentsBeingRead.has(alias.viaAccountEmail)
+    )
+    .map((alias) => ({
+      email: alias.email,
+      ownerUserId: alias.ownerUserId,
+      aliasOfEmail: alias.viaAccountEmail,
+    }));
+
+  return [...direct.map((row) => ({ ...row })), ...aliasRows];
+}
+
 /**
  * The enforcement primitive for shared inboxes. Resolves WHOSE token/data should be used for
  * `accountEmail` when `requesterId` asks for it:

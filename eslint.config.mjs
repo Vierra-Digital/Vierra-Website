@@ -15,6 +15,9 @@ const eslintConfig = [
       ".next/**",
       "out/**",
       "build/**",
+      // Generated coverage report (gitignored). Linting it reported warnings about vendored
+      // scripts nobody maintains, and slowed every lint run down for nothing.
+      "coverage/**",
       "node_modules/**",
       "next-env.d.ts",
       "public/**",

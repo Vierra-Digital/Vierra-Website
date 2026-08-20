@@ -1,4 +1,5 @@
 import { withAuth } from "@/lib/api/withAuth";
+import { mapInBatches } from "@/lib/batch";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { asStr } from "@/lib/api/parsing";
@@ -65,20 +66,6 @@ function extractHtml(payload: unknown): string {
   return html;
 }
 
-/** Run `worker` over `items` with a bounded number of in-flight requests. */
-async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let cursor = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (cursor < items.length) {
-        const index = cursor++;
-        results[index] = await worker(items[index]);
-      }
-    })
-  );
-  return results;
-}
 
 export default withAuth(
   async (req, res, session) => {
@@ -106,7 +93,7 @@ export default withAuth(
       return;
     }
 
-    const entries = await mapWithConcurrency(messageIds, CONCURRENCY, async (id) => {
+    const entries = await mapInBatches(messageIds, async (id) => {
       try {
         const response = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=full`,
@@ -133,7 +120,7 @@ export default withAuth(
         // A single unreadable message shouldn't fail the whole page scan.
         return [id, null] as const;
       }
-    });
+    }, CONCURRENCY);
 
     const trackers: Record<string, { tracked: boolean; count: number; vendors: string[]; hasAttachment: boolean }> = {};
     for (const [id, verdict] of entries) {

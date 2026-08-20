@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getAccessibleGmailAccounts, getGmailAliasAccounts } from "@/lib/email/mailboxAccess";
+import { getAccessibleGmailAccounts, getGmailAliasAccounts, selectFetchAccounts } from "@/lib/email/mailboxAccess";
 import { extractHeader, buildAliasScopeQuery } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
+import { mapInBatches } from "@/lib/batch";
 
 type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive" | "allmail" | "starred" | "important" | "scheduled";
 const OPEN_BASE_WINDOW_MS = 15_000;
@@ -235,26 +236,15 @@ export default withAuth(async (req, res, session) => {
   // Accessible = owned + admin-granted (shared inboxes). Each carries the ownerUserId whose
   // token/data to use; for owned accounts ownerUserId === userId (identical to before).
   const accessibleAccounts = await getAccessibleGmailAccounts(userId);
-  const accessibleEmails = new Set(accessibleAccounts.map((row) => row.email));
-  type FetchAccount = { email: string; ownerUserId: string; aliasOfEmail?: string };
-  let accountRows: FetchAccount[] = accessibleAccounts;
-
-  if (selectedEmails.length) {
-    const direct: FetchAccount[] = accessibleAccounts.filter((row) => selectedEmails.includes(row.email));
-    // Any selected email that isn't a directly-connected account may be a verified Gmail "send
-    // as" alias (a domain address forwarded into Gmail) — its mail lives in the owning account's
-    // inbox, not a mailbox of its own, so resolve it back to that account + token. Without this,
-    // selecting such an address matched nothing and returned a silently empty inbox.
-    const unresolved = selectedEmails.filter((email) => !accessibleEmails.has(email));
-    let aliasRows: FetchAccount[] = [];
-    if (unresolved.length) {
-      const aliasAccounts = await getGmailAliasAccounts(userId);
-      aliasRows = aliasAccounts
-        .filter((alias) => unresolved.includes(alias.email))
-        .map((alias) => ({ email: alias.email, ownerUserId: alias.ownerUserId, aliasOfEmail: alias.viaAccountEmail }));
-    }
-    accountRows = [...direct, ...aliasRows];
-  }
+  // Selected accounts, plus any selected send-as alias resolved back to the account that holds its
+  // mail — and never an alias whose parent is already being read, which would return it twice.
+  const accountRows = selectFetchAccounts(
+    accessibleAccounts,
+    selectedEmails.some((email) => !accessibleAccounts.some((row) => row.email === email))
+      ? await getGmailAliasAccounts(userId)
+      : [],
+    selectedEmails
+  );
 
   if (accountRows.length === 0) {
     res.status(200).json({ messages: [], accountErrors: [] });
@@ -285,7 +275,12 @@ export default withAuth(async (req, res, session) => {
           const ids = (list.messages || []).map((m) => m.id).filter(Boolean);
           if (ids.length === 0) return [] as MessageRow[];
 
-          const detailed = await Promise.all(ids.map((id) => fetchGmailMessage(accessToken, id)));
+          // Bounded, not all at once. A page can be 100 messages and several accounts load in
+          // parallel, so an unbounded fan-out is hundreds of concurrent Gmail calls — the same
+          // shape that returned "Too many concurrent requests for user" on bulk actions, except
+          // here it fails the whole list rather than a few items. Ten at a time is well inside
+          // Gmail's per-user limit and still saturates the round-trip latency.
+          const detailed = await mapInBatches(ids, (id) => fetchGmailMessage(accessToken, id), 10);
           const visibleDetailed =
             mailbox === "sent"
               ? detailed.filter((msg) => !(Array.isArray(msg.labelIds) && msg.labelIds.includes("TRASH")))
