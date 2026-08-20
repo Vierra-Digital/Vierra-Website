@@ -441,6 +441,12 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   /** The main inbox, lowercased. Every other connected mailbox is a brand account added onto it. */
   const [primaryAccount, setPrimaryAccount] = useState("");
   const [primaryError, setPrimaryError] = useState("");
+  /**
+   * Failures from the small inline actions on this page (revoking access, deleting or toggling a
+   * filter, hiding an inbox). These used to swallow the response entirely: the row vanished or the
+   * switch moved, and a save that never happened looked identical to one that did.
+   */
+  const [actionError, setActionError] = useState("");
   type DeliverabilityResult = {
     domain: string;
     googleManaged: boolean;
@@ -1044,13 +1050,30 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   };
 
+  /**
+   * Revoke a teammate's access to a mailbox.
+   *
+   * The row is removed only once the server confirms it. Removing it regardless — which is what
+   * this did — told an admin that access was revoked while the teammate still had it, which is the
+   * worst possible thing for this particular control to get wrong.
+   */
   const revokeGrant = async (id: string) => {
-    await fetch("/api/email/mailbox-grants", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    }).catch(() => null);
-    setMailboxGrants((prev) => prev.filter((g) => g.id !== id));
+    setActionError("");
+    try {
+      const response = await fetch("/api/email/mailbox-grants", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        setActionError(payload?.message || "Could not revoke that access. It is still in place.");
+        return;
+      }
+      setMailboxGrants((prev) => prev.filter((g) => g.id !== id));
+    } catch {
+      setActionError("Could not revoke that access. It is still in place.");
+    }
   };
 
   const createBookingLink = async (acknowledgeNoAttendanceAnalytics = false) => {
@@ -1166,12 +1189,22 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
   const toggleAccountEnabled = async (email: string, enabled: boolean) => {
     const key = email.toLowerCase();
+    setActionError("");
     setAccountEnabled((prev) => ({ ...prev, [key]: enabled }));
-    await fetch("/api/gmail/account-preferences", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountEmail: key, enabled }),
-    }).catch(() => null);
+    const revert = () => {
+      setAccountEnabled((prev) => ({ ...prev, [key]: !enabled }));
+      setActionError(`Could not ${enabled ? "show" : "hide"} ${key} in the panel.`);
+    };
+    try {
+      const response = await fetch("/api/gmail/account-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountEmail: key, enabled }),
+      });
+      if (!response.ok) revert();
+    } catch {
+      revert();
+    }
   };
 
   const createFilter = async () => {
@@ -1193,18 +1226,38 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   };
 
+  /** Removed from the list only once deleted, or a filter that still runs would look gone. */
   const deleteFilter = async (id: string) => {
-    await fetch(`/api/gmail/filters/${id}`, { method: "DELETE" }).catch(() => null);
-    setFilters((prev) => prev.filter((f) => f.id !== id));
+    setActionError("");
+    try {
+      const response = await fetch(`/api/gmail/filters/${id}`, { method: "DELETE" });
+      if (!response.ok) {
+        setActionError("Could not delete that filter — it is still active.");
+        return;
+      }
+      setFilters((prev) => prev.filter((f) => f.id !== id));
+    } catch {
+      setActionError("Could not delete that filter — it is still active.");
+    }
   };
 
   const toggleFilter = async (id: string, enabled: boolean) => {
+    setActionError("");
     setFilters((prev) => prev.map((f) => (f.id === id ? { ...f, enabled } : f)));
-    await fetch(`/api/gmail/filters/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled }),
-    }).catch(() => null);
+    const revert = () => {
+      setFilters((prev) => prev.map((f) => (f.id === id ? { ...f, enabled: !enabled } : f)));
+      setActionError(`Could not turn that filter ${enabled ? "on" : "off"}.`);
+    };
+    try {
+      const response = await fetch(`/api/gmail/filters/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!response.ok) revert();
+    } catch {
+      revert();
+    }
   };
 
   const saveSettings = async () => {
@@ -1967,7 +2020,9 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     })}
                   </ul>
                 )}
-                {primaryError ? <p className="mt-3 text-xs text-red-600">{primaryError}</p> : null}
+                {primaryError || actionError ? (
+                  <p className="mt-3 text-xs text-red-600">{primaryError || actionError}</p>
+                ) : null}
                 {sendAsAliases.length > 0 ? (
                   <div className="mt-4 rounded-xl border border-[#ECEAF1] bg-[#FAFAFB] p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
@@ -2574,6 +2629,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   icon={FiUsers}
                 >
                   <div className="space-y-3">
+                    {actionError ? <p className="text-xs text-red-600">{actionError}</p> : null}
                     {mailboxGrants.length === 0 ? (
                       <p className={TEXT_MUTED}>No shared-inbox grants yet.</p>
                     ) : (
@@ -2817,6 +2873,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 icon={FiFilter}
               >
                 <div className="space-y-3">
+                  {actionError ? <p className="text-xs text-red-600">{actionError}</p> : null}
                   {filters.length === 0 ? (
                     <p className={TEXT_MUTED}>No filters yet.</p>
                   ) : (

@@ -189,7 +189,16 @@ const MailboxEmpty: React.FC = () => (
 
 // Client-side cap on total compose attachment bytes. Kept conservative (below the server/platform
 // request-body limit) so oversized sends fail fast with a clear message instead of an opaque 413.
-const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+/**
+ * Total attachment bytes accepted before sending, measured decoded.
+ *
+ * The ceiling is the serverless request-body limit, not Gmail: API routes run as functions with a
+ * 6 MB payload cap, and base64 inflates a file by a third, so 4 MB of files is about 5.4 MB on the
+ * wire with room for the rest of the JSON. This was 20 MB — which encodes to roughly 27 MB — so a
+ * large attachment passed this check and then failed at the platform, surfacing as a bare
+ * "Failed to send." with nothing pointing at the size.
+ */
+const MAX_TOTAL_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 
 /**
  * Cap on a mailbox action (trash, archive, move…). Comfortably above a normal Gmail round trip but
@@ -358,6 +367,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const composeReadReceiptDefaultRef = useRef(false);
   const undoSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /**
+   * The message waiting out its undo window, as a request body.
+   *
+   * Undo used to live entirely in a setTimeout, and the unmount cleanup cleared it — so closing the
+   * tab or navigating away within the undo window (up to 30s) silently threw the email away. It was
+   * not queued anywhere and no draft survived it. Held here so it can be flushed on the way out.
+   */
+  const pendingSendBodyRef = useRef<string | null>(null);
   const [artemisDrafting, setArtemisDrafting] = useState(false);
   const [artemisRewriteOpen, setArtemisRewriteOpen] = useState(false);
   const [composeError, setComposeError] = useState("");
@@ -3447,15 +3464,11 @@ ${sourceText}`;
     }
   };
 
-  const performSendCompose = async () => {
-    setSendingCompose(true);
-    setComposeError("");
-    setComposeSuccess("");
-    try {
-      const response = await fetch("/api/gmail/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+  /**
+   * The send request body. Extracted so the undo window can hold the exact same payload and flush
+   * it if the page goes away mid-countdown.
+   */
+  const buildSendPayload = () => ({
           accountEmail: composeAccountEmail,
           from: composeFrom && composeFrom !== composeAccountEmail ? composeFrom : undefined,
           to: composeTo.trim(),
@@ -3480,7 +3493,19 @@ ${sourceText}`;
             contentType: a.contentType,
             contentBase64: a.contentBase64,
           })),
-        }),
+  });
+
+  const performSendCompose = async () => {
+    // Being sent now, so there is nothing left for the unload path to flush.
+    pendingSendBodyRef.current = null;
+    setSendingCompose(true);
+    setComposeError("");
+    setComposeSuccess("");
+    try {
+      const response = await fetch("/api/gmail/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildSendPayload()),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -3531,6 +3556,8 @@ ${sourceText}`;
   };
 
   const cancelUndoSend = () => {
+    // Undo is the one path that genuinely discards the pending send.
+    pendingSendBodyRef.current = null;
     if (undoSendTimeoutRef.current) {
       clearTimeout(undoSendTimeoutRef.current);
       undoSendTimeoutRef.current = null;
@@ -3593,6 +3620,7 @@ ${sourceText}`;
     }
     setComposeError("");
     setUndoCountdown(delay);
+    pendingSendBodyRef.current = JSON.stringify(buildSendPayload());
     undoSendTimeoutRef.current = setTimeout(() => {
       cancelUndoSend();
       void performSendCompose();
@@ -3602,8 +3630,50 @@ ${sourceText}`;
     }, 1000);
   };
 
+  /**
+   * Send anything still inside its undo window when the page goes away.
+   *
+   * sendBeacon is built for exactly this and survives unload, where a normal fetch is cancelled. It
+   * caps the payload at roughly 64KB, so a message with attachments can be too big to flush — in
+   * that case beforeunload asks the user to stay rather than losing it silently. The user pressed
+   * Send, so completing the send is the expected outcome of leaving; only undo cancels it.
+   */
   useEffect(() => {
+    const flushPendingSend = () => {
+      const body = pendingSendBodyRef.current;
+      if (!body) return true;
+      try {
+        const sent = navigator.sendBeacon?.(
+          "/api/gmail/send",
+          new Blob([body], { type: "application/json" })
+        );
+        if (sent) {
+          pendingSendBodyRef.current = null;
+          return true;
+        }
+      } catch {
+        /* fall through to reporting that it could not be flushed */
+      }
+      return false;
+    };
+
+    const handlePageHide = () => {
+      flushPendingSend();
+    };
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!pendingSendBodyRef.current) return;
+      if (flushPendingSend()) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      // Unmounting mid-countdown is a navigation away, not an undo: flush rather than drop.
+      flushPendingSend();
       if (undoSendTimeoutRef.current) clearTimeout(undoSendTimeoutRef.current);
       if (undoCountdownRef.current) clearInterval(undoCountdownRef.current);
     };
@@ -3643,7 +3713,8 @@ ${sourceText}`;
     const additionBytes = additions.reduce((sum, a) => sum + decodedBytes(a.contentBase64), 0);
     if (currentBytes + additionBytes > MAX_TOTAL_ATTACHMENT_BYTES) {
       setComposeError(
-        `Attachments exceed the ${Math.round(MAX_TOTAL_ATTACHMENT_BYTES / (1024 * 1024))} MB limit — remove some and try again.`
+        `Attachments exceed the ${Math.round(MAX_TOTAL_ATTACHMENT_BYTES / (1024 * 1024))} MB limit — ` +
+          `send a link instead, or split them across messages.`
       );
       return;
     }
