@@ -2986,11 +2986,19 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       .catch(() => setActionError("Failed to move the message."));
   };
 
-  const openReplyCompose = () => {
+  /**
+   * Open the inline composer as a reply, with everything a reply shares: the Re: subject, the
+   * threading headers, and a cleared body.
+   *
+   * Reply and Reply all differ only in the recipient list. They were two copies of this, which is
+   * why the References fix — the parent Message-ID that was missing from the chain — had to be
+   * applied twice and could have been applied to only one.
+   */
+  const beginInlineReply = (mode: "reply" | "replyAll", to: string) => {
     if (!selectedMessage) return;
     const latest = threadMessages[threadMessages.length - 1];
-    setInlineComposeMode("reply");
-    setInlineComposeTo(parseMailboxAddress(latest?.replyTo || selectedMessage.replyTo || selectedMessage.fromRaw || selectedMessage.from).email);
+    setInlineComposeMode(mode);
+    setInlineComposeTo(to);
     setInlineComposeSubject(
       /^re:/i.test(selectedMessage.subject || "") ? selectedMessage.subject : `Re: ${selectedMessage.subject || ""}`
     );
@@ -3010,31 +3018,29 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setInlineComposeSuccess("");
   };
 
+  /** The address a reply goes to: Reply-To when the sender set one, otherwise who it came from. */
+  const replyRecipient = () => {
+    if (!selectedMessage) return "";
+    const latest = threadMessages[threadMessages.length - 1];
+    return parseMailboxAddress(
+      latest?.replyTo || selectedMessage.replyTo || selectedMessage.fromRaw || selectedMessage.from
+    ).email;
+  };
+
+  const openReplyCompose = () => {
+    if (!selectedMessage) return;
+    beginInlineReply("reply", replyRecipient());
+  };
+
   const openReplyAllCompose = () => {
     if (!selectedMessage) return;
     const latest = threadMessages[threadMessages.length - 1];
-    const fromIdentity = parseMailboxAddress(latest?.replyTo || selectedMessage.replyTo || selectedMessage.fromRaw || selectedMessage.from);
     const toList = parseAddressList(latest?.toRaw || selectedMessage.toRaw || selectedMessage.to);
-    const uniqueEmails = Array.from(new Set([fromIdentity.email, ...toList.map((entry) => entry.email)].filter(Boolean)));
-    setInlineComposeMode("replyAll");
-    setInlineComposeTo(uniqueEmails.join(", "));
-    setInlineComposeSubject(
-      /^re:/i.test(selectedMessage.subject || "") ? selectedMessage.subject : `Re: ${selectedMessage.subject || ""}`
+    // Everyone on the original, deduped, with the sender first.
+    const uniqueEmails = Array.from(
+      new Set([replyRecipient(), ...toList.map((entry) => entry.email)].filter(Boolean))
     );
-    setInlineComposeIntroText("");
-    setInlineComposeBodyText("");
-    setInlineComposeBodyHtml("");
-    setInlineComposePreviewHtml("");
-    setInlineComposeThreadId(selectedMessage.threadId || latest?.threadId || "");
-    setInlineComposeInReplyTo(latest?.messageIdHeader || selectedMessage.messageIdHeader || "");
-    setInlineComposeReferences(
-      buildReplyReferences(
-        latest?.references || selectedMessage.references,
-        latest?.messageIdHeader || selectedMessage.messageIdHeader
-      )
-    );
-    setInlineComposeError("");
-    setInlineComposeSuccess("");
+    beginInlineReply("replyAll", uniqueEmails.join(", "));
   };
 
   const openForwardCompose = () => {
@@ -3410,25 +3416,28 @@ ${sourceText}`;
     setArtemisPromptOpen(true);
   };
 
-  const runArtemisDraft = async (intent: string) => {
-    if (!intent.trim() || artemisDrafting) return;
-    setArtemisPromptOpen(false);
+  /**
+   * Ask Artemis for body text and put the result in the composer.
+   *
+   * Drafting and rewriting were the same twenty lines twice over, differing only in the endpoint,
+   * the request body and the error wording — including their own private copies of the
+   * plain-text-to-HTML conversion, which is the part that would quietly diverge.
+   */
+  const runArtemis = async (endpoint: string, body: Record<string, unknown>, failureMessage: string) => {
     setArtemisDrafting(true);
     setComposeError("");
     try {
-      const response = await fetch("/api/ai/compose", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intent: intent.trim(), tone: getArtemisTone() }),
+        body: JSON.stringify(body),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.message || "Artemis couldn't draft that.");
+      if (!response.ok) throw new Error(payload?.message || failureMessage);
       const text = String(payload?.text || "").trim();
-      if (text) {
-        setComposeBody(text);
-        const esc = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        setComposeBodyHtml(`<p>${esc(text).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br />")}</p>`);
-      }
+      if (!text) return;
+      setComposeBody(text);
+      setComposeBodyHtml(`<p>${escapeHtml(text).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br />")}</p>`);
     } catch (error) {
       setComposeError(error instanceof Error ? error.message : "Artemis error.");
     } finally {
@@ -3436,31 +3445,17 @@ ${sourceText}`;
     }
   };
 
+  const runArtemisDraft = async (intent: string) => {
+    if (!intent.trim() || artemisDrafting) return;
+    setArtemisPromptOpen(false);
+    await runArtemis("/api/ai/compose", { intent: intent.trim(), tone: getArtemisTone() }, "Artemis couldn't draft that.");
+  };
+
   const handleArtemisRewrite = async (mode: string) => {
     setArtemisRewriteOpen(false);
     const current = (composeBody || "").trim();
     if (!current || artemisDrafting) return;
-    setArtemisDrafting(true);
-    setComposeError("");
-    try {
-      const response = await fetch("/api/ai/rewrite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: current, mode }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.message || "Artemis couldn't rewrite that.");
-      const text = String(payload?.text || "").trim();
-      if (text) {
-        setComposeBody(text);
-        const esc = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        setComposeBodyHtml(`<p>${esc(text).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br />")}</p>`);
-      }
-    } catch (error) {
-      setComposeError(error instanceof Error ? error.message : "Artemis error.");
-    } finally {
-      setArtemisDrafting(false);
-    }
+    await runArtemis("/api/ai/rewrite", { text: current, mode }, "Artemis couldn't rewrite that.");
   };
 
   /**
