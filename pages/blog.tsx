@@ -41,9 +41,18 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
             revalidate: 300,
         };
     } catch (error) {
-        // Never cache an empty/errored index — rethrow so Next keeps serving the
-        // last good static page and retries on the next revalidation.
-        console.error('blog index getStaticProps DB error (retryable, not cached):', error);
+        console.error('blog index getStaticProps DB error:', error);
+        // At build time a throw here aborts the entire deploy. The database is reachable from the
+        // build, but not guaranteed to be — a saturated connection pool is enough — and losing a
+        // deploy of the whole site because one page could not list posts is the wrong trade. The
+        // page already has a hasFetchError state that renders without posts and marks itself
+        // noindex, so serve that with a short revalidate: the first request after the build
+        // regenerates it with real content.
+        if (process.env.NEXT_PHASE === 'phase-production-build') {
+            return { props: { latestPosts: [], hasFetchError: true }, revalidate: 30 };
+        }
+        // At runtime, still rethrow: Next then keeps serving the last good static page and retries
+        // on the next revalidation, rather than caching an empty index.
         throw error;
     }
 };
