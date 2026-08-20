@@ -58,7 +58,7 @@ export const ICON_BUTTON_SOLID =
  * without competing with the composer's filled Send.
  */
 export const REPLY_ACTION_BUTTON =
-  "inline-flex items-center gap-2 rounded-full border border-[#D8CFEA] bg-white px-4 py-1.5 text-[13px] font-medium text-[#4C1191] transition-colors hover:bg-[#F4F1FA]";
+  "email-reply-action inline-flex min-h-9 items-center gap-2 rounded-md px-4 text-[13px] font-medium transition-colors";
 
 /** Primary action. */
 export const BUTTON_PRIMARY =
