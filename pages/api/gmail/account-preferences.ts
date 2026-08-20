@@ -25,8 +25,41 @@ function isMissingTable(error: unknown): boolean {
 
 type PreferenceRow = { account_email: string; enabled: boolean; is_primary: boolean };
 
+/**
+ * Whether this database has the is_primary column yet, remembered per process.
+ *
+ * Without this the endpoint attempted the query on every single request against a database where
+ * the migration has not been applied. It degraded correctly, but Prisma logs each failed query, so
+ * a perfectly working panel filled the server log with database errors on every load. Probed once
+ * with a cheap catalogue lookup instead, so a missing column costs one query per process and
+ * produces no errors at all.
+ *
+ * Only ever flips false -> true (after the migration is applied and the process restarts), never the
+ * other way, so a transient failure cannot permanently disable the feature.
+ */
+let primaryColumnAvailable: boolean | null = null;
+
+async function hasPrimaryColumn(): Promise<boolean> {
+  if (primaryColumnAvailable !== null) return primaryColumnAvailable;
+  try {
+    const rows = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'email_account_preferences' AND column_name = 'is_primary'
+      ) AS exists
+    `;
+    primaryColumnAvailable = Boolean(rows[0]?.exists);
+  } catch {
+    // Catalogue unreadable (missing table, no permission): treat the feature as unavailable rather
+    // than retrying a query that will fail anyway.
+    primaryColumnAvailable = false;
+  }
+  return primaryColumnAvailable;
+}
+
 /** Preferences including the primary flag, or null when the column/table isn't available. */
 async function readPreferencesWithPrimary(userId: string): Promise<PreferenceRow[] | null> {
+  if (!(await hasPrimaryColumn())) return null;
   try {
     return await prisma.$queryRaw<PreferenceRow[]>`
       SELECT account_email, enabled, is_primary
@@ -84,6 +117,16 @@ export default withAuth(
     const hasPrimary = req.body?.isPrimary !== undefined;
     const enabled = req.body?.enabled !== false;
     const isPrimary = req.body?.isPrimary === true;
+
+    if (hasPrimary && isPrimary && !(await hasPrimaryColumn())) {
+      res.status(200).json({
+        ok: false,
+        accountEmail,
+        degraded: true,
+        message: "Setting a primary inbox needs prisma/manual/20260820_email_account_primary.sql applied.",
+      });
+      return;
+    }
 
     if (hasPrimary && isPrimary) {
       // One statement per step, in a transaction: clearing the old primary and setting the new one
