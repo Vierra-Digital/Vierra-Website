@@ -38,3 +38,17 @@ export async function createSupabaseAuthUser(email: string, password?: string) {
   }
   return data.user;
 }
+
+/**
+ * Deletes a Supabase Auth identity. Used to roll back a partially-failed
+ * account creation (auth user created but the Prisma-side rows failed) and
+ * when an admin deletes an app user, so the email isn't left permanently
+ * stuck on an orphaned, unreachable Supabase identity. Errors are logged but
+ * swallowed — callers use this as best-effort cleanup, not a critical path.
+ */
+export async function deleteSupabaseAuthUser(userId: string) {
+  const { error } = await getSupabaseAdmin().auth.admin.deleteUser(userId);
+  if (error) {
+    console.error("deleteSupabaseAuthUser", userId, error.message);
+  }
+}

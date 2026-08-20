@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { createSupabaseAuthUser } from "@/lib/supabase/admin";
+import { createSupabaseAuthUser, deleteSupabaseAuthUser } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -66,8 +66,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const roleToStore = String(newRole).toLowerCase() === "client" ? "staff" : String(newRole);
     const normalizedEmail = String(email).trim().toLowerCase();
+
+    let authUserId: string | null = null;
     try {
       const authUser = await createSupabaseAuthUser(normalizedEmail, password ? String(password) : undefined);
+      authUserId = authUser.id;
       const user = await prisma.user.create({
         data: { id: authUser.id, name: name || null, email: normalizedEmail },
         select: { id: true, name: true, email: true },
@@ -78,7 +81,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(201).json({ ...user, role: roleToStore });
     } catch (e: any) {
       console.error("admin/users POST", e);
-      const msg = e?.code === "P2002" ? "Email already exists" : "Failed to create user";
+      // Roll back the Supabase Auth identity if it was created but a later
+      // step failed — otherwise the email is permanently stuck on an
+      // orphaned identity that blocks every future create/invite attempt.
+      if (authUserId) await deleteSupabaseAuthUser(authUserId);
+      const msg = e?.code === "P2002" ? "Email already exists" : e?.message || "Failed to create user";
       return res.status(400).json({ message: msg });
     }
   }
@@ -175,6 +182,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!target) return res.status(404).json({ message: "User not found" });
       await prisma.client.updateMany({ where: { user_id: userId }, data: { user_id: null } });
       await prisma.user.delete({ where: { id: userId } });
+      // Also remove the Supabase Auth identity — otherwise the email stays
+      // registered on Supabase's side and can never be re-created or re-invited.
+      await deleteSupabaseAuthUser(String(userId));
       return res.status(200).json({ deleted: userId });
     } catch (e) {
       console.error("admin/users DELETE", e);
