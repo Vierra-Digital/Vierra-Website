@@ -42,6 +42,7 @@ type ListedUser = {
     image: boolean
     role: string
     clientName: string | null
+    isSelf?: boolean
 }
 
 function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
@@ -408,13 +409,15 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                     </td>
                                                     <td className="px-4 py-4">
                                         <div className="flex items-center gap-2">
-                                                            <button 
-                                                                onClick={() => deleteUser(u.id)} 
-                                                                disabled={u.email?.toLowerCase() === "business@alexshick.com"}
-                                                                className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                            >
-                                                                Remove
-                                                            </button>
+                                                            {!u.isSelf && (
+                                                                <button
+                                                                    onClick={() => deleteUser(u.id)}
+                                                                    disabled={u.email?.toLowerCase() === "business@alexshick.com"}
+                                                                    className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                >
+                                                                    Remove
+                                                                </button>
+                                                            )}
                                         </div>
                                     </td>
                                 </tr>

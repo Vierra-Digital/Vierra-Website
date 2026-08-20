@@ -16,15 +16,18 @@ const StaffActionsMenu: React.FC<{
     staffName: string
     onEdit: () => void
     onDelete: () => void
-}> = ({ staffName, onEdit, onDelete }) => {
+    isSelf?: boolean
+}> = ({ staffName, onEdit, onDelete, isSelf }) => {
     return (
         <RowActionMenu label={`Manage ${staffName}`}>
             <RowActionMenuItem onClick={onEdit} icon={<FiEdit3 className="w-4 h-4" />} tone="accent">
                 Edit Staff
             </RowActionMenuItem>
-            <RowActionMenuItem onClick={onDelete} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
-                Remove Staff
-            </RowActionMenuItem>
+            {!isSelf && (
+                <RowActionMenuItem onClick={onDelete} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
+                    Remove Staff
+                </RowActionMenuItem>
+            )}
         </RowActionMenu>
     )
 }
@@ -57,6 +60,7 @@ interface TeamRow {
     status: string
     lastActiveAt: string | null
     isPending?: boolean
+    isSelf?: boolean
 }
 
 const StatusBadge: React.FC<{ lastActiveAt: string | null; isPending?: boolean }> = ({ lastActiveAt, isPending }) => {
@@ -245,6 +249,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 status: u.status,
                 lastActiveAt: u.lastActiveAt,
                 isPending: false,
+                isSelf: u.isSelf,
             }))
 
             let pendingRows: TeamRow[] = []
@@ -617,6 +622,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                                                 staffName={r.name}
                                                                 onEdit={() => handleManageStaff(r)}
                                                                 onDelete={() => handleDeleteStaff(r.id, r.name)}
+                                                                isSelf={r.isSelf}
                                                             />
                                                         )}
                                     </td>
