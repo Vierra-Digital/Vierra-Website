@@ -53,6 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           lastActiveAt: null,
           clientName: u.clients_clients_user_idTousers?.name ?? null,
           hasPassword: false,
+          isSelf: u.id === session.user.id,
         };
       });
       return res.status(200).json(shaped);
@@ -207,6 +208,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const id = req.query.id || (req.body && req.body.id);
     const userId = Array.isArray(id) ? id[0] : id;
     if (!userId) return res.status(400).json({ message: "id is required" });
+    if (userId === session.user.id) {
+      return res.status(400).json({ message: "You cannot remove your own account" });
+    }
     try {
       // Only delete users who belong to the admin's own company — never any user id system-wide.
       const target = await prisma.companyMembership.findFirst({
