@@ -50,6 +50,9 @@ import {
   FiUsers,
   FiX,
 } from "react-icons/fi";
+// Feather has no reply-all glyph; two overlapping arrows read as a smudge at 16px. Material's
+// is the same double-arrow Gmail uses.
+import { MdReplyAll } from "react-icons/md";
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
@@ -5292,7 +5295,7 @@ ${sourceText}`;
                           <FiChevronsRight className="w-4 h-4 rotate-180" />
                           Back
                         </button>
-                        <div className="flex flex-wrap items-center gap-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           {/* The same three actions as at the foot of the message. Both places are
                               wanted: the toolbar is where they are reached for out of habit, the
                               foot is where they belong while reading. */}
@@ -5316,8 +5319,7 @@ ${sourceText}`;
                             aria-label="Reply All"
                             data-tip="Reply All"
                           >
-                            <FiCornerUpLeft className="w-4 h-4 -mr-1.5" />
-                            <FiCornerUpLeft className="w-4 h-4" />
+                            <MdReplyAll className="w-[18px] h-[18px]" />
                           </button>
                           <button
                             type="button"
@@ -5592,10 +5594,7 @@ ${sourceText}`;
                                       }}
                                       className={REPLY_ACTION_BUTTON}
                                     >
-                                      <span className="inline-flex items-center" aria-hidden>
-                                        <FiCornerUpLeft className="h-4 w-4 -mr-1.5" />
-                                        <FiCornerUpLeft className="h-4 w-4" />
-                                      </span>
+                                      <MdReplyAll className="h-[18px] w-[18px]" aria-hidden />
                                       Reply all
                                     </button>
                                     <button

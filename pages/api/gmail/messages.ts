@@ -285,10 +285,35 @@ export default withAuth(async (req, res, session) => {
           : searchQuery;
 
         const mapDetailedMessages = (detailed: GmailMessageResponse[]): MessageRow[] => {
-          const visibleDetailed =
+          let visibleDetailed =
             mailbox === "sent"
               ? detailed.filter((msg) => !(Array.isArray(msg.labelIds) && msg.labelIds.includes("TRASH")))
               : detailed;
+
+          if (mailbox === "archive") {
+            /**
+             * Archive is "no INBOX label", which Gmail search expresses fine — but mail this
+             * account sent also has no INBOX, so the query alone drags every sent message in.
+             * The previous `-in:sent` clause excluded those AND excluded self-addressed mail,
+             * which carries SENT *and* INBOX; archiving such a message removed INBOX and then
+             * the clause hid it, so it vanished with nowhere to be found.
+             *
+             * Search can't express "sent but also received", so split it here: drop SENT
+             * messages unless this mailbox is among the recipients. Self-addressed mail stays,
+             * ordinary sent mail goes.
+             */
+            const self = account.email.toLowerCase();
+            visibleDetailed = visibleDetailed.filter((msg) => {
+              const labels = Array.isArray(msg.labelIds) ? msg.labelIds : [];
+              if (!labels.includes("SENT")) return true;
+              const headers = msg.payload?.headers || [];
+              const recipients = ["To", "Cc", "Bcc", "Delivered-To"]
+                .map((name) => extractHeader(headers, name) || "")
+                .join(", ")
+                .toLowerCase();
+              return recipients.includes(self);
+            });
+          }
           return visibleDetailed.map((msg) => {
             const headers = msg.payload?.headers || [];
             const subject = decodeHtmlEntities(extractHeader(headers, "Subject") || "(No Subject)");
