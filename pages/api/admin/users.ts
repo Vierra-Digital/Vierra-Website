@@ -25,6 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               id: true,
               name: true,
               email: true,
+              is_platform_admin: true,
               user_preferences: { select: { time_zone: true, image_storage_key: true, image_updated_at: true } },
               clients_clients_user_idTousers: { select: { name: true } },
             },
@@ -34,7 +35,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         orderBy: { joined_at: "asc" },
       });
 
-      const shaped = memberships.map((m) => {
+      const shaped = memberships
+        // Superadmins are invisible to everyone except other superadmins — a regular company
+        // admin/staff member shouldn't even know the account exists, let alone see it in the list.
+        .filter((m) => isPlatformAdmin || !m.users_company_memberships_user_idTousers.is_platform_admin)
+        .map((m) => {
         const u = m.users_company_memberships_user_idTousers;
         return {
           id: u.id,
@@ -57,6 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           lastActiveAt: null,
           clientName: u.clients_clients_user_idTousers?.name ?? null,
           companyName: isPlatformAdmin ? ((m as any).companies?.name ?? null) : null,
+          isPlatformAdmin: u.is_platform_admin,
           hasPassword: false,
           isSelf: u.id === session.user.id,
         };
@@ -143,10 +149,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // membership-scoped queries below instead of the caller's own companyId.
       const target = await prisma.companyMembership.findFirst({
         where: isPlatformAdmin ? { user_id: String(id) } : { company_id: companyId, user_id: String(id) },
-        select: { user_id: true, company_id: true },
+        select: {
+          user_id: true,
+          company_id: true,
+          users_company_memberships_user_idTousers: { select: { is_platform_admin: true } },
+        },
       });
       if (!target) return res.status(404).json({ message: "User not found" });
       const targetCompanyId = target.company_id;
+      // A superadmin's own company role can't be changed from here, by anyone (including another
+      // superadmin) — it's not what determines their access, so editing it would be misleading at
+      // best. Other fields (name, email, position, time zone...) are unaffected.
+      if (newRole !== undefined && target.users_company_memberships_user_idTousers.is_platform_admin) {
+        return res.status(403).json({ message: "Superadmin accounts can't have their role changed here." });
+      }
 
       const normalizedEmail = email !== undefined ? String(email).trim().toLowerCase() : undefined;
       // Sync Supabase Auth first — if it fails, bail out before touching Prisma so the two
@@ -225,9 +241,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Platform admins are exempt from that scoping (see the PUT handler above for why).
       const target = await prisma.companyMembership.findFirst({
         where: isPlatformAdmin ? { user_id: String(userId) } : { company_id: companyId, user_id: String(userId) },
-        select: { user_id: true },
+        select: {
+          user_id: true,
+          users_company_memberships_user_idTousers: { select: { is_platform_admin: true } },
+        },
       });
       if (!target) return res.status(404).json({ message: "User not found" });
+      if (target.users_company_memberships_user_idTousers.is_platform_admin) {
+        return res.status(403).json({ message: "Superadmin accounts can't be removed here." });
+      }
       await prisma.client.updateMany({ where: { user_id: userId }, data: { user_id: null } });
       await prisma.user.delete({ where: { id: userId } });
       return res.status(200).json({ deleted: userId });

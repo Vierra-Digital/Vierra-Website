@@ -43,6 +43,7 @@ type ListedUser = {
     role: string
     clientName: string | null
     companyName: string | null
+    isPlatformAdmin?: boolean
     isSelf?: boolean
 }
 
@@ -411,7 +412,9 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                                         <select
                                                             value={u.role === "user" || u.role === "client" ? "user" : (u.role || "admin")}
                                                             onChange={(e) => updateRole(u.id, e.target.value)}
-                                                            className="text-sm border border-[#E5E7EB] rounded-md pl-2 pr-[5px] mr-10 py-0.5 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                                                            disabled={u.isPlatformAdmin}
+                                                            title={u.isPlatformAdmin ? "Superadmin role can't be changed here" : undefined}
+                                                            className="text-sm border border-[#E5E7EB] rounded-md pl-2 pr-[5px] mr-10 py-0.5 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] disabled:opacity-50 disabled:cursor-not-allowed"
                                                         >
                                                             <option value="admin">Admin</option>
                                                             <option value="staff">Staff</option>
@@ -420,7 +423,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                     </td>
                                                     <td className="px-4 py-4">
                                         <div className="flex items-center gap-2">
-                                                            {!u.isSelf && (
+                                                            {!u.isSelf && !u.isPlatformAdmin && (
                                                                 <button
                                                                     onClick={() => deleteUser(u.id)}
                                                                     disabled={u.email?.toLowerCase() === "business@alexshick.com"}
