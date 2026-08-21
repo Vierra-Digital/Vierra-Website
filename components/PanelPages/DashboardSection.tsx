@@ -427,7 +427,7 @@ const DashboardSection = () => {
                                   : card.lifetimeValue.toLocaleString()
 
                             return (
-                                <div key={card.key} className="group bg-[#FBFAFC] rounded-xl px-3.5 py-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.03)] transition-colors duration-150 hover:bg-[#F7F5FA]">
+                                <div key={card.key} className="group bg-[#F1EFF6] rounded-xl px-3.5 py-3.5 transition-colors duration-150 hover:bg-[#EBE8F3]">
                                     <div className="mb-1.5">
                                         <h3 className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">{card.label}</h3>
                                     </div>
@@ -457,7 +457,7 @@ const DashboardSection = () => {
                     {/* Chart and Recent Posts share a row: the chart alone left its right side empty
                         on wide screens. */}
                     <div className="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                    <div className="bg-[#FBFAFC] rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+                    <div className="bg-[#F1EFF6] rounded-xl p-4">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Website Visits</h3>
                             <div className="relative">
@@ -532,7 +532,7 @@ const DashboardSection = () => {
                             )}
                         </div>
                     </div>
-<div className="bg-[#FBFAFC] rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)] flex flex-col">
+<div className="bg-[#F1EFF6] rounded-xl p-4 flex flex-col">
                             <h3 className="text-lg font-semibold text-[#111827] mb-3">Recent Posts</h3>
                             {postsLoading ? (
                                 <div className="space-y-2">
@@ -569,7 +569,7 @@ const DashboardSection = () => {
                     {/* Staff Activity sits under the chart at the same width as Recent Posts, so
                         the two read as a matched pair rather than one wide and one narrow. */}
                     <div className="mb-4 w-full max-w-[320px]">
-                        <div className="bg-[#FBFAFC] rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+                        <div className="bg-[#F1EFF6] rounded-xl p-4">
                             <h3 className="text-lg font-semibold text-[#111827] mb-3">Staff Activity</h3>
                             {staffLoading ? (
                                 <div className="space-y-2">
@@ -610,7 +610,7 @@ const DashboardSection = () => {
 
                 
                 <div className="w-[400px] shrink-0 space-y-4">
-                    <div className="bg-[#FBFAFC] rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
+                    <div className="bg-[#F1EFF6] rounded-xl p-4">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Upcoming Meetings</h3>
                         </div>
