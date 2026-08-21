@@ -191,32 +191,37 @@ export async function resolveMailboxOwner(
 ): Promise<{ ownerUserId: string; canSend: boolean; tokenEmail: string } | null> {
   const email = accountEmail.toLowerCase();
   try {
-    const ownsGmail = await prisma.platformToken.findFirst({
-      where: { user_id: requesterId, platform: `gmail:${email}` },
-      select: { id: true },
-    });
-    if (ownsGmail) return { ownerUserId: requesterId, canSend: true, tokenEmail: email };
-    const ownsSmtp = await prisma.emailProviderAccount.findFirst({
-      where: { user_id: requesterId, account_email: email },
-      select: { id: true },
-    });
-    if (ownsSmtp) return { ownerUserId: requesterId, canSend: true, tokenEmail: email };
+    // Own-mailbox is the overwhelmingly common case, so it's worth firing both ownership checks
+    // together rather than paying two sequential round-trips before falling through to grants.
+    const [ownsGmail, ownsSmtp] = await Promise.all([
+      prisma.platformToken.findFirst({
+        where: { user_id: requesterId, platform: `gmail:${email}` },
+        select: { id: true },
+      }),
+      prisma.emailProviderAccount.findFirst({
+        where: { user_id: requesterId, account_email: email },
+        select: { id: true },
+      }),
+    ]);
+    if (ownsGmail || ownsSmtp) return { ownerUserId: requesterId, canSend: true, tokenEmail: email };
 
     const grant = await prisma.mailboxGrant.findFirst({
       where: { grantee_user_id: requesterId, account_email: email },
       select: { can_send: true },
     });
     if (grant) {
-      const gmailOwner = await prisma.platformToken.findFirst({
-        where: { platform: `gmail:${email}` },
-        orderBy: { created_at: "asc" },
-        select: { user_id: true },
-      });
+      const [gmailOwner, smtpOwner] = await Promise.all([
+        prisma.platformToken.findFirst({
+          where: { platform: `gmail:${email}` },
+          orderBy: { created_at: "asc" },
+          select: { user_id: true },
+        }),
+        prisma.emailProviderAccount.findFirst({
+          where: { account_email: email },
+          select: { user_id: true },
+        }),
+      ]);
       if (gmailOwner) return { ownerUserId: gmailOwner.user_id, canSend: grant.can_send, tokenEmail: email };
-      const smtpOwner = await prisma.emailProviderAccount.findFirst({
-        where: { account_email: email },
-        select: { user_id: true },
-      });
       if (smtpOwner) return { ownerUserId: smtpOwner.user_id, canSend: grant.can_send, tokenEmail: email };
     }
 

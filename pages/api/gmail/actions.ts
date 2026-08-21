@@ -5,6 +5,14 @@ import { prisma } from "@/lib/prisma";
 import { asStr } from "@/lib/api/parsing";
 import { mapInBatches } from "@/lib/batch";
 import { invalidateGmailListCache } from "@/lib/gmail/messageListCache";
+import {
+  fetchWithTimeout,
+  GMAIL_BATCH_CONCURRENCY,
+  GMAIL_RATE_LIMIT_RETRIES,
+  isRateLimited,
+  backoffDelayMs,
+  delay,
+} from "@/lib/gmail/rateLimitedFetch";
 
 type ActionType =
   | "trash"
@@ -34,24 +42,6 @@ function normalizeItems(input: unknown): ActionItem[] {
       messageId: asStr((item as any)?.messageId),
     }))
     .filter((item) => item.accountEmail && item.messageId);
-}
-
-/**
- * Per-request cap on a single Gmail call. Without it one stalled upstream request holds the whole
- * serverless invocation until the platform kills it, which surfaces to the client as an opaque
- * 502 after a long wait instead of a usable error.
- */
-const GMAIL_CALL_TIMEOUT_MS = 10_000;
-
-/** fetch with a hard timeout, so a hung Gmail request fails fast and reports why. */
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), GMAIL_CALL_TIMEOUT_MS);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
 }
 
 async function callGmailAction(accessToken: string, action: ActionType, messageId: string) {
@@ -106,30 +96,6 @@ async function callGmailAction(accessToken: string, action: ActionType, messageI
   });
 }
 
-/**
- * How many of a batch's Gmail calls run at once.
- *
- * Firing a whole selection in parallel is what produced "Too many concurrent requests for user":
- * Gmail limits concurrency per user, so a 28-message bulk action had several items rejected with 429
- * while the rest succeeded — a partial failure the user then had to retry by hand.
- */
-const ACTION_CONCURRENCY = 5;
-/** Kept low deliberately: the client aborts the whole request at 15s, so retries must fit inside it. */
-const RATE_LIMIT_RETRIES = 2;
-
-/** Gmail signals rate limiting as 429, and as 403 with a rate-limit reason in the body. */
-function isRateLimited(status: number, body: string): boolean {
-  if (status === 429) return true;
-  return status === 403 && /rateLimitExceeded|userRateLimitExceeded|Too many concurrent requests/i.test(body);
-}
-
-/** Exponential backoff with jitter, so retried items in one batch don't resynchronise. */
-function backoffDelayMs(attempt: number): number {
-  return 300 * 2 ** attempt + Math.floor(Math.random() * 150);
-}
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 export default withAuth(async (req, res, session) => {
   const action = asStr(req.body?.action) as ActionType;
   const items = normalizeItems(req.body?.items);
@@ -168,17 +134,21 @@ export default withAuth(async (req, res, session) => {
   // the token has to be fetched for that address, not for the alias. Kept per requested account so
   // the retry path below can look it up again.
   const tokenEmailMap = new Map<string, string>();
-  for (const accountEmail of uniqueAccounts) {
-    const access = await resolveMailboxOwner(userId, accountEmail);
-    const ownerUserId = access && access.canSend ? access.ownerUserId : null;
-    ownerMap.set(accountEmail, ownerUserId);
-    const tokenEmail = access?.tokenEmail || accountEmail;
-    tokenEmailMap.set(accountEmail, tokenEmail);
-    const tokenResult = ownerUserId
-      ? await getValidGmailAccessToken(ownerUserId, tokenEmail)
-      : { ok: false as const };
-    tokenMap.set(accountEmail, tokenResult.ok ? tokenResult.accessToken : null);
-  }
+  // Accounts are independent lookups — resolving them one at a time only matters for
+  // mixed-mailbox selections, but there's no reason to pay for it serially either way.
+  await Promise.all(
+    uniqueAccounts.map(async (accountEmail) => {
+      const access = await resolveMailboxOwner(userId, accountEmail);
+      const ownerUserId = access && access.canSend ? access.ownerUserId : null;
+      ownerMap.set(accountEmail, ownerUserId);
+      const tokenEmail = access?.tokenEmail || accountEmail;
+      tokenEmailMap.set(accountEmail, tokenEmail);
+      const tokenResult = ownerUserId
+        ? await getValidGmailAccessToken(ownerUserId, tokenEmail)
+        : { ok: false as const };
+      tokenMap.set(accountEmail, tokenResult.ok ? tokenResult.accessToken : null);
+    })
+  );
   // Resolve accountEmail -> account_id for outbound message cleanup. Scoped to the mailbox
   // OWNER's user_id (from ownerMap above), not the requester's — for a shared/delegated inbox
   // the EmailProviderAccount row (and the EmailOutboundMessage rows it's cleaned up against
@@ -203,7 +173,7 @@ export default withAuth(async (req, res, session) => {
     }
   }
 
-  // Bounded concurrency rather than all at once — see ACTION_CONCURRENCY.
+  // Bounded concurrency rather than all at once — see GMAIL_BATCH_CONCURRENCY.
   const results = await mapInBatches(
     items,
     async (item) => {
@@ -239,7 +209,7 @@ export default withAuth(async (req, res, session) => {
           const normalized = String(text || "");
           // Rate limiting is transient and says nothing about this message, so retry it rather than
           // reporting a failure the user can only fix by clicking the same button again.
-          if (isRateLimited(response.status, normalized) && attempt < RATE_LIMIT_RETRIES) {
+          if (isRateLimited(response.status, normalized) && attempt < GMAIL_RATE_LIMIT_RETRIES) {
             await delay(backoffDelayMs(attempt));
             continue;
           }
@@ -264,7 +234,7 @@ export default withAuth(async (req, res, session) => {
         return { ...item, ok: false, error: error instanceof Error ? error.message : "Unknown error" };
       }
     },
-    ACTION_CONCURRENCY
+    GMAIL_BATCH_CONCURRENCY
   );
 
   // Any of these actions change what a mailbox view would return (read state, labels, presence),
