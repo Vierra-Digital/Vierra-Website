@@ -335,8 +335,11 @@ export async function readCachedUpcomingMeetings(userId: string): Promise<Upcomi
   const status = await prisma.dashboardMeetingsSyncStatus.findUnique({ where: { user_id: userId } })
   if (!status) return null
 
+  // Only meetings that have not started yet, filtered in the query rather than after the take.
+  // Taking the five earliest rows outright meant a meeting from this morning consumed a slot, so
+  // the panel showed three upcoming ones and looked capped when it was simply full of the past.
   const meetings = await prisma.dashboardUpcomingMeeting.findMany({
-    where: { user_id: userId },
+    where: { user_id: userId, start_at: { gte: new Date() } },
     orderBy: { start_at: "asc" },
     take: UPCOMING_MEETINGS_LIMIT,
   })

@@ -40,12 +40,12 @@ function formatActiveSince(iso: string | null): string {
     const then = new Date(iso).getTime()
     if (!Number.isFinite(then)) return "Never"
     const mins = Math.max(0, Math.round((Date.now() - then) / 60000))
-    if (mins < 1) return "Just now"
-    if (mins < 60) return `${mins}m ago`
+    if (mins < 1) return "Just Now"
+    if (mins < 60) return `${mins} Min Ago`
     const hours = Math.round(mins / 60)
-    if (hours < 24) return `${hours}h ago`
+    if (hours < 24) return `${hours} ${hours === 1 ? "Hour" : "Hours"} Ago`
     const days = Math.round(hours / 24)
-    return days < 7 ? `${days}d ago` : new Date(iso).toLocaleDateString()
+    return days < 7 ? `${days} ${days === 1 ? "Day" : "Days"} Ago` : new Date(iso).toLocaleDateString()
 }
 
 type StaffActivityRow = {
@@ -210,6 +210,9 @@ const DashboardSection = () => {
             setWebsiteVisitsLoading(true)
             try {
                 if (!monthFilter) return
+                // Re-enter the loading state on every month change, or the previous month's
+                // series stays on screen while the new one is in flight.
+                setWebsiteVisitsLoading(true)
                 const response = await fetch(`/api/dashboard/website-visits?month=${encodeURIComponent(monthFilter)}`)
                 if (!response.ok) {
                     setWebsiteVisitsConfigured(false)
@@ -424,16 +427,26 @@ const DashboardSection = () => {
                                   : card.lifetimeValue.toLocaleString()
 
                             return (
-                                <div key={card.key} className="group bg-white rounded-xl px-3.5 py-3.5 border border-[#ECEAF1] shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-colors duration-150 hover:border-[#DED8EA]">
+                                <div key={card.key} className="group bg-[#FBFAFC] rounded-xl px-3.5 py-3.5 shadow-[0_1px_2px_rgba(16,24,40,0.03)] transition-colors duration-150 hover:bg-[#F7F5FA]">
                                     <div className="mb-1.5">
                                         <h3 className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">{card.label}</h3>
                                     </div>
-                                    <div className={`text-[22px] font-semibold leading-none tracking-[-0.02em] mb-1.5 ${numberColorByStat[card.key]}`}>
-                                        {displayValue}
-                                    </div>
+                                    {statsLoading ? (
+                                        <div className="dash-skeleton mb-2 h-[22px] w-16 rounded" />
+                                    ) : (
+                                        <div className={`text-[22px] font-semibold leading-none tracking-[-0.02em] mb-1.5 ${numberColorByStat[card.key]}`}>
+                                            {displayValue}
+                                        </div>
+                                    )}
                                     <div className={`flex items-center text-[12px] font-medium ${trendUi.valueClass}`}>
-                                        <TrendIcon className={`w-3 h-3 mr-1 ${trendUi.iconClass}`} />
-                                        {statsLoading ? "..." : growthLabel}
+                                        {statsLoading ? (
+                                            <span className="dash-skeleton h-3 w-10 rounded" />
+                                        ) : (
+                                            <>
+                                                <TrendIcon className={`w-3 h-3 mr-1 ${trendUi.iconClass}`} />
+                                                {growthLabel}
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                             )
@@ -444,7 +457,7 @@ const DashboardSection = () => {
                     {/* Chart and Recent Posts share a row: the chart alone left its right side empty
                         on wide screens. */}
                     <div className="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                    <div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
+                    <div className="bg-[#FBFAFC] rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Website Visits</h3>
                             <div className="relative">
@@ -462,10 +475,19 @@ const DashboardSection = () => {
                                 <RiArrowDropDownLine className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
                             </div>
                         </div>
-                        <div className="h-64 bg-[#FAFAFB] rounded-lg p-3 border border-[#F1EFF5]">
+                        <div className="h-64 rounded-lg p-3">
                             {websiteVisitsLoading ? (
-                                <div className="h-full w-full flex items-center justify-center text-sm text-[#6B7280]">
-                                    Loading website visits...
+                                /* Bars rather than a spinner or a line of text: the chart's own
+                                   shape, so switching months doesn't collapse the panel's height
+                                   and then snap back. */
+                                <div className="flex h-full w-full items-end gap-2 px-1 pb-5">
+                                    {[38, 62, 46, 74, 55, 68, 42].map((h, i) => (
+                                        <div
+                                            key={i}
+                                            className="dash-skeleton flex-1 rounded-t-md"
+                                            style={{ height: `${h}%`, animationDelay: `${i * 70}ms` }}
+                                        />
+                                    ))}
                                 </div>
                             ) : !websiteVisitsConfigured ? (
                                 <div className="h-full w-full flex items-center justify-center text-sm text-[#6B7280] text-center px-6">
@@ -510,12 +532,12 @@ const DashboardSection = () => {
                             )}
                         </div>
                     </div>
-<div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1] flex flex-col">
+<div className="bg-[#FBFAFC] rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)] flex flex-col">
                             <h3 className="text-lg font-semibold text-[#111827] mb-3">Recent Posts</h3>
                             {postsLoading ? (
                                 <div className="space-y-2">
                                     {[...Array(3)].map((_, i) => (
-                                        <div key={i} className="h-9 rounded-lg bg-[#F4F2F8] animate-pulse" />
+                                        <div key={i} className="dash-skeleton h-9 rounded-lg" style={{ animationDelay: `${i * 70}ms` }} />
                                     ))}
                                 </div>
                             ) : recentPosts.length === 0 ? (
@@ -535,7 +557,7 @@ const DashboardSection = () => {
                                                 </p>
                                             </div>
                                             <span className="shrink-0 rounded-full bg-[#F3EDFB] px-2 py-0.5 text-[11px] font-medium text-[#701CC0]">
-                                                {post.views.toLocaleString()} views
+                                                {post.views.toLocaleString()} {post.views === 1 ? "View" : "Views"}
                                             </span>
                                         </li>
                                     ))}
@@ -547,12 +569,12 @@ const DashboardSection = () => {
                     {/* Staff Activity sits under the chart at the same width as Recent Posts, so
                         the two read as a matched pair rather than one wide and one narrow. */}
                     <div className="mb-4 w-full max-w-[320px]">
-                        <div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
+                        <div className="bg-[#FBFAFC] rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
                             <h3 className="text-lg font-semibold text-[#111827] mb-3">Staff Activity</h3>
                             {staffLoading ? (
                                 <div className="space-y-2">
                                     {[...Array(3)].map((_, i) => (
-                                        <div key={i} className="h-9 rounded-lg bg-[#F4F2F8] animate-pulse" />
+                                        <div key={i} className="dash-skeleton h-9 rounded-lg" style={{ animationDelay: `${i * 70}ms` }} />
                                     ))}
                                 </div>
                             ) : staffActivity.length === 0 ? (
@@ -587,21 +609,31 @@ const DashboardSection = () => {
                 </div>
 
                 
-                <div className="w-[360px] shrink-0 space-y-4">
-                    <div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
+                <div className="w-[400px] shrink-0 space-y-4">
+                    <div className="bg-[#FBFAFC] rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Upcoming Meetings</h3>
                         </div>
                         {meetingsLoading ? (
+                            <div className="space-y-3">
+                                {[...Array(3)].map((_, i) => (
+                                    <div key={i} className="rounded-lg bg-white p-3">
+                                        <div className="dash-skeleton mb-2 h-3.5 w-3/4 rounded" style={{ animationDelay: `${i * 80}ms` }} />
+                                        <div className="dash-skeleton mb-2.5 h-3 w-1/2 rounded" style={{ animationDelay: `${i * 80 + 50}ms` }} />
+                                        <div className="dash-skeleton h-8 w-full rounded-md" style={{ animationDelay: `${i * 80 + 90}ms` }} />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : false ? (
                             <div className="text-sm text-[#6B7280]">Loading upcoming meetings...</div>
                         ) : !calendarConnected ? (
-                            <div className="rounded-lg border border-[#ECEAF1] bg-[#FAFAFB] p-3">
+                            <div className="rounded-lg bg-white p-3">
                                 <p className="text-sm text-[#374151]">
                                     Connect your Google Gmail account in settings to load upcoming meetings.
                                 </p>
                             </div>
                         ) : calendarNeedsReconnect ? (
-                            <div className="rounded-lg border border-[#ECEAF1] bg-[#FAFAFB] p-3">
+                            <div className="rounded-lg bg-white p-3">
                                 <p className="text-sm text-[#6B7280]">
                                     Reconnect your Google account in settings to grant calendar access, then refresh this page.
                                 </p>
@@ -610,7 +642,7 @@ const DashboardSection = () => {
                                 ) : null}
                             </div>
                         ) : futureMeetings.length === 0 ? (
-                            <div className="rounded-lg border border-[#ECEAF1] bg-[#FAFAFB] p-3 flex flex-col items-center text-center">
+                            <div className="rounded-lg bg-white p-3 flex flex-col items-center text-center">
                                 <div className="relative mb-3 flex h-14 w-14 items-center justify-center">
                                     <div className="meeting-empty-ping absolute inset-0 rounded-full bg-[#E9D5FF]" />
                                     <div className="meeting-empty-icon relative flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm border border-[#E9D5FF]">
@@ -625,7 +657,7 @@ const DashboardSection = () => {
                         ) : (
                             <div className="space-y-4">
                                 {futureMeetings.map((meeting) => (
-                                    <div key={meeting.id} className="p-3 bg-[#FAFAFB] rounded-lg border border-[#F1EFF5]">
+                                    <div key={meeting.id} className="p-3 bg-white rounded-lg">
                                         <div className="min-w-0">
                                             <div className="font-medium text-sm mb-2">{meeting.title}</div>
                                             <div className="flex items-center gap-2.5 mb-2">

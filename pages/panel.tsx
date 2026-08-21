@@ -273,7 +273,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
               />
             </Link>
           </div>
-          <div id="panel-nav" className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-y-2.5 items-center text-[#EDF1F5] pt-0 pb-4">
+          <div id="panel-nav" className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-y-[14px] items-center text-[#EDF1F5] pt-0 pb-5">
             {isClientViewMode ? (
               <>
                 <div id="panel-nav-item" onClick={() => { setViewModeSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${viewModeSection === 0 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>

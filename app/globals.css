@@ -1371,3 +1371,27 @@ input[type="search"]::-ms-clear:hover {
 
 
 
+
+/* ── Dashboard skeletons ───────────────────────────────────────────────────────
+   Light-panel counterpart to .settings-skeleton: same sheen, tuned for the
+   dashboard's off-white cards so placeholders read as the surface settling
+   rather than a dozen separate things blinking. */
+.dash-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(17, 24, 39, 0.045) 0%,
+    rgba(17, 24, 39, 0.09) 50%,
+    rgba(17, 24, 39, 0.045) 100%
+  );
+  background-size: 200% 100%;
+  animation: dash-skeleton-sheen 1.4s ease-in-out infinite;
+}
+
+@keyframes dash-skeleton-sheen {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-skeleton { animation: none; background: rgba(17, 24, 39, 0.07); }
+}
