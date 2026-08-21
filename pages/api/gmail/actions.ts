@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { asStr } from "@/lib/api/parsing";
 import { mapInBatches } from "@/lib/batch";
 import { invalidateGmailListCache } from "@/lib/gmail/messageListCache";
+import { invalidateGmailCountsCache } from "@/lib/gmail/countsCache";
 
 type ActionType =
   | "trash"
@@ -273,7 +274,12 @@ export default withAuth(async (req, res, session) => {
   for (const accountEmail of succeededAccounts) {
     const owner = ownerMap.get(accountEmail);
     const tokenEmail = tokenEmailMap.get(accountEmail) || accountEmail;
-    if (owner) invalidateGmailListCache(owner, tokenEmail);
+    if (owner) {
+      invalidateGmailListCache(owner, tokenEmail);
+      // These actions all change unread/starred/draft state, which is exactly what the
+      // counts cache holds — without this, badges could lag up to COUNTS_CACHE_TTL_MS.
+      invalidateGmailCountsCache(owner, tokenEmail);
+    }
   }
 
   const failures = results.filter((result) => !result.ok);

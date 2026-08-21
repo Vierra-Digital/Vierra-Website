@@ -3,6 +3,7 @@ import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { asStr } from "@/lib/api/parsing";
 import { invalidateGmailListCache } from "@/lib/gmail/messageListCache";
+import { invalidateGmailCountsCache } from "@/lib/gmail/countsCache";
 
 export default withAuth(
   async (req, res, session) => {
@@ -87,6 +88,7 @@ export default withAuth(
       return;
     }
     invalidateGmailListCache(access.ownerUserId, access.tokenEmail);
+    invalidateGmailCountsCache(access.ownerUserId, access.tokenEmail);
     res.status(200).json({ ok: true });
   },
   { methods: ["POST"] }
