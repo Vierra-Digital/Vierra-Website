@@ -29,6 +29,7 @@ import {
   FiMail,
   FiMaximize2,
   FiMinimize2,
+  FiMoreHorizontal,
   FiMoreVertical,
   FiMove,
   FiPlus,
@@ -244,6 +245,18 @@ function writeCachedSelectedAccounts(accounts: string[]): void {
   }
 }
 
+/** Google Drive mark, inline so the button carries the real logo without a remote fetch. */
+const DriveMark: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 87.3 78" className={className} aria-hidden focusable="false">
+    <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da" />
+    <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47" />
+    <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335" />
+    <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d" />
+    <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc" />
+    <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00" />
+  </svg>
+);
+
 /**
  * Compose footer icon button. Gmail's composer is one row of quiet, chrome-less icons with a
  * single solid Send — so an "on" toggle (Confidential, Receipt, a set schedule) reads as a soft
@@ -428,6 +441,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [inlineComposeCc, setInlineComposeCc] = useState("");
   const [inlineComposeBcc, setInlineComposeBcc] = useState("");
   const [inlineShowCc, setInlineShowCc] = useState(false);
+  /** Gmail shows the recipient as text; it only becomes a field once you click it. */
+  const [inlineToEditing, setInlineToEditing] = useState(false);
+  /** Gmail's "⋯" — the trimmed quoted original, hidden until asked for, then editable. */
+  const [inlineShowQuoted, setInlineShowQuoted] = useState(false);
   const [inlineShowBcc, setInlineShowBcc] = useState(false);
   /** Inline reply overflow menu — switches reply mode, as Gmail's does. */
   const [inlineMoreOpen, setInlineMoreOpen] = useState(false);
@@ -3089,6 +3106,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setInlineComposeBcc("");
     setInlineShowCc(false);
     setInlineShowBcc(false);
+    setInlineToEditing(false);
+    setInlineShowQuoted(false);
     setInlineMoreOpen(false);
     setInlineComposeTo(to);
     setInlineComposeSubject(
@@ -5541,19 +5560,32 @@ ${sourceText}`;
                                      which the dark layer does not remap — so the card stayed white
                                      while its text was remapped to near-white and became illegible. */
                                   <div ref={inlineComposeRef} className="pt-3">
-                                    <div className="rounded-2xl border border-[#E5E7EB] bg-white shadow-sm">
+                                    <div className="inline-reply-card rounded-xl border border-[#E5E7EB] bg-white shadow-sm">
                                       {/* Recipient line. Gmail shows the address as plain text with
                                           Cc/Bcc one click away, rather than a labelled form row and a
                                           mode caption repeating what the button you just pressed said. */}
                                       <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
                                         <span className="shrink-0 text-[13px] text-[#6B7280]">To</span>
-                                        <input
-                                          value={inlineComposeTo}
-                                          onChange={(event) => setInlineComposeTo(event.target.value)}
-                                          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none placeholder:text-[#9CA3AF]"
-                                          placeholder="name@email.com"
-                                          aria-label="To"
-                                        />
+                                        {inlineToEditing ? (
+                                          <input
+                                            value={inlineComposeTo}
+                                            onChange={(event) => setInlineComposeTo(event.target.value)}
+                                            onBlur={() => setInlineToEditing(false)}
+                                            autoFocus
+                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none placeholder:text-[#9CA3AF]"
+                                            placeholder="name@email.com"
+                                            aria-label="To"
+                                          />
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={() => setInlineToEditing(true)}
+                                            className="min-w-0 flex-1 truncate text-left text-[13px] font-medium text-[#1E1B2E]"
+                                            title="Click to change recipients"
+                                          >
+                                            {inlineComposeTo || "Add recipients"}
+                                          </button>
+                                        )}
                                         <div className="flex shrink-0 items-center gap-2">
                                           <button
                                             type="button"
@@ -5629,6 +5661,34 @@ ${sourceText}`;
                                         />
                                       </div>
 
+                                      {/* Gmail trims the message you're replying to behind a small
+                                          "⋯" and lets you edit it once expanded. The quoted body is
+                                          already part of the send payload, so this exposes the same
+                                          value rather than a copy of it. */}
+                                      {inlineComposeBodyHtml ? (
+                                        <div className="px-3 pb-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => setInlineShowQuoted((open) => !open)}
+                                            className="inline-reply-ellipsis email-tip"
+                                            data-tip={inlineShowQuoted ? "Hide trimmed content" : "Show trimmed content"}
+                                            aria-label={inlineShowQuoted ? "Hide trimmed content" : "Show trimmed content"}
+                                            aria-expanded={inlineShowQuoted}
+                                          >
+                                            <FiMoreHorizontal className="h-3.5 w-3.5" aria-hidden />
+                                          </button>
+                                          {inlineShowQuoted ? (
+                                            <div
+                                              contentEditable
+                                              suppressContentEditableWarning
+                                              onBlur={(event) => setInlineComposeBodyHtml(event.currentTarget.innerHTML)}
+                                              className="email-body mt-2 max-h-60 overflow-y-auto rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] p-3 text-[13px] leading-[1.6] text-[#374151] outline-none focus:border-[#701CC0]/40"
+                                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(inlineComposeBodyHtml) }}
+                                            />
+                                          ) : null}
+                                        </div>
+                                      ) : null}
+
                                       {inlineComposeMode === "forward" && inlineComposePreviewHtml ? (
                                         <div className="mx-4 mb-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3">
                                           <p className="mb-2 text-[11px] uppercase tracking-wide text-[#6B7280]">
@@ -5665,9 +5725,9 @@ ${sourceText}`;
                                             !inlineComposeTo.trim() ||
                                             (!inlineComposeIntroText.trim() && !inlineComposeBodyText.trim())
                                           }
-                                          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-[#701CC0] px-4 text-[13px] font-semibold text-white transition hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
+                                          className="compose-cta inline-flex shrink-0 items-center justify-center gap-2 rounded-md px-4 py-2 text-[13px] font-medium text-white shadow-[0_6px_20px_-8px_rgba(94,23,168,0.9)] transition-[filter] duration-200 ease-out hover:brightness-[1.08] active:brightness-[0.96] disabled:pointer-events-none disabled:opacity-40"
                                         >
-                                          <FiSend className="h-3.5 w-3.5" aria-hidden />
+                                          <FiSend className="h-4 w-4 shrink-0" aria-hidden />
                                           {inlineComposeSending ? "Sending…" : "Send"}
                                         </button>
 
@@ -5675,11 +5735,11 @@ ${sourceText}`;
                                           type="button"
                                           onClick={() => void handleArtemisDraft()}
                                           disabled={artemisDrafting}
-                                          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-[#701CC0] transition hover:bg-[#701CC0]/10 disabled:opacity-40"
-                                          title="Help me write"
+                                          className="inline-reply-icon email-tip"
+                                          data-tip={artemisDrafting ? "Writing…" : "Help me write"}
+                                          aria-label="Help me write"
                                         >
-                                          <FiZap className="h-3.5 w-3.5" aria-hidden />
-                                          {artemisDrafting ? "Writing…" : "Help me write"}
+                                          <FiZap className={`h-4 w-4 text-[#A855F7] ${artemisDrafting ? "bolt-charging" : "bolt-idle"}`} aria-hidden />
                                         </button>
 
                                         <span className="mx-1 h-5 w-px shrink-0 bg-black/10" aria-hidden />
@@ -5700,7 +5760,7 @@ ${sourceText}`;
                                           data-tip="Insert from Drive (coming soon)"
                                           aria-label="Insert from Drive"
                                         >
-                                          <FiUpload className="h-4 w-4" aria-hidden />
+                                          <DriveMark className="h-4 w-4" />
                                         </button>
                                         <button
                                           type="button"

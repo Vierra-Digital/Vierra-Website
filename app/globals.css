@@ -1229,3 +1229,77 @@ input[type="search"]::-ms-clear:hover {
 /* The editor's formatting strip belongs to the same bar: drop its own frame so the
    two read as one row of controls rather than two stacked bars. */
 .email-shell .inline-reply-bar + * .ProseMirror { outline: none; }
+
+/* ── Inline reply: one surface, not a card inside a card ───────────────────────
+   ComposeRichEditor draws its own bordered card, correct standalone but a second
+   frame inside the reply card. Same treatment the compose HUD already gets. */
+.email-shell .inline-reply-card { background: #17122A !important; border-color: rgba(255, 255, 255, 0.08) !important; }
+.email-shell .inline-reply-card .rounded-md.border,
+.email-shell .inline-reply-card [class*="rounded-md"][class*="border-[#EAE5F4]"] {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+.email-shell .inline-reply-card .border-b,
+.email-shell .inline-reply-card .border-t { border-color: rgba(255, 255, 255, 0.06) !important; }
+.email-shell .inline-reply-card input,
+.email-shell .inline-reply-card [contenteditable="true"] { color: #EDE9F8 !important; background: transparent !important; }
+.email-shell .inline-reply-card input::placeholder { color: #6F6989 !important; }
+.email-shell .inline-reply-card .text-\[\#6B7280\] { color: #837CA0 !important; }
+.email-shell .inline-reply-card .text-\[\#1E1B2E\] { color: #EDE9F8 !important; }
+
+/* The editor's toolbar was authored for a light panel — lilac chips on #F6F3FD,
+   which fought the dark reader. Same controls, panel palette. */
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 0;
+}
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] button,
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] span { color: #C3BCD8 !important; }
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] button:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: transparent !important;
+  color: #F3F0FB !important;
+}
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] select {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 6px !important;
+  color: #DCD7EC !important;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] select option { background: #241C3E; color: #EDE9F8; }
+/* The two colour swatches read as filled blocks; make them read as swatches. */
+.email-shell .inline-reply-card input[type="color"] { border-radius: 6px !important; height: 22px !important; width: 26px !important; }
+.email-shell .inline-reply-card .bg-\[\#DEC9F6\] { background: rgba(255, 255, 255, 0.12) !important; }
+
+/* Gmail's trimmed-content "⋯". */
+.email-shell .inline-reply-ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #A8A1C0;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.email-shell .inline-reply-ellipsis:hover { background: rgba(255, 255, 255, 0.14); color: #EDE9F8; }
+
+/* "Help me write": the bolt idles with a slow glow and charges while drafting. */
+@keyframes bolt-glow {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(168, 85, 247, 0)); opacity: 0.85; }
+  50% { filter: drop-shadow(0 0 5px rgba(168, 85, 247, 0.85)); opacity: 1; }
+}
+@keyframes bolt-charge {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 2px rgba(168, 85, 247, 0.6)); }
+  50% { transform: scale(1.18); filter: drop-shadow(0 0 9px rgba(192, 132, 252, 1)); }
+}
+.bolt-idle { animation: bolt-glow 2.4s ease-in-out infinite; }
+.bolt-charging { animation: bolt-charge 0.7s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .bolt-idle, .bolt-charging { animation: none; }
+}
