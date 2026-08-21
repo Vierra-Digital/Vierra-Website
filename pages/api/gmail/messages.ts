@@ -428,15 +428,25 @@ export default withAuth(async (req, res, session) => {
    * A message id is unique within a mailbox, so keying on it collapses the repeats while leaving
    * genuinely distinct messages from different accounts alone.
    */
-  const seenMessageIds = new Set<string>();
+  /**
+   * Dedupe on the RFC-822 Message-ID header, not the Gmail message id.
+   *
+   * Mailing yourself leaves two distinct Gmail messages — the copy in Sent and the copy that was
+   * delivered — with different ids but the SAME Message-ID header, because it is one mail. Both
+   * satisfy the Archive query once the delivered copy loses INBOX, so the row appeared twice and
+   * a dedupe keyed on the Gmail id could never collapse it. Distinct mails never share a
+   * Message-ID, so this is safe; fall back to the Gmail id when a message carries no header.
+   */
+  const seenMessageKeys = new Set<string>();
   let mergedMessages = messagesByAccount
     .flat()
     .sort((a, b) => b.timestamp - a.timestamp)
     .filter((message) => {
-      const key = String(message.id || "");
-      if (!key) return true;
-      if (seenMessageIds.has(key)) return false;
-      seenMessageIds.add(key);
+      const header = String(message.messageIdHeader || "").trim().toLowerCase();
+      const key = header || `id:${String(message.id || "")}`;
+      if (key === "id:") return true;
+      if (seenMessageKeys.has(key)) return false;
+      seenMessageKeys.add(key);
       return true;
     });
   if (mailbox === "drafts") {

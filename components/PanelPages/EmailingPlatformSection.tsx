@@ -398,7 +398,16 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [newLabelName, setNewLabelName] = useState("");
   const [creatingLabel, setCreatingLabel] = useState(false);
   /** Guards double-fires without greying the toolbar out for the whole round trip. */
-  const actionInFlightRef = useRef(false);
+  /**
+   * Rows with an action in flight, keyed by rowKey.
+   *
+   * This was a single boolean, so ANY action anywhere blocked every other action until Gmail
+   * answered — archive one message, immediately move a different one, and the second was refused
+   * outright with "Still finishing the last action". That is the slowness and the "takes several
+   * attempts": the click was rejected, not slow. Per-row means only the same message is guarded,
+   * which is all the guard was ever for (double-submitting one mutation).
+   */
+  const actionInFlightRef = useRef<Set<string>>(new Set());
   /** Set below; lets applyAction re-sync after a partial failure without a cyclic dep. */
   const loadMessagesRef = useRef<() => void>(() => {});
   const [labelToDelete, setLabelToDelete] = useState<{ id: string; name: string } | null>(null);
@@ -2624,13 +2633,16 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }));
       if (items.length === 0 && composeDraftRows.length === 0) return;
       const isReadToggle = action === "markRead" || action === "markUnread";
-      if (!isReadToggle && actionInFlightRef.current) {
-        // Silently returning here is why a second delete "did nothing" while the first was still
-        // in flight. Say so instead.
-        setActionError("Still finishing the last action — one moment.");
+      const inFlightKeys = selectedMessageRows.map((message) => rowKey(message));
+      if (!isReadToggle && inFlightKeys.some((key) => actionInFlightRef.current.has(key))) {
+        // Only refuse a repeat action on a message already mid-flight; a different message goes
+        // through immediately.
+        setActionError("Still finishing the last action on that message — one moment.");
         return;
       }
-      if (!isReadToggle) actionInFlightRef.current = true;
+      if (!isReadToggle) {
+        for (const key of inFlightKeys) actionInFlightRef.current.add(key);
+      }
 
       setActionError("");
       // Marking unread clears the "already marked read" latch, or reopening the message would hit it
@@ -2817,7 +2829,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "Action failed.");
       } finally {
-        if (!isReadToggle) actionInFlightRef.current = false;
+        if (!isReadToggle) {
+          for (const key of inFlightKeys) actionInFlightRef.current.delete(key);
+        }
         setActionLoading(false);
       }
     },
