@@ -80,7 +80,13 @@ function parseMailbox(v: string | undefined): Mailbox {
 
 function buildMailboxQuery(mailbox: Mailbox) {
   if (mailbox === "archive") {
-    return { q: "-in:inbox -in:sent -in:drafts -in:spam -in:trash" };
+    // "Archived" in Gmail means one thing: no INBOX label. This used to also exclude in:sent,
+    // which silently swallowed anything self-addressed — a form notification your own site
+    // mails to you carries BOTH SENT and INBOX, so archiving it removed INBOX (correct) and
+    // then the -in:sent clause hid it here (wrong). The message was archived and unfindable,
+    // which reads exactly like archive deleting mail. Sent copies now show up in Archive too;
+    // that's the honest definition, and being able to find what you archived matters more.
+    return { q: "-in:inbox -in:drafts -in:spam -in:trash" };
   }
   if (mailbox === "sent") {
     return { q: "in:sent -in:trash" };

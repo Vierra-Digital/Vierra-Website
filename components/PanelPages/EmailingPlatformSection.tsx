@@ -4637,6 +4637,31 @@ ${sourceText}`;
                                         </button>
                                       ) : null}
                                       <div ref={snoozeMenuRef} className="relative">
+                          {/* Star and Spam sit between Archive and Snooze so the reader's sequence
+                              matches the list row's. */}
+                          {/* Star was only ever on the list row, so an open message could not be
+                              starred without going back. In Starred this is the unstar the list
+                              offers in the same position. */}
+                          {selectedMessage ? (
+                            <button
+                              type="button"
+                              onClick={() => void toggleStar(selectedMessage)}
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label={selectedMessage.starred ? "Unstar" : "Star"}
+                              data-tip={selectedMessage.starred ? "Unstar" : "Star"}
+                            >
+                              <FiStar className={`w-4 h-4 ${selectedMessage.starred ? "fill-[#F5A623] text-[#F5A623]" : ""}`} />
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => applyAction(spamActionType)}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label={spamActionTitle}
+                            data-tip={spamActionTitle}
+                          >
+                            <FiAlertCircle className="w-4 h-4" />
+                          </button>
                                         <button
                                           type="button"
                                           onClick={() => setSnoozeMenuOpen((open) => !open)}
@@ -5267,7 +5292,7 @@ ${sourceText}`;
                           <FiChevronsRight className="w-4 h-4 rotate-180" />
                           Back
                         </button>
-                        <div className="flex flex-wrap items-center gap-1">
+                        <div className="flex flex-wrap items-center gap-0">
                           {/* The same three actions as at the foot of the message. Both places are
                               wanted: the toolbar is where they are reached for out of habit, the
                               foot is where they belong while reading. */}
@@ -5291,7 +5316,8 @@ ${sourceText}`;
                             aria-label="Reply All"
                             data-tip="Reply All"
                           >
-                            <FiUsers className="w-4 h-4" />
+                            <FiCornerUpLeft className="w-4 h-4 -mr-1.5" />
+                            <FiCornerUpLeft className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
@@ -5311,29 +5337,6 @@ ${sourceText}`;
                               list toolbar (star, spam, trash, read, move, archive, snooze), so the
                               two toolbars are not two different sequences of the same icons.
                               Reader-only actions (label, block) come last. */}
-                          {/* Star was only ever on the list row, so an open message could not be
-                              starred without going back. In Starred this is the unstar the list
-                              offers in the same position. */}
-                          {selectedMessage ? (
-                            <button
-                              type="button"
-                              onClick={() => void toggleStar(selectedMessage)}
-                              className={`${ICON_BUTTON} email-tip`}
-                              aria-label={selectedMessage.starred ? "Unstar" : "Star"}
-                              data-tip={selectedMessage.starred ? "Unstar" : "Star"}
-                            >
-                              <FiStar className={`w-4 h-4 ${selectedMessage.starred ? "fill-[#F5A623] text-[#F5A623]" : ""}`} />
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            onClick={() => applyAction(spamActionType)}
-                            className={`${ICON_BUTTON} email-tip`}
-                            aria-label={spamActionTitle}
-                            data-tip={spamActionTitle}
-                          >
-                            <FiAlertCircle className="w-4 h-4" />
-                          </button>
                           <button
                             type="button"
                             onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
@@ -5382,6 +5385,27 @@ ${sourceText}`;
                           {/* Snooze existed only on the list, so an open message had to be closed to
                               snooze it. Same presets, same menu, same dismissal. */}
                           <div ref={snoozeMenuRef} className="relative">
+                          {/* Same position as the list toolbar: after Archive, before Snooze. */}
+                          {selectedMessage ? (
+                            <button
+                              type="button"
+                              onClick={() => void toggleStar(selectedMessage)}
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label={selectedMessage.starred ? "Unstar" : "Star"}
+                              data-tip={selectedMessage.starred ? "Unstar" : "Star"}
+                            >
+                              <FiStar className={`w-4 h-4 ${selectedMessage.starred ? "fill-[#F5A623] text-[#F5A623]" : ""}`} />
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => applyAction(spamActionType)}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label={spamActionTitle}
+                            data-tip={spamActionTitle}
+                          >
+                            <FiAlertCircle className="w-4 h-4" />
+                          </button>
                             <button
                               type="button"
                               onClick={() => setSnoozeMenuOpen((open) => !open)}
@@ -5568,7 +5592,10 @@ ${sourceText}`;
                                       }}
                                       className={REPLY_ACTION_BUTTON}
                                     >
-                                      <FiUsers className="h-4 w-4" aria-hidden />
+                                      <span className="inline-flex items-center" aria-hidden>
+                                        <FiCornerUpLeft className="h-4 w-4 -mr-1.5" />
+                                        <FiCornerUpLeft className="h-4 w-4" />
+                                      </span>
                                       Reply all
                                     </button>
                                     <button
@@ -5738,14 +5765,13 @@ ${sourceText}`;
                                           <button
                                             type="button"
                                             onClick={() => setInlineShowQuoted((open) => !open)}
-                                            className="trimmed-toggle"
+                                            className="trimmed-toggle email-tip"
                                             aria-expanded={inlineShowQuoted}
+                                            data-tip={inlineShowQuoted ? "Hide trimmed content" : "Show trimmed content"}
+                                            aria-label={inlineShowQuoted ? "Hide trimmed content" : "Show trimmed content"}
                                           >
                                             <span className="trimmed-dots" aria-hidden>
                                               <FiMoreHorizontal className="h-3.5 w-3.5" />
-                                            </span>
-                                            <span className="trimmed-label">
-                                              {inlineShowQuoted ? "Hide trimmed content" : "Show trimmed content"}
                                             </span>
                                           </button>
                                           {inlineShowQuoted ? (
