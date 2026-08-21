@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { RiArrowDropDownLine } from "react-icons/ri"
 import { FiTrendingUp, FiTrendingDown, FiMinus, FiCalendar, FiClock } from "react-icons/fi"
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 type GrowthDirection = "up" | "flat" | "down"
 type DashboardStatKey =
@@ -71,9 +71,22 @@ type RecentPostRow = {
 type WebsiteVisitsPoint = { week: string; visits: number }
 
 const DashboardSection = () => {
+    const [clientNow, setClientNow] = useState<Date | null>(null)
+    useEffect(() => {
+        setClientNow(new Date())
+    }, [])
+
     const allMonths = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
     const MONTH_WINDOW = 6
-    const now = new Date()
+    /**
+     * Seeded on mount, not at render time.
+     *
+     * `new Date()` in the component body ran on the server (UTC) and again on the client (local
+     * zone). Near a month boundary those disagree, so the server and client rendered different
+     * <option> lists and React reported a hydration mismatch. Deferring to an effect means the
+     * server renders no options and the client fills them in.
+     */
+    const now = clientNow ?? new Date(0)
     const monthOptions = Array.from({ length: MONTH_WINDOW }, (_, index) => {
         const date = new Date(now.getFullYear(), now.getMonth() - index, 1)
         const year = date.getFullYear()
@@ -88,7 +101,12 @@ const DashboardSection = () => {
         }
     }).reverse()
     const currentMonthValue = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
-    const [monthFilter, setMonthFilter] = useState(currentMonthValue)
+    // Empty until clientNow lands, then pinned to the real current month. Seeding it from the
+    // epoch placeholder used for SSR would leave the picker showing 1970's month.
+    const [monthFilter, setMonthFilter] = useState("")
+    useEffect(() => {
+        if (clientNow && !monthFilter) setMonthFilter(currentMonthValue)
+    }, [clientNow, currentMonthValue, monthFilter])
     const [statsLoading, setStatsLoading] = useState(true)
     const [statsCards, setStatsCards] = useState<DashboardStat[]>([])
     const [meetingsLoading, setMeetingsLoading] = useState(true)
@@ -191,6 +209,7 @@ const DashboardSection = () => {
         const fetchWebsiteVisits = async () => {
             setWebsiteVisitsLoading(true)
             try {
+                if (!monthFilter) return
                 const response = await fetch(`/api/dashboard/website-visits?month=${encodeURIComponent(monthFilter)}`)
                 if (!response.ok) {
                     setWebsiteVisitsConfigured(false)
@@ -282,6 +301,16 @@ const DashboardSection = () => {
             return "UTC"
         }
     }, [])
+
+    /**
+     * Drop anything already finished. The cache is synced periodically, so a meeting that ended
+     * an hour ago is still in the payload and was being listed as "upcoming".
+     */
+    const futureMeetings = upcomingMeetings.filter((meeting) => {
+        const end = new Date(meeting.endIso || meeting.startIso || 0).getTime()
+        if (!Number.isFinite(end)) return true
+        return clientNow ? end >= clientNow.getTime() : true
+    })
 
     const formatMeetingDate = (iso: string) => {
         const date = new Date(iso)
@@ -402,7 +431,7 @@ const DashboardSection = () => {
                                     <div className={`text-[22px] font-semibold leading-none tracking-[-0.02em] mb-1.5 ${numberColorByStat[card.key]}`}>
                                         {displayValue}
                                     </div>
-                                    <div className={`inline-flex items-center gap-0.5 rounded-full bg-[#F6F5F8] px-1.5 py-0.5 text-[11px] font-medium ${trendUi.valueClass}`}>
+                                    <div className={`flex items-center text-[12px] font-medium ${trendUi.valueClass}`}>
                                         <TrendIcon className={`w-3 h-3 mr-1 ${trendUi.iconClass}`} />
                                         {statsLoading ? "..." : growthLabel}
                                     </div>
@@ -446,7 +475,15 @@ const DashboardSection = () => {
                                 </div>
                             ) : (
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={websiteVisitsData}>
+                                    <AreaChart data={websiteVisitsData} margin={{ top: 6, right: 6, left: -18, bottom: 0 }}>
+                                        {/* Vertical fade so the fill reads as area under the curve
+                                            rather than a solid purple block. */}
+                                        <defs>
+                                            <linearGradient id="visitsFill" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="0%" stopColor="#701CC0" stopOpacity={0.28} />
+                                                <stop offset="100%" stopColor="#701CC0" stopOpacity={0.02} />
+                                            </linearGradient>
+                                        </defs>
                                         <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                                         <XAxis dataKey="week" stroke="#6B7280" fontSize={12} />
                                         <YAxis stroke="#6B7280" fontSize={12} />
@@ -458,21 +495,23 @@ const DashboardSection = () => {
                                                 fontSize: '12px'
                                             }} 
                                         />
-                                        <Line 
-                                            type="monotone" 
+                                        <Area
+                                            type="monotone"
                                             dataKey="visits"
                                             name="Visits"
-                                            stroke="#701CC0" 
-                                            strokeWidth={3}
-                                            dot={{ fill: '#701CC0', strokeWidth: 2, r: 4 }}
+                                            stroke="#701CC0"
+                                            strokeWidth={2.5}
+                                            fill="url(#visitsFill)"
+                                            dot={{ fill: '#701CC0', strokeWidth: 2, r: 3 }}
+                                            activeDot={{ r: 5 }}
                                         />
-                                    </LineChart>
+                                    </AreaChart>
                                 </ResponsiveContainer>
                             )}
                         </div>
                     </div>
-<div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
-                            <h3 className="text-[15px] font-semibold text-[#111827] mb-3">Recent Posts</h3>
+<div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1] flex flex-col">
+                            <h3 className="text-lg font-semibold text-[#111827] mb-3">Recent Posts</h3>
                             {postsLoading ? (
                                 <div className="space-y-2">
                                     {[...Array(3)].map((_, i) => (
@@ -482,7 +521,7 @@ const DashboardSection = () => {
                             ) : recentPosts.length === 0 ? (
                                 <p className="text-xs text-[#6B7280]">No published posts yet.</p>
                             ) : (
-                                <ul className="divide-y divide-[#F1EFF5]">
+                                <ul className="flex-1 divide-y divide-[#F1EFF5] flex flex-col justify-between">
                                     {recentPosts.map((post) => (
                                         <li key={post.id} className="flex items-center gap-2.5 py-2">
                                             <div className="min-w-0 flex-1">
@@ -505,10 +544,11 @@ const DashboardSection = () => {
                         </div>
                     </div>
 
-                    {/* Staff Activity takes the row below the chart. */}
-                    <div className="mb-4 max-w-[820px]">
+                    {/* Staff Activity sits under the chart at the same width as Recent Posts, so
+                        the two read as a matched pair rather than one wide and one narrow. */}
+                    <div className="mb-4 w-full max-w-[320px]">
                         <div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
-                            <h3 className="text-[15px] font-semibold text-[#111827] mb-3">Staff Activity</h3>
+                            <h3 className="text-lg font-semibold text-[#111827] mb-3">Staff Activity</h3>
                             {staffLoading ? (
                                 <div className="space-y-2">
                                     {[...Array(3)].map((_, i) => (
@@ -547,7 +587,7 @@ const DashboardSection = () => {
                 </div>
 
                 
-                <div className="w-80 space-y-6">
+                <div className="w-[360px] shrink-0 space-y-4">
                     <div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Upcoming Meetings</h3>
@@ -569,7 +609,7 @@ const DashboardSection = () => {
                                     <p className="mt-2 text-xs text-[#9CA3AF]">{calendarIssueMessage}</p>
                                 ) : null}
                             </div>
-                        ) : upcomingMeetings.length === 0 ? (
+                        ) : futureMeetings.length === 0 ? (
                             <div className="rounded-lg border border-[#ECEAF1] bg-[#FAFAFB] p-3 flex flex-col items-center text-center">
                                 <div className="relative mb-3 flex h-14 w-14 items-center justify-center">
                                     <div className="meeting-empty-ping absolute inset-0 rounded-full bg-[#E9D5FF]" />
@@ -584,7 +624,7 @@ const DashboardSection = () => {
                             </div>
                         ) : (
                             <div className="space-y-4">
-                                {upcomingMeetings.map((meeting) => (
+                                {futureMeetings.map((meeting) => (
                                     <div key={meeting.id} className="p-3 bg-[#FAFAFB] rounded-lg border border-[#F1EFF5]">
                                         <div className="min-w-0">
                                             <div className="font-medium text-sm mb-2">{meeting.title}</div>
