@@ -418,7 +418,27 @@ export default withAuth(async (req, res, session) => {
     })
   );
 
-  let mergedMessages = messagesByAccount.flat().sort((a, b) => b.timestamp - a.timestamp);
+  /**
+   * Dedupe by Gmail message id before anything else reads the list.
+   *
+   * selectFetchAccounts already tries to avoid reading a mailbox twice via one of its send-as
+   * aliases, but any path that slips past it — an alias whose parent resolves differently, or the
+   * same mailbox reachable as both owned and granted — fetches the same messages again and both
+   * copies land here. It showed up worst in Archive and Sent, where self-addressed mail is common.
+   * A message id is unique within a mailbox, so keying on it collapses the repeats while leaving
+   * genuinely distinct messages from different accounts alone.
+   */
+  const seenMessageIds = new Set<string>();
+  let mergedMessages = messagesByAccount
+    .flat()
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .filter((message) => {
+      const key = String(message.id || "");
+      if (!key) return true;
+      if (seenMessageIds.has(key)) return false;
+      seenMessageIds.add(key);
+      return true;
+    });
   if (mailbox === "drafts") {
     // Resolve account_ids for selected emails when filtering
     let selectedAccountIds: string[] = [];

@@ -4640,31 +4640,6 @@ ${sourceText}`;
                                         </button>
                                       ) : null}
                                       <div ref={snoozeMenuRef} className="relative">
-                          {/* Star and Spam sit between Archive and Snooze so the reader's sequence
-                              matches the list row's. */}
-                          {/* Star was only ever on the list row, so an open message could not be
-                              starred without going back. In Starred this is the unstar the list
-                              offers in the same position. */}
-                          {selectedMessage ? (
-                            <button
-                              type="button"
-                              onClick={() => void toggleStar(selectedMessage)}
-                              className={`${ICON_BUTTON} email-tip`}
-                              aria-label={selectedMessage.starred ? "Unstar" : "Star"}
-                              data-tip={selectedMessage.starred ? "Unstar" : "Star"}
-                            >
-                              <FiStar className={`w-4 h-4 ${selectedMessage.starred ? "fill-[#F5A623] text-[#F5A623]" : ""}`} />
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            onClick={() => applyAction(spamActionType)}
-                            className={`${ICON_BUTTON} email-tip`}
-                            aria-label={spamActionTitle}
-                            data-tip={spamActionTitle}
-                          >
-                            <FiAlertCircle className="w-4 h-4" />
-                          </button>
                                         <button
                                           type="button"
                                           onClick={() => setSnoozeMenuOpen((open) => !open)}
