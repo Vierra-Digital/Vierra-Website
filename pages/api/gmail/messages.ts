@@ -298,20 +298,19 @@ export default withAuth(async (req, res, session) => {
              * which carries SENT *and* INBOX; archiving such a message removed INBOX and then
              * the clause hid it, so it vanished with nowhere to be found.
              *
-             * Search can't express "sent but also received", so split it here: drop SENT
-             * messages unless this mailbox is among the recipients. Self-addressed mail stays,
-             * ordinary sent mail goes.
+             * Gmail applies CATEGORY_* labels only to mail it received. A message you sent
+             * carries SENT and nothing else; a self-addressed one (your site mailing a form
+             * notification to your own address) carries SENT *and* a CATEGORY_*, because it
+             * arrived as well. That distinction is what search can't express, so use it here:
+             * a SENT message stays only if Gmail also treated it as received.
+             *
+             * Keeps archived self-addressed mail findable — the bug where a message archived
+             * fine and then vanished — while ordinary sent mail stays out of Archive.
              */
-            const self = account.email.toLowerCase();
             visibleDetailed = visibleDetailed.filter((msg) => {
               const labels = Array.isArray(msg.labelIds) ? msg.labelIds : [];
               if (!labels.includes("SENT")) return true;
-              const headers = msg.payload?.headers || [];
-              const recipients = ["To", "Cc", "Bcc", "Delivered-To"]
-                .map((name) => extractHeader(headers, name) || "")
-                .join(", ")
-                .toLowerCase();
-              return recipients.includes(self);
+              return labels.some((label) => label.startsWith("CATEGORY_"));
             });
           }
           return visibleDetailed.map((msg) => {

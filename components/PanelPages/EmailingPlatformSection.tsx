@@ -5333,7 +5333,6 @@ ${sourceText}`;
                             <FiSend className="w-4 h-4" />
                           </button>
 
-                          <span className="mx-1 h-5 w-px bg-current opacity-15" aria-hidden />
 
                           {/* Every shared action in the same order as the
                               list toolbar (star, spam, trash, read, move, archive, snooze), so the
@@ -5439,7 +5438,6 @@ ${sourceText}`;
                             ) : null}
                           </div>
 
-                          <span className="mx-1 h-5 w-px bg-current opacity-15" aria-hidden />
 
                           {/* Label: ref-scoped like every other menu here. It previously had no ref,
                               so clicking outside it or changing view left it hanging open, and it was
