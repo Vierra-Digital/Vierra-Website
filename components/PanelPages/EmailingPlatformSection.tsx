@@ -424,6 +424,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [composeActiveDraftKey, setComposeActiveDraftKey] = useState("");
   const [inlineComposeMode, setInlineComposeMode] = useState<null | "reply" | "replyAll" | "forward">(null);
   const [inlineComposeTo, setInlineComposeTo] = useState("");
+  /** Cc/Bcc on the inline reply. Gmail keeps them one click from the recipient line. */
+  const [inlineComposeCc, setInlineComposeCc] = useState("");
+  const [inlineComposeBcc, setInlineComposeBcc] = useState("");
+  const [inlineShowCc, setInlineShowCc] = useState(false);
+  const [inlineShowBcc, setInlineShowBcc] = useState(false);
+  /** Inline reply overflow menu — switches reply mode, as Gmail's does. */
+  const [inlineMoreOpen, setInlineMoreOpen] = useState(false);
   const [inlineComposeSubject, setInlineComposeSubject] = useState("");
   const [inlineComposeIntroText, setInlineComposeIntroText] = useState("");
   const [inlineComposeBodyText, setInlineComposeBodyText] = useState("");
@@ -3074,6 +3081,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     if (!selectedMessage) return;
     const latest = threadMessages[threadMessages.length - 1];
     setInlineComposeMode(mode);
+    setInlineComposeCc("");
+    setInlineComposeBcc("");
+    setInlineShowCc(false);
+    setInlineShowBcc(false);
+    setInlineMoreOpen(false);
     setInlineComposeTo(to);
     setInlineComposeSubject(
       /^re:/i.test(selectedMessage.subject || "") ? selectedMessage.subject : `Re: ${selectedMessage.subject || ""}`
@@ -3163,6 +3175,12 @@ ${sourceText}`;
     const intro = inlineComposeIntroText.trim();
     const textBody = intro ? `${intro}\n\n${inlineComposeBodyText}` : inlineComposeBodyText || intro;
     if (!textBody.trim()) return;
+    const inlineCcError = validateRecipientCsv("Cc", inlineComposeCc);
+    const inlineBccError = validateRecipientCsv("Bcc", inlineComposeBcc);
+    if (inlineCcError || inlineBccError) {
+      setInlineComposeError(inlineCcError || inlineBccError || "");
+      return;
+    }
     const introHtml = intro ? `<div>${linkifyTextForHtml(intro)}</div><br>` : "";
     const htmlBody = inlineComposeBodyHtml ? `${introHtml}${inlineComposeBodyHtml}` : introHtml || linkifyTextForHtml(textBody);
 
@@ -3176,6 +3194,8 @@ ${sourceText}`;
         body: JSON.stringify({
           accountEmail: selectedMessage.accountEmail,
           to: inlineComposeTo.trim(),
+          cc: inlineComposeCc.trim() || undefined,
+          bcc: inlineComposeBcc.trim() || undefined,
           subject: inlineComposeSubject.trim(),
           body: textBody,
           bodyHtml: htmlBody,
@@ -5513,26 +5533,60 @@ ${sourceText}`;
                                      while its text was remapped to near-white and became illegible. */
                                   <div ref={inlineComposeRef} className="pt-3">
                                     <div className="rounded-2xl border border-[#E5E7EB] bg-white shadow-sm">
-                                      {/* Recipient line: editable, but reads as a line of text. */}
+                                      {/* Recipient line. Gmail shows the address as plain text with
+                                          Cc/Bcc one click away, rather than a labelled form row and a
+                                          mode caption repeating what the button you just pressed said. */}
                                       <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
-                                        <span className="shrink-0 text-[13px] text-[#6B7280]">
-                                          {inlineComposeMode === "forward" ? "To" : "Reply to"}
-                                        </span>
+                                        <span className="shrink-0 text-[13px] text-[#6B7280]">To</span>
                                         <input
                                           value={inlineComposeTo}
                                           onChange={(event) => setInlineComposeTo(event.target.value)}
                                           className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none placeholder:text-[#9CA3AF]"
                                           placeholder="name@email.com"
-                                          aria-label={inlineComposeMode === "forward" ? "To" : "Reply to"}
+                                          aria-label="To"
                                         />
-                                        <span className="shrink-0 text-[11px] uppercase tracking-wide text-[#9CA3AF]">
-                                          {inlineComposeMode === "replyAll"
-                                            ? "Reply all"
-                                            : inlineComposeMode === "forward"
-                                              ? "Forward"
-                                              : "Reply"}
-                                        </span>
+                                        <div className="flex shrink-0 items-center gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => setInlineShowCc((open) => !open)}
+                                            aria-pressed={inlineShowCc}
+                                            className="text-[12px] font-medium text-[#701CC0] hover:underline"
+                                          >
+                                            Cc
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setInlineShowBcc((open) => !open)}
+                                            aria-pressed={inlineShowBcc}
+                                            className="text-[12px] font-medium text-[#701CC0] hover:underline"
+                                          >
+                                            Bcc
+                                          </button>
+                                        </div>
                                       </div>
+
+                                      {inlineShowCc ? (
+                                        <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
+                                          <span className="shrink-0 text-[13px] text-[#6B7280]">Cc</span>
+                                          <input
+                                            value={inlineComposeCc}
+                                            onChange={(event) => setInlineComposeCc(event.target.value)}
+                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none"
+                                            aria-label="Cc"
+                                          />
+                                        </div>
+                                      ) : null}
+                                      {inlineShowBcc ? (
+                                        <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
+                                          <span className="shrink-0 text-[13px] text-[#6B7280]">Bcc</span>
+                                          <input
+                                            value={inlineComposeBcc}
+                                            onChange={(event) => setInlineComposeBcc(event.target.value)}
+                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none"
+                                            aria-label="Bcc"
+                                          />
+                                        </div>
+                                      ) : null}
 
                                       {/* Subject only when forwarding. A reply inherits the thread's
                                           subject, as in Gmail; offering it as a field here invites
@@ -5581,9 +5635,11 @@ ${sourceText}`;
                                         </p>
                                       ) : null}
 
-                                      {/* Send leads on the left, as in Gmail; discard is an icon
-                                          rather than a button competing with it. */}
-                                      <div className="flex items-center gap-3 px-4 pb-3">
+                                      {/* One action row: Send, a ⋮ that switches reply mode, then
+                                          discard at the far edge. Gmail stacks a formatting bar above
+                                          this; combined here so the reply is a single strip of
+                                          controls rather than two competing bars. */}
+                                      <div className="flex items-center gap-2 px-4 pb-3">
                                         <button
                                           type="button"
                                           onClick={sendInlineCompose}
@@ -5599,10 +5655,48 @@ ${sourceText}`;
                                           <FiSend className="h-4 w-4" aria-hidden />
                                           {inlineComposeSending ? "Sending…" : "Send"}
                                         </button>
+                                        <div className="relative shrink-0">
+                                          <button
+                                            type="button"
+                                            onClick={() => setInlineMoreOpen((open) => !open)}
+                                            className="email-tip rounded-full p-2 text-[#6B7280] transition hover:bg-black/5 hover:text-[#1E1B2E]"
+                                            data-tip="More options"
+                                            aria-label="More options"
+                                            aria-expanded={inlineMoreOpen}
+                                          >
+                                            <FiMoreVertical className="h-4 w-4" aria-hidden />
+                                          </button>
+                                          {inlineMoreOpen ? (
+                                            <div className="compose-menu absolute bottom-full left-0 z-[60] mb-2 w-48">
+                                              {([
+                                                ["reply", "Reply"],
+                                                ["replyAll", "Reply all"],
+                                                ["forward", "Forward"],
+                                              ] as const).map(([mode, label]) => (
+                                                <button
+                                                  key={mode}
+                                                  type="button"
+                                                  disabled={inlineComposeMode === mode}
+                                                  onClick={() => {
+                                                    setInlineMoreOpen(false);
+                                                    if (mode === "forward") void openForwardCompose();
+                                                    else if (mode === "replyAll") void openReplyAllCompose();
+                                                    else void openReplyCompose();
+                                                  }}
+                                                  className={composeMenuItemClass}
+                                                >
+                                                  {label}
+                                                  {inlineComposeMode === mode ? " ✓" : ""}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                        <span className="flex-1" aria-hidden />
                                         <button
                                           type="button"
                                           onClick={() => setInlineComposeMode(null)}
-                                          className="email-tip rounded p-2 text-[#6B7280] transition hover:text-[#1E1B2E]"
+                                          className="email-tip shrink-0 rounded-full p-2 text-[#6B7280] transition hover:bg-black/5 hover:text-[#1E1B2E]"
                                           data-tip="Discard reply"
                                           aria-label="Discard reply"
                                         >
