@@ -4,13 +4,15 @@ import { withAuth } from "@/lib/api/withAuth"
 type GrowthDirection = "up" | "flat" | "down"
 
 type StatCard = {
-  key: "clients" | "meetingsBooked" | "campaigns" | "leadsGenerated"
-  label: "Clients" | "Meetings Booked" | "Campaigns" | "Leads Generated"
+  key: "clients" | "meetingsBooked" | "campaigns" | "leadsGenerated" | "revenue" | "expenses" | "profit"
+  label: "Clients" | "Meetings Booked" | "Campaigns" | "Leads Generated" | "Revenue" | "Expenses" | "Profit"
   lifetimeValue: number
   currentMonthValue: number
   previousMonthValue: number
   growthPercent: number
   growthDirection: GrowthDirection
+  /** Cards whose values are money, so the UI formats them as currency rather than counts. */
+  isCurrency?: boolean
 }
 
 function getUtcMonthRange(date: Date) {
@@ -127,6 +129,28 @@ export default withAuth(async (req, res, session) => {
       }),
     ])
 
+    // Money is stored in integer cents on finance_entries; sum per kind per month window.
+    const sumFinance = async (kind: "revenue" | "expense", start: Date, end: Date) => {
+      const agg = await prisma.financeEntry.aggregate({
+        where: { company_id: companyId, kind, occurred_at: { gte: start, lt: end } },
+        _sum: { amount_cents: true },
+      })
+      return (agg._sum.amount_cents ?? 0) / 100
+    }
+    const [
+      revenueThisMonth,
+      revenueLastMonth,
+      expensesThisMonth,
+      expensesLastMonth,
+    ] = await Promise.all([
+      sumFinance("revenue", currentMonthStart, currentMonthEnd),
+      sumFinance("revenue", previousMonthStart, previousMonthEnd),
+      sumFinance("expense", currentMonthStart, currentMonthEnd),
+      sumFinance("expense", previousMonthStart, previousMonthEnd),
+    ])
+    const profitThisMonth = revenueThisMonth - expensesThisMonth
+    const profitLastMonth = revenueLastMonth - expensesLastMonth
+
     const currentYear = now.getUTCFullYear()
     const currentMonth = now.getUTCMonth() + 1
     const previousMonthDate = new Date(Date.UTC(currentYear, now.getUTCMonth() - 1, 1))
@@ -180,6 +204,38 @@ export default withAuth(async (req, res, session) => {
         previousMonthValue: previousMonthLeads,
         growthPercent: leadsGrowth,
         growthDirection: getGrowthDirection(currentMonthLeads, previousMonthLeads),
+      },
+      {
+        key: "revenue",
+        label: "Revenue",
+        lifetimeValue: revenueThisMonth,
+        currentMonthValue: revenueThisMonth,
+        previousMonthValue: revenueLastMonth,
+        growthPercent: calculateGrowth(revenueThisMonth, revenueLastMonth),
+        growthDirection: getGrowthDirection(revenueThisMonth, revenueLastMonth),
+        isCurrency: true,
+      },
+      {
+        key: "expenses",
+        label: "Expenses",
+        lifetimeValue: expensesThisMonth,
+        currentMonthValue: expensesThisMonth,
+        previousMonthValue: expensesLastMonth,
+        growthPercent: calculateGrowth(expensesThisMonth, expensesLastMonth),
+        // Spending more is not "up" in the good sense, but direction here is literal —
+        // the card colours the arrow, and inverting it only for expenses would mislead.
+        growthDirection: getGrowthDirection(expensesThisMonth, expensesLastMonth),
+        isCurrency: true,
+      },
+      {
+        key: "profit",
+        label: "Profit",
+        lifetimeValue: profitThisMonth,
+        currentMonthValue: profitThisMonth,
+        previousMonthValue: profitLastMonth,
+        growthPercent: calculateGrowth(profitThisMonth, profitLastMonth),
+        growthDirection: getGrowthDirection(profitThisMonth, profitLastMonth),
+        isCurrency: true,
       },
     ]
 

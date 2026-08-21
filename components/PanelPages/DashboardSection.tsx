@@ -4,7 +4,14 @@ import { FiTrendingUp, FiTrendingDown, FiMinus, FiCalendar, FiClock } from "reac
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 type GrowthDirection = "up" | "flat" | "down"
-type DashboardStatKey = "clients" | "meetingsBooked" | "campaigns" | "leadsGenerated"
+type DashboardStatKey =
+    | "clients"
+    | "meetingsBooked"
+    | "campaigns"
+    | "leadsGenerated"
+    | "revenue"
+    | "expenses"
+    | "profit"
 
 type DashboardStat = {
     key: DashboardStatKey
@@ -14,6 +21,7 @@ type DashboardStat = {
     previousMonthValue: number
     growthPercent: number
     growthDirection: GrowthDirection
+    isCurrency?: boolean
 }
 
 type UpcomingMeeting = {
@@ -204,23 +212,35 @@ const DashboardSection = () => {
         fetchWebsiteVisits()
     }, [monthFilter])
 
-    const statOrder: DashboardStatKey[] = ["clients", "meetingsBooked", "campaigns", "leadsGenerated"]
+    const statOrder: DashboardStatKey[] = [
+        "clients",
+        "meetingsBooked",
+        "campaigns",
+        "leadsGenerated",
+        "revenue",
+        "expenses",
+        "profit",
+    ]
+    const STAT_LABELS: Record<DashboardStatKey, string> = {
+        clients: "Clients",
+        meetingsBooked: "Meetings Booked",
+        campaigns: "Campaigns",
+        leadsGenerated: "Leads Generated",
+        revenue: "Revenue",
+        expenses: "Expenses",
+        profit: "Profit",
+    }
+    const CURRENCY_STATS = new Set<DashboardStatKey>(["revenue", "expenses", "profit"])
     const orderedStats = statOrder.map((key) =>
         statsCards.find((card) => card.key === key) ?? {
             key,
-            label:
-                key === "clients"
-                    ? "Clients"
-                    : key === "meetingsBooked"
-                        ? "Meetings Booked"
-                        : key === "campaigns"
-                            ? "Campaigns"
-                            : "Leads Generated",
+            label: STAT_LABELS[key],
             lifetimeValue: 0,
             currentMonthValue: 0,
             previousMonthValue: 0,
             growthPercent: 0,
             growthDirection: "flat" as GrowthDirection,
+            isCurrency: CURRENCY_STATS.has(key),
         }
     )
 
@@ -229,6 +249,9 @@ const DashboardSection = () => {
         meetingsBooked: "text-orange-600",
         campaigns: "text-purple-600",
         leadsGenerated: "text-green-600",
+        revenue: "text-emerald-600",
+        expenses: "text-rose-600",
+        profit: "text-[#701CC0]",
     }
 
     const getTrendUi = (direction: GrowthDirection) => {
@@ -355,13 +378,22 @@ const DashboardSection = () => {
                 
                 <div className="flex-1">
                     
-                    <div className="grid grid-cols-2 gap-3 mb-5 lg:grid-cols-[repeat(4,minmax(0,190px))]">
+                    <div className="grid grid-cols-2 gap-3 mb-5 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(150px,175px))]">
                         {orderedStats.map((card) => {
                             const trendUi = getTrendUi(card.growthDirection)
                             const TrendIcon = trendUi.Icon
                             const roundedGrowth = Number(card.growthPercent.toFixed(1))
                             const growthLabel = roundedGrowth % 1 === 0 ? `${roundedGrowth.toFixed(0)}%` : `${roundedGrowth}%`
-                            const displayValue = statsLoading ? "..." : card.lifetimeValue.toLocaleString()
+                            const isMoney = card.isCurrency || CURRENCY_STATS.has(card.key)
+                            const displayValue = statsLoading
+                                ? "..."
+                                : isMoney
+                                  ? card.lifetimeValue.toLocaleString(undefined, {
+                                        style: "currency",
+                                        currency: "USD",
+                                        maximumFractionDigits: 0,
+                                    })
+                                  : card.lifetimeValue.toLocaleString()
 
                             return (
                                 <div key={card.key} className="bg-white rounded-xl px-3.5 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
