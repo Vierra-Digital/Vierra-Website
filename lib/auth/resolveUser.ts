@@ -2,7 +2,11 @@ import type { SupabaseClient, User as SupabaseUser } from "@supabase/supabase-js
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 
 export type ResolvedIdentity =
-  | { kind: "member"; user: { id: string; email: string; role: string; name: string | null }; companyId: string }
+  | {
+      kind: "member";
+      user: { id: string; email: string; role: string; name: string | null; isPlatformAdmin: boolean };
+      companyId: string;
+    }
   | { kind: "client"; user: { id: string; email: string; role?: undefined; name: string | null }; clientId: string; companyId: string }
   | { kind: "unaffiliated"; user: { id: string; email: string; role?: undefined; name: string | null } };
 
@@ -20,17 +24,20 @@ export async function resolveUser(supabase: SupabaseClient, authUser: SupabaseUs
   const email = authUser.email ?? "";
 
   const [{ data: nameRow }, { data: companyId }, { data: role }, { data: clientId }] = await Promise.all([
-    supabase.from("users").select("name").eq("id", authUser.id).maybeSingle(),
+    supabase.from("users").select("name, is_platform_admin").eq("id", authUser.id).maybeSingle(),
     supabase.rpc("user_company_id"),
     supabase.rpc("user_company_role"),
     supabase.rpc("user_client_id"),
   ]);
-  const name = (nameRow as { name: string | null } | null)?.name ?? null;
+  const name = (nameRow as { name: string | null; is_platform_admin: boolean | null } | null)?.name ?? null;
+  const isPlatformAdmin = Boolean(
+    (nameRow as { name: string | null; is_platform_admin: boolean | null } | null)?.is_platform_admin
+  );
 
   if (companyId) {
     return {
       kind: "member",
-      user: { id: authUser.id, email, role: role as string, name },
+      user: { id: authUser.id, email, role: role as string, name, isPlatformAdmin },
       companyId: companyId as string,
     };
   }
@@ -91,7 +98,7 @@ export async function resolveUser(supabase: SupabaseClient, authUser: SupabaseUs
       await admin.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", inv.id);
       return {
         kind: "member",
-        user: { id: authUser.id, email, role: inv.role, name },
+        user: { id: authUser.id, email, role: inv.role, name, isPlatformAdmin: false },
         companyId: inv.company_id,
       };
     }
