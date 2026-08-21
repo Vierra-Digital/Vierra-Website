@@ -210,6 +210,41 @@ const ACTION_TIMEOUT_MS = 15_000;
 const MESSAGE_CACHE_LIMIT = 12;
 
 /**
+ * Last-known enabled account selection, so a repeat visit can start fetching messages/counts
+ * immediately instead of waiting out a full /api/gmail/status + account-preferences round trip
+ * before it even knows which accounts to ask for. Not user-scoped: on a shared browser this can
+ * seed a stale guess from a previous session, but the server always re-derives access from the
+ * live session, so a stale/foreign email just yields an empty result that self-corrects the
+ * moment the real connections response lands — never someone else's data.
+ */
+const LAST_ACCOUNTS_STORAGE_KEY = "vierra:email-panel:last-accounts";
+
+function readCachedSelectedAccounts(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(LAST_ACCOUNTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string" && v.length > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedSelectedAccounts(accounts: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (accounts.length === 0) {
+      window.localStorage.removeItem(LAST_ACCOUNTS_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(LAST_ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+    }
+  } catch {
+    /* storage unavailable (disabled, quota, private mode) — the panel just falls back to the gate wait */
+  }
+}
+
+/**
  * Compose footer icon button. Gmail's composer is one row of quiet, chrome-less icons with a
  * single solid Send — so an "on" toggle (Confidential, Receipt, a set schedule) reads as a soft
  * brand-tinted disc rather than an outlined box, which is what made the old bar look blocky.
@@ -229,7 +264,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 }) => {
   const initialAccountsRef = useRef(initialSelectedAccounts);
   const deepLinkAppliedRef = useRef(false);
-  const [step, setStep] = useState<"gate" | "client">(initialSelectedAccounts.length > 0 ? "client" : "gate");
+  // No URL-preselected accounts: fall back to last time's enabled selection (if any) so the panel
+  // can start fetching messages/counts immediately instead of sitting on the gate loading screen
+  // for a full connections round trip. loadGmailConnections still runs and corrects this if it's wrong.
+  const cachedAccountsRef = useRef(initialSelectedAccounts.length > 0 ? [] : readCachedSelectedAccounts());
+  const initialResolvedAccounts = initialSelectedAccounts.length > 0 ? initialSelectedAccounts : cachedAccountsRef.current;
+  const [step, setStep] = useState<"gate" | "client">(initialResolvedAccounts.length > 0 ? "client" : "gate");
   const [activeModule, setActiveModule] = useState<ModuleKey>("inbox");
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
   /** User's custom sidebar order (module keys). Empty = fall back to MODULES order. */
@@ -243,7 +283,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   >({});
   const [gmailAccounts, setGmailAccounts] = useState<GmailAccountConnection[]>([]);
   const [gmailLoading, setGmailLoading] = useState(false);
-  const [selectedAccounts, setSelectedAccounts] = useState<string[]>(initialSelectedAccounts);
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>(initialResolvedAccounts);
 
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState("");
@@ -1675,9 +1715,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
       // The full-page client opens with the chosen accounts (URL param) or all enabled;
       // the "gate" is only shown as a "no accounts connected" state.
-      setSelectedAccounts(preselected.length > 0 ? preselected : enabledConnected);
+      const resolvedAccounts = preselected.length > 0 ? preselected : enabledConnected;
+      setSelectedAccounts(resolvedAccounts);
       setStep(connected.length === 0 ? "gate" : "client");
+      // Remember this for next visit's optimistic seed (see cachedAccountsRef above).
+      writeCachedSelectedAccounts(resolvedAccounts);
     } catch {
+      // Transient failure (network blip, etc.) — leave the cached selection alone rather than
+      // wiping it, so the next visit still gets the fast path instead of being punished for this.
       setGmailAccounts([]);
       setSelectedAccounts([]);
       setStep("gate");
