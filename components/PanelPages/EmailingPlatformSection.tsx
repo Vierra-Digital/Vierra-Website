@@ -66,7 +66,7 @@ import MoveToMenu from "@/components/email/MoveToMenu";
 import { buildReplyReferences } from "@/lib/email/threading";
 import {
   BRAND_LOGO,
-  ICON_BUTTON_SOLID, FIELD_LABEL, ALERT, REPLY_ACTION_BUTTON,
+  ICON_BUTTON, FIELD_LABEL, ALERT, REPLY_ACTION_BUTTON,
 } from "@/components/email/emailTheme";
 import {
   PAGE_SIZE,
@@ -4528,7 +4528,7 @@ ${sourceText}`;
                       {activeModule !== "contacts" ? (
                         <>
                           <div className="email-toolbar flex items-center justify-between gap-3 px-4 py-2.5">
-                            <div className="flex items-center gap-1.5 flex-wrap">
+                            <div className="flex items-center gap-2 flex-wrap">
                               {showListPaging ? (
                                 <input
                                   type="checkbox"
@@ -4551,7 +4551,7 @@ ${sourceText}`;
                                       void Promise.all([loadMessages(), loadMailboxCounts()]);
                                     }}
                                     disabled={messagesLoading}
-                                    className={`${ICON_BUTTON_SOLID} email-tip`}
+                                    className={`${ICON_BUTTON} email-tip`}
                                     aria-label="Refresh"
                                     data-tip="Refresh"
                                   >
@@ -4566,7 +4566,7 @@ ${sourceText}`;
                                       type="button"
                                       onClick={() => void unstarSelected()}
                                       disabled={actionLoading}
-                                      className={`${ICON_BUTTON_SOLID} email-tip`}
+                                      className={`${ICON_BUTTON} email-tip`}
                                       aria-label="Unstar"
                                       data-tip="Unstar"
                                     >
@@ -4578,7 +4578,7 @@ ${sourceText}`;
                                     <button
                                       type="button"
                                       onClick={() => applyAction("unspam")}
-                                      className={`${ICON_BUTTON_SOLID} email-tip`}
+                                      className={`${ICON_BUTTON} email-tip`}
                                       aria-label="Mark As Not Spam"
                                       data-tip="Mark As Not Spam"
                                     >
@@ -4592,7 +4592,7 @@ ${sourceText}`;
                                   <button
                                     type="button"
                                     onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
-                                    className={`${ICON_BUTTON_SOLID} email-tip`}
+                                    className={`${ICON_BUTTON} email-tip`}
                                     data-tip={deletesPermanently ? "Delete Permanently" : "Move To Trash"}
                                   >
                                     <FiTrash2 className="w-4 h-4" />
@@ -4605,7 +4605,7 @@ ${sourceText}`;
                                       <button
                                         type="button"
                                         onClick={() => applyAction(selectionHasUnread ? "markRead" : "markUnread")}
-                                        className={`${ICON_BUTTON_SOLID} email-tip`}
+                                        className={`${ICON_BUTTON} email-tip`}
                                         aria-label={selectionHasUnread ? "Mark As Read" : "Mark As Unread"}
                                         data-tip={selectionHasUnread ? "Mark As Read" : "Mark As Unread"}
                                       >
@@ -4622,7 +4622,7 @@ ${sourceText}`;
                                       <button
                                         type="button"
                                         onClick={() => setMoveMenuOpen((prev) => (prev === "list" ? null : "list"))}
-                                        className={`${ICON_BUTTON_SOLID} email-tip`}
+                                        className={`${ICON_BUTTON} email-tip`}
                                         aria-label="Move To"
                                         data-tip="Move To"
                                       >
@@ -4643,7 +4643,7 @@ ${sourceText}`;
                                         <button
                                           type="button"
                                           onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                                          className={`${ICON_BUTTON_SOLID} email-tip`}
+                                          className={`${ICON_BUTTON} email-tip`}
                                           data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
                                         >
                                           <FiArchive className="w-4 h-4" />
@@ -4653,7 +4653,7 @@ ${sourceText}`;
                                         <button
                                           type="button"
                                           onClick={() => setSnoozeMenuOpen((open) => !open)}
-                                          className={`${ICON_BUTTON_SOLID} email-tip`}
+                                          className={`${ICON_BUTTON} email-tip`}
                                           data-tip="Snooze"
                                           aria-label="Snooze"
                                         >
@@ -5280,7 +5280,7 @@ ${sourceText}`;
                           <FiChevronsRight className="w-4 h-4 rotate-180" />
                           Back
                         </button>
-                        <div className="flex flex-wrap items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
                           {/* The same three actions as at the foot of the message. Both places are
                               wanted: the toolbar is where they are reached for out of habit, the
                               foot is where they belong while reading. */}
@@ -5289,7 +5289,7 @@ ${sourceText}`;
                             onClick={() => {
                               void openReplyCompose();
                             }}
-                            className={`${ICON_BUTTON_SOLID} email-tip`}
+                            className={`${ICON_BUTTON} email-tip`}
                             aria-label="Reply"
                             data-tip="Reply"
                           >
@@ -5300,7 +5300,7 @@ ${sourceText}`;
                             onClick={() => {
                               void openReplyAllCompose();
                             }}
-                            className={`${ICON_BUTTON_SOLID} email-tip`}
+                            className={`${ICON_BUTTON} email-tip`}
                             aria-label="Reply All"
                             data-tip="Reply All"
                           >
@@ -5311,7 +5311,7 @@ ${sourceText}`;
                             onClick={() => {
                               void openForwardCompose();
                             }}
-                            className={`${ICON_BUTTON_SOLID} email-tip`}
+                            className={`${ICON_BUTTON} email-tip`}
                             aria-label="Forward"
                             data-tip="Forward"
                           >
@@ -5326,7 +5326,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
-                            className={`${ICON_BUTTON_SOLID} email-tip`}
+                            className={`${ICON_BUTTON} email-tip`}
                             aria-label={deletesPermanently ? "Delete Permanently" : "Move To Trash"}
                             data-tip={deletesPermanently ? "Delete Permanently" : "Move To Trash"}
                           >
@@ -5335,7 +5335,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => applyAction("markUnread")}
-                            className={`${ICON_BUTTON_SOLID} email-tip`}
+                            className={`${ICON_BUTTON} email-tip`}
                             aria-label="Mark As Unread"
                             data-tip="Mark As Unread"
                           >
@@ -5347,7 +5347,7 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => setMoveMenuOpen((prev) => (prev === "message" ? null : "message"))}
-                              className={`${ICON_BUTTON_SOLID} email-tip`}
+                              className={`${ICON_BUTTON} email-tip`}
                               aria-label="Move To"
                               data-tip="Move To"
                             >
@@ -5361,7 +5361,7 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                              className={`${ICON_BUTTON_SOLID} email-tip`}
+                              className={`${ICON_BUTTON} email-tip`}
                               aria-label={activeModule === "archive" ? "Unarchive" : "Archive"}
                               data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
                             >
@@ -5377,7 +5377,7 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => void toggleStar(selectedMessage)}
-                              className={`${ICON_BUTTON_SOLID} email-tip`}
+                              className={`${ICON_BUTTON} email-tip`}
                               aria-label={selectedMessage.starred ? "Unstar" : "Star"}
                               data-tip={selectedMessage.starred ? "Unstar" : "Star"}
                             >
@@ -5387,7 +5387,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => applyAction(spamActionType)}
-                            className={`${ICON_BUTTON_SOLID} email-tip`}
+                            className={`${ICON_BUTTON} email-tip`}
                             aria-label={spamActionTitle}
                             data-tip={spamActionTitle}
                           >
@@ -5399,7 +5399,7 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => setSnoozeMenuOpen((open) => !open)}
-                              className={`${ICON_BUTTON_SOLID} email-tip`}
+                              className={`${ICON_BUTTON} email-tip`}
                               aria-label="Snooze"
                               data-tip="Snooze"
                             >
@@ -5435,7 +5435,7 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => setLabelMenuOpen((open) => !open)}
-                              className={`${ICON_BUTTON_SOLID} email-tip`}
+                              className={`${ICON_BUTTON} email-tip`}
                               aria-label="Label"
                               data-tip="Label"
                             >
@@ -5464,7 +5464,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={blockSelectedSender}
-                            className={`${ICON_BUTTON_SOLID} email-tip`}
+                            className={`${ICON_BUTTON} email-tip`}
                             aria-label={selectedBlockedEntry ? "Unblock Sender" : "Block Sender"}
                             data-tip={selectedBlockedEntry ? "Unblock Sender" : "Block Sender"}
                           >
@@ -5743,6 +5743,23 @@ ${sourceText}`;
                                           toolbar pinned open — Gmail's reply always shows one, and a
                                           plain textarea meant a reply could not carry bold, a list or
                                           a link at all. */}
+                                      {/* The reply body. Removing the trimmed-content block took
+                                          this with it, leaving the composer with no input at all —
+                                          the recipient row and the send bar rendered, but there was
+                                          nowhere to type. */}
+                                      <div className="px-2 pb-1 pt-2">
+                                        <ComposeRichEditor
+                                          ref={inlineEditorRef}
+                                          valueHtml={inlineComposeIntroHtml}
+                                          onChange={({ html, text }) => {
+                                            setInlineComposeIntroHtml(html);
+                                            setInlineComposeIntroText(text);
+                                          }}
+                                          minHeightClass="min-h-[150px]"
+                                          showToolbar={inlineShowFormatting}
+                                        />
+                                      </div>
+
                                       {inlineComposeMode === "forward" && inlineComposePreviewHtml ? (
                                         <div className="mx-4 mb-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3">
                                           <p className="mb-2 text-[11px] uppercase tracking-wide text-[#6B7280]">
