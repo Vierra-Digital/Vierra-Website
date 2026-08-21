@@ -1357,3 +1357,51 @@ input[type="search"]::-ms-clear:hover {
 @media (prefers-reduced-motion: reduce) {
   .bolt-draw { animation: none; stroke-dasharray: none; stroke-dashoffset: 0; }
 }
+
+/* Recipient chip: an X to drop one address, and a clear invalid state so a typo is visible
+   before Send is attempted (Send stays disabled while any address is malformed). */
+.email-shell .recipient-chip { gap: 4px; padding-right: 4px; }
+.email-shell .recipient-chip.is-invalid {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #FCA5A5;
+}
+.email-shell .recipient-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+.email-shell .recipient-chip-x:hover { opacity: 1; background: rgba(255, 255, 255, 0.18); }
+
+/* "Show trimmed content": inline text that is itself the control, the way Gmail's is — the
+   ellipsis chip reads as the affordance and the label explains it. */
+.email-shell .trimmed-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 2px 2px 0;
+  border-radius: 6px;
+  color: #8C86A6;
+  font-size: 12.5px;
+  transition: color 140ms ease;
+}
+.email-shell .trimmed-toggle:hover { color: #D8D3EA; }
+.email-shell .trimmed-dots {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.09);
+  transition: background-color 140ms ease;
+}
+.email-shell .trimmed-toggle:hover .trimmed-dots { background: rgba(255, 255, 255, 0.16); }
+.email-shell .trimmed-label { text-decoration: underline; text-underline-offset: 2px; text-decoration-color: rgba(255,255,255,0.25); }

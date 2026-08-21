@@ -5632,11 +5632,39 @@ ${sourceText}`;
                                                 .split(",")
                                                 .map((entry) => entry.trim())
                                                 .filter(Boolean)
-                                                .map((addr, index) => (
-                                                  <span key={`${addr}-${index}`} className="recipient-chip">
-                                                    {addr}
-                                                  </span>
-                                                ))
+                                                .map((addr, index, all) => {
+                                                  const bare = addr.includes("<")
+                                                    ? (addr.match(/<([^>]+)>/)?.[1] || addr).trim()
+                                                    : addr;
+                                                  const valid = EMAIL_REGEX.test(bare);
+                                                  return (
+                                                    <span
+                                                      key={`${addr}-${index}`}
+                                                      className={`recipient-chip ${valid ? "" : "is-invalid"}`}
+                                                      title={valid ? addr : `${addr} — not a valid address`}
+                                                    >
+                                                      <span className="truncate">{addr}</span>
+                                                      <span
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        aria-label={`Remove ${addr}`}
+                                                        className="recipient-chip-x"
+                                                        onClick={(event) => {
+                                                          event.stopPropagation();
+                                                          setInlineComposeTo(all.filter((_, i) => i !== index).join(", "));
+                                                        }}
+                                                        onKeyDown={(event) => {
+                                                          if (event.key !== "Enter" && event.key !== " ") return;
+                                                          event.stopPropagation();
+                                                          event.preventDefault();
+                                                          setInlineComposeTo(all.filter((_, i) => i !== index).join(", "));
+                                                        }}
+                                                      >
+                                                        <FiX className="h-3 w-3" aria-hidden />
+                                                      </span>
+                                                    </span>
+                                                  );
+                                                })
                                             )}
                                           </button>
                                         )}
@@ -5702,34 +5730,23 @@ ${sourceText}`;
                                           toolbar pinned open — Gmail's reply always shows one, and a
                                           plain textarea meant a reply could not carry bold, a list or
                                           a link at all. */}
-                                      <div className="px-2 pb-1 pt-2">
-                                        <ComposeRichEditor
-                                          ref={inlineEditorRef}
-                                          valueHtml={inlineComposeIntroHtml}
-                                          onChange={({ html, text }) => {
-                                            setInlineComposeIntroHtml(html);
-                                            setInlineComposeIntroText(text);
-                                          }}
-                                          minHeightClass="min-h-[150px]"
-                                          showToolbar={inlineShowFormatting}
-                                        />
-                                      </div>
-
-                                      {/* Gmail trims the message you're replying to behind a small
-                                          "⋯" and lets you edit it once expanded. The quoted body is
-                                          already part of the send payload, so this exposes the same
-                                          value rather than a copy of it. */}
+                                      {/* Trimmed content sits directly under what you typed and above the
+                                          controls — it is part of the message, not an action. Reads
+                                          as a line of text that is also the button, as Gmail's is. */}
                                       {inlineComposeBodyHtml ? (
                                         <div className="px-3 pb-2">
                                           <button
                                             type="button"
                                             onClick={() => setInlineShowQuoted((open) => !open)}
-                                            className="inline-reply-ellipsis email-tip"
-                                            data-tip={inlineShowQuoted ? "Hide trimmed content" : "Show trimmed content"}
-                                            aria-label={inlineShowQuoted ? "Hide trimmed content" : "Show trimmed content"}
+                                            className="trimmed-toggle"
                                             aria-expanded={inlineShowQuoted}
                                           >
-                                            <FiMoreHorizontal className="h-3.5 w-3.5" aria-hidden />
+                                            <span className="trimmed-dots" aria-hidden>
+                                              <FiMoreHorizontal className="h-3.5 w-3.5" />
+                                            </span>
+                                            <span className="trimmed-label">
+                                              {inlineShowQuoted ? "Hide trimmed content" : "Show trimmed content"}
+                                            </span>
                                           </button>
                                           {inlineShowQuoted ? (
                                             <div
@@ -5742,6 +5759,19 @@ ${sourceText}`;
                                           ) : null}
                                         </div>
                                       ) : null}
+
+                                      <div className="px-2 pb-1 pt-2">
+                                        <ComposeRichEditor
+                                          ref={inlineEditorRef}
+                                          valueHtml={inlineComposeIntroHtml}
+                                          onChange={({ html, text }) => {
+                                            setInlineComposeIntroHtml(html);
+                                            setInlineComposeIntroText(text);
+                                          }}
+                                          minHeightClass="min-h-[150px]"
+                                          showToolbar={inlineShowFormatting}
+                                        />
+                                      </div>
 
                                       {inlineComposeMode === "forward" && inlineComposePreviewHtml ? (
                                         <div className="mx-4 mb-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3">
@@ -5777,6 +5807,13 @@ ${sourceText}`;
                                           disabled={
                                             inlineComposeSending ||
                                             !inlineComposeTo.trim() ||
+                                            !inlineComposeTo
+                                              .split(",")
+                                              .map((entry) => entry.trim())
+                                              .filter(Boolean)
+                                              .every((entry) =>
+                                                EMAIL_REGEX.test(entry.includes("<") ? (entry.match(/<([^>]+)>/)?.[1] || entry).trim() : entry)
+                                              ) ||
                                             (!inlineComposeIntroText.trim() && !inlineComposeBodyText.trim())
                                           }
                                           className="compose-cta inline-flex shrink-0 items-center justify-center gap-2 rounded-md px-4 py-2 text-[13px] font-medium text-white shadow-[0_6px_20px_-8px_rgba(94,23,168,0.9)] transition-[filter] duration-200 ease-out hover:brightness-[1.08] active:brightness-[0.96] disabled:pointer-events-none disabled:opacity-40"
@@ -5894,13 +5931,18 @@ ${sourceText}`;
                                         <button
                                           type="button"
                                           onClick={() => {
-                                            flushDraftsNow();
+                                            // Discard means gone: drop the autosaved draft rather
+                                            // than flushing it, or every abandoned reply would
+                                            // accumulate in Drafts.
+                                            if (inlineDraftStorageKey) {
+                                              void clearLocalDraft(inlineDraftStorageKey).catch(() => null);
+                                            }
                                             setInlineComposeMode(null);
                                             void loadMailboxCounts();
                                           }}
                                           className="inline-reply-icon email-tip"
-                                          data-tip="Discard reply"
-                                          aria-label="Discard reply"
+                                          data-tip="Discard Reply"
+                                          aria-label="Discard Reply"
                                         >
                                           <FiTrash2 className="h-4 w-4" aria-hidden />
                                         </button>
