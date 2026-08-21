@@ -769,6 +769,8 @@ model CompanyMembership {
   mentor_id                                  String?       @db.Uuid
   status                                     String        @default("offline")
   strikes                                    Int           @default(0)
+  /** Last presence report. Null = never seen since the column was added. */
+  last_active_at                             DateTime?     @db.Timestamptz(6)
   joined_at                                  DateTime      @default(now()) @db.Timestamptz(6)
   companies                                  Company     @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users_company_memberships_mentor_idTousers User? @relation("company_memberships_mentor_idTousers", fields: [mentor_id], references: [id], onUpdate: NoAction)

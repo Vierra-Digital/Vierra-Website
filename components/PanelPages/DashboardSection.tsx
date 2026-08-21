@@ -26,6 +26,40 @@ type UpcomingMeeting = {
     meetingLink: string | null
 }
 
+/** "3m ago" / "2h ago" / a date — enough to judge whether an offline row is stale. */
+function formatActiveSince(iso: string | null): string {
+    if (!iso) return "Never"
+    const then = new Date(iso).getTime()
+    if (!Number.isFinite(then)) return "Never"
+    const mins = Math.max(0, Math.round((Date.now() - then) / 60000))
+    if (mins < 1) return "Just now"
+    if (mins < 60) return `${mins}m ago`
+    const hours = Math.round(mins / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.round(hours / 24)
+    return days < 7 ? `${days}d ago` : new Date(iso).toLocaleDateString()
+}
+
+type StaffActivityRow = {
+    userId: string
+    name: string | null
+    email: string | null
+    role: string
+    position: string | null
+    status: string
+    lastActiveAt: string | null
+    isLive: boolean
+}
+
+type RecentPostRow = {
+    id: string
+    title: string
+    slug: string
+    publishedDate: string
+    views: number
+    author: string | null
+}
+
 type WebsiteVisitsPoint = { week: string; visits: number }
 
 const DashboardSection = () => {
@@ -57,6 +91,43 @@ const DashboardSection = () => {
     const [websiteVisitsLoading, setWebsiteVisitsLoading] = useState(true)
     const [websiteVisitsConfigured, setWebsiteVisitsConfigured] = useState(false)
     const [websiteVisitsData, setWebsiteVisitsData] = useState<WebsiteVisitsPoint[]>([])
+    const [staffActivity, setStaffActivity] = useState<StaffActivityRow[]>([])
+    const [staffLoading, setStaffLoading] = useState(true)
+    const [recentPosts, setRecentPosts] = useState<RecentPostRow[]>([])
+    const [postsLoading, setPostsLoading] = useState(true)
+
+    // Staff presence and the latest posts are independent of each other and of the stats, so they
+    // load in parallel and each panel fills in on its own rather than gating the page.
+    useEffect(() => {
+        let cancelled = false
+        const load = async () => {
+            try {
+                const [staffRes, postsRes] = await Promise.all([
+                    fetch("/api/dashboard/staff-activity"),
+                    fetch("/api/dashboard/recent-posts"),
+                ])
+                if (staffRes.ok) {
+                    const data = await staffRes.json()
+                    if (!cancelled && Array.isArray(data?.staff)) setStaffActivity(data.staff)
+                }
+                if (postsRes.ok) {
+                    const data = await postsRes.json()
+                    if (!cancelled && Array.isArray(data?.posts)) setRecentPosts(data.posts)
+                }
+            } catch {
+                /* leave the panels empty; their empty states explain themselves */
+            } finally {
+                if (!cancelled) {
+                    setStaffLoading(false)
+                    setPostsLoading(false)
+                }
+            }
+        }
+        void load()
+        return () => {
+            cancelled = true
+        }
+    }, [])
 
     useEffect(() => {
         const fetchDashboardStats = async () => {
@@ -363,6 +434,79 @@ const DashboardSection = () => {
                                         />
                                     </LineChart>
                                 </ResponsiveContainer>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Staff presence and recent posts, side by side under the chart. Both are
+                        capped to the chart's width so the column reads as one stack. */}
+                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 max-w-[820px]">
+                        <div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
+                            <h3 className="text-[15px] font-semibold text-[#111827] mb-3">Staff Activity</h3>
+                            {staffLoading ? (
+                                <div className="space-y-2">
+                                    {[...Array(3)].map((_, i) => (
+                                        <div key={i} className="h-9 rounded-lg bg-[#F4F2F8] animate-pulse" />
+                                    ))}
+                                </div>
+                            ) : staffActivity.length === 0 ? (
+                                <p className="text-xs text-[#6B7280]">No teammates yet.</p>
+                            ) : (
+                                <ul className="divide-y divide-[#F1EFF5]">
+                                    {staffActivity.map((row) => (
+                                        <li key={row.userId} className="flex items-center gap-2.5 py-2">
+                                            <span
+                                                className={`h-2 w-2 shrink-0 rounded-full ${
+                                                    row.isLive
+                                                        ? "bg-emerald-500"
+                                                        : row.status === "away" || row.status === "busy"
+                                                          ? "bg-amber-400"
+                                                          : "bg-[#D1D5DB]"
+                                                }`}
+                                                aria-hidden
+                                            />
+                                            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#111827]">
+                                                {row.name || row.email || "Unknown"}
+                                            </span>
+                                            <span className="shrink-0 text-[11px] text-[#6B7280]">
+                                                {row.isLive ? "Active now" : formatActiveSince(row.lastActiveAt)}
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+
+                        <div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
+                            <h3 className="text-[15px] font-semibold text-[#111827] mb-3">Recent Posts</h3>
+                            {postsLoading ? (
+                                <div className="space-y-2">
+                                    {[...Array(3)].map((_, i) => (
+                                        <div key={i} className="h-9 rounded-lg bg-[#F4F2F8] animate-pulse" />
+                                    ))}
+                                </div>
+                            ) : recentPosts.length === 0 ? (
+                                <p className="text-xs text-[#6B7280]">No published posts yet.</p>
+                            ) : (
+                                <ul className="divide-y divide-[#F1EFF5]">
+                                    {recentPosts.map((post) => (
+                                        <li key={post.id} className="flex items-center gap-2.5 py-2">
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-[13px] font-medium text-[#111827]">{post.title}</p>
+                                                <p className="text-[11px] text-[#9CA3AF]">
+                                                    {new Date(post.publishedDate).toLocaleDateString(undefined, {
+                                                        month: "short",
+                                                        day: "numeric",
+                                                        year: "numeric",
+                                                    })}
+                                                </p>
+                                            </div>
+                                            <span className="shrink-0 rounded-full bg-[#F3EDFB] px-2 py-0.5 text-[11px] font-medium text-[#701CC0]">
+                                                {post.views.toLocaleString()} views
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
                             )}
                         </div>
                     </div>
