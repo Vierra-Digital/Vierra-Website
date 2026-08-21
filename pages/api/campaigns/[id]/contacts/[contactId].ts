@@ -158,4 +158,21 @@ export default withAuth(async (req, res, session) => {
     res.status(200).json({ contact: serializeCampaignContact(updated) });
     return;
   }
-}, { methods: ["GET", "PATCH"] });
+
+  if (req.method === "DELETE") {
+    // Hard-erasure path (CCPA/CPRA-style deletion request), distinct from the unsubscribe/
+    // "remove_contact" categorization flow above, which only stops future sends and keeps the
+    // record. Suppress the email first so a future lead-sourcing run can't re-add and re-contact
+    // this person even after their record is gone, then delete. campaign_step_sends cascades and
+    // bookings.campaign_contact_id is set null via FK (see prisma/schema.prisma); lead_status_events
+    // and assignment_events aren't modeled with a Prisma relation, so clear them explicitly.
+    await addToDnc(campaignId, existing.contact_email);
+    await prisma.$transaction([
+      prisma.leadStatusEvent.deleteMany({ where: { campaign_contact_id: contactId } }),
+      prisma.assignmentEvent.deleteMany({ where: { campaign_contact_id: contactId } }),
+      prisma.campaignContact.delete({ where: { id: contactId } }),
+    ]);
+    res.status(200).json({ ok: true });
+    return;
+  }
+}, { methods: ["GET", "PATCH", "DELETE"] });
