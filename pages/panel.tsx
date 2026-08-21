@@ -22,6 +22,7 @@ import {
   FiUsers,
   FiPercent,
   FiFile,
+  FiUserCheck,
 } from "react-icons/fi"
 import { RiArrowDropDownLine } from "react-icons/ri";
 import { useSession, signOut } from "@/lib/session-client"
@@ -318,7 +319,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                   </div>
                 )}
                 <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 2 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
-                  <FiUsers className="w-4 h-4 shrink-0" />
+                  <FiUserCheck className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Staff Orbital
                   </span>

@@ -2,6 +2,9 @@ import { prisma } from "@/lib/prisma"
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens"
 import { getCalendarVisibilityPreferences } from "@/lib/googleCalendar/visibility"
 
+/** How many meetings the dashboard panel shows. */
+export const UPCOMING_MEETINGS_LIMIT = 5;
+
 type GoogleCalendarListResponse = {
   items?: Array<{
     id?: string
@@ -264,7 +267,7 @@ export async function fetchUpcomingMeetingsFromGoogle(userId: string): Promise<U
     })
     .filter((meeting): meeting is UpcomingMeeting => Boolean(meeting))
     .sort((a, b) => new Date(a.startIso).getTime() - new Date(b.startIso).getTime())
-    .slice(0, 3)
+    .slice(0, UPCOMING_MEETINGS_LIMIT)
 
   return {
     connected: true,
@@ -335,7 +338,7 @@ export async function readCachedUpcomingMeetings(userId: string): Promise<Upcomi
   const meetings = await prisma.dashboardUpcomingMeeting.findMany({
     where: { user_id: userId },
     orderBy: { start_at: "asc" },
-    take: 3,
+    take: UPCOMING_MEETINGS_LIMIT,
   })
 
   return {

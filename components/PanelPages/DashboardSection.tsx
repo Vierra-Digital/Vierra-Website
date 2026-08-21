@@ -284,7 +284,7 @@ const DashboardSection = () => {
                 
                 <div className="flex-1">
                     
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+                    <div className="grid grid-cols-2 gap-3 mb-5 lg:grid-cols-[repeat(4,minmax(0,190px))]">
                         {orderedStats.map((card) => {
                             const trendUi = getTrendUi(card.growthDirection)
                             const TrendIcon = trendUi.Icon
@@ -310,7 +310,7 @@ const DashboardSection = () => {
                     </div>
 
                     
-                    <div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1] mb-5">
+                    <div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1] mb-5 max-w-[820px]">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Website Visits</h3>
                             <div className="relative">
