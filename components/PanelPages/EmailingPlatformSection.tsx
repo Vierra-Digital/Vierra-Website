@@ -5308,7 +5308,7 @@ ${sourceText}`;
                             aria-label="Reply All"
                             data-tip="Reply All"
                           >
-                            <MdReplyAll className="w-[18px] h-[18px]" />
+                            <MdReplyAll className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
@@ -5372,10 +5372,11 @@ ${sourceText}`;
                               <FiArchive className="w-4 h-4" />
                             </button>
                           ) : null}
-                          {/* Snooze existed only on the list, so an open message had to be closed to
-                              snooze it. Same presets, same menu, same dismissal. */}
-                          <div ref={snoozeMenuRef} className="relative">
-                          {/* Same position as the list toolbar: after Archive, before Snooze. */}
+                          {/* After Archive, before Snooze — matching the list toolbar's order.
+                              These must stay DIRECT children of the row: nested inside snooze's
+                              `relative` dropdown anchor (display:block, no gap) they rendered
+                              flush against each other while every other joint had 6px, which is
+                              what the uneven spacing was. */}
                           {selectedMessage ? (
                             <button
                               type="button"
@@ -5396,6 +5397,9 @@ ${sourceText}`;
                           >
                             <FiAlertCircle className="w-4 h-4" />
                           </button>
+                          {/* Snooze existed only on the list, so an open message had to be closed to
+                              snooze it. Same presets, same menu, same dismissal. */}
+                          <div ref={snoozeMenuRef} className="relative">
                             <button
                               type="button"
                               onClick={() => setSnoozeMenuOpen((open) => !open)}

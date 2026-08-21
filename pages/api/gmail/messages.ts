@@ -429,24 +429,30 @@ export default withAuth(async (req, res, session) => {
    * genuinely distinct messages from different accounts alone.
    */
   /**
-   * Dedupe on the RFC-822 Message-ID header, not the Gmail message id.
+   * Collapse Archive and Sent to one row per conversation, the way Gmail does.
    *
-   * Mailing yourself leaves two distinct Gmail messages — the copy in Sent and the copy that was
-   * delivered — with different ids but the SAME Message-ID header, because it is one mail. Both
-   * satisfy the Archive query once the delivered copy loses INBOX, so the row appeared twice and
-   * a dedupe keyed on the Gmail id could never collapse it. Distinct mails never share a
-   * Message-ID, so this is safe; fall back to the Gmail id when a message carries no header.
+   * What looked like duplicates were never duplicate messages — checked against the live
+   * mailboxes, there are zero repeated Message-IDs. They are distinct messages in the SAME
+   * thread: the reply or forward you sent sitting next to the original you received, both
+   * archived, with subjects one "Re:"/"Fwd:" apart. A flat per-message list renders both, so
+   * the conversation reads as a duplicate row. Dropping `-in:sent` from the Archive query made
+   * it more visible by pulling sent copies in beside their received twins.
+   *
+   * Only Archive and Sent collapse: those are the views where both halves of a conversation
+   * end up side by side. Inbox intentionally keeps a row per message so a new reply surfaces.
+   * Sorted newest-first above, so the first row kept per thread is the latest message in it.
    */
-  const seenMessageKeys = new Set<string>();
+  const collapseThreads = mailbox === "archive" || mailbox === "sent";
+  const seenThreadIds = new Set<string>();
   let mergedMessages = messagesByAccount
     .flat()
     .sort((a, b) => b.timestamp - a.timestamp)
     .filter((message) => {
-      const header = String(message.messageIdHeader || "").trim().toLowerCase();
-      const key = header || `id:${String(message.id || "")}`;
-      if (key === "id:") return true;
-      if (seenMessageKeys.has(key)) return false;
-      seenMessageKeys.add(key);
+      if (!collapseThreads) return true;
+      const threadKey = String(message.threadId || "");
+      if (!threadKey) return true;
+      if (seenThreadIds.has(threadKey)) return false;
+      seenThreadIds.add(threadKey);
       return true;
     });
   if (mailbox === "drafts") {

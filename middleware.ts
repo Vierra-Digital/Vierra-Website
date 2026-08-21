@@ -1,6 +1,10 @@
 /**
- * Next 16 renamed the root `middleware` file convention to `proxy` — the old name still works
- * but logs a deprecation warning on every dev boot. Same behaviour, same `config.matcher`.
+ * Kept as `middleware`, not the `proxy` name Next 16 prefers.
+ *
+ * Renaming it silenced the deprecation warning but broke the dev client: Next still requested
+ * /_next/static/development/_clientMiddlewareManifest.js, the server answered with JSON, the
+ * browser refused to execute it as a script, and client JS never hydrated — every panel page sat
+ * on its loading screen forever. A boot-time warning is much cheaper than that.
  */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
@@ -37,7 +41,7 @@ function carryCookies(from: NextResponse, to: NextResponse): NextResponse {
   return to;
 }
 
-export default async function proxy(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Refresh the Supabase session cookie on every matched request — required by
