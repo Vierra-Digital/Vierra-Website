@@ -29,7 +29,6 @@ import {
   FiMail,
   FiMaximize2,
   FiMinimize2,
-  FiMoreHorizontal,
   FiMoreVertical,
   FiMove,
   FiPlus,
@@ -67,7 +66,7 @@ import MoveToMenu from "@/components/email/MoveToMenu";
 import { buildReplyReferences } from "@/lib/email/threading";
 import {
   BRAND_LOGO,
-  ICON_BUTTON, ICON_BUTTON_SOLID, FIELD_LABEL, ALERT, REPLY_ACTION_BUTTON,
+  ICON_BUTTON_SOLID, FIELD_LABEL, ALERT, REPLY_ACTION_BUTTON,
 } from "@/components/email/emailTheme";
 import {
   PAGE_SIZE,
@@ -473,8 +472,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [inlineShowCc, setInlineShowCc] = useState(false);
   /** Gmail shows the recipient as text; it only becomes a field once you click it. */
   const [inlineToEditing, setInlineToEditing] = useState(false);
-  /** Gmail's "⋯" — the trimmed quoted original, hidden until asked for, then editable. */
-  const [inlineShowQuoted, setInlineShowQuoted] = useState(false);
   /** Formatting bar is opt-in, as in Gmail — the "Aa" toggle in the send row reveals it. */
   const [inlineShowFormatting, setInlineShowFormatting] = useState(false);
   const [inlineShowBcc, setInlineShowBcc] = useState(false);
@@ -3143,7 +3140,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setInlineShowCc(false);
     setInlineShowBcc(false);
     setInlineToEditing(false);
-    setInlineShowQuoted(false);
     setInlineShowFormatting(false);
     setInlineMoreOpen(false);
     setInlineComposeTo(to);
@@ -5293,7 +5289,7 @@ ${sourceText}`;
                             onClick={() => {
                               void openReplyCompose();
                             }}
-                            className={`${ICON_BUTTON} email-tip`}
+                            className={`${ICON_BUTTON_SOLID} email-tip`}
                             aria-label="Reply"
                             data-tip="Reply"
                           >
@@ -5304,7 +5300,7 @@ ${sourceText}`;
                             onClick={() => {
                               void openReplyAllCompose();
                             }}
-                            className={`${ICON_BUTTON} email-tip`}
+                            className={`${ICON_BUTTON_SOLID} email-tip`}
                             aria-label="Reply All"
                             data-tip="Reply All"
                           >
@@ -5315,7 +5311,7 @@ ${sourceText}`;
                             onClick={() => {
                               void openForwardCompose();
                             }}
-                            className={`${ICON_BUTTON} email-tip`}
+                            className={`${ICON_BUTTON_SOLID} email-tip`}
                             aria-label="Forward"
                             data-tip="Forward"
                           >
@@ -5330,7 +5326,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
-                            className={`${ICON_BUTTON} email-tip`}
+                            className={`${ICON_BUTTON_SOLID} email-tip`}
                             aria-label={deletesPermanently ? "Delete Permanently" : "Move To Trash"}
                             data-tip={deletesPermanently ? "Delete Permanently" : "Move To Trash"}
                           >
@@ -5339,7 +5335,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => applyAction("markUnread")}
-                            className={`${ICON_BUTTON} email-tip`}
+                            className={`${ICON_BUTTON_SOLID} email-tip`}
                             aria-label="Mark As Unread"
                             data-tip="Mark As Unread"
                           >
@@ -5351,7 +5347,7 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => setMoveMenuOpen((prev) => (prev === "message" ? null : "message"))}
-                              className={`${ICON_BUTTON} email-tip`}
+                              className={`${ICON_BUTTON_SOLID} email-tip`}
                               aria-label="Move To"
                               data-tip="Move To"
                             >
@@ -5365,7 +5361,7 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                              className={`${ICON_BUTTON} email-tip`}
+                              className={`${ICON_BUTTON_SOLID} email-tip`}
                               aria-label={activeModule === "archive" ? "Unarchive" : "Archive"}
                               data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
                             >
@@ -5381,7 +5377,7 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => void toggleStar(selectedMessage)}
-                              className={`${ICON_BUTTON} email-tip`}
+                              className={`${ICON_BUTTON_SOLID} email-tip`}
                               aria-label={selectedMessage.starred ? "Unstar" : "Star"}
                               data-tip={selectedMessage.starred ? "Unstar" : "Star"}
                             >
@@ -5391,7 +5387,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={() => applyAction(spamActionType)}
-                            className={`${ICON_BUTTON} email-tip`}
+                            className={`${ICON_BUTTON_SOLID} email-tip`}
                             aria-label={spamActionTitle}
                             data-tip={spamActionTitle}
                           >
@@ -5403,7 +5399,7 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => setSnoozeMenuOpen((open) => !open)}
-                              className={`${ICON_BUTTON} email-tip`}
+                              className={`${ICON_BUTTON_SOLID} email-tip`}
                               aria-label="Snooze"
                               data-tip="Snooze"
                             >
@@ -5439,7 +5435,7 @@ ${sourceText}`;
                             <button
                               type="button"
                               onClick={() => setLabelMenuOpen((open) => !open)}
-                              className={`${ICON_BUTTON} email-tip`}
+                              className={`${ICON_BUTTON_SOLID} email-tip`}
                               aria-label="Label"
                               data-tip="Label"
                             >
@@ -5468,7 +5464,7 @@ ${sourceText}`;
                           <button
                             type="button"
                             onClick={blockSelectedSender}
-                            className={`${ICON_BUTTON} email-tip`}
+                            className={`${ICON_BUTTON_SOLID} email-tip`}
                             aria-label={selectedBlockedEntry ? "Unblock Sender" : "Block Sender"}
                             data-tip={selectedBlockedEntry ? "Unblock Sender" : "Block Sender"}
                           >
@@ -5747,48 +5743,6 @@ ${sourceText}`;
                                           toolbar pinned open — Gmail's reply always shows one, and a
                                           plain textarea meant a reply could not carry bold, a list or
                                           a link at all. */}
-                                      {/* Trimmed content sits directly under what you typed and above the
-                                          controls — it is part of the message, not an action. Reads
-                                          as a line of text that is also the button, as Gmail's is. */}
-                                      {inlineComposeBodyHtml ? (
-                                        <div className="px-3 pb-2">
-                                          <button
-                                            type="button"
-                                            onClick={() => setInlineShowQuoted((open) => !open)}
-                                            className="trimmed-toggle email-tip"
-                                            aria-expanded={inlineShowQuoted}
-                                            data-tip={inlineShowQuoted ? "Hide trimmed content" : "Show trimmed content"}
-                                            aria-label={inlineShowQuoted ? "Hide trimmed content" : "Show trimmed content"}
-                                          >
-                                            <span className="trimmed-dots" aria-hidden>
-                                              <FiMoreHorizontal className="h-3.5 w-3.5" />
-                                            </span>
-                                          </button>
-                                          {inlineShowQuoted ? (
-                                            <div
-                                              contentEditable
-                                              suppressContentEditableWarning
-                                              onBlur={(event) => setInlineComposeBodyHtml(event.currentTarget.innerHTML)}
-                                              className="email-body mt-2 max-h-60 overflow-y-auto rounded-lg border border-[#E5E7EB] bg-[#FAFAFB] p-3 text-[13px] leading-[1.6] text-[#374151] outline-none focus:border-[#701CC0]/40"
-                                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(inlineComposeBodyHtml) }}
-                                            />
-                                          ) : null}
-                                        </div>
-                                      ) : null}
-
-                                      <div className="px-2 pb-1 pt-2">
-                                        <ComposeRichEditor
-                                          ref={inlineEditorRef}
-                                          valueHtml={inlineComposeIntroHtml}
-                                          onChange={({ html, text }) => {
-                                            setInlineComposeIntroHtml(html);
-                                            setInlineComposeIntroText(text);
-                                          }}
-                                          minHeightClass="min-h-[150px]"
-                                          showToolbar={inlineShowFormatting}
-                                        />
-                                      </div>
-
                                       {inlineComposeMode === "forward" && inlineComposePreviewHtml ? (
                                         <div className="mx-4 mb-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3">
                                           <p className="mb-2 text-[11px] uppercase tracking-wide text-[#6B7280]">

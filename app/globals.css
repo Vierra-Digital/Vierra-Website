@@ -1275,20 +1275,6 @@ input[type="search"]::-ms-clear:hover {
 .email-shell .inline-reply-card input[type="color"] { border-radius: 6px !important; height: 22px !important; width: 26px !important; }
 .email-shell .inline-reply-card .bg-\[\#DEC9F6\] { background: rgba(255, 255, 255, 0.12) !important; }
 
-/* Gmail's trimmed-content "⋯". */
-.email-shell .inline-reply-ellipsis {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 20px;
-  padding: 0 8px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #A8A1C0;
-  transition: background-color 140ms ease, color 140ms ease;
-}
-.email-shell .inline-reply-ellipsis:hover { background: rgba(255, 255, 255, 0.14); color: #EDE9F8; }
-
 /* "Help me write": the bolt idles with a slow glow and charges while drafting. */
 @keyframes bolt-glow {
   0%, 100% { filter: drop-shadow(0 0 0 rgba(168, 85, 247, 0)); opacity: 0.85; }
@@ -1321,7 +1307,10 @@ input[type="search"]::-ms-clear:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.email-shell .inline-reply-card button:hover > .recipient-chip { background: rgba(255, 255, 255, 0.12); }
+/* Hover the chip, not its container. All the chips live inside one button, so a
+   `button:hover > .recipient-chip` rule lit every recipient at once when you were pointing at
+   one of them. */
+.email-shell .recipient-chip:hover { background: rgba(255, 255, 255, 0.14); }
 
 /* Editor body matches the recipient line's 13px — the default 14px+ made the box feel oversized
    next to the header it sits under. */
@@ -1380,28 +1369,5 @@ input[type="search"]::-ms-clear:hover {
 }
 .email-shell .recipient-chip-x:hover { opacity: 1; background: rgba(255, 255, 255, 0.18); }
 
-/* "Show trimmed content": inline text that is itself the control, the way Gmail's is — the
-   ellipsis chip reads as the affordance and the label explains it. */
-.email-shell .trimmed-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 2px 2px 2px 0;
-  border-radius: 6px;
-  color: #8C86A6;
-  font-size: 12.5px;
-  transition: color 140ms ease;
-}
-.email-shell .trimmed-toggle:hover { color: #D8D3EA; }
-.email-shell .trimmed-dots {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 18px;
-  padding: 0 7px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.09);
-  transition: background-color 140ms ease;
-}
-.email-shell .trimmed-toggle:hover .trimmed-dots { background: rgba(255, 255, 255, 0.16); }
-.email-shell .trimmed-label { text-decoration: underline; text-underline-offset: 2px; text-decoration-color: rgba(255,255,255,0.25); }
+
+
