@@ -272,8 +272,8 @@ const DashboardSection = () => {
 
     return (
         <div className="w-full h-full bg-white text-[#111014] flex flex-col">
-            <div className="dashboard-scroll-area flex-1 flex justify-center px-5 pt-1 overflow-y-auto">
-                <div className="w-full max-w-6xl flex flex-col h-full pb-16">
+            <div className="dashboard-scroll-area flex-1 px-5 pt-1 overflow-y-auto overflow-x-hidden">
+                <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full pb-16">
             <div className="w-full flex justify-between items-center mb-2">
                 <h1 className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827] mt-5 mb-4">Dashboard</h1>
                 <div />

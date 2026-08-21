@@ -149,7 +149,7 @@ const CampaignsSection: React.FC = () => {
   return (
     <div className="w-full h-full bg-white text-[#111014] flex flex-col overflow-y-auto">
       <div className="flex-1 flex justify-center px-6 pb-10">
-        <div className="w-full max-w-6xl flex flex-col">
+        <div className="mx-auto w-full max-w-[1680px] flex flex-col">
           {/* Header: one block with a single margin instead of a title carrying its own
               mt-6/mb-6 inside a row that also set mb-2, which is what made the spacing here
               read as arbitrary. */}

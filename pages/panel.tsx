@@ -482,7 +482,11 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
               </div>
             </div>
           </div>
-          <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden relative">
+          {/* Section wrappers are plain block divs, so as flex items with no grow they
+              shrink-to-fit their content — every page rendered at its content width and sat
+              left with dead space beside it, which got worse the wider the display. Forcing
+              children to full width fixes all of them at once. */}
+          <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden relative [&>div]:w-full [&>div]:min-w-0">
             {/* Mounted immediately on login (not lazily on first click) and kept mounted for the
                 rest of the session — matches the visitedSections pattern below — so switching to
                 Settings never re-triggers its getSettings/gmail/social/calendar fetches. */}
