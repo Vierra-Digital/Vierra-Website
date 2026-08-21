@@ -9,7 +9,8 @@ type StatCard = {
   lifetimeValue: number
   currentMonthValue: number
   previousMonthValue: number
-  growthPercent: number
+  /** null = no prior-month baseline; render as "New" rather than a percentage. */
+  growthPercent: number | null
   growthDirection: GrowthDirection
 }
 
@@ -25,9 +26,17 @@ function getPreviousUtcMonthRange(date: Date) {
   return { start, end }
 }
 
-function calculateGrowth(current: number, previous: number) {
-  const denominator = previous === 0 ? 1 : previous
-  return Math.round((((current - previous) / denominator) * 100) * 10) / 10
+/**
+ * Month-over-month change, or null when there is no baseline to compare against.
+ *
+ * This substituted 1 for a zero denominator, which doesn't scale a percentage — it invents one.
+ * Going from 0 clients last month to 3 this month reported "300%", and 12 reported "1200%",
+ * because the divisor was 1 rather than the (nonexistent) previous total. There is no percentage
+ * change from zero, so say so instead of printing a number that looks authoritative and isn't.
+ */
+function calculateGrowth(current: number, previous: number): number | null {
+  if (previous === 0) return current === 0 ? 0 : null
+  return Math.round((((current - previous) / previous) * 100) * 10) / 10
 }
 
 function getGrowthDirection(current: number, previous: number): GrowthDirection {

@@ -12,7 +12,7 @@ type DashboardStat = {
     lifetimeValue: number
     currentMonthValue: number
     previousMonthValue: number
-    growthPercent: number
+    growthPercent: number | null
     growthDirection: GrowthDirection
 }
 
@@ -288,8 +288,15 @@ const DashboardSection = () => {
                         {orderedStats.map((card) => {
                             const trendUi = getTrendUi(card.growthDirection)
                             const TrendIcon = trendUi.Icon
-                            const roundedGrowth = Number(card.growthPercent.toFixed(1))
-                            const growthLabel = roundedGrowth % 1 === 0 ? `${roundedGrowth.toFixed(0)}%` : `${roundedGrowth}%`
+                            // null means there was no prior-month baseline — "New" is honest,
+                            // a percentage computed against zero is not.
+                            const roundedGrowth = card.growthPercent === null ? null : Number(card.growthPercent.toFixed(1))
+                            const growthLabel =
+                              roundedGrowth === null
+                                ? "New"
+                                : roundedGrowth % 1 === 0
+                                  ? `${roundedGrowth.toFixed(0)}%`
+                                  : `${roundedGrowth}%`
                             const displayValue = statsLoading ? "..." : card.lifetimeValue.toLocaleString()
 
                             return (

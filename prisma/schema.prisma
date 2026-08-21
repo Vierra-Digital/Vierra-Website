@@ -1,10 +1,10 @@
 generator client {
-  provider        = "prisma-client-js"
-  // multiSchema is GA in the Prisma 6 CLI, so this is redundant for `prisma validate` and the CLI
-  // warns that it is deprecated. It is kept because the Prisma VS Code extension bundles its own
-  // engine: an extension older than the CLI still requires it for the datasource `schemas` key and
-  // the @@schema attributes, and without it flags every model in this file as an error.
-  previewFeatures = ["multiSchema"]
+  provider = "prisma-client-js"
+  // No previewFeatures: multiSchema went GA, so listing it only produces a deprecation warning on
+  // every `prisma generate` (which `predev` runs, so it printed on every dev boot). The datasource
+  // `schemas` key and the @@schema attributes below work without it. If the Prisma VS Code
+  // extension starts flagging every model here, its bundled engine predates GA — update it rather
+  // than restoring the flag.
 }
 
 datasource db {
