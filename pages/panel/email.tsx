@@ -4,6 +4,8 @@ import dynamic from "next/dynamic";
 import type { GetServerSideProps } from "next";
 import { requireSession } from "@/lib/auth";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
+import { getAccessibleGmailAccounts } from "@/lib/email/mailboxAccess";
+import { resolveEnabledAccounts } from "@/lib/email/accountPreferences";
 
 const EmailingPlatformSection = dynamic(
   () => import("@/components/PanelPages/EmailingPlatformSection"),
@@ -54,10 +56,29 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   }
 
   const accountsParam = Array.isArray(ctx.query.accounts) ? ctx.query.accounts[0] : ctx.query.accounts;
-  const initialSelectedAccounts = (accountsParam || "")
+  let initialSelectedAccounts = (accountsParam || "")
     .split(",")
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean);
+
+  // No explicit ?accounts= — resolve the same "enabled accounts, primary first" selection the
+  // client would otherwise wait on /api/gmail/status + account-preferences for, right here in the
+  // same request that's already fetching the session. This is a same-process function call over
+  // Prisma (no Gmail API round trip, no client network hop), so on a cold visit (nothing cached in
+  // localStorage yet) the panel can start fetching messages immediately on mount instead of sitting
+  // on the gate loading screen for a client-side round trip first.
+  if (initialSelectedAccounts.length === 0) {
+    try {
+      const accessible = await getAccessibleGmailAccounts(session.user.id);
+      initialSelectedAccounts = await resolveEnabledAccounts(
+        session.user.id,
+        accessible.map((a) => a.email)
+      );
+    } catch {
+      // Fall back to the client's own connections fetch — same as before this optimization existed.
+      initialSelectedAccounts = [];
+    }
+  }
 
   const threadParam = Array.isArray(ctx.query.thread) ? ctx.query.thread[0] : ctx.query.thread;
   const initialOpenThreadId = (threadParam || "").trim();

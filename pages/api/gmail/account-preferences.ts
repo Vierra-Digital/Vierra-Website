@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr } from "@/lib/api/parsing";
+import { hasPrimaryColumn, isMissingPreferencesTable, readPreferencesWithPrimary } from "@/lib/email/accountPreferences";
 
 /**
  * Per-account state for the email panel: whether a mailbox is shown, and which one is the primary
@@ -19,58 +20,6 @@ import { asStr } from "@/lib/api/parsing";
  * which would take the whole account list down with it — the same failure mode that once broke the
  * nav layout. Raw SQL lets a missing column degrade to "no primary set" instead.
  */
-function isMissingTable(error: unknown): boolean {
-  return typeof error === "object" && error !== null && (error as { code?: string }).code === "P2021";
-}
-
-type PreferenceRow = { account_email: string; enabled: boolean; is_primary: boolean };
-
-/**
- * Whether this database has the is_primary column yet, remembered per process.
- *
- * Without this the endpoint attempted the query on every single request against a database where
- * the migration has not been applied. It degraded correctly, but Prisma logs each failed query, so
- * a perfectly working panel filled the server log with database errors on every load. Probed once
- * with a cheap catalogue lookup instead, so a missing column costs one query per process and
- * produces no errors at all.
- *
- * Only ever flips false -> true (after the migration is applied and the process restarts), never the
- * other way, so a transient failure cannot permanently disable the feature.
- */
-let primaryColumnAvailable: boolean | null = null;
-
-async function hasPrimaryColumn(): Promise<boolean> {
-  if (primaryColumnAvailable !== null) return primaryColumnAvailable;
-  try {
-    const rows = await prisma.$queryRaw<Array<{ exists: boolean }>>`
-      SELECT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'email_account_preferences' AND column_name = 'is_primary'
-      ) AS exists
-    `;
-    primaryColumnAvailable = Boolean(rows[0]?.exists);
-  } catch {
-    // Catalogue unreadable (missing table, no permission): treat the feature as unavailable rather
-    // than retrying a query that will fail anyway.
-    primaryColumnAvailable = false;
-  }
-  return primaryColumnAvailable;
-}
-
-/** Preferences including the primary flag, or null when the column/table isn't available. */
-async function readPreferencesWithPrimary(userId: string): Promise<PreferenceRow[] | null> {
-  if (!(await hasPrimaryColumn())) return null;
-  try {
-    return await prisma.$queryRaw<PreferenceRow[]>`
-      SELECT account_email, enabled, is_primary
-      FROM email_account_preferences
-      WHERE user_id = ${userId}::uuid
-    `;
-  } catch {
-    return null;
-  }
-}
-
 export default withAuth(
   async (req, res, session) => {
     const userId = session.user.id;
@@ -98,7 +47,7 @@ export default withAuth(
           degraded: true,
         });
       } catch (error) {
-        if (isMissingTable(error)) {
+        if (isMissingPreferencesTable(error)) {
           res.status(200).json({ preferences: [] });
           return;
         }
@@ -153,7 +102,7 @@ export default withAuth(
           ok: false,
           accountEmail,
           degraded: true,
-          message: isMissingTable(error)
+          message: isMissingPreferencesTable(error)
             ? "Email panel preferences aren't migrated on this database yet."
             : "Setting a primary inbox needs prisma/manual/20260820_email_account_primary.sql applied.",
         });
@@ -169,7 +118,7 @@ export default withAuth(
       });
       res.status(200).json({ ok: true, accountEmail, enabled });
     } catch (error) {
-      if (isMissingTable(error)) {
+      if (isMissingPreferencesTable(error)) {
         res.status(200).json({ ok: true, accountEmail, enabled, degraded: true });
         return;
       }
