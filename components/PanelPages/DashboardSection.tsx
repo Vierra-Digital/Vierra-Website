@@ -272,19 +272,19 @@ const DashboardSection = () => {
 
     return (
         <div className="w-full h-full bg-white text-[#111014] flex flex-col">
-            <div className="dashboard-scroll-area flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
+            <div className="dashboard-scroll-area flex-1 flex justify-center px-5 pt-1 overflow-y-auto">
                 <div className="w-full max-w-6xl flex flex-col h-full pb-16">
             <div className="w-full flex justify-between items-center mb-2">
-                <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Dashboard</h1>
+                <h1 className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827] mt-5 mb-4">Dashboard</h1>
                 <div />
             </div>
 
             
-            <div className="flex gap-6">
+            <div className="flex gap-4">
                 
                 <div className="flex-1">
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
                         {orderedStats.map((card) => {
                             const trendUi = getTrendUi(card.growthDirection)
                             const TrendIcon = trendUi.Icon
@@ -293,11 +293,11 @@ const DashboardSection = () => {
                             const displayValue = statsLoading ? "..." : card.lifetimeValue.toLocaleString()
 
                             return (
-                                <div key={card.key} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                                <div key={card.key} className="bg-white rounded-xl px-3.5 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
                                     <div className="mb-2">
                                         <h3 className="text-sm font-medium text-[#6B7280] uppercase">{card.label}</h3>
                                     </div>
-                                    <div className={`text-2xl font-bold mb-1 ${numberColorByStat[card.key]}`}>
+                                    <div className={`text-[22px] font-semibold leading-none tracking-[-0.02em] mb-1.5 ${numberColorByStat[card.key]}`}>
                                         {displayValue}
                                     </div>
                                     <div className={`flex items-center text-sm ${trendUi.valueClass}`}>
@@ -310,7 +310,7 @@ const DashboardSection = () => {
                     </div>
 
                     
-                    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-8">
+                    <div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1] mb-5">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Website Visits</h3>
                             <div className="relative">
@@ -328,7 +328,7 @@ const DashboardSection = () => {
                                 <RiArrowDropDownLine className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
                             </div>
                         </div>
-                        <div className="h-80 bg-gray-50 rounded-lg p-4 shadow-inner">
+                        <div className="h-64 bg-[#FAFAFB] rounded-lg p-3 border border-[#F1EFF5]">
                             {websiteVisitsLoading ? (
                                 <div className="h-full w-full flex items-center justify-center text-sm text-[#6B7280]">
                                     Loading website visits...
@@ -371,20 +371,20 @@ const DashboardSection = () => {
 
                 
                 <div className="w-80 space-y-6">
-                    <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100">
+                    <div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Upcoming Meetings</h3>
                         </div>
                         {meetingsLoading ? (
                             <div className="text-sm text-[#6B7280]">Loading upcoming meetings...</div>
                         ) : !calendarConnected ? (
-                            <div className="rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-4">
+                            <div className="rounded-lg border border-[#ECEAF1] bg-[#FAFAFB] p-3">
                                 <p className="text-sm text-[#374151]">
                                     Connect your Google Gmail account in settings to load upcoming meetings.
                                 </p>
                             </div>
                         ) : calendarNeedsReconnect ? (
-                            <div className="rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-4">
+                            <div className="rounded-lg border border-[#ECEAF1] bg-[#FAFAFB] p-3">
                                 <p className="text-sm text-[#6B7280]">
                                     Reconnect your Google account in settings to grant calendar access, then refresh this page.
                                 </p>
@@ -393,7 +393,7 @@ const DashboardSection = () => {
                                 ) : null}
                             </div>
                         ) : upcomingMeetings.length === 0 ? (
-                            <div className="rounded-lg border border-[#E5E7EB] bg-[#FAFAFA] p-4 flex flex-col items-center text-center">
+                            <div className="rounded-lg border border-[#ECEAF1] bg-[#FAFAFB] p-3 flex flex-col items-center text-center">
                                 <div className="relative mb-3 flex h-14 w-14 items-center justify-center">
                                     <div className="meeting-empty-ping absolute inset-0 rounded-full bg-[#E9D5FF]" />
                                     <div className="meeting-empty-icon relative flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-sm border border-[#E9D5FF]">
@@ -408,10 +408,10 @@ const DashboardSection = () => {
                         ) : (
                             <div className="space-y-4">
                                 {upcomingMeetings.map((meeting) => (
-                                    <div key={meeting.id} className="p-4 bg-gray-50 rounded-lg">
+                                    <div key={meeting.id} className="p-3 bg-[#FAFAFB] rounded-lg border border-[#F1EFF5]">
                                         <div className="min-w-0">
                                             <div className="font-medium text-sm mb-2">{meeting.title}</div>
-                                            <div className="flex items-center gap-4 mb-3">
+                                            <div className="flex items-center gap-2.5 mb-2">
                                                 <div className="flex items-center gap-1 text-xs text-[#6B7280]">
                                                     <FiCalendar className="w-3 h-3" />
                                                     <span className={isMeetingToday(meeting.startIso) ? "text-red-600 font-semibold" : ""}>
