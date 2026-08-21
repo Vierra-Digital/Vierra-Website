@@ -533,7 +533,7 @@ const DashboardSection = () => {
                         </div>
                     </div>
 <div className="bg-[#F1EFF6] rounded-xl p-4 flex flex-col">
-                            <h3 className="text-lg font-semibold text-[#111827] mb-3">Recent Posts</h3>
+                            <h3 className="text-lg font-semibold text-[#111827] mb-3">Recent Blog Posts</h3>
                             {postsLoading ? (
                                 <div className="space-y-2">
                                     {[...Array(3)].map((_, i) => (
@@ -541,7 +541,7 @@ const DashboardSection = () => {
                                     ))}
                                 </div>
                             ) : recentPosts.length === 0 ? (
-                                <p className="text-xs text-[#6B7280]">No published posts yet.</p>
+                                <p className="text-xs text-[#6B7280]">No published blog posts yet.</p>
                             ) : (
                                 <ul className="flex-1 divide-y divide-[#F1EFF5] flex flex-col justify-between">
                                     {recentPosts.map((post) => (
