@@ -4532,7 +4532,7 @@ ${sourceText}`;
                       {activeModule !== "contacts" ? (
                         <>
                           <div className="email-toolbar flex items-center justify-between gap-3 px-4 py-2.5">
-                            <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               {showListPaging ? (
                                 <input
                                   type="checkbox"

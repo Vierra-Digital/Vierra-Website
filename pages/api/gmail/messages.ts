@@ -429,22 +429,27 @@ export default withAuth(async (req, res, session) => {
    * genuinely distinct messages from different accounts alone.
    */
   /**
-   * Collapse Archive and Sent to one row per conversation, the way Gmail does.
+   * One row per conversation, in every mailbox — what Gmail does everywhere.
    *
-   * What looked like duplicates were never duplicate messages — checked against the live
-   * mailboxes, there are zero repeated Message-IDs. They are distinct messages in the SAME
-   * thread: the reply or forward you sent sitting next to the original you received, both
-   * archived, with subjects one "Re:"/"Fwd:" apart. A flat per-message list renders both, so
-   * the conversation reads as a duplicate row. Dropping `-in:sent` from the Archive query made
-   * it more visible by pulling sent copies in beside their received twins.
+   * Collapsing only Archive and Sent left the duplicates visible in Inbox, which is where they
+   * were actually being seen. The reported pair is instructive: two real submissions 30 minutes
+   * apart, different Message-IDs, that Gmail threaded together because the subject, sender and
+   * recipient all match — and because the site mails them from alex@vierradev.com TO
+   * alex@vierradev.com, each one carries SENT *and* INBOX, so it surfaces in two mailboxes at
+   * once. Per-message rendering therefore showed the same conversation twice in both.
    *
-   * Only Archive and Sent collapse: those are the views where both halves of a conversation
-   * end up side by side. Inbox intentionally keeps a row per message so a new reply surfaces.
-   * Sorted newest-first above, so the first row kept per thread is the latest message in it.
+   * Drafts are exempt: each draft is its own editable object, not a message in a conversation.
+   * Rows are sorted newest-first above, so the kept row is the latest message in the thread, and
+   * threadCount tells the UI how many it stands for.
    */
-  const collapseThreads = mailbox === "archive" || mailbox === "sent";
+  const threadCounts = new Map<string, number>();
+  for (const message of messagesByAccount.flat()) {
+    const key = String(message.threadId || message.id || "");
+    if (key) threadCounts.set(key, (threadCounts.get(key) ?? 0) + 1);
+  }
+  const collapseThreads = mailbox !== "drafts";
   const seenThreadIds = new Set<string>();
-  let mergedMessages = messagesByAccount
+  let mergedMessages: MessageRow[] = messagesByAccount
     .flat()
     .sort((a, b) => b.timestamp - a.timestamp)
     .filter((message) => {
@@ -454,7 +459,11 @@ export default withAuth(async (req, res, session) => {
       if (seenThreadIds.has(threadKey)) return false;
       seenThreadIds.add(threadKey);
       return true;
-    });
+    })
+    .map((message) => ({
+      ...message,
+      threadCount: threadCounts.get(String(message.threadId || message.id || "")) ?? 1,
+    }));
   if (mailbox === "drafts") {
     // Resolve account_ids for selected emails when filtering
     let selectedAccountIds: string[] = [];
