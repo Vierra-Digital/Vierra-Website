@@ -5,6 +5,7 @@ import { Geist } from "next/font/google";
 import Image from "next/image";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/router";
 import { FaGoogle } from "react-icons/fa";
 import {
   FiAlertCircle,
@@ -210,6 +211,41 @@ const ACTION_TIMEOUT_MS = 15_000;
 const MESSAGE_CACHE_LIMIT = 12;
 
 /**
+ * Last-known enabled account selection, so a repeat visit can start fetching messages/counts
+ * immediately instead of waiting out a full /api/gmail/status + account-preferences round trip
+ * before it even knows which accounts to ask for. Not user-scoped: on a shared browser this can
+ * seed a stale guess from a previous session, but the server always re-derives access from the
+ * live session, so a stale/foreign email just yields an empty result that self-corrects the
+ * moment the real connections response lands — never someone else's data.
+ */
+const LAST_ACCOUNTS_STORAGE_KEY = "vierra:email-panel:last-accounts";
+
+function readCachedSelectedAccounts(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(LAST_ACCOUNTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string" && v.length > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedSelectedAccounts(accounts: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (accounts.length === 0) {
+      window.localStorage.removeItem(LAST_ACCOUNTS_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(LAST_ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+    }
+  } catch {
+    /* storage unavailable (disabled, quota, private mode) — the panel just falls back to the gate wait */
+  }
+}
+
+/**
  * Compose footer icon button. Gmail's composer is one row of quiet, chrome-less icons with a
  * single solid Send — so an "on" toggle (Confidential, Receipt, a set schedule) reads as a soft
  * brand-tinted disc rather than an outlined box, which is what made the old bar look blocky.
@@ -227,9 +263,28 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   initialSelectedAccounts = [],
   initialOpenThreadId = "",
 }) => {
+  const router = useRouter();
   const initialAccountsRef = useRef(initialSelectedAccounts);
   const deepLinkAppliedRef = useRef(false);
-  const [step, setStep] = useState<"gate" | "client">(initialSelectedAccounts.length > 0 ? "client" : "gate");
+  // Browser back/forward for the email panel: module, label, and open-message are pushed to the
+  // URL as they change so the browser's own history stack can step through them. `isApplyingNavRef`
+  // marks a state change as "already reflected in the URL" (came from the URL itself, either the
+  // initial mount sync or a back/forward pop) so the push-effect below doesn't turn around and
+  // push a duplicate/incorrect entry for it. `navReadyRef` withholds any pushes until the very
+  // first URL->state sync has run, so mount doesn't overwrite a deep-linked URL with defaults.
+  const isApplyingNavRef = useRef(false);
+  const navReadyRef = useRef(false);
+  const pendingNavThreadRef = useRef("");
+  // The very first URL write (priming the address bar with the starting module, e.g. "?module=inbox"
+  // on a bare "/panel/email" visit) uses replace so it doesn't consume a "back" step before the
+  // panel is even navigated within; every write after that is a real push.
+  const hasWrittenNavUrlRef = useRef(false);
+  // No URL-preselected accounts: fall back to last time's enabled selection (if any) so the panel
+  // can start fetching messages/counts immediately instead of sitting on the gate loading screen
+  // for a full connections round trip. loadGmailConnections still runs and corrects this if it's wrong.
+  const cachedAccountsRef = useRef(initialSelectedAccounts.length > 0 ? [] : readCachedSelectedAccounts());
+  const initialResolvedAccounts = initialSelectedAccounts.length > 0 ? initialSelectedAccounts : cachedAccountsRef.current;
+  const [step, setStep] = useState<"gate" | "client">(initialResolvedAccounts.length > 0 ? "client" : "gate");
   const [activeModule, setActiveModule] = useState<ModuleKey>("inbox");
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
   /** User's custom sidebar order (module keys). Empty = fall back to MODULES order. */
@@ -243,7 +298,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   >({});
   const [gmailAccounts, setGmailAccounts] = useState<GmailAccountConnection[]>([]);
   const [gmailLoading, setGmailLoading] = useState(false);
-  const [selectedAccounts, setSelectedAccounts] = useState<string[]>(initialSelectedAccounts);
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>(initialResolvedAccounts);
 
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState("");
@@ -488,6 +543,20 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const invalidateMessagesCache = useCallback(() => {
     messagesCacheRef.current.clear();
   }, []);
+  /** Cache keys currently being prefetched, so a fast re-render doesn't fire the same fetch twice. */
+  const prefetchInFlightRef = useRef<Set<string>>(new Set());
+  const storeMessagesCache = useCallback(
+    (key: string, messages: MessageRow[], accountErrors: Array<{ accountEmail: string; message: string }>, hasNextPage: boolean) => {
+      // Bounded LRU-ish cache: re-inserting moves the key to the end, and we evict the oldest.
+      messagesCacheRef.current.delete(key);
+      messagesCacheRef.current.set(key, { messages, accountErrors, hasNextPage });
+      if (messagesCacheRef.current.size > MESSAGE_CACHE_LIMIT) {
+        const oldest = messagesCacheRef.current.keys().next().value;
+        if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
+      }
+    },
+    []
+  );
   const selectedMessageIdRef = useRef("");
   const moveListMenuRef = useRef<HTMLDivElement | null>(null);
   const snoozeMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1661,9 +1730,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
       // The full-page client opens with the chosen accounts (URL param) or all enabled;
       // the "gate" is only shown as a "no accounts connected" state.
-      setSelectedAccounts(preselected.length > 0 ? preselected : enabledConnected);
+      const resolvedAccounts = preselected.length > 0 ? preselected : enabledConnected;
+      setSelectedAccounts(resolvedAccounts);
       setStep(connected.length === 0 ? "gate" : "client");
+      // Remember this for next visit's optimistic seed (see cachedAccountsRef above).
+      writeCachedSelectedAccounts(resolvedAccounts);
     } catch {
+      // Transient failure (network blip, etc.) — leave the cached selection alone rather than
+      // wiping it, so the next visit still gets the fast path instead of being punished for this.
       setGmailAccounts([]);
       setSelectedAccounts([]);
       setStep("gate");
@@ -1806,17 +1880,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       const nextMessages = Array.isArray(payload?.messages) ? payload.messages : [];
       const nextAccountErrors = Array.isArray(payload?.accountErrors) ? payload.accountErrors : [];
       const nextHasNextPage = Boolean(payload?.hasNextPage);
-      // Bounded LRU-ish cache: re-inserting moves the key to the end, and we evict the oldest.
-      messagesCacheRef.current.delete(cacheKey);
-      messagesCacheRef.current.set(cacheKey, {
-        messages: nextMessages,
-        accountErrors: nextAccountErrors,
-        hasNextPage: nextHasNextPage,
-      });
-      if (messagesCacheRef.current.size > MESSAGE_CACHE_LIMIT) {
-        const oldest = messagesCacheRef.current.keys().next().value;
-        if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
-      }
+      storeMessagesCache(cacheKey, nextMessages, nextAccountErrors, nextHasNextPage);
       // Self-heal the mark-read latch: anything Gmail still reports as unread must be markable
       // again, including messages marked unread from another client since this page loaded.
       for (const message of nextMessages as MessageRow[]) {
@@ -1832,6 +1896,33 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         setSelectedMessageDetail(null);
         setViewMode("list");
       }
+      // Quietly warm the next page in the background so paging forward feels instant — by the
+      // time the user clicks "next" the data is usually already sitting in the cache.
+      if (nextHasNextPage) {
+        const nextPageQuery = new URLSearchParams(query);
+        nextPageQuery.set("page", String(currentPage + 1));
+        const nextPageCacheKey = nextPageQuery.toString();
+        if (!messagesCacheRef.current.has(nextPageCacheKey) && !prefetchInFlightRef.current.has(nextPageCacheKey)) {
+          prefetchInFlightRef.current.add(nextPageCacheKey);
+          fetch(`/api/gmail/messages?${nextPageCacheKey}`)
+            .then((prefetchResponse) => prefetchResponse.json().catch(() => ({})))
+            .then((prefetchPayload) => {
+              // Don't let a slow prefetch resurrect stale data after the view moved on (mailbox
+              // switch, new search, or a mutating action that invalidated the cache).
+              if (requestId !== loadMessagesRequestRef.current) return;
+              const prefetchMessages = Array.isArray(prefetchPayload?.messages) ? prefetchPayload.messages : [];
+              const prefetchAccountErrors = Array.isArray(prefetchPayload?.accountErrors) ? prefetchPayload.accountErrors : [];
+              const prefetchHasNextPage = Boolean(prefetchPayload?.hasNextPage);
+              storeMessagesCache(nextPageCacheKey, prefetchMessages, prefetchAccountErrors, prefetchHasNextPage);
+            })
+            .catch(() => {
+              /* best-effort: a failed prefetch just means the next click loads normally */
+            })
+            .finally(() => {
+              prefetchInFlightRef.current.delete(nextPageCacheKey);
+            });
+        }
+      }
     } catch (error) {
       if (requestId !== loadMessagesRequestRef.current) return;
       setMessages([]);
@@ -1842,7 +1933,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       if (requestId !== loadMessagesRequestRef.current) return;
       setMessagesLoading(false);
     }
-  }, [activeModule, activeLabelId, canLoadMessages, currentPage, debouncedSearch, pageSize, selectedAccounts, step]);
+  }, [activeModule, activeLabelId, canLoadMessages, currentPage, debouncedSearch, pageSize, selectedAccounts, step, storeMessagesCache]);
 
   useEffect(() => {
     loadMessagesRef.current = () => void loadMessages();
@@ -2042,6 +2133,123 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       setDetailError("");
     }
   }, [messages, initialOpenThreadId]);
+
+  // Browser back/forward: once the router has resolved the current URL, adopt whatever
+  // module/label it names as the starting state (covers a hard refresh or a shared link that
+  // isn't just the bare initial-thread deep link above), then let every later module/label/message
+  // change push a fresh history entry. Runs once — after the first sync, module/label are driven
+  // entirely by state, and this effect exists only to prime that state from the URL on load.
+  useEffect(() => {
+    if (!router.isReady || navReadyRef.current) return;
+    navReadyRef.current = true;
+    const query = router.query;
+    const moduleParam = Array.isArray(query.module) ? query.module[0] : query.module;
+    const labelParam = (Array.isArray(query.label) ? query.label[0] : query.label) || "";
+    const threadParam = (Array.isArray(query.thread) ? query.thread[0] : query.thread) || "";
+    const moduleValid = moduleParam && MODULES.some((item) => item.key === moduleParam);
+    if ((moduleValid && moduleParam !== activeModule) || (labelParam && labelParam !== activeLabelId)) {
+      isApplyingNavRef.current = true;
+      if (moduleValid) setActiveModule(moduleParam as ModuleKey);
+      setActiveLabelId(labelParam);
+    }
+    // The bare `?thread=` deep link (Discord alert, etc.) is already handled above via
+    // initialOpenThreadId; only pick this up when it names a *different* thread than that one.
+    if (threadParam && threadParam !== initialOpenThreadId) {
+      pendingNavThreadRef.current = threadParam;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady]);
+
+  // Resolves a thread id captured from the URL (initial load or a back/forward pop) into the
+  // actual message row once that mailbox's messages have loaded — mirrors the initialOpenThreadId
+  // deep-link effect above, but re-runs for every later pop instead of firing only once.
+  useEffect(() => {
+    if (!pendingNavThreadRef.current) return;
+    const row = messages.find((m) => m.threadId === pendingNavThreadRef.current);
+    if (row) {
+      pendingNavThreadRef.current = "";
+      isApplyingNavRef.current = true;
+      setSelectedMessageId(row.id);
+      setViewMode("message");
+      setDetailError("");
+    }
+  }, [messages]);
+
+  // A popped label id arrives with no name attached (the URL only carries the id) — recover it
+  // from the loaded labels list, same as clicking the label in the sidebar would set it.
+  useEffect(() => {
+    if (!activeLabelId || activeLabelName) return;
+    const found = labels.find((l) => l.id === activeLabelId);
+    if (found) setActiveLabelName(found.name);
+  }, [labels, activeLabelId, activeLabelName]);
+
+  // Browser back/forward button handling: Next's router only fires beforePopState for
+  // client-side-navigable pops, which is exactly what our own history.pushState entries below are.
+  // Apply the popped module/label/thread to state (guarded so the push-effect doesn't re-push it)
+  // and let Next update its own query bookkeeping to match (`return true`).
+  useEffect(() => {
+    router.beforePopState(({ as }) => {
+      try {
+        const url = new URL(as, window.location.origin);
+        const moduleParam = url.searchParams.get("module");
+        const labelParam = url.searchParams.get("label") || "";
+        const threadParam = url.searchParams.get("thread") || "";
+        const moduleValid = moduleParam && MODULES.some((item) => item.key === moduleParam);
+        isApplyingNavRef.current = true;
+        if (moduleValid) setActiveModule(moduleParam as ModuleKey);
+        setActiveLabelId(labelParam);
+        if (threadParam) {
+          pendingNavThreadRef.current = threadParam;
+        } else {
+          pendingNavThreadRef.current = "";
+          setSelectedMessageId("");
+          setViewMode("list");
+          setDetailError("");
+        }
+      } catch {
+        /* malformed pop target — ignore, current state stands */
+      }
+      return true;
+    });
+    return () => {
+      router.beforePopState(() => true);
+    };
+  }, [router]);
+
+  // Pushes a history entry for every module switch, label switch, and message open/close so the
+  // browser's back/forward buttons can step through the email panel the same way they do a
+  // multi-page site. Skipped while navReadyRef hasn't primed from the URL yet, and skipped for any
+  // change that already came FROM the URL (isApplyingNavRef) — otherwise a back/forward pop would
+  // immediately push a duplicate (or, worse, an out-of-order) entry right back onto the stack.
+  useEffect(() => {
+    if (!navReadyRef.current) return;
+    if (isApplyingNavRef.current) {
+      isApplyingNavRef.current = false;
+      return;
+    }
+    // Start from whatever's already in the address bar (e.g. `?accounts=` from a deep link) and
+    // only touch the three nav keys, so unrelated params survive every module/label/message push.
+    const params = new URLSearchParams(window.location.search);
+    params.set("module", activeModule);
+    if (activeLabelId) params.set("label", activeLabelId);
+    else params.delete("label");
+    if (viewMode === "message" && selectedMessage?.threadId) params.set("thread", selectedMessage.threadId);
+    else params.delete("thread");
+    const nextSearch = params.toString();
+    const currentSearch = window.location.search.replace(/^\?/, "");
+    if (nextSearch === currentSearch) {
+      hasWrittenNavUrlRef.current = true;
+      return;
+    }
+    const writeMethod = hasWrittenNavUrlRef.current ? "push" : "replace";
+    hasWrittenNavUrlRef.current = true;
+    router[writeMethod](
+      { pathname: router.pathname, query: Object.fromEntries(params) },
+      undefined,
+      { shallow: true }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeModule, activeLabelId, viewMode, selectedMessage?.threadId]);
 
   // Opening an unread email marks it read the moment it opens: locally first (so going back
   // shows it read immediately) and on Gmail in the background. Keyed by id so it fires once.

@@ -78,25 +78,33 @@ async function refreshAccessToken(refreshToken: string) {
   };
 }
 
+type PreloadedTokenRow = {
+  access_token: string | null;
+  refresh_token: string | null;
+  expires_at: Date | null;
+};
+
 export async function getValidGmailAccessToken(
   userId: string,
   accountEmail: string,
-  options?: { forceRefresh?: boolean }
+  options?: { forceRefresh?: boolean; preloadedRow?: PreloadedTokenRow }
 ): Promise<GmailTokenResult> {
   const normalizedEmail = accountEmail.trim().toLowerCase();
-  const row = await prisma.platformToken.findUnique({
-    where: {
-      user_id_platform: {
-        user_id: userId,
-        platform: `gmail:${normalizedEmail}`,
+  const row =
+    options?.preloadedRow ??
+    (await prisma.platformToken.findUnique({
+      where: {
+        user_id_platform: {
+          user_id: userId,
+          platform: `gmail:${normalizedEmail}`,
+        },
       },
-    },
-    select: {
-      access_token: true,
-      refresh_token: true,
-      expires_at: true,
-    },
-  });
+      select: {
+        access_token: true,
+        refresh_token: true,
+        expires_at: true,
+      },
+    }));
 
   if (!row?.access_token) {
     return { ok: false, reason: "account_not_found", message: "Gmail account token not found." };
