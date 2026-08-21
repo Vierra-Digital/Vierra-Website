@@ -3,7 +3,7 @@ import { signOut } from "@/lib/session-client";
 import ProfileImage from "./ProfileImage";
 import ImageCropModal from "./ImageCropModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
-import { FiEdit3, FiUpload, FiRotateCcw, FiLock, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2, FiCalendar } from "react-icons/fi";
+import { FiLogOut, FiEdit3, FiUpload, FiRotateCcw, FiLock, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2, FiCalendar } from "react-icons/fi";
 import { FaFacebookF, FaLinkedinIn, FaGoogle } from "react-icons/fa";
 import { X } from "lucide-react";
 
@@ -1119,6 +1119,23 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         </div>
       )}
 
+      {/* Sign out lives here, not on the nav rail: the rail is for navigation, and a destructive
+          action sitting one row below it was easy to mis-click. */}
+      <div className={`rounded-xl ${cardBg} border p-5 shadow-sm`}>
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Sign out</h3>
+            <p className={`text-[13px] ${textSecondary} mt-0.5`}>Ends your session on this device.</p>
+          </div>
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-red-200 bg-white px-3.5 py-2 text-[13px] font-medium text-red-600 transition-colors hover:bg-red-50"
+          >
+            <FiLogOut className="w-4 h-4" />
+            Log out
+          </button>
+        </div>
+      </div>
     </div>
   );
 

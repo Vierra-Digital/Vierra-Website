@@ -11,7 +11,6 @@ import { useRouter } from "next/router"
 // One icon family for the whole rail. Seven families for ten icons meant seven different
 // stroke weights and optical sizes sitting in a column, which is most of what read as clutter.
 import {
-  FiLogOut,
   FiShield,
   FiFolder,
   FiArrowLeft,
@@ -25,7 +24,7 @@ import {
   FiUserCheck,
 } from "react-icons/fi"
 import { RiArrowDropDownLine } from "react-icons/ri";
-import { useSession, signOut } from "@/lib/session-client"
+import { useSession } from "@/lib/session-client"
 import { useActivityHeartbeat } from "@/hooks/useActivityHeartbeat"
 const SignPdfSection = dynamic(
   () => import("@/components/PanelPages/SignPdfSection"),
@@ -442,15 +441,9 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                 <FiArrowLeft className="w-4 h-4 shrink-0" />
                 <span className={`text-xs ${inter.className} ml-2`}>Back</span>
               </button>
-            ) : (
-              <button
-                onClick={() => signOut({ callbackUrl: "/login" })}
-                className="group w-[calc(100%-16px)] flex h-[34px] flex-row items-center gap-x-2.5 px-3 justify-start rounded-lg text-white bg-transparent hover:bg-white/[0.09] transition-colors duration-150"
-              >
-                <FiLogOut className="w-4 h-4 shrink-0" />
-                <span className={`text-xs ${inter.className} ml-2`}>Logout</span>
-              </button>
-            )}
+            ) : null}
+            {/* Logout lives in Account Settings, reachable from the account chip above — the rail
+                is for navigation, and a sign-out sitting one row under it was easy to mis-click. */}
           </div>
         </div>
         <div id="right-side" className="flex flex-col flex-1 min-w-0 h-full relative overflow-x-hidden">

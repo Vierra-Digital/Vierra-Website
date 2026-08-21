@@ -219,7 +219,6 @@ const DashboardSection = () => {
         "leadsGenerated",
         "revenue",
         "expenses",
-        "profit",
     ]
     const STAT_LABELS: Record<DashboardStatKey, string> = {
         clients: "Clients",
@@ -378,7 +377,7 @@ const DashboardSection = () => {
                 
                 <div className="flex-1">
                     
-                    <div className="grid grid-cols-2 gap-3 mb-5 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fit,minmax(150px,175px))]">
+                    <div className="grid grid-cols-2 gap-3 mb-4 sm:grid-cols-3 xl:grid-cols-6">
                         {orderedStats.map((card) => {
                             const trendUi = getTrendUi(card.growthDirection)
                             const TrendIcon = trendUi.Icon
@@ -396,14 +395,14 @@ const DashboardSection = () => {
                                   : card.lifetimeValue.toLocaleString()
 
                             return (
-                                <div key={card.key} className="bg-white rounded-xl px-3.5 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
-                                    <div className="mb-2">
-                                        <h3 className="text-sm font-medium text-[#6B7280] uppercase">{card.label}</h3>
+                                <div key={card.key} className="group bg-white rounded-xl px-3.5 py-3.5 border border-[#ECEAF1] shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-colors duration-150 hover:border-[#DED8EA]">
+                                    <div className="mb-1.5">
+                                        <h3 className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">{card.label}</h3>
                                     </div>
                                     <div className={`text-[22px] font-semibold leading-none tracking-[-0.02em] mb-1.5 ${numberColorByStat[card.key]}`}>
                                         {displayValue}
                                     </div>
-                                    <div className={`flex items-center text-sm ${trendUi.valueClass}`}>
+                                    <div className={`inline-flex items-center gap-0.5 rounded-full bg-[#F6F5F8] px-1.5 py-0.5 text-[11px] font-medium ${trendUi.valueClass}`}>
                                         <TrendIcon className={`w-3 h-3 mr-1 ${trendUi.iconClass}`} />
                                         {statsLoading ? "..." : growthLabel}
                                     </div>
@@ -413,7 +412,10 @@ const DashboardSection = () => {
                     </div>
 
                     
-                    <div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1] mb-5 max-w-[820px]">
+                    {/* Chart and Recent Posts share a row: the chart alone left its right side empty
+                        on wide screens. */}
+                    <div className="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                    <div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Website Visits</h3>
                             <div className="relative">
@@ -469,10 +471,42 @@ const DashboardSection = () => {
                             )}
                         </div>
                     </div>
+<div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
+                            <h3 className="text-[15px] font-semibold text-[#111827] mb-3">Recent Posts</h3>
+                            {postsLoading ? (
+                                <div className="space-y-2">
+                                    {[...Array(3)].map((_, i) => (
+                                        <div key={i} className="h-9 rounded-lg bg-[#F4F2F8] animate-pulse" />
+                                    ))}
+                                </div>
+                            ) : recentPosts.length === 0 ? (
+                                <p className="text-xs text-[#6B7280]">No published posts yet.</p>
+                            ) : (
+                                <ul className="divide-y divide-[#F1EFF5]">
+                                    {recentPosts.map((post) => (
+                                        <li key={post.id} className="flex items-center gap-2.5 py-2">
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-[13px] font-medium text-[#111827]">{post.title}</p>
+                                                <p className="text-[11px] text-[#9CA3AF]">
+                                                    {new Date(post.publishedDate).toLocaleDateString(undefined, {
+                                                        month: "short",
+                                                        day: "numeric",
+                                                        year: "numeric",
+                                                    })}
+                                                </p>
+                                            </div>
+                                            <span className="shrink-0 rounded-full bg-[#F3EDFB] px-2 py-0.5 text-[11px] font-medium text-[#701CC0]">
+                                                {post.views.toLocaleString()} views
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    </div>
 
-                    {/* Staff presence and recent posts, side by side under the chart. Both are
-                        capped to the chart's width so the column reads as one stack. */}
-                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 max-w-[820px]">
+                    {/* Staff Activity takes the row below the chart. */}
+                    <div className="mb-4 max-w-[820px]">
                         <div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
                             <h3 className="text-[15px] font-semibold text-[#111827] mb-3">Staff Activity</h3>
                             {staffLoading ? (
@@ -501,40 +535,7 @@ const DashboardSection = () => {
                                                 {row.name || row.email || "Unknown"}
                                             </span>
                                             <span className="shrink-0 text-[11px] text-[#6B7280]">
-                                                {row.isLive ? "Active now" : formatActiveSince(row.lastActiveAt)}
-                                            </span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-
-                        <div className="bg-white rounded-xl p-4 shadow-[0_1px_2px_rgba(16,24,40,0.04)] border border-[#ECEAF1]">
-                            <h3 className="text-[15px] font-semibold text-[#111827] mb-3">Recent Posts</h3>
-                            {postsLoading ? (
-                                <div className="space-y-2">
-                                    {[...Array(3)].map((_, i) => (
-                                        <div key={i} className="h-9 rounded-lg bg-[#F4F2F8] animate-pulse" />
-                                    ))}
-                                </div>
-                            ) : recentPosts.length === 0 ? (
-                                <p className="text-xs text-[#6B7280]">No published posts yet.</p>
-                            ) : (
-                                <ul className="divide-y divide-[#F1EFF5]">
-                                    {recentPosts.map((post) => (
-                                        <li key={post.id} className="flex items-center gap-2.5 py-2">
-                                            <div className="min-w-0 flex-1">
-                                                <p className="truncate text-[13px] font-medium text-[#111827]">{post.title}</p>
-                                                <p className="text-[11px] text-[#9CA3AF]">
-                                                    {new Date(post.publishedDate).toLocaleDateString(undefined, {
-                                                        month: "short",
-                                                        day: "numeric",
-                                                        year: "numeric",
-                                                    })}
-                                                </p>
-                                            </div>
-                                            <span className="shrink-0 rounded-full bg-[#F3EDFB] px-2 py-0.5 text-[11px] font-medium text-[#701CC0]">
-                                                {post.views.toLocaleString()} views
+                                                {row.isLive ? "Active Now" : formatActiveSince(row.lastActiveAt)}
                                             </span>
                                         </li>
                                     ))}
