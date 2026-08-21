@@ -3,7 +3,7 @@ import { signOut } from "@/lib/session-client";
 import ProfileImage from "./ProfileImage";
 import ImageCropModal from "./ImageCropModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
-import { FiEdit3, FiUpload, FiRotateCcw, FiLock, FiLogOut, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2, FiCalendar } from "react-icons/fi";
+import { FiEdit3, FiUpload, FiRotateCcw, FiLock, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2, FiCalendar } from "react-icons/fi";
 import { FaFacebookF, FaLinkedinIn, FaGoogle } from "react-icons/fa";
 import { X } from "lucide-react";
 
@@ -630,7 +630,10 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const gmailSettingsSource = userRole === "admin" || userRole === "staff" ? "panel-settings" : "settings";
 
   const cardsContent = (
-    <div className="space-y-6">
+    /* Two balanced columns on wide screens. A single stacked column meant scrolling past
+       everything to reach anything, and left most of a 1680px page empty. CSS columns keep the
+       cards in source order while filling both sides; break-inside stops a card splitting. */
+    <div className="space-y-4 xl:space-y-0 xl:[column-count:2] xl:[column-gap:1rem] [&>div]:break-inside-avoid xl:[&>div]:mb-4">
       
       <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
         <div className="flex flex-col sm:flex-row gap-6">
@@ -1116,21 +1119,6 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         </div>
       )}
 
-      <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h3 className={`font-semibold ${textPrimary}`}>Sign Out</h3>
-            <p className={`text-sm ${textSecondary} mt-0.5`}>Sign out of your account on this device.</p>
-          </div>
-          <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 text-sm font-medium transition-colors shrink-0"
-          >
-            <FiLogOut className="w-4 h-4" />
-            Logout
-          </button>
-        </div>
-      </div>
     </div>
   );
 
@@ -1138,13 +1126,11 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     <div className={`w-full h-full ${pageBg} text-[#111014] flex flex-col`}>
       
       {isPanel && (
-        <div className="flex-1 flex justify-center px-6 pt-2">
-          <div className="w-full max-w-6xl flex flex-col h-full">
-            <div className="w-full flex justify-between items-center mb-2">
-              <div>
-                <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Account Settings</h1>
-              </div>
-            </div>
+        <div className="flex-1 px-8 lg:px-14 pt-1 overflow-x-hidden">
+          <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
+            <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em] text-[#111827] mt-8 mb-6">
+              Account Settings
+            </h1>
             <div className="pb-16">
               {cardsContent}
             </div>
