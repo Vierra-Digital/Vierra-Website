@@ -245,6 +245,24 @@ function writeCachedSelectedAccounts(accounts: string[]): void {
   }
 }
 
+/**
+ * "Help me write" bolt. The stroke draws itself on a loop rather than pulsing a filled glyph —
+ * a filled icon can only fade or scale, which reads as a notification badge, not as writing.
+ * Drafting speeds the draw up and brightens it.
+ */
+const BoltDraw: React.FC<{ className?: string; drafting?: boolean }> = ({ className, drafting }) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden focusable="false">
+    <path
+      d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={drafting ? "bolt-draw is-drafting" : "bolt-draw"}
+    />
+  </svg>
+);
+
 /** Google Drive mark, inline so the button carries the real logo without a remote fetch. */
 const DriveMark: React.FC<{ className?: string }> = ({ className }) => (
   <svg viewBox="0 0 87.3 78" className={className} aria-hidden focusable="false">
@@ -445,6 +463,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [inlineToEditing, setInlineToEditing] = useState(false);
   /** Gmail's "⋯" — the trimmed quoted original, hidden until asked for, then editable. */
   const [inlineShowQuoted, setInlineShowQuoted] = useState(false);
+  /** Formatting bar is opt-in, as in Gmail — the "Aa" toggle in the send row reveals it. */
+  const [inlineShowFormatting, setInlineShowFormatting] = useState(false);
   const [inlineShowBcc, setInlineShowBcc] = useState(false);
   /** Inline reply overflow menu — switches reply mode, as Gmail's does. */
   const [inlineMoreOpen, setInlineMoreOpen] = useState(false);
@@ -1491,7 +1511,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
   const inlineDraftStorageKey = useMemo(() => {
     if (!inlineComposeMode || !selectedMessage) return "";
-    if (inlineComposeMode === "forward") return "";
     return `inline:${inlineComposeMode}:${selectedMessage.accountEmail.toLowerCase()}:${selectedMessage.id}`;
   }, [inlineComposeMode, selectedMessage]);
 
@@ -2392,7 +2411,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
     }
 
-    if (!inlineComposeSending && inlineComposeMode && inlineComposeMode !== "forward" && inlineDraftStorageKey) {
+    if (!inlineComposeSending && inlineComposeMode && inlineDraftStorageKey) {
       const hasInlineContent = inlineComposeIntroText.trim();
       if (hasInlineContent) {
         void saveLocalDraft(
@@ -2503,7 +2522,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   ]);
 
   useEffect(() => {
-    if (inlineComposeSending || !inlineComposeMode || inlineComposeMode === "forward" || !inlineDraftStorageKey) return;
+    if (inlineComposeSending || !inlineComposeMode || !inlineDraftStorageKey) return;
     const hasContent = inlineComposeIntroText.trim();
     const timeout = window.setTimeout(() => {
       if (!hasContent) return;
@@ -3108,15 +3127,32 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setInlineShowBcc(false);
     setInlineToEditing(false);
     setInlineShowQuoted(false);
+    setInlineShowFormatting(false);
     setInlineMoreOpen(false);
     setInlineComposeTo(to);
     setInlineComposeSubject(
       /^re:/i.test(selectedMessage.subject || "") ? selectedMessage.subject : `Re: ${selectedMessage.subject || ""}`
     );
     setInlineComposeIntroText("");
-    setInlineComposeBodyText("");
-    setInlineComposeBodyHtml("");
-    setInlineComposePreviewHtml("");
+    // Quote the message being replied to, as Gmail does. This used to be cleared, so a reply
+    // carried none of the original AND the "⋯" that reveals it had nothing to show, which is
+    // why the control looked missing — it was rendering conditionally on an always-empty value.
+    {
+      const sourceHtml = latest?.bodyHtml || selectedMessageDetail?.bodyHtml || "";
+      const sourceText = latest?.bodyText || selectedMessageDetail?.bodyText || selectedMessage.snippet || "";
+      const quotedFrom = formatIdentity(latest?.fromRaw || selectedMessage.fromRaw || selectedMessage.from);
+      const quotedDate = formatDetailedDate(latest?.timestamp || selectedMessage.timestamp, latest?.date || selectedMessage.date);
+      const safeHtml = sourceHtml
+        ? sanitizeHtml(sourceHtml)
+        : `<div style="white-space:pre-wrap;">${escapeHtml(sourceText)}</div>`;
+      const quotedHtml = `<div style="border-left:2px solid #D1D5DB;padding-left:12px;margin-top:8px;color:#4B5563;">
+      <p style="font-size:12px;margin:0 0 10px;">On ${escapeHtml(quotedDate)}, ${escapeHtml(quotedFrom)} wrote:</p>
+      <div>${safeHtml}</div>
+    </div>`;
+      setInlineComposeBodyText(`\n\nOn ${quotedDate}, ${quotedFrom} wrote:\n${sourceText}`);
+      setInlineComposeBodyHtml(quotedHtml);
+      setInlineComposePreviewHtml(quotedHtml);
+    }
     setInlineComposeThreadId(selectedMessage.threadId || latest?.threadId || "");
     setInlineComposeInReplyTo(latest?.messageIdHeader || selectedMessage.messageIdHeader || "");
     setInlineComposeReferences(
@@ -5573,17 +5609,35 @@ ${sourceText}`;
                                             onBlur={() => setInlineToEditing(false)}
                                             autoFocus
                                             className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none placeholder:text-[#9CA3AF]"
-                                            placeholder="name@email.com"
-                                            aria-label="To"
+                                            placeholder="name@email.com, second@email.com"
+                                            aria-label="To (comma separated)"
                                           />
                                         ) : (
+                                          /* Each address is its own chip so several are countable at
+                                             a glance; the whole row is still one comma-separated
+                                             value, so clicking it edits the list as text. */
                                           <button
                                             type="button"
                                             onClick={() => setInlineToEditing(true)}
-                                            className="min-w-0 flex-1 truncate text-left text-[13px] font-medium text-[#1E1B2E]"
-                                            title="Click to change recipients"
+                                            className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-left"
+                                            title="Click to edit recipients (comma separated)"
                                           >
-                                            {inlineComposeTo || "Add recipients"}
+                                            {inlineComposeTo
+                                              .split(",")
+                                              .map((entry) => entry.trim())
+                                              .filter(Boolean).length === 0 ? (
+                                              <span className="text-[13px] text-[#9CA3AF]">Add recipients</span>
+                                            ) : (
+                                              inlineComposeTo
+                                                .split(",")
+                                                .map((entry) => entry.trim())
+                                                .filter(Boolean)
+                                                .map((addr, index) => (
+                                                  <span key={`${addr}-${index}`} className="recipient-chip">
+                                                    {addr}
+                                                  </span>
+                                                ))
+                                            )}
                                           </button>
                                         )}
                                         <div className="flex shrink-0 items-center gap-2">
@@ -5657,7 +5711,7 @@ ${sourceText}`;
                                             setInlineComposeIntroText(text);
                                           }}
                                           minHeightClass="min-h-[150px]"
-                                          showToolbar
+                                          showToolbar={inlineShowFormatting}
                                         />
                                       </div>
 
@@ -5739,11 +5793,19 @@ ${sourceText}`;
                                           data-tip={artemisDrafting ? "Writing…" : "Help me write"}
                                           aria-label="Help me write"
                                         >
-                                          <FiZap className={`h-4 w-4 text-[#A855F7] ${artemisDrafting ? "bolt-charging" : "bolt-idle"}`} aria-hidden />
+                                          <BoltDraw className="h-4 w-4" drafting={artemisDrafting} />
                                         </button>
 
-                                        <span className="mx-1 h-5 w-px shrink-0 bg-black/10" aria-hidden />
-
+                                        <button
+                                          type="button"
+                                          onClick={() => setInlineShowFormatting((open) => !open)}
+                                          aria-pressed={inlineShowFormatting}
+                                          className={`inline-reply-icon email-tip ${inlineShowFormatting ? "is-on" : ""}`}
+                                          data-tip="Formatting options"
+                                          aria-label="Formatting options"
+                                        >
+                                          <FiType className="h-4 w-4" aria-hidden />
+                                        </button>
                                         <button
                                           type="button"
                                           onClick={() => composeAttachInputRef.current?.click()}
@@ -5831,7 +5893,11 @@ ${sourceText}`;
                                         <span className="flex-1" aria-hidden />
                                         <button
                                           type="button"
-                                          onClick={() => setInlineComposeMode(null)}
+                                          onClick={() => {
+                                            flushDraftsNow();
+                                            setInlineComposeMode(null);
+                                            void loadMailboxCounts();
+                                          }}
                                           className="inline-reply-icon email-tip"
                                           data-tip="Discard reply"
                                           aria-label="Discard reply"

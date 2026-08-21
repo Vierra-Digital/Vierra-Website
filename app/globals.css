@@ -1303,3 +1303,57 @@ input[type="search"]::-ms-clear:hover {
 @media (prefers-reduced-motion: reduce) {
   .bolt-idle, .bolt-charging { animation: none; }
 }
+
+/* Recipient chips in the inline reply. One comma-separated value underneath; the chips exist so
+   three recipients are countable at a glance instead of being one run-on string. */
+.email-shell .recipient-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 8px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: #E7E2F5;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.email-shell .inline-reply-card button:hover > .recipient-chip { background: rgba(255, 255, 255, 0.12); }
+
+/* Editor body matches the recipient line's 13px — the default 14px+ made the box feel oversized
+   next to the header it sits under. */
+.email-shell .inline-reply-card [contenteditable="true"],
+.email-shell .inline-reply-card .ProseMirror { font-size: 13px !important; line-height: 1.6 !important; }
+
+/* Formatting bar: full-bleed to the card edges (it was inset, leaving a stripe of card either
+   side) and on the panel's palette rather than lilac-on-white. */
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+  border-radius: 0 !important;
+  row-gap: 4px;
+}
+
+/* Bolt that draws itself. */
+@keyframes bolt-draw-stroke {
+  0% { stroke-dasharray: 64; stroke-dashoffset: 64; opacity: 0.5; }
+  55% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dasharray: 64; stroke-dashoffset: -64; opacity: 0.5; }
+}
+.bolt-draw {
+  color: #A855F7;
+  animation: bolt-draw-stroke 2.6s linear infinite;
+}
+.bolt-draw.is-drafting {
+  color: #C084FC;
+  animation-duration: 0.9s;
+  filter: drop-shadow(0 0 5px rgba(192, 132, 252, 0.85));
+}
+@media (prefers-reduced-motion: reduce) {
+  .bolt-draw { animation: none; stroke-dasharray: none; stroke-dashoffset: 0; }
+}
