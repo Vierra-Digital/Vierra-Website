@@ -955,7 +955,18 @@ input[type="search"]::-ms-clear:hover {
    reader is already a bounded pane inside the panel, so capping it again left the text ending
    partway across a mostly-empty card. */
 .email-shell .email-body { max-width: 100%; word-break: break-word; overflow-wrap: anywhere; }
-.email-shell .email-body img { max-width: 100%; height: auto; }
+/* Tailwind Preflight sets `img { display: block }`, and a block image ignores both
+   align="center" and a parent's text-align — which is why centred logos sat left inside their
+   coloured block. Email HTML assumes images are inline, so put that back inside message bodies
+   only. `margin: 0 auto` is NOT the fix: it would centre left-aligned images too. */
+.email-shell .email-body img { max-width: 100%; height: auto; display: inline-block; }
+.email-shell .email-body img[align="center"] { display: block; margin-left: auto; margin-right: auto; }
+/* Senders lay out with tables and expect the browser's default centring to work. */
+.email-shell .email-body table[align="center"] { margin-left: auto; margin-right: auto; }
+.email-shell .email-body td[align="center"],
+.email-shell .email-body th[align="center"],
+.email-shell .email-body div[align="center"],
+.email-shell .email-body p[align="center"] { text-align: center; }
 .email-shell .email-body a { color: #5B21B6; text-decoration: underline; text-underline-offset: 2px; }
 .email-shell .email-body p { margin: 0 0 0.85em; }
 .email-shell .email-body > *:last-child { margin-bottom: 0; }
@@ -1194,3 +1205,27 @@ input[type="search"]::-ms-clear:hover {
 @media (prefers-reduced-motion: reduce) {
   .settings-skeleton { animation: none; background: rgba(255, 255, 255, 0.06); }
 }
+
+/* ── Inline reply control strip ────────────────────────────────────────────────
+   One row of quiet icon buttons next to a compact Send, sized well below the
+   panel's main toolbars — this bar sits inside a message card, so it should read
+   as an accessory to the reply, not as chrome around it. */
+.email-shell .inline-reply-bar { border-top: 1px solid rgba(255, 255, 255, 0.06); }
+.email-shell .inline-reply-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  width: 32px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  color: #9C95B8;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.email-shell .inline-reply-icon:hover:not(:disabled) { background: rgba(255, 255, 255, 0.07); color: #E7E2F5; }
+.email-shell .inline-reply-icon:disabled { opacity: 0.35; pointer-events: none; }
+.email-shell .inline-reply-icon.is-on { background: rgba(112, 28, 192, 0.18); color: #C8A6F5; }
+
+/* The editor's formatting strip belongs to the same bar: drop its own frame so the
+   two read as one row of controls rather than two stacked bars. */
+.email-shell .inline-reply-bar + * .ProseMirror { outline: none; }

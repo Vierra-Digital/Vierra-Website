@@ -5652,11 +5652,11 @@ ${sourceText}`;
                                         </p>
                                       ) : null}
 
-                                      {/* One action row: Send, a ⋮ that switches reply mode, then
-                                          discard at the far edge. Gmail stacks a formatting bar above
-                                          this; combined here so the reply is a single strip of
-                                          controls rather than two competing bars. */}
-                                      <div className="flex items-center gap-2 px-4 pb-3">
+                                      {/* One control strip, per Gmail: a compact Send, then the insert/mode controls
+                                          as quiet icons, then discard at the far edge. The formatting
+                                          toolbar is rendered into this same row by the editor above
+                                          (toolbarSlot), so there is no second bar competing with it. */}
+                                      <div className="inline-reply-bar flex flex-wrap items-center gap-1 px-3 pb-2.5 pt-1.5">
                                         <button
                                           type="button"
                                           onClick={sendInlineCompose}
@@ -5665,17 +5665,47 @@ ${sourceText}`;
                                             !inlineComposeTo.trim() ||
                                             (!inlineComposeIntroText.trim() && !inlineComposeBodyText.trim())
                                           }
-                                          /* Identical to the main composer's Send, so the two are
-                                             one control appearing in two places. */
-                                          className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md bg-[#701CC0] px-6 text-sm font-semibold text-white hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
+                                          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-[#701CC0] px-4 text-[13px] font-semibold text-white transition hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
                                         >
-                                          <FiSend className="h-4 w-4" aria-hidden />
+                                          <FiSend className="h-3.5 w-3.5" aria-hidden />
                                           {inlineComposeSending ? "Sending…" : "Send"}
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleArtemisDraft()}
+                                          disabled={artemisDrafting}
+                                          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium text-[#701CC0] transition hover:bg-[#701CC0]/10 disabled:opacity-40"
+                                          title="Help me write"
+                                        >
+                                          <FiZap className="h-3.5 w-3.5" aria-hidden />
+                                          {artemisDrafting ? "Writing…" : "Help me write"}
+                                        </button>
+
+                                        <span className="mx-1 h-5 w-px shrink-0 bg-black/10" aria-hidden />
+
+                                        <button
+                                          type="button"
+                                          onClick={() => composeAttachInputRef.current?.click()}
+                                          className="inline-reply-icon email-tip"
+                                          data-tip="Attach files"
+                                          aria-label="Attach files"
+                                        >
+                                          <FiPaperclip className="h-4 w-4" aria-hidden />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled
+                                          className="inline-reply-icon email-tip"
+                                          data-tip="Insert from Drive (coming soon)"
+                                          aria-label="Insert from Drive"
+                                        >
+                                          <FiUpload className="h-4 w-4" aria-hidden />
                                         </button>
                                         <button
                                           type="button"
                                           onClick={() => inlineEditorRef.current?.promptInsertLink()}
-                                          className="email-tip shrink-0 rounded-full p-2 text-[#6B7280] transition hover:bg-black/5 hover:text-[#1E1B2E]"
+                                          className="inline-reply-icon email-tip"
                                           data-tip="Insert link"
                                           aria-label="Insert link"
                                         >
@@ -5684,54 +5714,65 @@ ${sourceText}`;
                                         <button
                                           type="button"
                                           onClick={() => inlineEditorRef.current?.promptInsertImage()}
-                                          className="email-tip shrink-0 rounded-full p-2 text-[#6B7280] transition hover:bg-black/5 hover:text-[#1E1B2E]"
+                                          className="inline-reply-icon email-tip"
                                           data-tip="Insert image"
                                           aria-label="Insert image"
                                         >
                                           <FiImage className="h-4 w-4" aria-hidden />
                                         </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setConfidentialOpen((open) => !open)}
+                                          aria-pressed={confidentialOn}
+                                          className={`inline-reply-icon email-tip ${confidentialOn ? "is-on" : ""}`}
+                                          data-tip="Confidential mode"
+                                          aria-label="Confidential mode"
+                                        >
+                                          <FiLock className="h-4 w-4" aria-hidden />
+                                        </button>
                                         <div className="relative shrink-0">
                                           <button
                                             type="button"
                                             onClick={() => setInlineMoreOpen((open) => !open)}
-                                            className="email-tip rounded-full p-2 text-[#6B7280] transition hover:bg-black/5 hover:text-[#1E1B2E]"
-                                            data-tip="More options"
-                                            aria-label="More options"
+                                            className="inline-reply-icon email-tip"
+                                            data-tip="Insert signature"
+                                            aria-label="Insert signature"
                                             aria-expanded={inlineMoreOpen}
                                           >
-                                            <FiMoreVertical className="h-4 w-4" aria-hidden />
+                                            <FiEdit3 className="h-4 w-4" aria-hidden />
                                           </button>
                                           {inlineMoreOpen ? (
-                                            <div className="compose-menu absolute bottom-full left-0 z-[60] mb-2 w-48">
-                                              {([
-                                                ["reply", "Reply"],
-                                                ["replyAll", "Reply all"],
-                                                ["forward", "Forward"],
-                                              ] as const).map(([mode, label]) => (
-                                                <button
-                                                  key={mode}
-                                                  type="button"
-                                                  disabled={inlineComposeMode === mode}
-                                                  onClick={() => {
-                                                    setInlineMoreOpen(false);
-                                                    if (mode === "forward") void openForwardCompose();
-                                                    else if (mode === "replyAll") void openReplyAllCompose();
-                                                    else void openReplyCompose();
-                                                  }}
-                                                  className={composeMenuItemClass}
-                                                >
-                                                  {label}
-                                                  {inlineComposeMode === mode ? " ✓" : ""}
-                                                </button>
-                                              ))}
+                                            <div className="compose-menu absolute bottom-full left-0 z-[60] mb-2 w-52">
+                                              {composeSignatures.length === 0 ? (
+                                                <p className="px-3 py-2 text-xs text-[#8C86A6]">No signatures yet</p>
+                                              ) : (
+                                                composeSignatures.map((sig) => (
+                                                  <button
+                                                    key={sig.id}
+                                                    type="button"
+                                                    className={`${composeMenuItemClass} truncate`}
+                                                    onClick={() => {
+                                                      setInlineMoreOpen(false);
+                                                      applyComposeSignature(sig.id);
+                                                    }}
+                                                  >
+                                                    <FiEdit3 className="h-4 w-4 shrink-0" aria-hidden />
+                                                    <span className="truncate">
+                                                      {sig.name}
+                                                      {sig.isDefault ? " (default)" : ""}
+                                                    </span>
+                                                  </button>
+                                                ))
+                                              )}
                                             </div>
                                           ) : null}
                                         </div>
+
                                         <span className="flex-1" aria-hidden />
                                         <button
                                           type="button"
                                           onClick={() => setInlineComposeMode(null)}
-                                          className="email-tip shrink-0 rounded-full p-2 text-[#6B7280] transition hover:bg-black/5 hover:text-[#1E1B2E]"
+                                          className="inline-reply-icon email-tip"
                                           data-tip="Discard reply"
                                           aria-label="Discard reply"
                                         >

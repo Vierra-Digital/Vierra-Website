@@ -15,6 +15,7 @@ const RESTRICTED_STYLES: sanitizeHtml.IOptions["allowedStyles"] = {
     "font-weight": NO_URL,
     "font-style": NO_URL,
     "text-align": NO_URL,
+    "text-align-last": NO_URL,
     "text-decoration": NO_URL,
     "line-height": NO_URL,
     margin: NO_URL,
@@ -55,9 +56,17 @@ export function sanitizeRichEmailHtml(html: string, opts?: { restrictStyles?: bo
     allowedAttributes: {
       ...sanitizeHtml.defaults.allowedAttributes,
       a: ["href", "name", "target", "rel", "style", "class"],
-      img: ["src", "alt", "width", "height", "style", "class"],
-      td: ["colspan", "rowspan", "style", "class"],
-      th: ["colspan", "rowspan", "style", "class"],
+      // `align` matters: bulk email centres logos with align="center" on the image, its cell or
+      // its table, not with CSS. Stripping it left every centred logo hard against the left edge
+      // of whatever coloured block it sat in. These are presentational and carry no URL, so they
+      // add no attack surface — unlike src/href, which stay scheme-restricted below.
+      img: ["src", "alt", "width", "height", "align", "border", "hspace", "vspace", "style", "class"],
+      table: ["align", "width", "height", "bgcolor", "border", "cellpadding", "cellspacing", "style", "class"],
+      tr: ["align", "valign", "bgcolor", "style", "class"],
+      td: ["colspan", "rowspan", "align", "valign", "width", "height", "bgcolor", "style", "class"],
+      th: ["colspan", "rowspan", "align", "valign", "width", "height", "bgcolor", "style", "class"],
+      div: ["align", "style", "class"],
+      p: ["align", "style", "class"],
       font: ["color", "face", "size"],
       "*": ["style", "class"],
     },
