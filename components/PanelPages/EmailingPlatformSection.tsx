@@ -433,6 +433,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [inlineMoreOpen, setInlineMoreOpen] = useState(false);
   const [inlineComposeSubject, setInlineComposeSubject] = useState("");
   const [inlineComposeIntroText, setInlineComposeIntroText] = useState("");
+  /** Rich-text form of the reply body. Plain text stays in sync for the text/plain part. */
+  const [inlineComposeIntroHtml, setInlineComposeIntroHtml] = useState("");
+  const inlineEditorRef = useRef<ComposeRichEditorHandle | null>(null);
   const [inlineComposeBodyText, setInlineComposeBodyText] = useState("");
   const [inlineComposeBodyHtml, setInlineComposeBodyHtml] = useState("");
   const [inlineComposePreviewHtml, setInlineComposePreviewHtml] = useState("");
@@ -3081,6 +3084,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     if (!selectedMessage) return;
     const latest = threadMessages[threadMessages.length - 1];
     setInlineComposeMode(mode);
+    setInlineComposeIntroHtml("");
     setInlineComposeCc("");
     setInlineComposeBcc("");
     setInlineShowCc(false);
@@ -3181,7 +3185,12 @@ ${sourceText}`;
       setInlineComposeError(inlineCcError || inlineBccError || "");
       return;
     }
-    const introHtml = intro ? `<div>${linkifyTextForHtml(intro)}</div><br>` : "";
+    // The editor's own markup wins when it has any; linkified plain text is the fallback for a
+    // draft restored before the rich editor mounted.
+    const introRich = inlineComposeIntroHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim()
+      ? inlineComposeIntroHtml
+      : "";
+    const introHtml = introRich ? `${introRich}<br>` : intro ? `<div>${linkifyTextForHtml(intro)}</div><br>` : "";
     const htmlBody = inlineComposeBodyHtml ? `${introHtml}${inlineComposeBodyHtml}` : introHtml || linkifyTextForHtml(textBody);
 
     setInlineComposeSending(true);
@@ -5603,14 +5612,22 @@ ${sourceText}`;
                                         </div>
                                       ) : null}
 
-                                      <textarea
-                                        value={inlineComposeIntroText}
-                                        onChange={(event) => setInlineComposeIntroText(event.target.value)}
-                                        rows={6}
-                                        className="block w-full resize-y border-0 bg-transparent px-4 py-3 text-[14px] leading-[1.6] text-[#1E1B2E] outline-none placeholder:text-[#9CA3AF]"
-                                        placeholder="Write your reply…"
-                                        aria-label="Message"
-                                      />
+                                      {/* Same rich editor the main composer uses, with its formatting
+                                          toolbar pinned open — Gmail's reply always shows one, and a
+                                          plain textarea meant a reply could not carry bold, a list or
+                                          a link at all. */}
+                                      <div className="px-2 pb-1 pt-2">
+                                        <ComposeRichEditor
+                                          ref={inlineEditorRef}
+                                          valueHtml={inlineComposeIntroHtml}
+                                          onChange={({ html, text }) => {
+                                            setInlineComposeIntroHtml(html);
+                                            setInlineComposeIntroText(text);
+                                          }}
+                                          minHeightClass="min-h-[150px]"
+                                          showToolbar
+                                        />
+                                      </div>
 
                                       {inlineComposeMode === "forward" && inlineComposePreviewHtml ? (
                                         <div className="mx-4 mb-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3">
@@ -5654,6 +5671,24 @@ ${sourceText}`;
                                         >
                                           <FiSend className="h-4 w-4" aria-hidden />
                                           {inlineComposeSending ? "Sending…" : "Send"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => inlineEditorRef.current?.promptInsertLink()}
+                                          className="email-tip shrink-0 rounded-full p-2 text-[#6B7280] transition hover:bg-black/5 hover:text-[#1E1B2E]"
+                                          data-tip="Insert link"
+                                          aria-label="Insert link"
+                                        >
+                                          <FiLink className="h-4 w-4" aria-hidden />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => inlineEditorRef.current?.promptInsertImage()}
+                                          className="email-tip shrink-0 rounded-full p-2 text-[#6B7280] transition hover:bg-black/5 hover:text-[#1E1B2E]"
+                                          data-tip="Insert image"
+                                          aria-label="Insert image"
+                                        >
+                                          <FiImage className="h-4 w-4" aria-hidden />
                                         </button>
                                         <div className="relative shrink-0">
                                           <button
