@@ -1527,6 +1527,9 @@ model EmailOutboundMessage {
   @@index([account_id], map: "idx_email_outbound_messages_account_id")
   @@index([campaign_id], map: "idx_email_outbound_messages_campaign_id")
   @@index([user_id], map: "idx_email_outbound_messages_user_id")
+  // Permanent-delete cleanup (pages/api/gmail/actions.ts) matches on account_id +
+  // gmail_message_id per deleted item; account_id alone doesn't cover that lookup.
+  @@index([account_id, gmail_message_id], map: "idx_email_outbound_messages_account_gmail_msg")
   @@schema("public")
 }
 
@@ -1856,6 +1859,9 @@ model PlatformToken {
 
   @@map("platform_tokens")
   @@index([user_id], map: "idx_platform_tokens_user_id")
+  // resolveMailboxOwner/getAccessibleGmailAccounts look up a granted mailbox's owner by
+  // platform alone (no user_id) — without this, every shared-inbox action seq-scans the table.
+  @@index([platform], map: "idx_platform_tokens_platform")
   @@unique([user_id, platform], map: "uq_platform_tokens_user_platform")
   @@schema("public")
 }
