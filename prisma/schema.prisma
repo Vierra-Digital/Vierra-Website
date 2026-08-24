@@ -1998,6 +1998,10 @@ model User {
   id                                                            String                              @id @db.Uuid
   email                                                         String                              @unique
   name                                                          String?
+  // Grants cross-company visibility in admin/users GET (see pages/api/admin/users.ts) — set
+  // directly via SQL for Vierra's own internal accounts, never exposed in any self-service UI, so
+  // a company's own admin can't escalate into other companies' data.
+  is_platform_admin                                             Boolean                             @default(false)
   created_at                                                    DateTime                            @default(now()) @db.Timestamptz(6)
   updated_at                                                    DateTime                            @default(now()) @db.Timestamptz(6)
   clients_clients_assigned_toTousers                            Client[]                           @relation("clients_assigned_toTousers")

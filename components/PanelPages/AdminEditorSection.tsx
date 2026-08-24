@@ -42,6 +42,8 @@ type ListedUser = {
     image: boolean
     role: string
     clientName: string | null
+    companyName: string | null
+    isPlatformAdmin?: boolean
     isSelf?: boolean
 }
 
@@ -143,6 +145,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                 (u.name?.toLowerCase().includes(q)) ||
                 (u.email?.toLowerCase().includes(q)) ||
                 (u.clientName?.toLowerCase().includes(q)) ||
+                (u.companyName?.toLowerCase().includes(q)) ||
                 (u.role?.toLowerCase().includes(q))
             )
         }
@@ -165,6 +168,9 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
 
     const paginatedUsers = filteredUsers.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
     const totalPages = Math.ceil(filteredUsers.length / pageSize)
+    // Only platform admins get companyName back from the API — show the column just for them,
+    // so everyone else's table (scoped to their own company) looks the same as before.
+    const showCompanyColumn = users.some((u) => u.companyName)
 
                             return (
         <>
@@ -373,6 +379,9 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                         <tr>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Name</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Email</th>
+                                            {showCompanyColumn && (
+                                                <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Company</th>
+                                            )}
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Password Reset</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Role</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Manage</th>
@@ -384,6 +393,9 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                                 <tr key={u.id} className="hover:bg-purple-50">
                                                     <td className="px-4 py-4 text-sm font-medium text-[#111827]">{u.name ?? "-"}</td>
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{u.email ?? "-"}</td>
+                                                    {showCompanyColumn && (
+                                                        <td className="px-4 py-4 text-sm text-[#111827]">{u.companyName ?? "-"}</td>
+                                                    )}
                                                     <td className="px-4 py-4">
                                         <div className="flex items-center gap-3">
                                             <button
@@ -397,10 +409,12 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                         </div>
                                     </td>
                                                     <td className="px-4 py-4">
-                                                        <select 
-                                                            value={u.role === "user" || u.role === "client" ? "user" : (u.role || "admin")} 
-                                                            onChange={(e) => updateRole(u.id, e.target.value)} 
-                                                            className="text-sm border border-[#E5E7EB] rounded-md pl-2 pr-[5px] mr-10 py-0.5 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                                                        <select
+                                                            value={u.role === "user" || u.role === "client" ? "user" : (u.role || "admin")}
+                                                            onChange={(e) => updateRole(u.id, e.target.value)}
+                                                            disabled={u.isPlatformAdmin}
+                                                            title={u.isPlatformAdmin ? "Superadmin role can't be changed here" : undefined}
+                                                            className="text-sm border border-[#E5E7EB] rounded-md pl-2 pr-[5px] mr-10 py-0.5 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] disabled:opacity-50 disabled:cursor-not-allowed"
                                                         >
                                                             <option value="admin">Admin</option>
                                                             <option value="staff">Staff</option>
@@ -409,7 +423,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                     </td>
                                                     <td className="px-4 py-4">
                                         <div className="flex items-center gap-2">
-                                                            {!u.isSelf && (
+                                                            {!u.isSelf && !u.isPlatformAdmin && (
                                                                 <button
                                                                     onClick={() => deleteUser(u.id)}
                                                                     disabled={u.email?.toLowerCase() === "business@alexshick.com"}
