@@ -24,7 +24,18 @@ export function scrollWindowToSection(sectionId: string, smooth = true): boolean
   return true;
 }
 
-export function scrollToHomeSection(sectionId: string): void {
+/**
+ * Scroll to a section of the home page, from anywhere.
+ *
+ * On the home page this scrolls directly. From another page it stores the target and navigates
+ * home, where the restore effect picks it up.
+ *
+ * `navigateHome` lets a caller hand in Next's router so that hop is a client-side transition
+ * instead of a full document load — the same reason the lint rule objects to assigning
+ * location.href for an internal page. It stays optional: this module is imported by plain
+ * functions as well as components, and a full load is a correct, if slower, fallback.
+ */
+export function scrollToHomeSection(sectionId: string, navigateHome?: (path: string) => void): void {
   if (typeof window === "undefined") return;
   if (window.location.pathname === "/") {
     scrollWindowToSection(sectionId, true);
@@ -33,7 +44,12 @@ export function scrollToHomeSection(sectionId: string): void {
   try {
     sessionStorage.setItem(SECTION_SCROLL_KEY, sectionId);
   } catch {
-    /* sessionStorage blocked — fall through to a plain home navigation */
+    /* sessionStorage blocked — the navigation still happens, just without the scroll */
   }
+  if (navigateHome) {
+    navigateHome("/");
+    return;
+  }
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   window.location.href = "/";
 }
