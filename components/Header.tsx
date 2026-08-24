@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation"
 import { bricolage, inter } from "@/lib/fonts";
 import Image from "next/image";
 import Link from "next/link";
@@ -18,6 +19,8 @@ export function Header() {
     document.body.style.overflow = isMobileMenuOpen ? "hidden" : "unset";
   }, [isMobileMenuOpen]);
 
+  const router = useRouter()
+
   const handleSectionClick = (
     event: React.MouseEvent<HTMLAnchorElement>,
     sectionId: string,
@@ -27,7 +30,9 @@ export function Header() {
     if (closeMobile) {
       setIsMobileMenuOpen(false)
     }
-    scrollToHomeSection(sectionId)
+    // Router passed in so leaving another page for a home section is a client-side transition
+    // rather than a full document load.
+    scrollToHomeSection(sectionId, (path) => router.push(path))
   }
 
   return (

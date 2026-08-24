@@ -263,6 +263,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     loadSocialConnections();
     loadGmailConnections();
     loadDetectedCalendars();
+    // Mount-only on purpose. These loaders are plain functions, recreated on every render, so
+    // listing them as dependencies would refetch all three on each render rather than once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Keep the role-gated sections (Gmail, calendars, social) in sync with an admin
@@ -287,7 +290,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, []);
+  }, [userRoleProp]);
 
   // Periodically recheck Gmail connection status in the background (no dedicated push
   // webhook from Google — /api/gmail/status already re-validates/refreshes each token, so

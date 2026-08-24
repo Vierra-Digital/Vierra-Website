@@ -75,6 +75,10 @@ export default function ConnectPage({ dashboardHref, initialImageVersion }: Page
   }, [])
 
   const startOauth = (provider: "facebook" | "linkedin" | "googleads") => {
+    // A full document navigation is required, not Next routing. This endpoint answers with a 302 to
+    // the provider's consent screen on their domain; the client router cannot follow a redirect off
+    // the app, so router.push would fetch the redirect as data and go nowhere.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = `/api/${provider}/initiate`
   }
   return (
