@@ -2,8 +2,12 @@ import { ImageResponse } from "next/og"
 
 // Dynamic Open Graph image for blog posts (and any page that passes ?title=).
 // Renders a branded 1200x630 card so every post has a unique social/AI card
-// instead of the shared meta-banner. Edge runtime = fast, cacheable.
-export const runtime = "edge"
+// instead of the shared meta-banner.
+//
+// Runs on the default Node.js runtime. `runtime = "edge"` used to be set here for speed, but the
+// Edge runtime is deprecated as of Next 16 and warned on every build; this route uses no
+// edge-specific API, and the bundled docs show ImageResponse examples reading fonts through
+// node:fs, so Node is the supported home for it now.
 
 export function GET(req: Request) {
   const { searchParams } = new URL(req.url)
