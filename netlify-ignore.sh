@@ -30,9 +30,15 @@ if [ -z "$CHANGED" ]; then
 fi
 
 # Paths that cannot affect the built site. Deliberately narrow — netlify.toml, package files,
-# next.config, the Prisma schema, and everything under app/ pages/ components/ lib/ public/ styles/
-# are all absent, so a change to any of them builds.
-NON_DEPLOYABLE='^(tests/|\.github/|\.vscode/|\.idea/|docs/|\.claude/|vitest\.config\.mts$|\.coderabbit\.yaml$|README\.md$|CONTRIBUTING\.md$|LICENSE$|\.gitignore$|netlify-ignore\.sh$|.*\.test\.ts$)'
+# next.config, eslint config, the Prisma schema, and everything under app/ pages/ components/ lib/
+# public/ styles/ are all absent, so a change to any of them builds.
+#
+# Note on Markdown: only the root-level docs below are listed, never a blanket *.md. content/md/*.md
+# is served by the /api/md markdown mirror at runtime, so those genuinely are deployable.
+#
+# prisma/manual/*.sql is hand-applied to the database out of band; the build runs `prisma generate`,
+# which reads only schema.prisma, so a change there cannot alter the output.
+NON_DEPLOYABLE='^(tests/|\.github/|\.vscode/|\.idea/|docs/|\.claude/|prisma/manual/|vitest\.config\.mts$|\.coderabbit\.yaml$|README\.md$|CONTRIBUTING\.md$|AGENTS\.md$|CLAUDE\.md$|LICENSE$|\.gitignore$|\.gitattributes$|\.editorconfig$|\.env\.example$|netlify-ignore\.sh$|.*\.test\.ts$)'
 
 while IFS= read -r file; do
   [ -z "$file" ] && continue
