@@ -1,6 +1,11 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { EMAIL_REGEX } from "@/lib/utils";
+import {
+  normalizeCareerApplication,
+  normalizeEmailAddress,
+  normalizePhoneNumber,
+  CAREER_FORM_LIMITS,
+} from "@/lib/careerApplicationValidation";
 import { bricolage, inter } from "@/lib/fonts";
 import { m as motion, AnimatePresence } from "framer-motion";
 import { FiUploadCloud, FiFileText, FiX, FiArrowLeft, FiArrowRight } from "react-icons/fi";
@@ -129,18 +134,10 @@ export function CareerApplicationModal({
     setFormData((prev) => ({ ...prev, [id]: id === "phoneNumber" ? formatPhone(value) : value }));
   };
 
-  const emailValid = EMAIL_REGEX.test(formData.email.trim());
-  const phoneValid = formData.phoneNumber.replace(/\D/g, "").length === 10;
-
-  const basicInfoValid =
-    !!formData.fullName.trim() &&
-    !!formData.email.trim() &&
-    emailValid &&
-    !!formData.phoneNumber.trim() &&
-    phoneValid &&
-    !!formData.currentLocation.trim() &&
-    !!formData.needRelocate &&
-    !!formData.usCitizen;
+  const normalizedApplication = normalizeCareerApplication({ roleSlug, ...formData });
+  const emailValid = normalizeEmailAddress(formData.email) !== null;
+  const phoneValid = normalizePhoneNumber(formData.phoneNumber) !== null;
+  const basicInfoValid = normalizedApplication !== null;
 
   const attachmentsValid = !!resume && !!coverLetter;
 
@@ -150,6 +147,7 @@ export function CareerApplicationModal({
   const handleSubmit = async () => {
     if (alreadyApplied || submitted || submitting || !basicInfoValid || !attachmentsValid) return;
     if (!resume || !coverLetter) return;
+    if (!normalizedApplication) return;
 
     setSubmitting(true);
     setSubmitError(null);
@@ -160,14 +158,7 @@ export function CareerApplicationModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          roleSlug,
-          fullName: formData.fullName.trim(),
-          email: formData.email.trim(),
-          phoneNumber: formData.phoneNumber.trim(),
-          currentLocation: formData.currentLocation.trim(),
-          needRelocate: formData.needRelocate,
-          usCitizen: formData.usCitizen,
-          additionalNotes: formData.additionalNotes.trim(),
+          ...normalizedApplication,
           website, // honeypot — always empty for real users
           files: [
             { field: "resume", name: resume.name, mimeType: resume.type, size: resume.size },
@@ -287,6 +278,7 @@ export function CareerApplicationModal({
                       <input
                         id="fullName"
                         type="text"
+                        maxLength={CAREER_FORM_LIMITS.fullName}
                         value={formData.fullName}
                         onChange={handleChange}
                         className={`${inputClass} border-gray-200`}
@@ -301,6 +293,7 @@ export function CareerApplicationModal({
                       <input
                         id="email"
                         type="email"
+                        maxLength={CAREER_FORM_LIMITS.email}
                         value={formData.email}
                         onChange={handleChange}
                         className={`${inputClass} ${formData.email && !emailValid ? "border-red-400 bg-red-50/50" : "border-gray-200"}`}
@@ -315,6 +308,7 @@ export function CareerApplicationModal({
                       <input
                         id="phoneNumber"
                         type="tel"
+                        maxLength={CAREER_FORM_LIMITS.phoneNumber}
                         inputMode="numeric"
                         value={formData.phoneNumber}
                         onChange={handleChange}
@@ -326,6 +320,7 @@ export function CareerApplicationModal({
                       <input
                         id="currentLocation"
                         type="text"
+                        maxLength={CAREER_FORM_LIMITS.currentLocation}
                         value={formData.currentLocation}
                         onChange={handleChange}
                         className={`${inputClass} border-gray-200`}
@@ -366,6 +361,7 @@ export function CareerApplicationModal({
                   <Field label="Additional Notes" htmlFor="additionalNotes" optional>
                     <textarea
                       id="additionalNotes"
+                      maxLength={CAREER_FORM_LIMITS.additionalNotes}
                       value={formData.additionalNotes}
                       onChange={handleChange}
                       rows={5}

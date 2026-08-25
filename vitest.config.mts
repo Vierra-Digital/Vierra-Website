@@ -48,6 +48,8 @@ export default defineConfig({
         "lib/ga4Client.ts",
         "lib/gmail/dsn.ts",
         "lib/email/postmaster.ts",
+        "lib/publicFormValidation.ts",
+        "lib/careerApplicationValidation.ts",
       ],
       // Floor set below current levels (~93% stmts/branch, 100% funcs) with margin: passes today,
       // blocks regressions, raise further as tests grow.

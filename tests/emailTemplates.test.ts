@@ -55,12 +55,37 @@ describe("transactional email templates", () => {
     expect(html).toContain("https://acme.test");
   });
 
+  it("escapes user-controlled audit values in HTML and attributes", async () => {
+    await sendEmail({
+      fullName: '<img src="x" onerror="alert(1)">',
+      email: "jane@example.com",
+      phoneNumber: "5551234567",
+      website: 'https://example.com/?q="quoted"',
+      monthlyRevenue: "<b>unexpected</b>",
+      desiredRevenue: "<script>alert(1)</script>",
+    });
+    const html = lastHtml();
+    expect(html).toContain("&lt;img src=&quot;x&quot; onerror=&quot;alert(1)&quot;&gt;");
+    expect(html).toContain("&lt;b&gt;unexpected&lt;/b&gt;");
+    expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).toContain("href=\"https://example.com/?q=&quot;quoted&quot;\"");
+    expect(html).not.toContain('<img src="x"');
+    expect(html).not.toContain("<script>alert(1)</script>");
+  });
+
   it("sendAuditConfirmationEmail greets the lead by first name", async () => {
     await sendAuditConfirmationEmail({ fullName: "Jane Doe", email: "jane@acme.test" });
     const html = lastHtml();
     expectShell(html);
     expect(html).toContain("Your Audit Request Has Been Claimed");
     expect(html).toContain("Hi Jane,");
+  });
+
+  it("escapes the lead name in the audit confirmation", async () => {
+    await sendAuditConfirmationEmail({ fullName: "<script>alert(1)</script>", email: "jane@example.com" });
+    const html = lastHtml();
+    expect(html).toContain("Hi &lt;script&gt;alert(1)&lt;/script&gt;,");
+    expect(html).not.toContain("Hi <script>alert(1)</script>,");
   });
 
   it("sendSignedDocumentEmail includes a Download PDF button and attachment cid", async () => {
