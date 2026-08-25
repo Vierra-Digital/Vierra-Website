@@ -34,7 +34,7 @@ const AdminEditorSection = () => {
     return (
         <div className="w-full h-full bg-white text-[#111014] flex flex-col">
             <div className="flex-1 flex justify-center px-6 pt-2">
-                <div className="w-full max-w-6xl flex flex-col h-full">
+                <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
                     {currentView === "users" ? (
                         <UsersPanel onManageSessions={() => setCurrentView("sessions")} />
                     ) : (

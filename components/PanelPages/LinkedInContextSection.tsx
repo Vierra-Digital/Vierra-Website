@@ -134,7 +134,7 @@ const LinkedInContextSection: React.FC<Props> = ({
     return (
       <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
         <div className="flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
-          <div className="w-full max-w-6xl flex flex-col h-full">
+          <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
             {!embedded && <PanelSectionHeader title={title} />}
             <div className="py-12 flex items-center justify-center">
               <LoadingSpinner label="Loading Context Data..." />
@@ -148,7 +148,7 @@ const LinkedInContextSection: React.FC<Props> = ({
   return (
     <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
       <div className="flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
-        <div className="w-full max-w-6xl flex flex-col h-full pb-16 lg:pb-24">
+        <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full pb-16 lg:pb-24">
           {!embedded && <PanelSectionHeader title={title} />}
 
           {error ? (

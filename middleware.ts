@@ -1,3 +1,11 @@
+/**
+ * Kept as `middleware`, not the `proxy` name Next 16 prefers.
+ *
+ * Renaming it silenced the deprecation warning but broke the dev client: Next still requested
+ * /_next/static/development/_clientMiddlewareManifest.js, the server answered with JSON, the
+ * browser refused to execute it as a script, and client JS never hydrated — every panel page sat
+ * on its loading screen forever. A boot-time warning is much cheaper than that.
+ */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
