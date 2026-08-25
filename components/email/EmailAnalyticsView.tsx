@@ -193,6 +193,9 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
 
   useEffect(() => {
     let cancelled = false;
+    // Entering the loading state for a fetch that the effect itself performs. The flag has to be set
+    // when the request starts, which is here — it is not derivable from the props that triggered it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError("");
     const params = new URLSearchParams();

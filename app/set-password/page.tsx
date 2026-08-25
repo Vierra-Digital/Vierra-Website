@@ -27,6 +27,9 @@ export default function SetPasswordPage() {
         const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
         const hashError = hashParams.get("error_description");
         if (hashError) {
+            // Recovery tokens live in the URL hash, which is never sent to the server, so the outcome
+            // cannot be known until the client runs — there is nothing to derive during render.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setLinkError(hashError.replace(/\+/g, " "));
             setHasSession(false);
             return;

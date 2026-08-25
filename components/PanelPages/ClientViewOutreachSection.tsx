@@ -187,6 +187,8 @@ const ClientViewOutreachSection: React.FC<{ clientId?: string | null }> = ({ cli
 
   useEffect(() => {
     if (step === "context") {
+      // Fetches the client's context when that step comes into view, rather than up front.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchContext();
     }
   }, [step, fetchContext]);

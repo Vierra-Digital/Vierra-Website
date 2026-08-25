@@ -387,6 +387,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   }, []);
 
   useEffect(() => {
+    // Loading the Postmaster Tools status on mount; the loader flips its own loading state after awaiting.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadPostmaster();
   }, [loadPostmaster]);
   const [accounts, setAccounts] = useState<GmailAccount[]>([]);
@@ -492,6 +494,16 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     accountEmail: string;
   };
   const [bookings, setBookings] = useState<BookingRow[]>([]);
+  /**
+   * The clock reading each booking's upcoming/past label is measured against, taken when the list
+   * is loaded.
+   *
+   * Calling Date.now() while rendering the list made the render impure: the same render produced
+   * different labels depending on when it ran, and because nothing re-renders as time passes, a
+   * meeting that had just started still read as upcoming until some unrelated state changed.
+   * Anchoring it to the fetch makes the labels consistent with the data they describe.
+   */
+  const [bookingsAsOf, setBookingsAsOf] = useState(() => Date.now());
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null);
   const [promptConfig, setPromptConfig] = useState<PromptConfig>(null);
   const [promptBusy, setPromptBusy] = useState(false);
@@ -517,6 +529,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     try {
       const raw = window.localStorage.getItem("email-undo-delay");
       const parsed = raw != null ? Number(raw) : NaN;
+      // The saved undo-send delay comes from localStorage, which does not exist during the server render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (Number.isFinite(parsed)) setUndoSendDelay(Math.max(0, Math.min(30, parsed)));
     } catch {
       /* ignore */
@@ -894,7 +908,10 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     try {
       const r = await fetch("/api/booking/bookings");
       const d = await r.json().catch(() => ({}));
-      if (r.ok) setBookings(Array.isArray(d?.bookings) ? d.bookings : []);
+      if (r.ok) {
+        setBookings(Array.isArray(d?.bookings) ? d.bookings : []);
+        setBookingsAsOf(Date.now());
+      }
     } catch {
       /* ignore */
     }
@@ -1316,8 +1333,15 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   // a separate button is what made changing them look like it did nothing. Debounced, so
   // typing in the vacation fields doesn't fire a request per keystroke. The sticky bar still
   // reports status and still offers a manual Save.
+  //
+  // The ref is refreshed in an effect, not during render: writing a ref while rendering mutates
+  // state that a discarded or double-invoked render was supposed to leave untouched. The debounce
+  // below fires 900ms after a commit, long after this effect has run, so it always calls the
+  // current version.
   const saveSettingsRef = useRef(saveSettings);
-  saveSettingsRef.current = saveSettings;
+  useEffect(() => {
+    saveSettingsRef.current = saveSettings;
+  });
   useEffect(() => {
     if (!hasUnsavedSettingsChanges || saving || switchingAccount) return;
     const timer = setTimeout(() => {
@@ -2531,7 +2555,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                       <ul className="space-y-2">
                         {bookings.slice(0, 20).map((b) => {
                           const start = new Date(b.startAt);
-                          const upcoming = start.getTime() >= Date.now();
+                          const upcoming = start.getTime() >= bookingsAsOf;
                           const attendanceLabel =
                             b.attendanceStatus === "held" ? "Held" : b.attendanceStatus === "not_held" ? "Not held" : null;
                           return (

@@ -106,7 +106,6 @@ const StatusBadge: React.FC<{ lastActiveAt: string | null; isPending?: boolean }
 
 const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const [rows, setRows] = useState<TeamRow[]>([])
-    const [filteredRows, setFilteredRows] = useState<TeamRow[]>([])
     const [loading, setLoading] = useState(true)
     const [currentPage, setCurrentPage] = useState(0)
     const [showAddStaff, setShowAddStaff] = useState(false)
@@ -287,7 +286,15 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         }
     }, [userRole])
 
-    const applyFiltersAndSort = useMemo(() => {
+    /**
+     * The rows the table shows. Derived, not stored.
+     *
+     * This memo already computed the value; an effect then copied it into state and reset the page,
+     * which meant every filter or sort change rendered the old list once before the new one. The
+     * page index is clamped below instead of reset, which also covers the case the reset never
+     * did: deleting enough rows to leave you past the end used to render an empty table.
+     */
+    const filteredRows = useMemo(() => {
         const filtered = rows.filter(row => {
             const matchesSearch = !searchTerm || 
                 row.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -350,11 +357,8 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     }, [rows, searchTerm, sortBy, sortOrder, statusFilter])
 
     useEffect(() => {
-        setFilteredRows(applyFiltersAndSort)
-        setCurrentPage(0)
-    }, [applyFiltersAndSort])
-
-    useEffect(() => {
+        // Loading the team on mount; the loader flips its own loading state after awaiting.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadTeamData()
     }, [loadTeamData])
 
@@ -392,8 +396,11 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         }
     }
 
-    const paginatedRows = filteredRows.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
-    const totalPages = Math.ceil(filteredRows.length / pageSize)
+    const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
+    // Clamped rather than reset: a filter that shrinks the list can leave currentPage past the end,
+    // and slicing beyond the array renders an empty table with no way to tell why.
+    const page = Math.min(currentPage, totalPages - 1)
+    const paginatedRows = filteredRows.slice(page * pageSize, (page + 1) * pageSize)
 
     return (
         <div className="w-full h-full bg-white text-[#111014] flex flex-col">
@@ -642,18 +649,18 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                             <div className="w-full flex items-center justify-center">
                                 <div className="flex items-center gap-2">
                                     <button
-                                        onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
-                                        disabled={currentPage === 0}
+                                        onClick={() => setCurrentPage(Math.max(0, page - 1))}
+                                        disabled={page === 0}
                                         className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Previous
                                     </button>
                                     <span className="text-xs text-[#6B7280]">
-                                        Page {currentPage + 1} of {totalPages}
+                                        Page {page + 1} of {totalPages}
                                     </span>
                                     <button
-                                        onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
-                                        disabled={currentPage >= totalPages - 1}
+                                        onClick={() => setCurrentPage(Math.min(totalPages - 1, page + 1))}
+                                        disabled={page >= totalPages - 1}
                                         className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
                                         Next

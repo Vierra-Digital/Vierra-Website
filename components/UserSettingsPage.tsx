@@ -102,11 +102,19 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const avatarMenuRef = useRef<HTMLDivElement>(null);
   const displayName = name && name.trim().length > 0 ? name : (user.email ? user.email.split("@")[0] : "User");
 
+  // Both of these sync a prop into state that has a second source, so neither can be derived.
+  //
+  // `name` is an editable field: a derived value would throw away whatever the user had typed on
+  // the next render. It still has to follow user.name, which changes when the profile is saved.
+  // `userRole` is also written by the polling effect further down, which picks up a role an admin
+  // changed elsewhere, so the prop is one of two inputs rather than the value itself.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setName(user.name || "");
   }, [user.name]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (userRoleProp) setUserRole(userRoleProp);
   }, [userRoleProp]);
 
@@ -260,6 +268,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   };
 
   useEffect(() => {
+    // See the note below: these are mount-only loaders that each set their own state after awaiting.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadSocialConnections();
     loadGmailConnections();
     loadDetectedCalendars();

@@ -49,6 +49,9 @@ export default function ConsentBanner() {
     // the page, so it doesn't cover the hero the instant they land.
     const REVEAL_AT = 300; // px
     if (window.scrollY > REVEAL_AT) {
+      // Depends on the stored choice in localStorage and the current scroll position, neither of which
+      // exists during render on the server.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setVisible(true);
       return;
     }

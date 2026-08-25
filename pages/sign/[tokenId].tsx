@@ -47,9 +47,33 @@ const SignDocumentPage: React.FC = () => {
   const [textValues, setTextValues] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState<number>(1);
   const pageRefs = useRef<{ [page: number]: HTMLDivElement | null }>({});
+  // The rendered size of the current page, measured rather than read from the ref during render.
+  // The field overlays are positioned as a fraction of it, and a ref read during render is both
+  // wrong on the first pass (the element does not exist yet, so no overlay was drawn) and stale
+  // afterwards — nothing re-rendered when the page was re-laid out, so the boxes drifted off their
+  // fields on resize. Observing the element keeps them pinned.
+  const [pageBox, setPageBox] = useState<{ width: number; height: number } | null>(null);
 
   useEffect(() => {
+    const el = pageRefs.current[currentPage];
+    if (!el) {
+      setPageBox(null);
+      return;
+    }
+    // Measuring after layout is what an effect is for: the size is only knowable once the page has
+    // been laid out, and react-pdf fills it in asynchronously after the canvas renders.
+    const measure = () => setPageBox({ width: el.clientWidth, height: el.clientHeight });
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [currentPage, numPages]);
+
+  useEffect(() => {
+    // tokenId is a dynamic route parameter, which is undefined until the router hydrates — the
+    // "missing token" case cannot be distinguished from "not known yet" during the first render.
     if (!tokenId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError("Invalid or missing token.");
       setIsLoadingDetails(false);
       return;
@@ -107,6 +131,9 @@ const SignDocumentPage: React.FC = () => {
     let interval: NodeJS.Timeout | null = null;
 
     if (isSubmitted) {
+      // Starting a countdown once the signature is accepted. The initial value has to be written
+      // when the timer starts, because every tick after it is a state change of its own.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRedirectCountdown(5);
       try {
         window.opener?.postMessage("nda-signed", window.location.origin);
@@ -338,13 +365,12 @@ const SignDocumentPage: React.FC = () => {
                               onRenderError={() => setError(`Failed to render page ${pageNumber}.`)}
                             />
                             {pageFields.map((field) => {
-                            if (!pageRefs.current[pageNumber] || !currentPageDimensions) return null;
-                            const pageElement = pageRefs.current[pageNumber];
-                            const scale = pageElement ? pageElement.clientWidth / currentPageDimensions.width : 1;
+                            if (!pageBox || !currentPageDimensions) return null;
+                            const scale = pageBox.width / currentPageDimensions.width;
                             const boxWidth = field.width * scale;
                             const boxHeight = field.height * scale;
-                            const boxLeft = field.xRatio * pageElement!.clientWidth;
-                            const boxTop = field.yRatio * pageElement!.clientHeight;
+                            const boxLeft = field.xRatio * pageBox.width;
+                            const boxTop = field.yRatio * pageBox.height;
 
                             const boxStyle: React.CSSProperties = {
                               position: 'absolute',

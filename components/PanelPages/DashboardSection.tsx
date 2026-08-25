@@ -73,6 +73,10 @@ type WebsiteVisitsPoint = { week: string; visits: number }
 const DashboardSection = () => {
     const [clientNow, setClientNow] = useState<Date | null>(null)
     useEffect(() => {
+        // Deliberately after mount. Reading the clock during render is impure and would make the
+        // server's HTML disagree with the client's first render, since everything below keys off
+        // today's date. Deferring it is the fix, not the problem.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setClientNow(new Date())
     }, [])
 
@@ -101,12 +105,16 @@ const DashboardSection = () => {
         }
     }).reverse()
     const currentMonthValue = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
-    // Empty until clientNow lands, then pinned to the real current month. Seeding it from the
-    // epoch placeholder used for SSR would leave the picker showing 1970's month.
-    const [monthFilter, setMonthFilter] = useState("")
-    useEffect(() => {
-        if (clientNow && !monthFilter) setMonthFilter(currentMonthValue)
-    }, [clientNow, currentMonthValue, monthFilter])
+    // The picker holds a user's choice; the default is derived, not stored.
+    //
+    // It stays empty until clientNow lands — seeding it from the epoch placeholder used for SSR
+    // would leave the picker showing 1970's month — and then falls back to the real current month.
+    // Deriving it removes the state-plus-effect that copied currentMonthValue into state once
+    // clientNow arrived, and with it the extra render that caused. The sequence is unchanged: no
+    // month on the first render, so the visits fetch below skips; the real month once the client
+    // clock is known, which triggers it.
+    const [monthOverride, setMonthOverride] = useState("")
+    const monthFilter = monthOverride || (clientNow ? currentMonthValue : "")
     const [statsLoading, setStatsLoading] = useState(true)
     const [statsCards, setStatsCards] = useState<DashboardStat[]>([])
     const [meetingsLoading, setMeetingsLoading] = useState(true)
@@ -463,7 +471,7 @@ const DashboardSection = () => {
                             <div className="relative">
                                 <select
                                     value={monthFilter}
-                                    onChange={(e) => setMonthFilter(e.target.value)}
+                                    onChange={(e) => setMonthOverride(e.target.value)}
                                     className="appearance-none bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200 text-sm text-[#6B7280] pr-8 cursor-pointer hover:bg-gray-50"
                                 >
                                     {monthOptions.map((month) => (
