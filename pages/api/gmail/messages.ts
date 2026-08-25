@@ -4,6 +4,7 @@ import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { getAccessibleGmailAccounts, getGmailAliasAccounts, selectFetchAccounts } from "@/lib/email/mailboxAccess";
 import { extractHeader, buildAliasScopeQuery } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
+import { collapsesThreads } from "@/lib/gmail/mailboxCollapse";
 import { mapInBatches } from "@/lib/batch";
 import {
   getAccountBucket,
@@ -617,7 +618,8 @@ export default withAuth(async (req, res, session) => {
     const key = String(message.threadId || message.id || "");
     if (key) threadCounts.set(key, (threadCounts.get(key) ?? 0) + 1);
   }
-  const collapseThreads = mailbox !== "drafts";
+  // See lib/gmail/mailboxCollapse.ts for why only these two views collapse.
+  const collapseThreads = collapsesThreads(mailbox);
   const seenThreadIds = new Set<string>();
   let mergedMessages: MessageRow[] = messagesByAccount
     .flat()
