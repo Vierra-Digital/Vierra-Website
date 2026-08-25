@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { inter } from "@/lib/fonts";
 import { FiPlus, FiFileText, FiFilter, FiSearch, FiEdit2, FiTrash2 } from "react-icons/fi"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
@@ -61,10 +61,6 @@ export default function BlogEditorSection() {
   const [search, setSearch] = useState("")
   const isEditing = useMemo(() => form.id !== "", [form.id])
   const postList = useMemo(() => posts ?? [], [posts])
-
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [search, dateSort, tagFilter, authorFilter])
 
   const resetForm = () =>
     setForm({ id: "", title: "", description: "", content: "", tag: "", date: "", authorName: "" })
@@ -308,7 +304,10 @@ export default function BlogEditorSection() {
   }, [postList, search, dateSort, tagFilter, authorFilter])
 
   const totalPages = Math.ceil(filteredPosts.length / pageSize) || 1
-  const paginatedPosts = filteredPosts.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  // Clamped rather than reset from an effect: filtering to fewer pages could leave currentPage past
+  // the end, which slices to nothing and renders an empty list.
+  const page = Math.min(currentPage, totalPages)
+  const paginatedPosts = filteredPosts.slice((page - 1) * pageSize, page * pageSize)
   const containerPadding = mode === "edit"
     ? "pb-40 md:pb-56 lg:pb-72 xl:pb-96"
     : "pb-32 md:pb-48 lg:pb-64 xl:pb-96"
@@ -436,16 +435,16 @@ export default function BlogEditorSection() {
             {filteredPosts.length > pageSize && (
               <div className="flex items-center justify-center gap-2 mt-4 py-2">
                 <button
-                  onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
-                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(Math.max(page - 1, 1))}
+                  disabled={page === 1}
                   className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Previous
                 </button>
-                <span className="text-xs text-[#6B7280]">Page {currentPage} of {totalPages}</span>
+                <span className="text-xs text-[#6B7280]">Page {page} of {totalPages}</span>
                 <button
-                  onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
-                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(Math.min(page + 1, totalPages))}
+                  disabled={page === totalPages}
                   className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next

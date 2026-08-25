@@ -39,6 +39,9 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (!slug) return;
+    // Entering the loading state for a fetch this effect performs; slug is a route parameter, so the
+    // request cannot be made any earlier.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     // Request the max window (default endpoint window is only 14 days) so the calendar's
     // month navigation has more than a couple weeks of real data to page through.
@@ -69,6 +72,10 @@ export default function BookingPage() {
     if (viewMonth || slotsByDay.size === 0) return;
     const firstKey = [...slotsByDay.keys()].sort()[0];
     const [y, m, d] = firstKey.split("-").map(Number);
+    // Picks a sensible default day once the slots arrive: the earliest one that has any. Only ever runs
+    // while viewMonth is unset, per the guard above, so a month the visitor navigated to is never
+    // overwritten — see the note above for the bug that caused.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelectedDay(firstKey);
     setViewMonth(new Date(y, m - 1, d));
   }, [slotsByDay, viewMonth]);

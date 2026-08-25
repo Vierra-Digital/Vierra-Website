@@ -93,6 +93,8 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     }
 
     useEffect(() => {
+        // Loading the user list on mount; the loader flips its own loading and error state after awaiting.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         load()
     }, [])
 
@@ -817,6 +819,8 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
     }, [])
 
     useEffect(() => {
+        // Loading the session list on mount; the loader flips its own loading and error state after awaiting.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         load()
     }, [load])
 

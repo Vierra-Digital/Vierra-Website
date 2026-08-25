@@ -104,6 +104,10 @@ export function CareerApplicationModal({
   // Reset transient state whenever the modal is opened for a (possibly new) role.
   useEffect(() => {
     if (isOpen) {
+      // Clearing the form when the modal opens for a (possibly different) role. These fields are genuine
+      // state — the user types into them — so they cannot be derived. The idiomatic alternative is for the
+      // caller to key this component on the role so it remounts, which every call site would have to do.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStep(1);
       setFormData(EMPTY_FORM);
       setResume(null);
