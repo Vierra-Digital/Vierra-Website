@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import DefaultAvatar from './DefaultAvatar';
 
@@ -21,11 +21,12 @@ const ProfileImage: React.FC<ProfileImageProps> = ({
   priority = false,
   quality = 100
 }) => {
-  const [imgError, setImgError] = useState(false);
+  // Remember which src failed rather than a bare "it failed" flag: a new src then simply is not
+  // the failed one, so there is nothing to reset. With a boolean, the flag had to be cleared by an
+  // effect, which meant one render of the fallback avatar even when the new image was fine.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const imgError = src != null && src === failedSrc;
 
-  useEffect(() => {
-    setImgError(false);
-  }, [src]);
   if (!src || src.length === 0 || imgError) {
     return (
       <DefaultAvatar 
@@ -51,7 +52,7 @@ const ProfileImage: React.FC<ProfileImageProps> = ({
         priority={priority}
         quality={quality}
         unoptimized
-        onError={() => setImgError(true)}
+        onError={() => setFailedSrc(src)}
       />
     </div>
   );

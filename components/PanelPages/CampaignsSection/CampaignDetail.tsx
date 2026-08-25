@@ -41,13 +41,17 @@ const detailCache = new Map<
 >();
 
 const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ campaignId, onBack }) => {
-  const cached = detailCache.get(campaignId);
-  const cacheFresh = !!cached && Date.now() - cached.ts < DETAIL_CACHE_TTL_MS;
-
-  const [campaign, setCampaign] = useState<Campaign | null>(cached?.data.campaign ?? null);
-  const [steps, setSteps] = useState<CampaignStep[]>(cached?.data.steps ?? []);
-  const [failed, setFailed] = useState<FailedContact[]>(cached?.data.failed ?? []);
-  const [loading, setLoading] = useState(!cacheFresh);
+  // Seeded from the cache in initialisers rather than in the render body: reading the clock while
+  // rendering is impure, and these values are only needed for the first render — load() owns every
+  // change after it. A stale entry still seeds the data while leaving loading true, exactly as
+  // before, so the spinner shows until the refetch lands.
+  const [campaign, setCampaign] = useState<Campaign | null>(() => detailCache.get(campaignId)?.data.campaign ?? null);
+  const [steps, setSteps] = useState<CampaignStep[]>(() => detailCache.get(campaignId)?.data.steps ?? []);
+  const [failed, setFailed] = useState<FailedContact[]>(() => detailCache.get(campaignId)?.data.failed ?? []);
+  const [loading, setLoading] = useState(() => {
+    const entry = detailCache.get(campaignId);
+    return !(entry && Date.now() - entry.ts < DETAIL_CACHE_TTL_MS);
+  });
   const [tab, setTab] = useState<Tab>("Overview");
   const [busy, setBusy] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
@@ -90,6 +94,11 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
   );
 
   useEffect(() => {
+    // load() flips its loading flag synchronously before awaiting, which is what the rule sees.
+    // Fetching when the parameters change is the textbook use for an effect; removing the
+    // synchronous flag would mean adopting Suspense-based fetching across the panel, which is an
+    // architectural decision and not a lint fix.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 

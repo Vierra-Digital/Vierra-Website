@@ -57,6 +57,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     // Show cached session immediately — eliminates loading flash on navigation/refresh.
     const cached = readCache();
+    // The cached user comes from localStorage, which does not exist during the server render — seeding it
+    // as initial state would make the server and client markup disagree. Showing it here costs one extra
+    // render and saves the loading flash on every navigation.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (cached) setState({ data: { user: cached }, status: "authenticated" });
 
     async function resolve(hasSupabaseSession: boolean) {

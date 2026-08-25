@@ -62,6 +62,11 @@ const ContactsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
   }, [search]);
 
   useEffect(() => {
+    // load() flips its loading flag synchronously before awaiting, which is what the rule sees.
+    // Fetching when the parameters change is the textbook use for an effect; removing the
+    // synchronous flag would mean adopting Suspense-based fetching across the panel, which is an
+    // architectural decision and not a lint fix.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId, statusFilter, debouncedSearch]);
