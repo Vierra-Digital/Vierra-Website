@@ -3,6 +3,7 @@ import formidable from "formidable"
 import fs from "fs"
 import { v4 as uuidv4 } from "uuid"
 import { SessionData, saveSessionData, PdfField } from "@/lib/sessionStore"
+import { requireRole } from "@/lib/auth"
 
 export const config = {
   api: {
@@ -18,6 +19,12 @@ export default async function handler(
     res.setHeader("Allow", ["POST"])
     return res.status(405).json({ message: `Method ${req.method} Not Allowed` })
   }
+
+  // Creating a signing session means accepting a PDF upload and minting a link that presents as an
+  // official Vierra document. generateSignLinkFromPreset — the same operation from a stored preset —
+  // has always required this; this route was reachable by anyone.
+  const session = await requireRole(req, res, ["admin", "staff"])
+  if (!session) return
 
   const form = formidable({})
   let tempPdfPath: string | null = null
