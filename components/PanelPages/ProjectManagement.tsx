@@ -451,7 +451,7 @@ export default function ProjectManagement() {
   return (
     <div className={`w-full h-full bg-[#FAFAFA] text-[#111014] flex flex-col ${inter.className}`}>
       <div className="flex-1 flex justify-center px-6 pt-2">
-        <div className="w-full max-w-6xl flex flex-col h-full">
+        <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
           <div className="w-full flex justify-between items-center mb-2">
             <div>
               <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Project Tasks</h1>

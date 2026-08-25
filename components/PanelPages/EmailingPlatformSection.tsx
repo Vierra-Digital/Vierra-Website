@@ -50,6 +50,9 @@ import {
   FiUsers,
   FiX,
 } from "react-icons/fi";
+// Feather has no reply-all glyph; two overlapping arrows read as a smudge at 16px. Material's
+// is the same double-arrow Gmail uses.
+import { MdReplyAll } from "react-icons/md";
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
@@ -64,7 +67,7 @@ import MoveToMenu from "@/components/email/MoveToMenu";
 import { buildReplyReferences } from "@/lib/email/threading";
 import {
   BRAND_LOGO,
-  ICON_BUTTON, ICON_BUTTON_SOLID, FIELD_LABEL, ALERT, REPLY_ACTION_BUTTON,
+  ICON_BUTTON, FIELD_LABEL, ALERT, REPLY_ACTION_BUTTON,
 } from "@/components/email/emailTheme";
 import {
   PAGE_SIZE,
@@ -246,6 +249,36 @@ function writeCachedSelectedAccounts(accounts: string[]): void {
 }
 
 /**
+ * "Help me write" bolt. The stroke draws itself on a loop rather than pulsing a filled glyph —
+ * a filled icon can only fade or scale, which reads as a notification badge, not as writing.
+ * Drafting speeds the draw up and brightens it.
+ */
+const BoltDraw: React.FC<{ className?: string; drafting?: boolean }> = ({ className, drafting }) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden focusable="false">
+    <path
+      d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={drafting ? "bolt-draw is-drafting" : "bolt-draw"}
+    />
+  </svg>
+);
+
+/** Google Drive mark, inline so the button carries the real logo without a remote fetch. */
+const DriveMark: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 87.3 78" className={className} aria-hidden focusable="false">
+    <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da" />
+    <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47" />
+    <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335" />
+    <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d" />
+    <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc" />
+    <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00" />
+  </svg>
+);
+
+/**
  * Compose footer icon button. Gmail's composer is one row of quiet, chrome-less icons with a
  * single solid Send — so an "on" toggle (Confidential, Receipt, a set schedule) reads as a soft
  * brand-tinted disc rather than an outlined box, which is what made the old bar look blocky.
@@ -379,7 +412,16 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [newLabelName, setNewLabelName] = useState("");
   const [creatingLabel, setCreatingLabel] = useState(false);
   /** Guards double-fires without greying the toolbar out for the whole round trip. */
-  const actionInFlightRef = useRef(false);
+  /**
+   * Rows with an action in flight, keyed by rowKey.
+   *
+   * This was a single boolean, so ANY action anywhere blocked every other action until Gmail
+   * answered — archive one message, immediately move a different one, and the second was refused
+   * outright with "Still finishing the last action". That is the slowness and the "takes several
+   * attempts": the click was rejected, not slow. Per-row means only the same message is guarded,
+   * which is all the guard was ever for (double-submitting one mutation).
+   */
+  const actionInFlightRef = useRef<Set<string>>(new Set());
   /** Set below; lets applyAction re-sync after a partial failure without a cyclic dep. */
   const loadMessagesRef = useRef<() => void>(() => {});
   const [labelToDelete, setLabelToDelete] = useState<{ id: string; name: string } | null>(null);
@@ -439,8 +481,22 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [composeActiveDraftKey, setComposeActiveDraftKey] = useState("");
   const [inlineComposeMode, setInlineComposeMode] = useState<null | "reply" | "replyAll" | "forward">(null);
   const [inlineComposeTo, setInlineComposeTo] = useState("");
+  /** Cc/Bcc on the inline reply. Gmail keeps them one click from the recipient line. */
+  const [inlineComposeCc, setInlineComposeCc] = useState("");
+  const [inlineComposeBcc, setInlineComposeBcc] = useState("");
+  const [inlineShowCc, setInlineShowCc] = useState(false);
+  /** Gmail shows the recipient as text; it only becomes a field once you click it. */
+  const [inlineToEditing, setInlineToEditing] = useState(false);
+  /** Formatting bar is opt-in, as in Gmail — the "Aa" toggle in the send row reveals it. */
+  const [inlineShowFormatting, setInlineShowFormatting] = useState(false);
+  const [inlineShowBcc, setInlineShowBcc] = useState(false);
+  /** Inline reply overflow menu — switches reply mode, as Gmail's does. */
+  const [inlineMoreOpen, setInlineMoreOpen] = useState(false);
   const [inlineComposeSubject, setInlineComposeSubject] = useState("");
   const [inlineComposeIntroText, setInlineComposeIntroText] = useState("");
+  /** Rich-text form of the reply body. Plain text stays in sync for the text/plain part. */
+  const [inlineComposeIntroHtml, setInlineComposeIntroHtml] = useState("");
+  const inlineEditorRef = useRef<ComposeRichEditorHandle | null>(null);
   const [inlineComposeBodyText, setInlineComposeBodyText] = useState("");
   const [inlineComposeBodyHtml, setInlineComposeBodyHtml] = useState("");
   const [inlineComposePreviewHtml, setInlineComposePreviewHtml] = useState("");
@@ -1479,7 +1535,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
   const inlineDraftStorageKey = useMemo(() => {
     if (!inlineComposeMode || !selectedMessage) return "";
-    if (inlineComposeMode === "forward") return "";
     return `inline:${inlineComposeMode}:${selectedMessage.accountEmail.toLowerCase()}:${selectedMessage.id}`;
   }, [inlineComposeMode, selectedMessage]);
 
@@ -2497,7 +2552,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
     }
 
-    if (!inlineComposeSending && inlineComposeMode && inlineComposeMode !== "forward" && inlineDraftStorageKey) {
+    if (!inlineComposeSending && inlineComposeMode && inlineDraftStorageKey) {
       const hasInlineContent = inlineComposeIntroText.trim();
       if (hasInlineContent) {
         void saveLocalDraft(
@@ -2608,7 +2663,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   ]);
 
   useEffect(() => {
-    if (inlineComposeSending || !inlineComposeMode || inlineComposeMode === "forward" || !inlineDraftStorageKey) return;
+    if (inlineComposeSending || !inlineComposeMode || !inlineDraftStorageKey) return;
     const hasContent = inlineComposeIntroText.trim();
     const timeout = window.setTimeout(() => {
       if (!hasContent) return;
@@ -2707,13 +2762,16 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }));
       if (items.length === 0 && composeDraftRows.length === 0) return;
       const isReadToggle = action === "markRead" || action === "markUnread";
-      if (!isReadToggle && actionInFlightRef.current) {
-        // Silently returning here is why a second delete "did nothing" while the first was still
-        // in flight. Say so instead.
-        setActionError("Still finishing the last action — one moment.");
+      const inFlightKeys = selectedMessageRows.map((message) => rowKey(message));
+      if (!isReadToggle && inFlightKeys.some((key) => actionInFlightRef.current.has(key))) {
+        // Only refuse a repeat action on a message already mid-flight; a different message goes
+        // through immediately.
+        setActionError("Still finishing the last action on that message — one moment.");
         return;
       }
-      if (!isReadToggle) actionInFlightRef.current = true;
+      if (!isReadToggle) {
+        for (const key of inFlightKeys) actionInFlightRef.current.add(key);
+      }
 
       setActionError("");
       // Marking unread clears the "already marked read" latch, or reopening the message would hit it
@@ -2900,7 +2958,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "Action failed.");
       } finally {
-        if (!isReadToggle) actionInFlightRef.current = false;
+        if (!isReadToggle) {
+          for (const key of inFlightKeys) actionInFlightRef.current.delete(key);
+        }
         setActionLoading(false);
       }
     },
@@ -3206,14 +3266,38 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     if (!selectedMessage) return;
     const latest = threadMessages[threadMessages.length - 1];
     setInlineComposeMode(mode);
+    setInlineComposeIntroHtml("");
+    setInlineComposeCc("");
+    setInlineComposeBcc("");
+    setInlineShowCc(false);
+    setInlineShowBcc(false);
+    setInlineToEditing(false);
+    setInlineShowFormatting(false);
+    setInlineMoreOpen(false);
     setInlineComposeTo(to);
     setInlineComposeSubject(
       /^re:/i.test(selectedMessage.subject || "") ? selectedMessage.subject : `Re: ${selectedMessage.subject || ""}`
     );
     setInlineComposeIntroText("");
-    setInlineComposeBodyText("");
-    setInlineComposeBodyHtml("");
-    setInlineComposePreviewHtml("");
+    // Quote the message being replied to, as Gmail does. This used to be cleared, so a reply
+    // carried none of the original AND the "⋯" that reveals it had nothing to show, which is
+    // why the control looked missing — it was rendering conditionally on an always-empty value.
+    {
+      const sourceHtml = latest?.bodyHtml || selectedMessageDetail?.bodyHtml || "";
+      const sourceText = latest?.bodyText || selectedMessageDetail?.bodyText || selectedMessage.snippet || "";
+      const quotedFrom = formatIdentity(latest?.fromRaw || selectedMessage.fromRaw || selectedMessage.from);
+      const quotedDate = formatDetailedDate(latest?.timestamp || selectedMessage.timestamp, latest?.date || selectedMessage.date);
+      const safeHtml = sourceHtml
+        ? sanitizeHtml(sourceHtml)
+        : `<div style="white-space:pre-wrap;">${escapeHtml(sourceText)}</div>`;
+      const quotedHtml = `<div style="border-left:2px solid #D1D5DB;padding-left:12px;margin-top:8px;color:#4B5563;">
+      <p style="font-size:12px;margin:0 0 10px;">On ${escapeHtml(quotedDate)}, ${escapeHtml(quotedFrom)} wrote:</p>
+      <div>${safeHtml}</div>
+    </div>`;
+      setInlineComposeBodyText(`\n\nOn ${quotedDate}, ${quotedFrom} wrote:\n${sourceText}`);
+      setInlineComposeBodyHtml(quotedHtml);
+      setInlineComposePreviewHtml(quotedHtml);
+    }
     setInlineComposeThreadId(selectedMessage.threadId || latest?.threadId || "");
     setInlineComposeInReplyTo(latest?.messageIdHeader || selectedMessage.messageIdHeader || "");
     setInlineComposeReferences(
@@ -3295,7 +3379,18 @@ ${sourceText}`;
     const intro = inlineComposeIntroText.trim();
     const textBody = intro ? `${intro}\n\n${inlineComposeBodyText}` : inlineComposeBodyText || intro;
     if (!textBody.trim()) return;
-    const introHtml = intro ? `<div>${linkifyTextForHtml(intro)}</div><br>` : "";
+    const inlineCcError = validateRecipientCsv("Cc", inlineComposeCc);
+    const inlineBccError = validateRecipientCsv("Bcc", inlineComposeBcc);
+    if (inlineCcError || inlineBccError) {
+      setInlineComposeError(inlineCcError || inlineBccError || "");
+      return;
+    }
+    // The editor's own markup wins when it has any; linkified plain text is the fallback for a
+    // draft restored before the rich editor mounted.
+    const introRich = inlineComposeIntroHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim()
+      ? inlineComposeIntroHtml
+      : "";
+    const introHtml = introRich ? `${introRich}<br>` : intro ? `<div>${linkifyTextForHtml(intro)}</div><br>` : "";
     const htmlBody = inlineComposeBodyHtml ? `${introHtml}${inlineComposeBodyHtml}` : introHtml || linkifyTextForHtml(textBody);
 
     setInlineComposeSending(true);
@@ -3308,6 +3403,8 @@ ${sourceText}`;
         body: JSON.stringify({
           accountEmail: selectedMessage.accountEmail,
           to: inlineComposeTo.trim(),
+          cc: inlineComposeCc.trim() || undefined,
+          bcc: inlineComposeBcc.trim() || undefined,
           subject: inlineComposeSubject.trim(),
           body: textBody,
           bodyHtml: htmlBody,
@@ -4589,7 +4686,7 @@ ${sourceText}`;
                                       void Promise.all([loadMessages(), loadMailboxCounts()]);
                                     }}
                                     disabled={messagesLoading}
-                                    className={`${ICON_BUTTON_SOLID} email-tip`}
+                                    className={`${ICON_BUTTON} email-tip`}
                                     aria-label="Refresh"
                                     data-tip="Refresh"
                                   >
@@ -4604,7 +4701,7 @@ ${sourceText}`;
                                       type="button"
                                       onClick={() => void unstarSelected()}
                                       disabled={actionLoading}
-                                      className={`${ICON_BUTTON_SOLID} email-tip`}
+                                      className={`${ICON_BUTTON} email-tip`}
                                       aria-label="Unstar"
                                       data-tip="Unstar"
                                     >
@@ -4616,7 +4713,7 @@ ${sourceText}`;
                                     <button
                                       type="button"
                                       onClick={() => applyAction("unspam")}
-                                      className={`${ICON_BUTTON_SOLID} email-tip`}
+                                      className={`${ICON_BUTTON} email-tip`}
                                       aria-label="Mark As Not Spam"
                                       data-tip="Mark As Not Spam"
                                     >
@@ -4630,7 +4727,7 @@ ${sourceText}`;
                                   <button
                                     type="button"
                                     onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
-                                    className={`${ICON_BUTTON_SOLID} email-tip`}
+                                    className={`${ICON_BUTTON} email-tip`}
                                     data-tip={deletesPermanently ? "Delete Permanently" : "Move To Trash"}
                                   >
                                     <FiTrash2 className="w-4 h-4" />
@@ -4643,7 +4740,7 @@ ${sourceText}`;
                                       <button
                                         type="button"
                                         onClick={() => applyAction(selectionHasUnread ? "markRead" : "markUnread")}
-                                        className={`${ICON_BUTTON_SOLID} email-tip`}
+                                        className={`${ICON_BUTTON} email-tip`}
                                         aria-label={selectionHasUnread ? "Mark As Read" : "Mark As Unread"}
                                         data-tip={selectionHasUnread ? "Mark As Read" : "Mark As Unread"}
                                       >
@@ -4660,7 +4757,7 @@ ${sourceText}`;
                                       <button
                                         type="button"
                                         onClick={() => setMoveMenuOpen((prev) => (prev === "list" ? null : "list"))}
-                                        className={`${ICON_BUTTON_SOLID} email-tip`}
+                                        className={`${ICON_BUTTON} email-tip`}
                                         aria-label="Move To"
                                         data-tip="Move To"
                                       >
@@ -4681,7 +4778,7 @@ ${sourceText}`;
                                         <button
                                           type="button"
                                           onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                                          className={`${ICON_BUTTON_SOLID} email-tip`}
+                                          className={`${ICON_BUTTON} email-tip`}
                                           data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
                                         >
                                           <FiArchive className="w-4 h-4" />
@@ -4691,7 +4788,7 @@ ${sourceText}`;
                                         <button
                                           type="button"
                                           onClick={() => setSnoozeMenuOpen((open) => !open)}
-                                          className={`${ICON_BUTTON_SOLID} email-tip`}
+                                          className={`${ICON_BUTTON} email-tip`}
                                           data-tip="Snooze"
                                           aria-label="Snooze"
                                         >
@@ -5318,7 +5415,7 @@ ${sourceText}`;
                           <FiChevronsRight className="w-4 h-4 rotate-180" />
                           Back
                         </button>
-                        <div className="flex flex-wrap items-center gap-1">
+                        <div className="flex flex-wrap items-center gap-2">
                           {/* The same three actions as at the foot of the message. Both places are
                               wanted: the toolbar is where they are reached for out of habit, the
                               foot is where they belong while reading. */}
@@ -5342,7 +5439,7 @@ ${sourceText}`;
                             aria-label="Reply All"
                             data-tip="Reply All"
                           >
-                            <FiUsers className="w-4 h-4" />
+                            <MdReplyAll className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
@@ -5356,35 +5453,11 @@ ${sourceText}`;
                             <FiSend className="w-4 h-4" />
                           </button>
 
-                          <span className="mx-1 h-5 w-px bg-current opacity-15" aria-hidden />
 
                           {/* Every shared action in the same order as the
                               list toolbar (star, spam, trash, read, move, archive, snooze), so the
                               two toolbars are not two different sequences of the same icons.
                               Reader-only actions (label, block) come last. */}
-                          {/* Star was only ever on the list row, so an open message could not be
-                              starred without going back. In Starred this is the unstar the list
-                              offers in the same position. */}
-                          {selectedMessage ? (
-                            <button
-                              type="button"
-                              onClick={() => void toggleStar(selectedMessage)}
-                              className={`${ICON_BUTTON} email-tip`}
-                              aria-label={selectedMessage.starred ? "Unstar" : "Star"}
-                              data-tip={selectedMessage.starred ? "Unstar" : "Star"}
-                            >
-                              <FiStar className={`w-4 h-4 ${selectedMessage.starred ? "fill-[#F5A623] text-[#F5A623]" : ""}`} />
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            onClick={() => applyAction(spamActionType)}
-                            className={`${ICON_BUTTON} email-tip`}
-                            aria-label={spamActionTitle}
-                            data-tip={spamActionTitle}
-                          >
-                            <FiAlertCircle className="w-4 h-4" />
-                          </button>
                           <button
                             type="button"
                             onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
@@ -5430,6 +5503,31 @@ ${sourceText}`;
                               <FiArchive className="w-4 h-4" />
                             </button>
                           ) : null}
+                          {/* After Archive, before Snooze — matching the list toolbar's order.
+                              These must stay DIRECT children of the row: nested inside snooze's
+                              `relative` dropdown anchor (display:block, no gap) they rendered
+                              flush against each other while every other joint had 6px, which is
+                              what the uneven spacing was. */}
+                          {selectedMessage ? (
+                            <button
+                              type="button"
+                              onClick={() => void toggleStar(selectedMessage)}
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label={selectedMessage.starred ? "Unstar" : "Star"}
+                              data-tip={selectedMessage.starred ? "Unstar" : "Star"}
+                            >
+                              <FiStar className={`w-4 h-4 ${selectedMessage.starred ? "fill-[#F5A623] text-[#F5A623]" : ""}`} />
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => applyAction(spamActionType)}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label={spamActionTitle}
+                            data-tip={spamActionTitle}
+                          >
+                            <FiAlertCircle className="w-4 h-4" />
+                          </button>
                           {/* Snooze existed only on the list, so an open message had to be closed to
                               snooze it. Same presets, same menu, same dismissal. */}
                           <div ref={snoozeMenuRef} className="relative">
@@ -5464,7 +5562,6 @@ ${sourceText}`;
                             ) : null}
                           </div>
 
-                          <span className="mx-1 h-5 w-px bg-current opacity-15" aria-hidden />
 
                           {/* Label: ref-scoped like every other menu here. It previously had no ref,
                               so clicking outside it or changing view left it hanging open, and it was
@@ -5619,7 +5716,7 @@ ${sourceText}`;
                                       }}
                                       className={REPLY_ACTION_BUTTON}
                                     >
-                                      <FiUsers className="h-4 w-4" aria-hidden />
+                                      <MdReplyAll className="h-[18px] w-[18px]" aria-hidden />
                                       Reply all
                                     </button>
                                     <button
@@ -5647,27 +5744,120 @@ ${sourceText}`;
                                      which the dark layer does not remap — so the card stayed white
                                      while its text was remapped to near-white and became illegible. */
                                   <div ref={inlineComposeRef} className="pt-3">
-                                    <div className="rounded-2xl border border-[#E5E7EB] bg-white shadow-sm">
-                                      {/* Recipient line: editable, but reads as a line of text. */}
+                                    <div className="inline-reply-card rounded-xl border border-[#E5E7EB] bg-white shadow-sm">
+                                      {/* Recipient line. Gmail shows the address as plain text with
+                                          Cc/Bcc one click away, rather than a labelled form row and a
+                                          mode caption repeating what the button you just pressed said. */}
                                       <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
-                                        <span className="shrink-0 text-[13px] text-[#6B7280]">
-                                          {inlineComposeMode === "forward" ? "To" : "Reply to"}
-                                        </span>
-                                        <input
-                                          value={inlineComposeTo}
-                                          onChange={(event) => setInlineComposeTo(event.target.value)}
-                                          className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none placeholder:text-[#9CA3AF]"
-                                          placeholder="name@email.com"
-                                          aria-label={inlineComposeMode === "forward" ? "To" : "Reply to"}
-                                        />
-                                        <span className="shrink-0 text-[11px] uppercase tracking-wide text-[#9CA3AF]">
-                                          {inlineComposeMode === "replyAll"
-                                            ? "Reply all"
-                                            : inlineComposeMode === "forward"
-                                              ? "Forward"
-                                              : "Reply"}
-                                        </span>
+                                        <span className="shrink-0 text-[13px] text-[#6B7280]">To</span>
+                                        {inlineToEditing ? (
+                                          <input
+                                            value={inlineComposeTo}
+                                            onChange={(event) => setInlineComposeTo(event.target.value)}
+                                            onBlur={() => setInlineToEditing(false)}
+                                            autoFocus
+                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none placeholder:text-[#9CA3AF]"
+                                            placeholder="name@email.com, second@email.com"
+                                            aria-label="To (comma separated)"
+                                          />
+                                        ) : (
+                                          /* Each address is its own chip so several are countable at
+                                             a glance; the whole row is still one comma-separated
+                                             value, so clicking it edits the list as text. */
+                                          <button
+                                            type="button"
+                                            onClick={() => setInlineToEditing(true)}
+                                            className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-left"
+                                            title="Click to edit recipients (comma separated)"
+                                          >
+                                            {inlineComposeTo
+                                              .split(",")
+                                              .map((entry) => entry.trim())
+                                              .filter(Boolean).length === 0 ? (
+                                              <span className="text-[13px] text-[#9CA3AF]">Add recipients</span>
+                                            ) : (
+                                              inlineComposeTo
+                                                .split(",")
+                                                .map((entry) => entry.trim())
+                                                .filter(Boolean)
+                                                .map((addr, index, all) => {
+                                                  const bare = addr.includes("<")
+                                                    ? (addr.match(/<([^>]+)>/)?.[1] || addr).trim()
+                                                    : addr;
+                                                  const valid = EMAIL_REGEX.test(bare);
+                                                  return (
+                                                    <span
+                                                      key={`${addr}-${index}`}
+                                                      className={`recipient-chip ${valid ? "" : "is-invalid"}`}
+                                                      title={valid ? addr : `${addr} — not a valid address`}
+                                                    >
+                                                      <span className="truncate">{addr}</span>
+                                                      <span
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        aria-label={`Remove ${addr}`}
+                                                        className="recipient-chip-x"
+                                                        onClick={(event) => {
+                                                          event.stopPropagation();
+                                                          setInlineComposeTo(all.filter((_, i) => i !== index).join(", "));
+                                                        }}
+                                                        onKeyDown={(event) => {
+                                                          if (event.key !== "Enter" && event.key !== " ") return;
+                                                          event.stopPropagation();
+                                                          event.preventDefault();
+                                                          setInlineComposeTo(all.filter((_, i) => i !== index).join(", "));
+                                                        }}
+                                                      >
+                                                        <FiX className="h-3 w-3" aria-hidden />
+                                                      </span>
+                                                    </span>
+                                                  );
+                                                })
+                                            )}
+                                          </button>
+                                        )}
+                                        <div className="flex shrink-0 items-center gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => setInlineShowCc((open) => !open)}
+                                            aria-pressed={inlineShowCc}
+                                            className="text-[12px] font-medium text-[#701CC0] hover:underline"
+                                          >
+                                            Cc
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setInlineShowBcc((open) => !open)}
+                                            aria-pressed={inlineShowBcc}
+                                            className="text-[12px] font-medium text-[#701CC0] hover:underline"
+                                          >
+                                            Bcc
+                                          </button>
+                                        </div>
                                       </div>
+
+                                      {inlineShowCc ? (
+                                        <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
+                                          <span className="shrink-0 text-[13px] text-[#6B7280]">Cc</span>
+                                          <input
+                                            value={inlineComposeCc}
+                                            onChange={(event) => setInlineComposeCc(event.target.value)}
+                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none"
+                                            aria-label="Cc"
+                                          />
+                                        </div>
+                                      ) : null}
+                                      {inlineShowBcc ? (
+                                        <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
+                                          <span className="shrink-0 text-[13px] text-[#6B7280]">Bcc</span>
+                                          <input
+                                            value={inlineComposeBcc}
+                                            onChange={(event) => setInlineComposeBcc(event.target.value)}
+                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none"
+                                            aria-label="Bcc"
+                                          />
+                                        </div>
+                                      ) : null}
 
                                       {/* Subject only when forwarding. A reply inherits the thread's
                                           subject, as in Gmail; offering it as a field here invites
@@ -5684,14 +5874,26 @@ ${sourceText}`;
                                         </div>
                                       ) : null}
 
-                                      <textarea
-                                        value={inlineComposeIntroText}
-                                        onChange={(event) => setInlineComposeIntroText(event.target.value)}
-                                        rows={6}
-                                        className="block w-full resize-y border-0 bg-transparent px-4 py-3 text-[14px] leading-[1.6] text-[#1E1B2E] outline-none placeholder:text-[#9CA3AF]"
-                                        placeholder="Write your reply…"
-                                        aria-label="Message"
-                                      />
+                                      {/* Same rich editor the main composer uses, with its formatting
+                                          toolbar pinned open — Gmail's reply always shows one, and a
+                                          plain textarea meant a reply could not carry bold, a list or
+                                          a link at all. */}
+                                      {/* The reply body. Removing the trimmed-content block took
+                                          this with it, leaving the composer with no input at all —
+                                          the recipient row and the send bar rendered, but there was
+                                          nowhere to type. */}
+                                      <div className="px-2 pb-1 pt-2">
+                                        <ComposeRichEditor
+                                          ref={inlineEditorRef}
+                                          valueHtml={inlineComposeIntroHtml}
+                                          onChange={({ html, text }) => {
+                                            setInlineComposeIntroHtml(html);
+                                            setInlineComposeIntroText(text);
+                                          }}
+                                          minHeightClass="min-h-[150px]"
+                                          showToolbar={inlineShowFormatting}
+                                        />
+                                      </div>
 
                                       {inlineComposeMode === "forward" && inlineComposePreviewHtml ? (
                                         <div className="mx-4 mb-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3">
@@ -5716,30 +5918,153 @@ ${sourceText}`;
                                         </p>
                                       ) : null}
 
-                                      {/* Send leads on the left, as in Gmail; discard is an icon
-                                          rather than a button competing with it. */}
-                                      <div className="flex items-center gap-3 px-4 pb-3">
+                                      {/* One control strip, per Gmail: a compact Send, then the insert/mode controls
+                                          as quiet icons, then discard at the far edge. The formatting
+                                          toolbar is rendered into this same row by the editor above
+                                          (toolbarSlot), so there is no second bar competing with it. */}
+                                      <div className="inline-reply-bar flex flex-wrap items-center gap-1 px-3 pb-2.5 pt-1.5">
                                         <button
                                           type="button"
                                           onClick={sendInlineCompose}
                                           disabled={
                                             inlineComposeSending ||
                                             !inlineComposeTo.trim() ||
+                                            !inlineComposeTo
+                                              .split(",")
+                                              .map((entry) => entry.trim())
+                                              .filter(Boolean)
+                                              .every((entry) =>
+                                                EMAIL_REGEX.test(entry.includes("<") ? (entry.match(/<([^>]+)>/)?.[1] || entry).trim() : entry)
+                                              ) ||
                                             (!inlineComposeIntroText.trim() && !inlineComposeBodyText.trim())
                                           }
-                                          /* Identical to the main composer's Send, so the two are
-                                             one control appearing in two places. */
-                                          className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md bg-[#701CC0] px-6 text-sm font-semibold text-white hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
+                                          className="compose-cta inline-flex shrink-0 items-center justify-center gap-2 rounded-md px-4 py-2 text-[13px] font-medium text-white shadow-[0_6px_20px_-8px_rgba(94,23,168,0.9)] transition-[filter] duration-200 ease-out hover:brightness-[1.08] active:brightness-[0.96] disabled:pointer-events-none disabled:opacity-40"
                                         >
-                                          <FiSend className="h-4 w-4" aria-hidden />
+                                          <FiSend className="h-4 w-4 shrink-0" aria-hidden />
                                           {inlineComposeSending ? "Sending…" : "Send"}
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleArtemisDraft()}
+                                          disabled={artemisDrafting}
+                                          className="inline-reply-icon email-tip"
+                                          data-tip={artemisDrafting ? "Writing…" : "Help me write"}
+                                          aria-label="Help me write"
+                                        >
+                                          <BoltDraw className="h-4 w-4" drafting={artemisDrafting} />
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => setInlineShowFormatting((open) => !open)}
+                                          aria-pressed={inlineShowFormatting}
+                                          className={`inline-reply-icon email-tip ${inlineShowFormatting ? "is-on" : ""}`}
+                                          data-tip="Formatting options"
+                                          aria-label="Formatting options"
+                                        >
+                                          <FiType className="h-4 w-4" aria-hidden />
                                         </button>
                                         <button
                                           type="button"
-                                          onClick={() => setInlineComposeMode(null)}
-                                          className="email-tip rounded p-2 text-[#6B7280] transition hover:text-[#1E1B2E]"
-                                          data-tip="Discard reply"
-                                          aria-label="Discard reply"
+                                          onClick={() => composeAttachInputRef.current?.click()}
+                                          className="inline-reply-icon email-tip"
+                                          data-tip="Attach files"
+                                          aria-label="Attach files"
+                                        >
+                                          <FiPaperclip className="h-4 w-4" aria-hidden />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled
+                                          className="inline-reply-icon email-tip"
+                                          data-tip="Insert from Drive (coming soon)"
+                                          aria-label="Insert from Drive"
+                                        >
+                                          <DriveMark className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => inlineEditorRef.current?.promptInsertLink()}
+                                          className="inline-reply-icon email-tip"
+                                          data-tip="Insert link"
+                                          aria-label="Insert link"
+                                        >
+                                          <FiLink className="h-4 w-4" aria-hidden />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => inlineEditorRef.current?.promptInsertImage()}
+                                          className="inline-reply-icon email-tip"
+                                          data-tip="Insert image"
+                                          aria-label="Insert image"
+                                        >
+                                          <FiImage className="h-4 w-4" aria-hidden />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setConfidentialOpen((open) => !open)}
+                                          aria-pressed={confidentialOn}
+                                          className={`inline-reply-icon email-tip ${confidentialOn ? "is-on" : ""}`}
+                                          data-tip="Confidential mode"
+                                          aria-label="Confidential mode"
+                                        >
+                                          <FiLock className="h-4 w-4" aria-hidden />
+                                        </button>
+                                        <div className="relative shrink-0">
+                                          <button
+                                            type="button"
+                                            onClick={() => setInlineMoreOpen((open) => !open)}
+                                            className="inline-reply-icon email-tip"
+                                            data-tip="Insert signature"
+                                            aria-label="Insert signature"
+                                            aria-expanded={inlineMoreOpen}
+                                          >
+                                            <FiEdit3 className="h-4 w-4" aria-hidden />
+                                          </button>
+                                          {inlineMoreOpen ? (
+                                            <div className="compose-menu absolute bottom-full left-0 z-[60] mb-2 w-52">
+                                              {composeSignatures.length === 0 ? (
+                                                <p className="px-3 py-2 text-xs text-[#8C86A6]">No signatures yet</p>
+                                              ) : (
+                                                composeSignatures.map((sig) => (
+                                                  <button
+                                                    key={sig.id}
+                                                    type="button"
+                                                    className={`${composeMenuItemClass} truncate`}
+                                                    onClick={() => {
+                                                      setInlineMoreOpen(false);
+                                                      applyComposeSignature(sig.id);
+                                                    }}
+                                                  >
+                                                    <FiEdit3 className="h-4 w-4 shrink-0" aria-hidden />
+                                                    <span className="truncate">
+                                                      {sig.name}
+                                                      {sig.isDefault ? " (default)" : ""}
+                                                    </span>
+                                                  </button>
+                                                ))
+                                              )}
+                                            </div>
+                                          ) : null}
+                                        </div>
+
+                                        <span className="flex-1" aria-hidden />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            // Discard means gone: drop the autosaved draft rather
+                                            // than flushing it, or every abandoned reply would
+                                            // accumulate in Drafts.
+                                            if (inlineDraftStorageKey) {
+                                              void clearLocalDraft(inlineDraftStorageKey).catch(() => null);
+                                            }
+                                            setInlineComposeMode(null);
+                                            void loadMailboxCounts();
+                                          }}
+                                          className="inline-reply-icon email-tip"
+                                          data-tip="Discard Reply"
+                                          aria-label="Discard Reply"
                                         >
                                           <FiTrash2 className="h-4 w-4" aria-hidden />
                                         </button>

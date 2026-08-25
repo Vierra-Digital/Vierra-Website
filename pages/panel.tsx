@@ -8,16 +8,23 @@ import { getInitialUserProfile } from "@/lib/profileImage.server"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter } from "next/router"
-import { FiLogOut, FiShield, FiFolder, FiArrowLeft, FiMail } from "react-icons/fi"
-import { AiOutlineAppstore } from "react-icons/ai";
-import { PiUsersThree, PiCalculator } from "react-icons/pi";
-import { BsPeople } from "react-icons/bs";
-import { CiSearch } from "react-icons/ci";
-import { RiArrowDropDownLine, RiFolder3Line } from "react-icons/ri";
-import { FaRegFilePdf } from "react-icons/fa6";
-import { HiOutlineDocumentText } from "react-icons/hi";
-import { HiGlobeAlt } from "react-icons/hi2";
-import { useSession, signOut } from "@/lib/session-client"
+// One icon family for the whole rail. Seven families for ten icons meant seven different
+// stroke weights and optical sizes sitting in a column, which is most of what read as clutter.
+import {
+  FiShield,
+  FiFolder,
+  FiArrowLeft,
+  FiMail,
+  FiGrid,
+  FiGlobe,
+  FiFileText,
+  FiUsers,
+  FiPercent,
+  FiFile,
+  FiUserCheck,
+} from "react-icons/fi"
+import { RiArrowDropDownLine } from "react-icons/ri";
+import { useSession } from "@/lib/session-client"
 import { useActivityHeartbeat } from "@/hooks/useActivityHeartbeat"
 const SignPdfSection = dynamic(
   () => import("@/components/PanelPages/SignPdfSection"),
@@ -254,85 +261,85 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
         <meta name="robots" content="noindex,nofollow" />
       </Head>
       <div id="main-panel" className="fixed inset-0 w-full h-full bg-white flex flex-row overflow-hidden">
-        <div id="left-side" className={`relative flex flex-col h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
-          <div id="vierra-nameplate-body" className="w-full h-20 shrink-0 flex items-center justify-center">
+        <div id="left-side" className={`relative flex flex-col h-full shrink-0 z-20 bg-[#6B1BC4] border-r border-white/[0.09] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[224px]" : "w-0"} md:w-[224px] overflow-hidden`}>
+          <div id="vierra-nameplate-body" className="w-full shrink-0 flex items-center justify-center px-4 pt-7 pb-6">
             <Link href="/">
               <Image
                 src="/assets/vierra-logo-panel.png"
                 alt="Vierra Go Home"
                 width={152}
                 height={56}
-                className="w-24 h-auto"
+                className="w-[108px] h-auto"
               />
             </Link>
           </div>
-          <div id="panel-nav" className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-y-[5px] items-center text-[#EDF1F5] pb-2">
+          <div id="panel-nav" className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-y-[14px] items-center text-[#EDF1F5] pt-0 pb-5">
             {isClientViewMode ? (
               <>
-                <div id="panel-nav-item" onClick={() => { setViewModeSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${viewModeSection === 0 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-                  <AiOutlineAppstore />
-                  <span className={`text-xs font-normal ${inter.className}`}>
+                <div id="panel-nav-item" onClick={() => { setViewModeSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${viewModeSection === 0 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                  <FiGrid className="w-4 h-4 shrink-0" />
+                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Dashboard
                   </span>
                 </div>
-                <div id="panel-nav-item" onClick={() => { setViewModeSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${viewModeSection === 2 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-                  <HiGlobeAlt />
-                  <span className={`text-xs ${inter.className}`}>
+                <div id="panel-nav-item" onClick={() => { setViewModeSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${viewModeSection === 2 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                  <FiGlobe className="w-4 h-4 shrink-0" />
+                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Outreach
                   </span>
                 </div>
-                <div id="panel-nav-item" onClick={() => { setViewModeSection(3); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${viewModeSection === 3 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-                  <HiOutlineDocumentText />
-                  <span className={`text-xs ${inter.className}`}>
+                <div id="panel-nav-item" onClick={() => { setViewModeSection(3); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${viewModeSection === 3 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                  <FiFileText className="w-4 h-4 shrink-0" />
+                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Context
                   </span>
                 </div>
-                <div id="panel-nav-item" onClick={() => { setViewModeSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${viewModeSection === 1 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-                  <FiFolder />
-                  <span className={`text-xs ${inter.className}`}>
+                <div id="panel-nav-item" onClick={() => { setViewModeSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${viewModeSection === 1 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                  <FiFolder className="w-4 h-4 shrink-0" />
+                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Files
                   </span>
                 </div>
               </>
             ) : (
               <>
-                <div id="panel-nav-item" onClick={() => { setCurrentSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 0 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-                  <AiOutlineAppstore />
-                  <span className={`text-xs font-normal ${inter.className}`}>
+                <div id="panel-nav-item" onClick={() => { setCurrentSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 0 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                  <FiGrid className="w-4 h-4 shrink-0" />
+                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Dashboard
                   </span>
                 </div>
                 {!isStaff && (
-                  <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 1 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-                    <PiUsersThree />
-                    <span className={`text-xs ${inter.className}`}>
+                  <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 1 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                    <FiUsers className="w-4 h-4 shrink-0" />
+                    <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                       Clients
                     </span>
                   </div>
                 )}
-                <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 2 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-                  <BsPeople />
-                  <span className={`text-xs ${inter.className}`}>
+                <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 2 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                  <FiUserCheck className="w-4 h-4 shrink-0" />
+                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Staff Orbital
                   </span>
                 </div>
                 {canAccessEmailPanel && (
-                  <div id="panel-nav-item" onClick={() => { window.open('/panel/email', '_blank', 'noopener,noreferrer'); setIsSidebarOpen(false); }} className="w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer hover:bg-white hover:text-black">
-                    <FiMail />
-                    <span className={`text-xs ${inter.className}`}>
+                  <div id="panel-nav-item" onClick={() => { window.open('/panel/email', '_blank', 'noopener,noreferrer'); setIsSidebarOpen(false); }} className="w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 hover:bg-white hover:text-black">
+                    <FiMail className="w-4 h-4 shrink-0" />
+                    <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                       Email Panel
                     </span>
                   </div>
                 )}
-                <div id="panel-nav-item" onClick={() => { setCurrentSection(5); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 5 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-                  <HiGlobeAlt />
-                  <span className={`text-xs ${inter.className}`}>
+                <div id="panel-nav-item" onClick={() => { setCurrentSection(5); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 5 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                  <FiGlobe className="w-4 h-4 shrink-0" />
+                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Marketing Tracker
                   </span>
                 </div>
-                <div id="panel-nav-item" onClick={() => { setCurrentSection(6); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 6 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}>
-                  <RiFolder3Line />
-                  <span className={`text-xs ${inter.className}`}>
+                <div id="panel-nav-item" onClick={() => { setCurrentSection(6); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 6 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                  <FiFolder className="w-4 h-4 shrink-0" />
+                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Project Tasks
                   </span>
                 </div>
@@ -341,10 +348,10 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                   <div
                     id="panel-nav-item"
                     onClick={() => { setCurrentSection(9); setShowSettings(false); setIsSidebarOpen(false); }}
-                    className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 9 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+                    className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 9 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
                   >
-                    <FaRegFilePdf />
-                    <span className={`text-xs ${inter.className}`}>
+                    <FiFile />
+                    <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                       PDF Signer
                     </span>
                   </div>
@@ -352,30 +359,30 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                 <div
                   id="panel-nav-item"
                   onClick={() => { setCurrentSection(4); setShowSettings(false); setIsSidebarOpen(false)}}
-                  className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 4 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+                  className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 4 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
                 >
-                  <PiCalculator />
-                  <span className={`text-xs ${inter.className}`}>
+                  <FiPercent className="w-4 h-4 shrink-0" />
+                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     LTV Calculator
                   </span>
                 </div>
                 <div
                   id="panel-nav-item"
                   onClick={() => { setCurrentSection(7); setShowSettings(false); setIsSidebarOpen(false)}}
-                  className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 7 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+                  className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 7 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
                 >
-                  <HiOutlineDocumentText />
-                  <span className={`text-xs ${inter.className}`}>
+                  <FiFileText className="w-4 h-4 shrink-0" />
+                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Blog Editor
                   </span>
                 </div>
                 <div
                   id="panel-nav-item"
                   onClick={() => { setCurrentSection(10); setShowSettings(false); setIsSidebarOpen(false)}}
-                  className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 10 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+                  className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 10 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
                 >
-                  <FiFolder />
-                  <span className={`text-xs ${inter.className}`}>
+                  <FiFolder className="w-4 h-4 shrink-0" />
+                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Files
                   </span>
                 </div>
@@ -383,10 +390,10 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                   <div
                     id="panel-nav-item"
                     onClick={() => { setCurrentSection(8); setShowSettings(false); setIsSidebarOpen(false)}}
-                    className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 8 ? 'bg-white text-black' : 'hover:bg-white hover:text-black'}`}
+                    className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 8 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
                   >
-                    <FiShield />
-                    <span className={`text-xs ${inter.className}`}>
+                    <FiShield className="w-4 h-4 shrink-0" />
+                    <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                       User Management
                     </span>
                   </div>
@@ -399,90 +406,64 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
               flex-1 + scrollable, so it absorbs extra height and this gap only
               compresses on screens too short to fit everything — never overlaps. */}
           <div className="w-full shrink-0" style={{ height: 52 }} aria-hidden="true" />
-          <div className="w-full flex justify-center shrink-0 pb-6">
-            {isClientViewMode ? (
+          <div className="w-full flex flex-col items-center shrink-0 gap-y-0.5 border-t border-white/[0.09] pt-2.5 pb-3">
+            {/* Account lives at the foot of the rail and opens upward — the pattern Linear,
+                Vercel and Attio share. It replaces a 48px global bar whose only other control
+                was a search field that did nothing. */}
+            <div className="relative w-[calc(100%-16px)]">
               <button
-                onClick={exitClientViewMode}
-                className="group w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 justify-start rounded-xl text-white bg-transparent hover:bg-white hover:text-black transition"
+                type="button"
+                aria-label="Open user settings"
+                aria-expanded={showSettings}
+                onClick={() => setShowSettings((prev) => !prev)}
+                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors duration-150 ${showSettings ? "bg-white/[0.08]" : "hover:bg-white/[0.05]"}`}
               >
-                <FiArrowLeft className="w-5 h-5 text-white group-hover:text-black transition-colors" />
-                <span className={`text-xs ${inter.className} ml-2`}>Back</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => signOut({ callbackUrl: "/login" })}
-                className="group w-[90%] flex h-[47px] flex-row items-center gap-x-[10px] pl-8 justify-start rounded-xl text-white bg-transparent hover:bg-white hover:text-black transition"
-              >
-                <FiLogOut className="w-5 h-5 text-white group-hover:text-black transition-colors" />
-                <span className={`text-xs ${inter.className} ml-2`}>Logout</span>
-              </button>
-            )}
-          </div>
-        </div>
-        <div id="right-side" className="flex flex-col w-full h-full relative">
-          <div id="right-side-heading" className="flex w-full flex-row h-16 bg-[#F8F0FF]">
-            <div className="md:hidden flex items-center pl-2">
-              <button
-                onClick={() => {
-                  setIsSidebarOpen(!isSidebarOpen);
-                  setShowSettings(false);
-                }}
-                aria-label="Toggle sidebar"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-6 w-6 text-[#701CC0]"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-            </div>
-            <div id="left-side-search-holder" className="flex w-1/2 h-full pl-4 items-center">
-              <div id="search-bar" className="w-full max-w-xs md:max-w-md z-40">
-                <label htmlFor="panel-search" className="sr-only">Search</label>
-                <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
-                  <CiSearch className="w-5 h-5 text-[#701CC0] flex-shrink-0" />
-                  <input
-                    id="panel-search"
-                    type="search"
-                    placeholder="Search"
-                    className={`flex-1 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none ${inter.className}`}
-                  />
-                </div>
-              </div>
-            </div>
-            <div id="right-side-info-holder" className="flex w-1/2 h-full items-center justify-end p-2 gap-x-4 md:gap-x-8 text-[#A6A9AC]">
-              <div id="user-holder" className="flex items-center w-auto h-auto">
-                <button
-                  className="flex items-center gap-x-2"
-                  aria-label="Open user settings"
-                  onClick={() => setShowSettings((prev) => !prev)}
-                >
                 <ProfileImage
                   src={profileImageSrc(imageVersion)}
                   alt="Profile"
                   name={currentUserName || session?.user?.name || "User"}
-                  size={32}
-                  className="shadow-md"
+                  size={26}
                   priority
                   quality={100}
                 />
-                  <div className="hidden md:flex items-center gap-0">
-                    <div id="name-holder" className="w-auto h-auto text-[#111014] flex items-center font-semibold">
-                      <span>{currentUserName || session?.user?.name || "Vierra Admin"}</span>
-                    </div>
-                    <div id="dropdowner" className="flex -ml-1">
-                      <RiArrowDropDownLine width={32} height={32} className="w-8 h-8" />
-                    </div>
-                  </div>
-                </button>
-              </div>
+                <span className={`min-w-0 flex-1 truncate text-xs font-medium text-white ${inter.className}`}>
+                  {currentUserName || session?.user?.name || "Vierra Admin"}
+                </span>
+                <RiArrowDropDownLine className={`h-5 w-5 shrink-0 text-white/50 transition-transform duration-150 ${showSettings ? "rotate-180" : ""}`} />
+              </button>
             </div>
+
+            {isClientViewMode ? (
+              <button
+                onClick={exitClientViewMode}
+                className="group w-[calc(100%-16px)] flex h-[34px] flex-row items-center gap-x-2.5 px-3 justify-start rounded-lg text-white bg-transparent hover:bg-white/[0.09] transition-colors duration-150"
+              >
+                <FiArrowLeft className="w-4 h-4 shrink-0" />
+                <span className={`text-xs ${inter.className} ml-2`}>Back</span>
+              </button>
+            ) : null}
+            {/* Logout lives in Account Settings, reachable from the account chip above — the rail
+                is for navigation, and a sign-out sitting one row under it was easy to mis-click. */}
           </div>
-          <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden relative">
+        </div>
+        <div id="right-side" className="flex flex-col flex-1 min-w-0 h-full relative overflow-x-hidden">
+          {/* Section wrappers are plain block divs, so as flex items with no grow they
+              shrink-to-fit their content — every page rendered at its content width and sat
+              left with dead space beside it, which got worse the wider the display. Forcing
+              children to full width fixes all of them at once. */}
+          {/* The sidebar toggle lived in the removed top bar. On mobile the rail collapses to
+              w-0, so without this there is no way to open it. */}
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            aria-label="Toggle sidebar"
+            className="md:hidden absolute left-3 top-3 z-30 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#ECE9F3] bg-white/95 text-[#701CC0] shadow-sm backdrop-blur"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <div id="right-side-body" className="flex w-full h-full bg-white overflow-y-auto overflow-x-hidden relative [&>div]:w-full [&>div]:min-w-0">
             {/* Mounted immediately on login (not lazily on first click) and kept mounted for the
                 rest of the session — matches the visitedSections pattern below — so switching to
                 Settings never re-triggers its getSettings/gmail/social/calendar fetches. */}

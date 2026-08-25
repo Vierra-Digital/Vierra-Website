@@ -1,10 +1,10 @@
 generator client {
-  provider        = "prisma-client-js"
-  // multiSchema is GA in the Prisma 6 CLI, so this is redundant for `prisma validate` and the CLI
-  // warns that it is deprecated. It is kept because the Prisma VS Code extension bundles its own
-  // engine: an extension older than the CLI still requires it for the datasource `schemas` key and
-  // the @@schema attributes, and without it flags every model in this file as an error.
-  previewFeatures = ["multiSchema"]
+  provider = "prisma-client-js"
+  // No previewFeatures: multiSchema went GA, so listing it only produces a deprecation warning on
+  // every `prisma generate` (which `predev` runs, so it printed on every dev boot). The datasource
+  // `schemas` key and the @@schema attributes below work without it. If the Prisma VS Code
+  // extension starts flagging every model here, its bundled engine predates GA — update it rather
+  // than restoring the flag.
 }
 
 datasource db {
@@ -757,6 +757,7 @@ model Company {
 
   @@map("companies")
   @@schema("public")
+  finance_entries                            FinanceEntry[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -769,6 +770,8 @@ model CompanyMembership {
   mentor_id                                  String?       @db.Uuid
   status                                     String        @default("offline")
   strikes                                    Int           @default(0)
+  /** Last presence report. Null = never seen since the column was added. */
+  last_active_at                             DateTime?     @db.Timestamptz(6)
   joined_at                                  DateTime      @default(now()) @db.Timestamptz(6)
   companies                                  Company     @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   users_company_memberships_mentor_idTousers User? @relation("company_memberships_mentor_idTousers", fields: [mentor_id], references: [id], onUpdate: NoAction)
@@ -2044,3 +2047,20 @@ model User {
   @@schema("public")
 }
 
+/// Revenue and expense records behind the dashboard's monthly finance tiles.
+model FinanceEntry {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id   String   @db.Uuid
+  /** "revenue" | "expense" */
+  kind         String
+  /** Integer cents — money in floating point accumulates rounding error. */
+  amount_cents Int
+  occurred_at  DateTime @default(now()) @db.Timestamptz(6)
+  note         String?
+  created_at   DateTime @default(now()) @db.Timestamptz(6)
+  companies    Company  @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("finance_entries")
+  @@index([company_id, occurred_at], map: "idx_finance_entries_company_occurred")
+  @@schema("public")
+}

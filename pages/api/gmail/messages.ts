@@ -95,7 +95,13 @@ function parseMailbox(v: string | undefined): Mailbox {
 
 function buildMailboxQuery(mailbox: Mailbox) {
   if (mailbox === "archive") {
-    return { q: "-in:inbox -in:sent -in:drafts -in:spam -in:trash" };
+    // "Archived" in Gmail means one thing: no INBOX label. This used to also exclude in:sent,
+    // which silently swallowed anything self-addressed — a form notification your own site
+    // mails to you carries BOTH SENT and INBOX, so archiving it removed INBOX (correct) and
+    // then the -in:sent clause hid it here (wrong). The message was archived and unfindable,
+    // which reads exactly like archive deleting mail. Sent copies now show up in Archive too;
+    // that's the honest definition, and being able to find what you archived matters more.
+    return { q: "-in:inbox -in:drafts -in:spam -in:trash" };
   }
   if (mailbox === "sent") {
     return { q: "in:sent -in:trash" };
@@ -409,10 +415,34 @@ export default withAuth(async (req, res, session) => {
           : searchQuery;
 
         const mapDetailedMessages = (detailed: GmailMessageResponse[]): MessageRow[] => {
-          const visibleDetailed =
+          let visibleDetailed =
             mailbox === "sent"
               ? detailed.filter((msg) => !(Array.isArray(msg.labelIds) && msg.labelIds.includes("TRASH")))
               : detailed;
+
+          if (mailbox === "archive") {
+            /**
+             * Archive is "no INBOX label", which Gmail search expresses fine — but mail this
+             * account sent also has no INBOX, so the query alone drags every sent message in.
+             * The previous `-in:sent` clause excluded those AND excluded self-addressed mail,
+             * which carries SENT *and* INBOX; archiving such a message removed INBOX and then
+             * the clause hid it, so it vanished with nowhere to be found.
+             *
+             * Gmail applies CATEGORY_* labels only to mail it received. A message you sent
+             * carries SENT and nothing else; a self-addressed one (your site mailing a form
+             * notification to your own address) carries SENT *and* a CATEGORY_*, because it
+             * arrived as well. That distinction is what search can't express, so use it here:
+             * a SENT message stays only if Gmail also treated it as received.
+             *
+             * Keeps archived self-addressed mail findable — the bug where a message archived
+             * fine and then vanished — while ordinary sent mail stays out of Archive.
+             */
+            visibleDetailed = visibleDetailed.filter((msg) => {
+              const labels = Array.isArray(msg.labelIds) ? msg.labelIds : [];
+              if (!labels.includes("SENT")) return true;
+              return labels.some((label) => label.startsWith("CATEGORY_"));
+            });
+          }
           return visibleDetailed.map((msg) => {
             const headers = msg.payload?.headers || [];
             const subject = decodeHtmlEntities(extractHeader(headers, "Subject") || "(No Subject)");
@@ -558,7 +588,52 @@ export default withAuth(async (req, res, session) => {
     })
   );
 
-  let mergedMessages = messagesByAccount.flat().sort((a, b) => b.timestamp - a.timestamp);
+  /**
+   * Dedupe by Gmail message id before anything else reads the list.
+   *
+   * selectFetchAccounts already tries to avoid reading a mailbox twice via one of its send-as
+   * aliases, but any path that slips past it — an alias whose parent resolves differently, or the
+   * same mailbox reachable as both owned and granted — fetches the same messages again and both
+   * copies land here. It showed up worst in Archive and Sent, where self-addressed mail is common.
+   * A message id is unique within a mailbox, so keying on it collapses the repeats while leaving
+   * genuinely distinct messages from different accounts alone.
+   */
+  /**
+   * One row per conversation, in every mailbox — what Gmail does everywhere.
+   *
+   * Collapsing only Archive and Sent left the duplicates visible in Inbox, which is where they
+   * were actually being seen. The reported pair is instructive: two real submissions 30 minutes
+   * apart, different Message-IDs, that Gmail threaded together because the subject, sender and
+   * recipient all match — and because the site mails them from alex@vierradev.com TO
+   * alex@vierradev.com, each one carries SENT *and* INBOX, so it surfaces in two mailboxes at
+   * once. Per-message rendering therefore showed the same conversation twice in both.
+   *
+   * Drafts are exempt: each draft is its own editable object, not a message in a conversation.
+   * Rows are sorted newest-first above, so the kept row is the latest message in the thread, and
+   * threadCount tells the UI how many it stands for.
+   */
+  const threadCounts = new Map<string, number>();
+  for (const message of messagesByAccount.flat()) {
+    const key = String(message.threadId || message.id || "");
+    if (key) threadCounts.set(key, (threadCounts.get(key) ?? 0) + 1);
+  }
+  const collapseThreads = mailbox !== "drafts";
+  const seenThreadIds = new Set<string>();
+  let mergedMessages: MessageRow[] = messagesByAccount
+    .flat()
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .filter((message) => {
+      if (!collapseThreads) return true;
+      const threadKey = String(message.threadId || "");
+      if (!threadKey) return true;
+      if (seenThreadIds.has(threadKey)) return false;
+      seenThreadIds.add(threadKey);
+      return true;
+    })
+    .map((message) => ({
+      ...message,
+      threadCount: threadCounts.get(String(message.threadId || message.id || "")) ?? 1,
+    }));
   if (mailbox === "drafts") {
     // Resolve account_ids for selected emails when filtering
     let selectedAccountIds: string[] = [];

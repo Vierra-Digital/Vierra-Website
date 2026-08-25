@@ -19,7 +19,10 @@ import { extractHeader, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
  * blocked" badge in the reader can never disagree.
  */
 
-const MAX_IDS = 40;
+// Must be >= PAGE_SIZE in components/email/constants.tsx (50). At 40 the last ten rows of a
+// full page were silently never scanned, so they never got a tracker dot no matter how long
+// you waited — most visible in mailboxes you reach after the inbox, like Archive.
+const MAX_IDS = 60;
 /** Gmail tolerates parallel gets, but keep a lid on it so a page scan can't stampede the API. */
 const CONCURRENCY = 4;
 

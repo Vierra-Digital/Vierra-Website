@@ -56,6 +56,8 @@ export type MessageRow = {
   composeBodyText?: string;
   composeBodyHtml?: string;
   composePreviewHtml?: string;
+  /** How many messages the collapsed conversation stands for (1 when it is a single message). */
+  threadCount?: number;
 };
 
 export type MessageDetail = {

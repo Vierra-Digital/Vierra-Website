@@ -955,7 +955,18 @@ input[type="search"]::-ms-clear:hover {
    reader is already a bounded pane inside the panel, so capping it again left the text ending
    partway across a mostly-empty card. */
 .email-shell .email-body { max-width: 100%; word-break: break-word; overflow-wrap: anywhere; }
-.email-shell .email-body img { max-width: 100%; height: auto; }
+/* Tailwind Preflight sets `img { display: block }`, and a block image ignores both
+   align="center" and a parent's text-align — which is why centred logos sat left inside their
+   coloured block. Email HTML assumes images are inline, so put that back inside message bodies
+   only. `margin: 0 auto` is NOT the fix: it would centre left-aligned images too. */
+.email-shell .email-body img { max-width: 100%; height: auto; display: inline-block; }
+.email-shell .email-body img[align="center"] { display: block; margin-left: auto; margin-right: auto; }
+/* Senders lay out with tables and expect the browser's default centring to work. */
+.email-shell .email-body table[align="center"] { margin-left: auto; margin-right: auto; }
+.email-shell .email-body td[align="center"],
+.email-shell .email-body th[align="center"],
+.email-shell .email-body div[align="center"],
+.email-shell .email-body p[align="center"] { text-align: center; }
 .email-shell .email-body a { color: #5B21B6; text-decoration: underline; text-underline-offset: 2px; }
 .email-shell .email-body p { margin: 0 0 0.85em; }
 .email-shell .email-body > *:last-child { margin-bottom: 0; }
@@ -1193,4 +1204,194 @@ input[type="search"]::-ms-clear:hover {
 /* Respect a reduced-motion preference: keep the placeholder, drop the movement. */
 @media (prefers-reduced-motion: reduce) {
   .settings-skeleton { animation: none; background: rgba(255, 255, 255, 0.06); }
+}
+
+/* ── Inline reply control strip ────────────────────────────────────────────────
+   One row of quiet icon buttons next to a compact Send, sized well below the
+   panel's main toolbars — this bar sits inside a message card, so it should read
+   as an accessory to the reply, not as chrome around it. */
+.email-shell .inline-reply-bar { border-top: 1px solid rgba(255, 255, 255, 0.06); }
+.email-shell .inline-reply-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  width: 32px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  color: #9C95B8;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.email-shell .inline-reply-icon:hover:not(:disabled) { background: rgba(255, 255, 255, 0.07); color: #E7E2F5; }
+.email-shell .inline-reply-icon:disabled { opacity: 0.35; pointer-events: none; }
+.email-shell .inline-reply-icon.is-on { background: rgba(112, 28, 192, 0.18); color: #C8A6F5; }
+
+/* The editor's formatting strip belongs to the same bar: drop its own frame so the
+   two read as one row of controls rather than two stacked bars. */
+.email-shell .inline-reply-bar + * .ProseMirror { outline: none; }
+
+/* ── Inline reply: one surface, not a card inside a card ───────────────────────
+   ComposeRichEditor draws its own bordered card, correct standalone but a second
+   frame inside the reply card. Same treatment the compose HUD already gets. */
+.email-shell .inline-reply-card { background: #17122A !important; border-color: rgba(255, 255, 255, 0.08) !important; }
+.email-shell .inline-reply-card .rounded-md.border,
+.email-shell .inline-reply-card [class*="rounded-md"][class*="border-[#EAE5F4]"] {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+.email-shell .inline-reply-card .border-b,
+.email-shell .inline-reply-card .border-t { border-color: rgba(255, 255, 255, 0.06) !important; }
+.email-shell .inline-reply-card input,
+.email-shell .inline-reply-card [contenteditable="true"] { color: #EDE9F8 !important; background: transparent !important; }
+.email-shell .inline-reply-card input::placeholder { color: #6F6989 !important; }
+.email-shell .inline-reply-card .text-\[\#6B7280\] { color: #837CA0 !important; }
+.email-shell .inline-reply-card .text-\[\#1E1B2E\] { color: #EDE9F8 !important; }
+
+/* The editor's toolbar was authored for a light panel — lilac chips on #F6F3FD,
+   which fought the dark reader. Same controls, panel palette. */
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 0;
+}
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] button,
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] span { color: #C3BCD8 !important; }
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] button:hover {
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: transparent !important;
+  color: #F3F0FB !important;
+}
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] select {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 6px !important;
+  color: #DCD7EC !important;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] select option { background: #241C3E; color: #EDE9F8; }
+/* The two colour swatches read as filled blocks; make them read as swatches. */
+.email-shell .inline-reply-card input[type="color"] { border-radius: 6px !important; height: 22px !important; width: 26px !important; }
+.email-shell .inline-reply-card .bg-\[\#DEC9F6\] { background: rgba(255, 255, 255, 0.12) !important; }
+
+/* "Help me write": the bolt idles with a slow glow and charges while drafting. */
+@keyframes bolt-glow {
+  0%, 100% { filter: drop-shadow(0 0 0 rgba(168, 85, 247, 0)); opacity: 0.85; }
+  50% { filter: drop-shadow(0 0 5px rgba(168, 85, 247, 0.85)); opacity: 1; }
+}
+@keyframes bolt-charge {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 2px rgba(168, 85, 247, 0.6)); }
+  50% { transform: scale(1.18); filter: drop-shadow(0 0 9px rgba(192, 132, 252, 1)); }
+}
+.bolt-idle { animation: bolt-glow 2.4s ease-in-out infinite; }
+.bolt-charging { animation: bolt-charge 0.7s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .bolt-idle, .bolt-charging { animation: none; }
+}
+
+/* Recipient chips in the inline reply. One comma-separated value underneath; the chips exist so
+   three recipients are countable at a glance instead of being one run-on string. */
+.email-shell .recipient-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 8px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  color: #E7E2F5;
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Hover the chip, not its container. All the chips live inside one button, so a
+   `button:hover > .recipient-chip` rule lit every recipient at once when you were pointing at
+   one of them. */
+.email-shell .recipient-chip:hover { background: rgba(255, 255, 255, 0.14); }
+
+/* Editor body matches the recipient line's 13px — the default 14px+ made the box feel oversized
+   next to the header it sits under. */
+.email-shell .inline-reply-card [contenteditable="true"],
+.email-shell .inline-reply-card .ProseMirror { font-size: 13px !important; line-height: 1.6 !important; }
+
+/* Formatting bar: full-bleed to the card edges (it was inset, leaving a stripe of card either
+   side) and on the panel's palette rather than lilac-on-white. */
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 10px !important;
+  padding-right: 10px !important;
+  border-radius: 0 !important;
+  row-gap: 4px;
+}
+
+/* Bolt that draws itself. */
+@keyframes bolt-draw-stroke {
+  0% { stroke-dasharray: 64; stroke-dashoffset: 64; opacity: 0.5; }
+  55% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dasharray: 64; stroke-dashoffset: -64; opacity: 0.5; }
+}
+.bolt-draw {
+  color: #A855F7;
+  animation: bolt-draw-stroke 2.6s linear infinite;
+}
+.bolt-draw.is-drafting {
+  color: #C084FC;
+  animation-duration: 0.9s;
+  filter: drop-shadow(0 0 5px rgba(192, 132, 252, 0.85));
+}
+@media (prefers-reduced-motion: reduce) {
+  .bolt-draw { animation: none; stroke-dasharray: none; stroke-dashoffset: 0; }
+}
+
+/* Recipient chip: an X to drop one address, and a clear invalid state so a typo is visible
+   before Send is attempted (Send stays disabled while any address is malformed). */
+.email-shell .recipient-chip { gap: 4px; padding-right: 4px; }
+.email-shell .recipient-chip.is-invalid {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #FCA5A5;
+}
+.email-shell .recipient-chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 120ms ease, background-color 120ms ease;
+}
+.email-shell .recipient-chip-x:hover { opacity: 1; background: rgba(255, 255, 255, 0.18); }
+
+
+
+
+/* ── Dashboard skeletons ───────────────────────────────────────────────────────
+   Light-panel counterpart to .settings-skeleton: same sheen, tuned for the
+   dashboard's off-white cards so placeholders read as the surface settling
+   rather than a dozen separate things blinking. */
+.dash-skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(17, 24, 39, 0.045) 0%,
+    rgba(17, 24, 39, 0.09) 50%,
+    rgba(17, 24, 39, 0.045) 100%
+  );
+  background-size: 200% 100%;
+  animation: dash-skeleton-sheen 1.4s ease-in-out infinite;
+}
+
+@keyframes dash-skeleton-sheen {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-skeleton { animation: none; background: rgba(17, 24, 39, 0.07); }
 }

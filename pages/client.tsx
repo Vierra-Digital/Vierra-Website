@@ -90,7 +90,7 @@ const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) =
         <meta name="robots" content="noindex,nofollow" />
       </Head>
       <div id="main-panel" className="fixed inset-0 w-full h-full bg-white flex flex-row overflow-hidden">
-        <div id="left-side" className={`relative flex flex-col h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
+        <div id="left-side" className={`relative flex flex-col h-full shrink-0 z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
           <div id="vierra-nameplate-body" className="w-full h-20 flex items-center justify-center mb-4">
             <Link href="/">
               <Image
@@ -134,7 +134,7 @@ const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) =
           </div>
         </div>
 
-        <div id="right-side" className="flex flex-col w-full h-full overflow-y-auto relative">
+        <div id="right-side" className="flex flex-col flex-1 min-w-0 h-full overflow-y-auto overflow-x-hidden relative">
           <div id="right-side-heading" className="flex w-full flex-row h-16 bg-[#F8F0FF]">
             <div className="md:hidden flex items-center pl-2">
               <button

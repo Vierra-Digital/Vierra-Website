@@ -2,6 +2,19 @@ import { prisma } from "@/lib/prisma"
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens"
 import { getCalendarVisibilityPreferences } from "@/lib/googleCalendar/visibility"
 
+/** How many meetings the dashboard panel shows. */
+export const UPCOMING_MEETINGS_LIMIT = 5;
+
+/**
+ * How many meetings the sync STORES, as opposed to how many the panel shows.
+ *
+ * These used to be the same number, which quietly starved the panel: the cache held five rows
+ * counting past ones, so a day after a sync two had already happened and only three upcoming
+ * ones were left to show. Keeping a deeper cache means the future-only read can always find
+ * UPCOMING_MEETINGS_LIMIT of them.
+ */
+const STORED_MEETINGS_LIMIT = 50;
+
 type GoogleCalendarListResponse = {
   items?: Array<{
     id?: string
@@ -40,7 +53,7 @@ export type UpcomingMeeting = {
   startIso: string
   endIso: string | null
   timeZone: string
-  meetingLink: string
+  meetingLink: string | null
 }
 
 export type IssueCode = "none" | "permission" | "api_disabled" | "google_error" | "no_calendars"
@@ -250,7 +263,10 @@ export async function fetchUpcomingMeetingsFromGoogle(userId: string): Promise<U
       const eventEnd = toDateStart(event.end)
 
       const meetingLink = resolveMeetingLink(event)
-      if (!meetingLink) return null
+      // Keep events without a Meet/Zoom link. Dropping them was the real cap on this panel:
+      // only calendar entries carrying a join URL ever reached the cache, so a day with three
+      // ordinary meetings and one video call showed one row. The UI already renders a
+      // "No Meeting Link" state for these, so there is nothing to guard against here.
 
       return {
         id: event.id || `${eventStart.toISOString()}-${event.summary || "event"}`,
@@ -264,7 +280,7 @@ export async function fetchUpcomingMeetingsFromGoogle(userId: string): Promise<U
     })
     .filter((meeting): meeting is UpcomingMeeting => Boolean(meeting))
     .sort((a, b) => new Date(a.startIso).getTime() - new Date(b.startIso).getTime())
-    .slice(0, 3)
+    .slice(0, STORED_MEETINGS_LIMIT)
 
   return {
     connected: true,
@@ -285,12 +301,19 @@ export async function fetchUpcomingMeetingsFromGoogle(userId: string): Promise<U
 export async function syncUpcomingMeetingsForUser(userId: string): Promise<UpcomingMeetingsResult> {
   const result = await fetchUpcomingMeetingsFromGoogle(userId)
 
+  const seenEventIds = new Set<string>();
+  const storableMeetings = result.meetings.filter((meeting) => {
+    if (seenEventIds.has(meeting.id)) return false;
+    seenEventIds.add(meeting.id);
+    return true;
+  });
+
   await prisma.$transaction([
     prisma.dashboardUpcomingMeeting.deleteMany({ where: { user_id: userId } }),
-    ...(result.meetings.length
+    ...(storableMeetings.length
       ? [
           prisma.dashboardUpcomingMeeting.createMany({
-            data: result.meetings.map((meeting) => ({
+            data: storableMeetings.map((meeting) => ({
               user_id: userId,
               event_id: meeting.id,
               title: meeting.title,
@@ -298,7 +321,7 @@ export async function syncUpcomingMeetingsForUser(userId: string): Promise<Upcom
               start_at: new Date(meeting.startIso),
               end_at: meeting.endIso ? new Date(meeting.endIso) : null,
               time_zone: meeting.timeZone,
-              meeting_link: meeting.meetingLink,
+              meeting_link: meeting.meetingLink ?? "",
             })),
           }),
         ]
@@ -328,17 +351,23 @@ export async function syncUpcomingMeetingsForUser(userId: string): Promise<Upcom
 }
 
 /** Reads the DB cache written by syncUpcomingMeetingsForUser — no Google API calls. */
-export async function readCachedUpcomingMeetings(userId: string): Promise<UpcomingMeetingsResult | null> {
+export async function readCachedUpcomingMeetings(
+  userId: string
+): Promise<(UpcomingMeetingsResult & { syncedAt: Date | null }) | null> {
   const status = await prisma.dashboardMeetingsSyncStatus.findUnique({ where: { user_id: userId } })
   if (!status) return null
 
+  // Only meetings that have not started yet, filtered in the query rather than after the take.
+  // Taking the five earliest rows outright meant a meeting from this morning consumed a slot, so
+  // the panel showed three upcoming ones and looked capped when it was simply full of the past.
   const meetings = await prisma.dashboardUpcomingMeeting.findMany({
-    where: { user_id: userId },
+    where: { user_id: userId, start_at: { gte: new Date() } },
     orderBy: { start_at: "asc" },
-    take: 3,
+    take: UPCOMING_MEETINGS_LIMIT,
   })
 
   return {
+    syncedAt: status.synced_at ?? null,
     connected: status.connected,
     connectedEmail: status.connected_email,
     needsReconnect: status.needs_reconnect,
@@ -351,7 +380,8 @@ export async function readCachedUpcomingMeetings(userId: string): Promise<Upcomi
       startIso: m.start_at.toISOString(),
       endIso: m.end_at ? m.end_at.toISOString() : null,
       timeZone: m.time_zone,
-      meetingLink: m.meeting_link,
+      // "" is how a link-less meeting is stored; surface it as null again.
+      meetingLink: m.meeting_link || null,
     })),
   }
 }
