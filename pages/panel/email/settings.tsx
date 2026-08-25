@@ -1316,8 +1316,15 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   // a separate button is what made changing them look like it did nothing. Debounced, so
   // typing in the vacation fields doesn't fire a request per keystroke. The sticky bar still
   // reports status and still offers a manual Save.
+  //
+  // The ref is refreshed in an effect, not during render: writing a ref while rendering mutates
+  // state that a discarded or double-invoked render was supposed to leave untouched. The debounce
+  // below fires 900ms after a commit, long after this effect has run, so it always calls the
+  // current version.
   const saveSettingsRef = useRef(saveSettings);
-  saveSettingsRef.current = saveSettings;
+  useEffect(() => {
+    saveSettingsRef.current = saveSettings;
+  });
   useEffect(() => {
     if (!hasUnsavedSettingsChanges || saving || switchingAccount) return;
     const timer = setTimeout(() => {
