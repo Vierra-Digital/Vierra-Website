@@ -759,6 +759,7 @@ model Company {
   project_tasks           ProjectTask[]
   signed_documents        SignedDocument[]
   stored_files            StoredFile[]
+  campaigns Campaign[]
 
   @@map("companies")
   @@schema("public")
@@ -859,6 +860,7 @@ model Contact {
   contact_tag_assignments ContactTagAssignment[]
   email_provider_accounts EmailProviderAccount?  @relation(fields: [account_id], references: [id], onUpdate: NoAction)
   users                   User              @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  campaign_contacts CampaignContact[]
 
   @@map("contacts")
   @@index([user_id], map: "idx_contacts_user_id")
@@ -958,6 +960,7 @@ model EmailScheduledSend {
   sent_at             DateTime? @db.Timestamptz(6)
   created_at          DateTime  @default(now()) @db.Timestamptz(6)
   updated_at          DateTime  @default(now()) @db.Timestamptz(6)
+  users User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "email_scheduled_sends_user_id_fkey")
 
   @@map("email_scheduled_sends")
   @@index([status, scheduled_at], map: "idx_email_scheduled_sends_due")
@@ -981,6 +984,7 @@ model EmailConfidentialMessage {
   created_at       DateTime  @default(now()) @db.Timestamptz(6)
 
   email_confidential_views EmailConfidentialView[]
+  users User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "email_confidential_messages_user_id_fkey")
 
   @@map("email_confidential_messages")
   @@index([user_id], map: "idx_email_confidential_messages_user_id")
@@ -1010,6 +1014,7 @@ model GmailInboxSyncState {
   last_status   String?
   created_at    DateTime  @default(now()) @db.Timestamptz(6)
   updated_at    DateTime  @default(now()) @db.Timestamptz(6)
+  users User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "gmail_inbox_sync_state_user_id_fkey")
 
   @@map("gmail_inbox_sync_state")
   @@unique([user_id, account_email], map: "uq_gmail_inbox_sync_state")
@@ -1047,6 +1052,7 @@ model EmailFilter {
   enabled          Boolean  @default(true)
   created_at       DateTime @default(now()) @db.Timestamptz(6)
   updated_at       DateTime @default(now()) @db.Timestamptz(6)
+  users User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "email_filters_user_id_fkey")
 
   @@map("email_filters")
   @@index([user_id], map: "idx_email_filters_user_id")
@@ -1060,6 +1066,7 @@ model EmailAiPreference {
   tone       String   @default("professional and friendly")
   created_at DateTime @default(now()) @db.Timestamptz(6)
   updated_at DateTime @default(now()) @db.Timestamptz(6)
+  users User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "email_ai_preferences_user_id_fkey")
 
   @@map("email_ai_preferences")
   @@schema("public")
@@ -1075,6 +1082,7 @@ model EmailSnooze {
   status        String   @default("SNOOZED") // SNOOZED | RESURFACED | CANCELED
   created_at    DateTime @default(now()) @db.Timestamptz(6)
   updated_at    DateTime @default(now()) @db.Timestamptz(6)
+  users User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "email_snoozes_user_id_fkey")
 
   @@map("email_snoozes")
   @@index([status, snooze_until], map: "idx_email_snoozes_due")
@@ -1092,6 +1100,7 @@ model EmailAccountPreference {
   is_primary    Boolean  @default(false)
   created_at    DateTime @default(now()) @db.Timestamptz(6)
   updated_at    DateTime @default(now()) @db.Timestamptz(6)
+  users User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "email_account_preferences_user_id_fkey")
 
   @@map("email_account_preferences")
   @@unique([user_id, account_email], map: "uq_email_account_preferences")
@@ -1107,6 +1116,7 @@ model EmailNavPreference {
   /** Rows per mailbox page. Null = built-in PAGE_SIZE. */
   page_size      Int?
   updated_at     DateTime @default(now()) @db.Timestamptz(6)
+  users User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "email_nav_preferences_user_id_fkey")
 
   @@map("email_nav_preferences")
   @@schema("public")
@@ -1133,6 +1143,7 @@ model BookingLink {
   updated_at       DateTime  @default(now()) @db.Timestamptz(6)
   bookings         Booking[]
   companies        Company?  @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users User @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "booking_links_user_id_fkey")
 
   @@map("booking_links")
   @@index([user_id], map: "idx_booking_links_user_id")
@@ -1350,7 +1361,10 @@ model Campaign {
   campaign_steps          CampaignStep[]
   campaign_contacts       CampaignContact[]
   campaign_daily_stats    CampaignDailyStat[]
-  email_provider_accounts EmailProviderAccount @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  email_provider_accounts EmailProviderAccount @relation(fields: [account_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  companies Company @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "campaigns_company_id_fkey")
+  users User? @relation(fields: [created_by], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "campaigns_created_by_fkey")
+  email_outbound_messages EmailOutboundMessage[]
 
   @@map("campaigns")
   @@index([account_id], map: "idx_campaigns_account_id")
@@ -1374,6 +1388,8 @@ model CampaignStep {
   campaigns          Campaign           @relation(fields: [campaign_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   email_templates    EmailTemplate?     @relation(fields: [template_id], references: [id], onUpdate: NoAction)
   campaign_step_sends CampaignStepSend[]
+  campaign_contacts CampaignContact[]
+  email_outbound_messages EmailOutboundMessage[]
 
   @@map("campaign_steps")
   @@unique([campaign_id, step_order], map: "uq_campaign_steps_order")
@@ -1410,6 +1426,12 @@ model CampaignContact {
   campaigns           Campaign           @relation(fields: [campaign_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   campaign_step_sends CampaignStepSend[]
   bookings            Booking[]
+  users User? @relation(fields: [assigned_to], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "campaign_contacts_assigned_to_fkey")
+  contacts Contact? @relation(fields: [contact_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "campaign_contacts_contact_id_fkey")
+  campaign_steps CampaignStep? @relation(fields: [current_step_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "campaign_contacts_current_step_id_fkey")
+  assignment_events AssignmentEvent[]
+  lead_status_events LeadStatusEvent[]
+  email_outbound_messages EmailOutboundMessage[]
 
   @@map("campaign_contacts")
   @@unique([campaign_id, contact_id], map: "uq_campaign_contacts")
@@ -1441,6 +1463,7 @@ model CampaignStepSend {
   updated_at          DateTime        @default(now()) @db.Timestamptz(6)
   campaign_contacts   CampaignContact @relation(fields: [campaign_contact_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   campaign_steps      CampaignStep    @relation(fields: [step_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  email_outbound_messages EmailOutboundMessage? @relation(fields: [outbound_message_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "campaign_step_sends_outbound_message_id_fkey")
 
   @@map("campaign_step_sends")
   @@index([campaign_contact_id], map: "idx_campaign_step_sends_contact_id")
@@ -1479,6 +1502,7 @@ model LeadStatusEvent {
   note                String?
   created_at          DateTime @default(now()) @db.Timestamptz(6)
   users               User?    @relation(fields: [changed_by_user_id], references: [id], onUpdate: NoAction)
+  campaign_contacts CampaignContact @relation(fields: [campaign_contact_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "lead_status_events_campaign_contact_id_fkey")
 
   @@map("lead_status_events")
   @@index([campaign_contact_id], map: "idx_lead_status_events_contact_id")
@@ -1492,6 +1516,10 @@ model AssignmentEvent {
   to_user_id          String   @db.Uuid
   changed_by_user_id  String?  @db.Uuid
   created_at          DateTime @default(now()) @db.Timestamptz(6)
+  campaign_contacts CampaignContact @relation(fields: [campaign_contact_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "assignment_events_campaign_contact_id_fkey")
+  users_assignment_events_from_user_idTousers User? @relation("assignment_events_from_user_idTousers", fields: [from_user_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "assignment_events_from_user_id_fkey")
+  users_assignment_events_to_user_idTousers User @relation("assignment_events_to_user_idTousers", fields: [to_user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "assignment_events_to_user_id_fkey")
+  users_assignment_events_changed_by_user_idTousers User? @relation("assignment_events_changed_by_user_idTousers", fields: [changed_by_user_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "assignment_events_changed_by_user_id_fkey")
 
   @@map("assignment_events")
   @@index([campaign_contact_id], map: "idx_assignment_events_contact_id")
@@ -1547,6 +1575,10 @@ model EmailOutboundMessage {
   email_outbound_recipients EmailOutboundRecipient[]
   email_tracking_events     EmailTrackingEvent[]
   email_tracking_links      EmailTrackingLink[]
+  campaign_contacts CampaignContact? @relation(fields: [campaign_contact_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "email_outbound_messages_campaign_contact_id_fkey")
+  campaigns Campaign? @relation(fields: [campaign_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "email_outbound_messages_campaign_id_fkey")
+  campaign_steps CampaignStep? @relation(fields: [step_id], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "email_outbound_messages_step_id_fkey")
+  campaign_step_sends CampaignStepSend[]
 
   @@map("email_outbound_messages")
   @@index([gmail_message_id], map: "idx_email_outbound_messages_gmail_message_id")
@@ -2089,6 +2121,22 @@ model User {
   stored_files                                                  StoredFile[]
   task_assignments                                              TaskAssignment[]
   user_preferences                                              UserPreference?
+  /// Foreign keys the database has always enforced, declared here so `migrate diff` stops
+  /// proposing to drop them.
+  booking_links BookingLink[]
+  email_account_preferences EmailAccountPreference[]
+  email_ai_preferences EmailAiPreference[]
+  email_confidential_messages EmailConfidentialMessage[]
+  email_filters EmailFilter[]
+  email_nav_preferences EmailNavPreference[]
+  email_scheduled_sends EmailScheduledSend[]
+  email_snoozes EmailSnooze[]
+  gmail_inbox_sync_state GmailInboxSyncState[]
+  campaigns Campaign[]
+  campaign_contacts CampaignContact[]
+  assignment_events_assignment_events_from_user_idTousers AssignmentEvent[] @relation("assignment_events_from_user_idTousers")
+  assignment_events_assignment_events_to_user_idTousers AssignmentEvent[] @relation("assignment_events_to_user_idTousers")
+  assignment_events_assignment_events_changed_by_user_idTousers AssignmentEvent[] @relation("assignment_events_changed_by_user_idTousers")
 
   @@map("users")
   @@schema("public")
