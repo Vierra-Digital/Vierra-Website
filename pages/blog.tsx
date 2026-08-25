@@ -96,10 +96,20 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
     const [visibleCount, setVisibleCount] = useState(latestPosts.length || 9);
     // Hydrate the search box from the URL (?search=) so the WebSite SearchAction
     // structured-data target (/blog?search={term}) actually applies the query.
+    // Hydrate the search box from the URL (?search=) so the WebSite SearchAction structured-data
+    // target (/blog?search={term}) actually applies the query.
+    //
+    // This has to stay an effect. The page is statically generated, so the server renders an empty
+    // box and the unfiltered list; seeding this during the first render instead would make the
+    // client's hydration output disagree with that HTML — searchQuery drives the input value, the
+    // filtered list and the empty-state heading. Setting it after hydration is the correct trade,
+    // so the lint rule is suppressed rather than satisfied.
     useEffect(() => {
         const q = new URLSearchParams(window.location.search).get("search");
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         if (q) setSearchQuery(q);
     }, []);
+
     const batchSize = 9;
     const sentinelRef = useRef<HTMLDivElement | null>(null);
     const filterInitialized = useRef(false);

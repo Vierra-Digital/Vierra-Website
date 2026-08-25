@@ -16,14 +16,12 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   const [step, setStep] = useState(1);
   const [clientData, setClientData] = useState({ clientName: "", clientEmail: "", businessName: "", industry: "", monthlyRetainer: "", clientGoal: "" });
   const [sessionLink, setSessionLink] = useState<string | null>(null);
-  const [origin, setOrigin] = useState<string>("");
+  // Read once at first render rather than set from an effect, which rendered an empty origin
+  // and then immediately re-rendered. Guarded for the server, where there is no location.
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") setOrigin(window.location.origin);
-  }, []);
 
   useEffect(() => {
     if (isOpen) {

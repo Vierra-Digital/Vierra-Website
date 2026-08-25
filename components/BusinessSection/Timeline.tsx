@@ -1,10 +1,11 @@
 "use client"
 
 import { bricolage, figtree } from "@/lib/fonts";
-import { useEffect, useRef, useState } from "react"
+import {useRef, useState} from "react"
 
 import { m as motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion"
 import { OnboardingStepAnim, TamMiningAnim } from "./OnboardingSteps"
+import { useMediaQuery } from "@/hooks/useMediaQuery"
 
 // Only one of the desktop (scroll-locked) / mobile (stacked cards) variants
 // below is ever visible — they were previously both always mounted with the
@@ -15,15 +16,10 @@ import { OnboardingStepAnim, TamMiningAnim } from "./OnboardingSteps"
 // behavior exactly and avoiding any hydration mismatch; once the real
 // viewport is known, only the matching variant stays mounted.
 function useIsDesktop() {
-  const [isDesktop, setIsDesktop] = useState<boolean | null>(null)
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1024px)")
-    setIsDesktop(mq.matches)
-    const onChange = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
-    mq.addEventListener("change", onChange)
-    return () => mq.removeEventListener("change", onChange)
-  }, [])
-  return isDesktop
+  // null on the server and during hydration — useSyncExternalStore uses the server snapshot for
+  // both, so "not yet known" still renders BOTH variants exactly as before, with no hydration
+  // mismatch and without the extra render an effect-plus-setState costs.
+  return useMediaQuery("(min-width: 1024px)", null)
 }
 
 
