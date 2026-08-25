@@ -1,8 +1,11 @@
 [build]
-  # The database schema is managed out-of-band (Supabase), not via Prisma
-  # Migrate — the prisma/migrations history is not in sync with the live DB, so
-  # `migrate deploy` fails (e.g. "relation users already exists"). The build only
-  # needs the generated client; schema changes are applied to the DB directly.
+  # The build generates the Prisma client but deliberately does not run migrations.
+  #
+  # The migration history has since been baselined, so `migrate deploy` no longer fails — it
+  # reports no pending migrations. It stays out of the build anyway: schema.prisma does not model
+  # everything the live database has (objects applied by hand, plus prisma/manual/*.sql), so schema
+  # changes are applied to the database directly and deliberately, never as a side effect of a
+  # deploy. The build only needs the generated client.
   command = "npx prisma generate && npm run build"
   publish = ".next"
   # Skip the build entirely when a push cannot change the deployed site (tests, CI config, docs).
