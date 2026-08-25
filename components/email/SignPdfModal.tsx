@@ -35,6 +35,9 @@ const SignPdfModal: React.FC<Props> = ({ open, onClose, onLinkReady, pdfCandidat
   }, [defaultSignerEmail]);
 
   useEffect(() => {
+    // Clearing the picked file and signer fields when the modal opens, so a previous attempt does not
+    // leak into the next one. These are typed-into fields, so they are state rather than derived.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (open) reset();
   }, [open, reset]);
 

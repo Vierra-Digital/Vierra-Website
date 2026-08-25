@@ -76,6 +76,9 @@ const RolePage: React.FC<{ role: JobRole; datePosted: string; validThrough: stri
 
   useEffect(() => {
     if (!role) return;
+    // Whether this visitor already applied is recorded in localStorage, which does not exist during the
+    // server render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAlreadyApplied(getAppliedRoles().includes(role.slug));
   }, [role]);
 

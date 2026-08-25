@@ -5,7 +5,7 @@
 // scattered order across the whole sphere (the market counting down), leaving
 // only the ~30% that match, then resets. Auto-rotates and is drag-interactive,
 // even mid-animation. No HUD. Loaded client-only.
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { Billboard, Environment, Lightformer } from "@react-three/drei"
 import * as THREE from "three"
@@ -118,14 +118,19 @@ function Cloud() {
   const { gl } = useThree()
   const positions = useMemo(() => fibCloud(SLUGS.length), [])
   // Random (scattered) sort order so logos vanish from all over the sphere.
-  const meta = useMemo(
-    () => SLUGS.map((slug) => {
+  //
+  // Held in state rather than a memo. useMemo is a performance hint that React is free to discard
+  // and recompute, and recomputing here would reshuffle which logos are kept mid-animation. A lazy
+  // state initialiser runs exactly once for the life of the component, which is the guarantee this
+  // actually needs.
+  const [meta] = useState(() =>
+    SLUGS.map((slug) => {
       const order = Math.random()
       return { slug, order, kept: order < 0.3 }
-    }),
-    []
+    })
   )
 
+  // eslint-disable-next-line react-hooks/immutability
   useEffect(() => {
     const el = gl.domElement
     const down = (e: PointerEvent) => {
@@ -145,6 +150,11 @@ function Cloud() {
     const up = () => {
       drag.current.active = false
     }
+    // react-three-fiber hands out live objects on purpose: gl.domElement is the canvas node and
+    // group.current is a Three.js Object3D whose transform is meant to be written directly, which
+    // is how a drag becomes a rotation without a React render per frame. The rule objects to
+    // mutating anything a hook returned; here that is the entire point of the API.
+    // eslint-disable-next-line react-hooks/immutability
     el.style.cursor = "grab"
     el.addEventListener("pointerdown", down)
     window.addEventListener("pointermove", move)

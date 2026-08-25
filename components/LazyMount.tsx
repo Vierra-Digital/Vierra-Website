@@ -28,6 +28,9 @@ export default function LazyMount({
     if (!el) return;
     // Environments without IntersectionObserver (very old browsers): mount now.
     if (typeof IntersectionObserver === "undefined") {
+      // Feature detection: browsers without IntersectionObserver get the content immediately. window is
+      // not available during the server render, so the check has to happen after mount.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShow(true);
       return;
     }
