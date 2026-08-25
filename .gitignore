@@ -41,3 +41,7 @@ todo.txt
 .vscode/
 # Local secrets / service-account keys — never commit
 secrets/
+
+# Local .env backups — these hold live credentials.
+.env.bak*
+.env.*.bak
