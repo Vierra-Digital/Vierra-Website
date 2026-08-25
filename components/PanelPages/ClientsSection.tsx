@@ -230,9 +230,11 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
         return sorted
     }, [rows, searchQuery, statusFilter, nameSort, retainerSort])
 
-    useEffect(() => {
-        setCurrentPage(0)
-    }, [searchQuery])
+    // Page index clamped rather than reset from an effect. Searching to a shorter list could leave
+    // currentPage past the end, and slicing beyond the array renders an empty table with nothing to
+    // explain it; the old effect only covered searchQuery, not the status or sort filters.
+    const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
+    const page = Math.min(currentPage, totalPages - 1)
 
     return (
         <>
@@ -411,7 +413,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-[#E5E7EB]">
-                                            {filteredRows.slice(currentPage * pageSize, (currentPage + 1) * pageSize).map((r) => (
+                                            {filteredRows.slice(page * pageSize, (page + 1) * pageSize).map((r) => (
                                                 <tr key={r.id} className="hover:bg-purple-50">
                                                     <td className="px-4 py-4">
                                                         <div className="flex items-center gap-3">
@@ -466,11 +468,11 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
                 {!loading && filteredRows.length > 0 && (
                     <PaginationControls
-                      currentPage={currentPage}
-                      totalPages={Math.ceil(filteredRows.length / pageSize)}
-                      onPrevious={() => setCurrentPage(Math.max(0, currentPage - 1))}
+                      currentPage={page}
+                      totalPages={totalPages}
+                      onPrevious={() => setCurrentPage(Math.max(0, page - 1))}
                       onNext={() =>
-                        setCurrentPage(Math.min(Math.ceil(filteredRows.length / pageSize) - 1, currentPage + 1))
+                        setCurrentPage(Math.min(totalPages - 1, page + 1))
                       }
                     />
                 )}
