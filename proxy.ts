@@ -1,10 +1,11 @@
 /**
- * Kept as `middleware`, not the `proxy` name Next 16 prefers.
+ * Next 16 renamed the middleware convention to `proxy`; the behaviour is identical.
  *
- * Renaming it silenced the deprecation warning but broke the dev client: Next still requested
- * /_next/static/development/_clientMiddlewareManifest.js, the server answered with JSON, the
- * browser refused to execute it as a script, and client JS never hydrated — every panel page sat
- * on its loading screen forever. A boot-time warning is much cheaper than that.
+ * An earlier attempt at this rename was reverted because the dev client stopped hydrating. That was
+ * on an earlier 16.x patch — `PROXY_FILENAME` is a first-class constant in 16.3.2, and hydration is
+ * verified working here (React fibers attached, router ready, panel routes redirecting normally).
+ * The `_clientMiddlewareManifest.js` MIME error that got blamed for it appears in dev either way,
+ * so it was never the cause.
  */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
@@ -41,7 +42,7 @@ function carryCookies(from: NextResponse, to: NextResponse): NextResponse {
   return to;
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Refresh the Supabase session cookie on every matched request — required by
@@ -93,7 +94,7 @@ export async function middleware(req: NextRequest) {
     const route = pathname.slice(0, -".md".length).replace(/^\/+/, "");
 
     // Rewrite to the handler, passing the route via a request header.
-    // (Neither dynamic segments nor added query params survive a middleware
+    // (Neither dynamic segments nor added query params survive a proxy
     // rewrite onto an optional catch-all reliably, but request headers do.)
     const url = req.nextUrl.clone();
     url.pathname = "/api/md";
