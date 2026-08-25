@@ -14,7 +14,7 @@ import {
 /**
  * Markdown mirror handler.
  *
- * Reached via the `.md` rewrite in middleware.ts. Resolves the underlying
+ * Reached via the `.md` rewrite in proxy.ts. Resolves the underlying
  * route and returns a `text/markdown` representation of that content page.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -25,12 +25,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // The page identity is carried in the `x-md-path` request header (set by
-  // middleware). Without this, Netlify's edge caches every `.md` URL under the
+  // proxy). Without this, Netlify's edge caches every `.md` URL under the
   // single `/api/md` key and serves whichever page was requested first to all
   // of them. Varying on the header makes the header part of the cache key.
   res.setHeader("Vary", "x-md-path");
 
-  // The route is provided by middleware via the `x-md-path` request header
+  // The route is provided by proxy via the `x-md-path` request header
   // (e.g. "blog/my-post"). Fall back to the `path` query param or the dynamic
   // catch-all segments when the handler is hit directly.
   const headerPath = req.headers["x-md-path"];

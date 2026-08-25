@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Both handlers are reachable from the public internet (middleware.ts skips /api/) and both perform
+// Both handlers are reachable from the public internet (proxy.ts skips /api/) and both perform
 // privileged work, so the session check is the only thing standing in front of them. These tests
 // exist so it cannot quietly go missing again.
 const { requireRoleMock, sendBrevoEmail, isBrevoConfigured, sendMail, escapeHtml, formidableParse, saveSessionData } =
