@@ -14,10 +14,34 @@ import { fetchSendAsAliases } from "@/lib/gmail/gmailApi";
  * them by an admin), each tagged with the `ownerUserId` whose token/data to use. For owned
  * accounts ownerUserId === userId, so endpoints that swap in this list behave identically for
  * owners. Fail-safe: on any error, returns just the owned accounts.
+ *
+ * Short-TTL, per-instance cache: this is the first thing every /status, /messages, and /counts
+ * request resolves, and the panel commonly calls two of those endpoints back to back (e.g. a
+ * message-list load alongside a badge-count refresh) — uncached, that's 2 extra Prisma round
+ * trips (owned connections + grants) duplicated across both requests for data that only changes
+ * when a mailbox is connected/disconnected or a grant is made/revoked, all of which explicitly
+ * call invalidateAccessibleAccountsCache. Same tradeoff as the alias cache below: doesn't survive
+ * a cold start, but that's fine — a cache miss just falls through to the query it's saving.
  */
+const ACCESSIBLE_CACHE_TTL_MS = 5 * 60 * 1000;
+const accessibleCache = new Map<string, { expiresAt: number; data: Array<{ email: string; ownerUserId: string }> }>();
+
+/**
+ * Drop a user's cached accessible-accounts (and, since it derives from that list, their alias
+ * cache) so the next request sees a mailbox that was just connected/disconnected, or a grant
+ * that was just made/revoked, instead of stale data for up to ACCESSIBLE_CACHE_TTL_MS.
+ */
+export function invalidateAccessibleAccountsCache(userId: string) {
+  accessibleCache.delete(userId);
+  aliasCache.delete(userId);
+}
+
 export async function getAccessibleGmailAccounts(
   userId: string
 ): Promise<Array<{ email: string; ownerUserId: string }>> {
+  const cached = accessibleCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
+
   const out: Array<{ email: string; ownerUserId: string }> = [];
   const seen = new Set<string>();
   try {
@@ -68,6 +92,7 @@ export async function getAccessibleGmailAccounts(
   } catch {
     /* grants table unavailable — owned accounts already returned */
   }
+  accessibleCache.set(userId, { expiresAt: Date.now() + ACCESSIBLE_CACHE_TTL_MS, data: out });
   return out;
 }
 

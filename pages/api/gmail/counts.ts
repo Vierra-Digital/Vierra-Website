@@ -4,6 +4,7 @@ import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { getAccessibleGmailAccounts, getGmailAliasAccounts, selectFetchAccounts } from "@/lib/email/mailboxAccess";
 import { asQueryStr } from "@/lib/api/parsing";
 import { buildAliasScopeQuery } from "@/lib/gmail/gmailApi";
+import { getCachedCounts, putCachedCounts } from "@/lib/gmail/countsCache";
 
 type GmailLabel = {
   messagesTotal?: number;
@@ -171,24 +172,32 @@ export default withAuth(async (req, res, session) => {
       try {
         // An alias has no token of its own; count against the account that owns it.
         const tokenAccountEmail = account.aliasOfEmail || account.email;
+        const aliasEmail = account.aliasOfEmail ? account.email : undefined;
         const countsFor = (accessToken: string) =>
           account.aliasOfEmail
             ? fetchAliasCounts(accessToken, account.email)
             : fetchMailboxCounts(accessToken);
-        const tokenResult = await getValidGmailAccessToken(account.ownerUserId, tokenAccountEmail);
-        if (!tokenResult.ok) {
-          throw new Error(tokenResult.message);
-        }
+
+        const cached = getCachedCounts(account.ownerUserId, tokenAccountEmail, aliasEmail);
         let counts: Awaited<ReturnType<typeof fetchMailboxCounts>>;
-        try {
-          counts = await countsFor(tokenResult.accessToken);
-        } catch (error) {
-          if (!isAuthError(error)) throw error;
-          const refreshResult = await getValidGmailAccessToken(account.ownerUserId, tokenAccountEmail, { forceRefresh: true });
-          if (!refreshResult.ok) {
-            throw new Error(refreshResult.message);
+        if (cached) {
+          counts = cached;
+        } else {
+          const tokenResult = await getValidGmailAccessToken(account.ownerUserId, tokenAccountEmail);
+          if (!tokenResult.ok) {
+            throw new Error(tokenResult.message);
           }
-          counts = await countsFor(refreshResult.accessToken);
+          try {
+            counts = await countsFor(tokenResult.accessToken);
+          } catch (error) {
+            if (!isAuthError(error)) throw error;
+            const refreshResult = await getValidGmailAccessToken(account.ownerUserId, tokenAccountEmail, { forceRefresh: true });
+            if (!refreshResult.ok) {
+              throw new Error(refreshResult.message);
+            }
+            counts = await countsFor(refreshResult.accessToken);
+          }
+          putCachedCounts(account.ownerUserId, tokenAccountEmail, counts, aliasEmail);
         }
         aggregated.inbox += counts.inbox;
         aggregated.sent += counts.sent;

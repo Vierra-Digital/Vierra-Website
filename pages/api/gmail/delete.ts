@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
+import { invalidateAccessibleAccountsCache } from "@/lib/email/mailboxAccess";
 
 function normalizeEmail(value: unknown) {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -25,6 +26,7 @@ export default withAuth(async (req, res, session) => {
       return;
     }
 
+    invalidateAccessibleAccountsCache(userId);
     res.status(200).json({ ok: true });
   } catch (error) {
     console.error("gmail delete error", error);
