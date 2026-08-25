@@ -25,16 +25,29 @@ const RateCard: React.FC<{ label: string; value: string; sub?: string }> = ({ la
 const AnalyticsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
   const [days, setDays] = useState(7);
   const cacheKey = `${campaignId}:${days}`;
-  const cached = statsCache.get(cacheKey);
-  const cacheFresh = !!cached && Date.now() - cached.ts < STATS_CACHE_TTL_MS;
 
-  const [stats, setStats] = useState<Stats | null>(cached?.data ?? null);
-  const [loading, setLoading] = useState(!cacheFresh);
+  // Both seeded from the cache once, in initialisers rather than in the render body. Reading the
+  // clock during render is impure — the same render would produce a different result a minute
+  // later — and these only ever needed to be evaluated for the first render anyway; the effect
+  // below owns every change after that. Behaviour is unchanged: a stale entry still seeds stats
+  // while leaving loading true, so the spinner shows until the refetch lands.
+  const [stats, setStats] = useState<Stats | null>(() => statsCache.get(cacheKey)?.data ?? null);
+  const [loading, setLoading] = useState(() => {
+    const entry = statsCache.get(cacheKey);
+    return !(entry && Date.now() - entry.ts < STATS_CACHE_TTL_MS);
+  });
 
   useEffect(() => {
     const key = `${campaignId}:${days}`;
     const entry = statsCache.get(key);
     if (entry && Date.now() - entry.ts < STATS_CACHE_TTL_MS) {
+      // Fast path when the day range changes and we already hold fresh numbers: adopt them and
+      // skip the round trip. This is a synchronous state write inside an effect, which the rule
+      // objects to, and the idiomatic alternative — remounting this component under a key of
+      // campaignId:days so the initialisers above re-run — would also keep the range picker
+      // mounted during the load, where today the spinner replaces it. Preserving what is on
+      // screen matters more here than the warning.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStats(entry.data);
       setLoading(false);
       return;

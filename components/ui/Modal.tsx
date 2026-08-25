@@ -42,6 +42,9 @@ export default function Modal({
   // `position: fixed` and `backdrop-filter` (the blur silently fails). Rendering
   // into body sidesteps all of that. Client-only (modals only open on interaction).
   const [mounted, setMounted] = useState(false);
+  // The portal target only exists in the browser, so the first render has to produce nothing and the
+  // mount has to be recorded afterwards. See the note above for why this portals at all.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {

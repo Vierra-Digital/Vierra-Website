@@ -5,6 +5,7 @@
 // works). Same default export as before, so FeatureBento needs no change.
 import { useEffect, useRef, useState } from "react"
 import dynamic from "next/dynamic"
+import { useMediaQuery } from "@/hooks/useMediaQuery"
 
 const BrandSphere3D = dynamic(() => import("./BrandSphere3D"), {
   ssr: false,
@@ -12,18 +13,11 @@ const BrandSphere3D = dynamic(() => import("./BrandSphere3D"), {
 })
 
 export default function BrandSphere() {
-  const [reducedMotion, setReducedMotion] = useState(false)
+  // false on the server and during hydration, the real value thereafter.
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)", false)
   const [inView, setInView] = useState(false)
   const [mounted, setMounted] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)")
-    setReducedMotion(mq.matches)
-    const onChange = (e: MediaQueryListEvent) => setReducedMotion(e.matches)
-    mq.addEventListener("change", onChange)
-    return () => mq.removeEventListener("change", onChange)
-  }, [])
 
   // Only run the WebGL render loop while the sphere is on screen — saves the GPU.
   useEffect(() => {

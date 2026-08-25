@@ -627,6 +627,9 @@ function MeetingBookingAnim() {
   // step 0: hover slot · 1: slot selected (Confirm appears) · 2: click Confirm · 3: booked (Google Calendar)
   const [step, setStep] = useState(0)
   const [now, setNow] = useState<Date | null>(null)
+  // The current time deliberately starts as null so the server and the first client render agree;
+  // the real clock can only be read after hydration.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setNow(new Date()), [])
   useEffect(() => {
     const seq: [number, number][] = [
