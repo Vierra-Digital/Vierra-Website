@@ -387,6 +387,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   }, []);
 
   useEffect(() => {
+    // Loading the Postmaster Tools status on mount; the loader flips its own loading state after awaiting.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadPostmaster();
   }, [loadPostmaster]);
   const [accounts, setAccounts] = useState<GmailAccount[]>([]);
@@ -527,6 +529,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     try {
       const raw = window.localStorage.getItem("email-undo-delay");
       const parsed = raw != null ? Number(raw) : NaN;
+      // The saved undo-send delay comes from localStorage, which does not exist during the server render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (Number.isFinite(parsed)) setUndoSendDelay(Math.max(0, Math.min(30, parsed)));
     } catch {
       /* ignore */

@@ -157,6 +157,11 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
     useEffect(() => {
         const byTag = filterPostsByTag(tagSelectedName, latestPosts);
         const bySearch = filterPostsByQuery(searchQuery, byTag);
+        // Filtering is deferred rather than derived on purpose. The search term can arrive from ?search= in
+        // the URL, and this page is statically generated, so computing the filtered list during the first
+        // render would produce different markup than the server sent and break hydration. The full list is
+        // also what belongs in the SSR HTML for crawlers.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setFilteredLatestPosts(bySearch);
         // Keep the initial full render intact (all posts stay in the SSR HTML for
         // crawlers); only restart pagination when the user changes tag/search.

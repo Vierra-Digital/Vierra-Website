@@ -268,6 +268,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   };
 
   useEffect(() => {
+    // See the note below: these are mount-only loaders that each set their own state after awaiting.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadSocialConnections();
     loadGmailConnections();
     loadDetectedCalendars();

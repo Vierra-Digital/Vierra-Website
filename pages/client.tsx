@@ -65,6 +65,9 @@ const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) =
 
   useEffect(() => {
     if (router.query.settings === "1") {
+      // ?settings=1 opens the settings panel on load. Reading it during render would tie the markup to the
+      // query string on a page whose first render has to match the server's.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowSettings(true)
     }
   }, [router.query.settings])

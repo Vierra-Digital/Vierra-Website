@@ -568,6 +568,11 @@ const RichTextEditor: React.FC<{
     if (value !== history[historyIndex]) {
       const newHistory = history.slice(0, historyIndex + 1)
       newHistory.push(value)
+      // Appending to the undo stack. This editor is controlled, so a new value can arrive from the parent
+      // as well as from typing here, and the stack has to record both — which is why it is not kept in the
+      // input handler alone. It settles after one pass: the pushed entry becomes history[historyIndex], so
+      // the condition above is false on the re-run.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHistory(newHistory)
       setHistoryIndex(newHistory.length - 1)
     }

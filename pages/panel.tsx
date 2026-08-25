@@ -107,7 +107,13 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   const router = useRouter()
   const [showSettings, setShowSettings] = useState(false)
   const [currentSection, setCurrentSection] = useState(0);
-  const [visitedSections, setVisitedSections] = useState<Set<number>>(() => new Set([0]))
+  // Section 0 is always mounted; section 1 (Clients) joins it immediately for admins, who land
+  // there most often right after Dashboard. Seeded here rather than added by an effect — this is
+  // gated on initialUserRole, which comes from SSR and so is identical on the server and the first
+  // client render, meaning there is nothing to defer.
+  const [visitedSections, setVisitedSections] = useState<Set<number>>(() =>
+    initialUserRole === "admin" ? new Set([0, 1]) : new Set([0])
+  )
   const [sectionEpoch, setSectionEpoch] = useState<Record<number, number>>({})
   const lastSectionVersionsRef = useRef<Record<string, string>>({})
   const visitedSectionsRef = useRef<Set<number>>(new Set([0]))
@@ -142,19 +148,11 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   }
 
   useEffect(() => {
+    // Fetching the profile on mount: the call flips its own state after awaiting, which is what
+    // an effect is for.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCurrentUser()
   }, [])
-
-  // Clients is the section admins land on most right after Dashboard, and its fetch is a
-  // single cheap indexed query — worth mounting (and fetching) immediately on login rather
-  // than waiting for the first click, same treatment as Settings. Gated on initialUserRole
-  // (known synchronously from SSR) rather than resolvedUserRole, which depends on the
-  // session hook resolving client-side first.
-  useEffect(() => {
-    if (initialUserRole === "admin") {
-      setVisitedSections((prev) => (prev.has(1) ? prev : new Set(prev).add(1)))
-    }
-  }, [initialUserRole])
 
   // Staff Orbital is common but not the universal first click — warm it a couple seconds
   // after login instead of competing with Dashboard/Settings/Clients for the same burst of
@@ -167,6 +165,10 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   }, [])
 
   useEffect(() => {
+    // Accumulated history, not derived state: once a section has been visited it stays mounted for
+    // the session. Recording it here rather than in the navigation handlers catches every path that
+    // can change the section, including a deep link landing straight on one.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVisitedSections((prev) => (prev.has(currentSection) ? prev : new Set(prev).add(currentSection)))
   }, [currentSection])
 
@@ -225,13 +227,17 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
     // captured one visit too late — the first revisit would silently adopt whatever changed
     // in the meantime as the new "no change" baseline instead of detecting it.
     if (currentSection in SECTION_VERSION_DOMAIN) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       checkSectionVersions()
     }
   }, [currentSection, checkSectionVersions])
 
   useEffect(() => {
     if (!router.isReady) return;
+    // Query parameters are not populated until the router is ready, so this cannot be read during
+    // the first render — deferring it is the only way to honour ?settings=1.
     if (router.query.settings === "1") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowSettings(true);
     }
   }, [router.isReady, router.query.settings]);

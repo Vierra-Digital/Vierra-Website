@@ -25,6 +25,9 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
 
   useEffect(() => {
     if (isOpen) {
+      // Clearing the wizard when the modal opens, so a previous invite link does not leak into the next
+      // one.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStep(1);
       setSessionLink(null);
       setErr(null);

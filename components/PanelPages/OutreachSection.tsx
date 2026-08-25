@@ -382,7 +382,7 @@ const OutreachSection = () => {
     useEffect(() => {
         // Each fetcher flips its own loading flag synchronously before awaiting, which is what the
         // rule sees. Refetching when the scope, period or view changes is what an effect is for.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
+        /* eslint-disable react-hooks/set-state-in-effect */
         if (scope === "company") {
             if (viewMode === "monthly") {
                 fetchMonthlyData();
@@ -392,6 +392,7 @@ const OutreachSection = () => {
         } else {
             fetchClientData();
         }
+        /* eslint-enable react-hooks/set-state-in-effect */
     }, [scope, selectedYear, selectedMonth, viewMode, fetchMonthlyData, fetchYearlySummary, fetchClientData]);
 
     // Load the selected client's manual funnel fields into the editable state.

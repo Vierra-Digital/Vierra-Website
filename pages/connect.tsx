@@ -42,6 +42,9 @@ export default function ConnectPage({ dashboardHref, initialImageVersion }: Page
   useEffect(() => {
     const token = localStorage.getItem("token")
     if (!token) {
+      // The auth token lives in localStorage, so whether there is anything to load is only knowable after
+      // mount.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false)
       return
     }

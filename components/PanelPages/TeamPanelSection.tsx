@@ -357,6 +357,8 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     }, [rows, searchTerm, sortBy, sortOrder, statusFilter])
 
     useEffect(() => {
+        // Loading the team on mount; the loader flips its own loading state after awaiting.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadTeamData()
     }, [loadTeamData])
 

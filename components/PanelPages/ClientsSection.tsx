@@ -122,11 +122,15 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
     }
 
     useEffect(() => {
+        // Loading the client list on mount; the fetch flips its own loading state after awaiting.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchClients()
     }, [])
 
     useEffect(() => {
         if (refreshTrigger && refreshTrigger > 0) {
+            // Re-fetches when the parent bumps refreshTrigger after adding or editing a client.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             fetchClients()
         }
     }, [refreshTrigger])
