@@ -10,7 +10,12 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["public", "auth"]
+  // Migrations and introspection need a DIRECT connection. DATABASE_URL now points at
+  // Supabase's transaction pooler (6543), which multiplexes statements across backends and
+  // cannot run DDL — `prisma db execute` against it hangs indefinitely rather than failing.
+  // directUrl keeps the app on the pooler while schema work goes straight to Postgres.
+  directUrl = env("DIRECT_URL")
+  schemas   = ["public", "auth"]
 }
 
 // Supabase-managed auth schema — every model below is introspected directly from the live
