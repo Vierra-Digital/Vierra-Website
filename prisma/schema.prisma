@@ -1101,9 +1101,9 @@ model EmailAccountPreference {
 // Per-user email panel nav layout — which left-nav modules the user has hidden.
 model EmailNavPreference {
   user_id        String   @id @db.Uuid
-  hidden_modules String[]
+  hidden_modules String[] @default([])
   /** Custom left-nav order (module keys). Empty = built-in MODULES order. */
-  module_order   String[]
+  module_order   String[] @default([])
   /** Rows per mailbox page. Null = built-in PAGE_SIZE. */
   page_size      Int?
   updated_at     DateTime @default(now()) @db.Timestamptz(6)
@@ -1218,7 +1218,7 @@ model Booking {
   // for analytics. Presence of this timestamp is the idempotency marker (see lib/booking/retention.ts).
   pii_erased_at       DateTime?             @db.Timestamptz(6)
   created_at          DateTime              @default(now()) @db.Timestamptz(6)
-  booking_links       BookingLink           @relation(fields: [booking_link_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  booking_links       BookingLink           @relation(fields: [booking_link_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "bookings_link_fkey")
   campaign_contacts   CampaignContact?      @relation(fields: [campaign_contact_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
   users_bookings_claimed_by_user_idTousers User? @relation("bookings_claimed_by_user_idTousers", fields: [claimed_by_user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
   booking_status_events       BookingStatusEvent[]
@@ -1353,6 +1353,9 @@ model Campaign {
   email_provider_accounts EmailProviderAccount @relation(fields: [account_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("campaigns")
+  @@index([account_id], map: "idx_campaigns_account_id")
+  @@index([company_id], map: "idx_campaigns_company_id")
+  @@index([company_id, status], map: "idx_campaigns_company_status")
   @@schema("public")
 }
 
@@ -1373,6 +1376,8 @@ model CampaignStep {
   campaign_step_sends CampaignStepSend[]
 
   @@map("campaign_steps")
+  @@unique([campaign_id, step_order], map: "uq_campaign_steps_order")
+  @@index([campaign_id], map: "idx_campaign_steps_campaign_id")
   @@schema("public")
 }
 
@@ -1407,6 +1412,13 @@ model CampaignContact {
   bookings            Booking[]
 
   @@map("campaign_contacts")
+  @@unique([campaign_id, contact_id], map: "uq_campaign_contacts")
+  @@index([assigned_to], map: "idx_campaign_contacts_assigned_to")
+  @@index([campaign_id], map: "idx_campaign_contacts_campaign_id")
+  @@index([contact_id], map: "idx_campaign_contacts_contact_id")
+  @@index([campaign_id, lead_status], map: "idx_campaign_contacts_lead_status")
+  @@index([campaign_id, queue_status, next_send_at], map: "idx_campaign_contacts_queue")
+  @@index([smartlead_lead_id], map: "idx_campaign_contacts_smartlead_lead_id")
   @@schema("public")
 }
 
@@ -1431,7 +1443,9 @@ model CampaignStepSend {
   campaign_steps      CampaignStep    @relation(fields: [step_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("campaign_step_sends")
-  @@unique([campaign_contact_id, step_id], map: "uq_campaign_step_sends_contact_step")
+  @@index([campaign_contact_id], map: "idx_campaign_step_sends_contact_id")
+  @@index([status, scheduled_at], map: "idx_campaign_step_sends_queue")
+  @@unique([campaign_contact_id, step_id], map: "uq_campaign_step_sends")
   @@schema("public")
 }
 
@@ -1450,6 +1464,7 @@ model CampaignDailyStat {
   campaigns    Campaign @relation(fields: [campaign_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("campaign_daily_stats")
+  @@index([campaign_id, date], map: "idx_campaign_daily_stats_campaign_date")
   @@unique([campaign_id, date], map: "uq_campaign_daily_stats")
   @@schema("public")
 }
@@ -1466,6 +1481,7 @@ model LeadStatusEvent {
   users               User?    @relation(fields: [changed_by_user_id], references: [id], onUpdate: NoAction)
 
   @@map("lead_status_events")
+  @@index([campaign_contact_id], map: "idx_lead_status_events_contact_id")
   @@schema("public")
 }
 
@@ -1478,6 +1494,7 @@ model AssignmentEvent {
   created_at          DateTime @default(now()) @db.Timestamptz(6)
 
   @@map("assignment_events")
+  @@index([campaign_contact_id], map: "idx_assignment_events_contact_id")
   @@schema("public")
 }
 
@@ -1532,6 +1549,7 @@ model EmailOutboundMessage {
   email_tracking_links      EmailTrackingLink[]
 
   @@map("email_outbound_messages")
+  @@index([gmail_message_id], map: "idx_email_outbound_messages_gmail_message_id")
   @@index([account_id], map: "idx_email_outbound_messages_account_id")
   @@index([campaign_id], map: "idx_email_outbound_messages_campaign_id")
   @@index([user_id], map: "idx_email_outbound_messages_user_id")
@@ -1800,9 +1818,9 @@ model ClientOutreachTracker {
   revenue_cents  Int      @default(0)
   created_at     DateTime @default(now()) @db.Timestamptz(6)
   updated_at     DateTime @default(now()) @db.Timestamptz(6)
-  companies      Company  @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  clients        Client   @relation(fields: [client_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  users          User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  companies      Company  @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "client_outreach_tracker_company_fkey")
+  clients        Client   @relation(fields: [client_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "client_outreach_tracker_client_fkey")
+  users          User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "client_outreach_tracker_user_fkey")
 
   @@map("client_outreach_tracker")
   @@unique([client_id, year, month, outreach], map: "uq_client_outreach_tracker")
@@ -1925,6 +1943,14 @@ model SignedDocument {
   signed_at         DateTime          @default(now()) @db.Timestamptz(6)
   created_at        DateTime          @default(now()) @db.Timestamptz(6)
   updated_at        DateTime          @default(now()) @db.Timestamptz(6)
+  /// Audit trail captured at signature time. Undeclared here until now, which meant `migrate dev`
+  /// or `db push` would have generated a DROP COLUMN for each — silently destroying the evidence
+  /// that a document was signed, by whom, and from where.
+  signed_ip         String?
+  signed_user_agent String?
+  consented_at      DateTime?         @db.Timestamptz(6)
+  /// Hash of the signed PDF, so a stored file can be shown unmodified since signing.
+  pdf_sha256        String?
   companies         Company         @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   signing_sessions  SigningSession? @relation(fields: [session_token], references: [token], onUpdate: NoAction)
   users             User      @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
@@ -1945,6 +1971,22 @@ model SigningSession {
   signer_email      String?
   created_at        DateTime           @default(now()) @db.Timestamptz(6)
   updated_at        DateTime           @default(now()) @db.Timestamptz(6)
+  /// Who sent the signing request.
+  sender_user_id    String?            @db.Uuid
+  sender_company_id String?            @db.Uuid
+  /// Recipient-side audit trail: when the link was opened, when terms were accepted, and the
+  /// client that signed.
+  opened_at         DateTime?          @db.Timestamptz(6)
+  consented_at      DateTime?          @db.Timestamptz(6)
+  signed_ip         String?
+  signed_user_agent String?
+  /// Access-code gate on the signing link — the recipient proves control of an email address
+  /// before the document is shown. attempts is the lockout counter.
+  access_email           String?
+  access_code_hash       String?
+  access_code_expires_at DateTime?     @db.Timestamptz(6)
+  access_code_attempts   Int           @default(0)
+  access_verified_at     DateTime?     @db.Timestamptz(6)
   signed_documents  SignedDocument[]
 
   @@map("signing_sessions")
