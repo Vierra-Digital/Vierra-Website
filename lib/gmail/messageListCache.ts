@@ -14,6 +14,14 @@ export type CacheEntry<T> = {
   nextPageToken?: string;
   exhausted: boolean;
   expiresAt: number;
+  /**
+   * Gmail's own change-cursor as of this entry's last successful fetch (from users.getProfile
+   * on a full fetch, or from history.list's own response on a repair). Only set for views that
+   * map onto a single Gmail system label — see historyLabelIdFor in pages/api/gmail/messages.ts.
+   * Lets a later request repair a STALE (but still present) entry via history.list — fetching
+   * only what changed since this point — instead of redoing the full list+get from scratch.
+   */
+  historyId?: string;
 };
 
 type AccountBucket = Map<string, CacheEntry<any>>;
@@ -44,6 +52,16 @@ export function getCacheEntry<T>(bucket: AccountBucket, subKey: string): CacheEn
     return undefined;
   }
   return entry;
+}
+
+/**
+ * Reads an entry whether or not it has expired, and never evicts it. The History-API repair
+ * path needs the STALE rows themselves (to patch in place) rather than an eviction — unlike
+ * getCacheEntry, "expired" here is just a signal to the caller, not something this function acts
+ * on. Returns undefined only when nothing has ever been cached for this view.
+ */
+export function getStaleCacheEntry<T>(bucket: AccountBucket, subKey: string): CacheEntry<T> | undefined {
+  return bucket.get(subKey) as CacheEntry<T> | undefined;
 }
 
 export function freshCacheEntry<T>(): CacheEntry<T> {

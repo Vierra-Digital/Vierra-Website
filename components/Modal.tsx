@@ -86,6 +86,9 @@ export function Modal({ isOpen, onClose }: ModalProps) {
 
   useEffect(() => {
     if (isOpen) {
+      // Clearing the form when the modal opens. These fields are state the user types into, so they cannot
+      // be derived; keying this component from the caller is the alternative.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStep(1);
       setFormData(EMPTY_FORM);
       setSubmitted(false);

@@ -207,6 +207,9 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
   }, [token, stripeLoading, checkStripeStatus]);
 
   useEffect(() => {
+    // Checks the Stripe connection when the user reaches that sub-step; the check flips its own
+    // loading flag before awaiting.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (video3SubStep === 2) checkStripeStatus();
   }, [video3SubStep, checkStripeStatus]);
 
@@ -240,17 +243,26 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    // A high-water mark, so going back does not lock the steps ahead. It accumulates rather than
+    // being derived from the current step, and recording it here catches every route to a new step
+    // instead of every navigation handler having to remember.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMaxStepReached((prev) => Math.max(prev, step));
   }, [step]);
 
   useEffect(() => {
+    // Re-reads the connected social accounts when a social question comes into view.
     const cur = questions[step];
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (cur?.type === "social") refreshSocial();
   }, [step, refreshSocial]);
 
   useEffect(() => {
     if (!showSuccessModal) return;
 
+    // Starting a countdown when the modal appears. The initial value has to be written when the
+    // timer starts rather than derived, because every tick after it is a state change of its own.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRedirectCountdown(5);
     const interval = setInterval(() => {
       setRedirectCountdown((prev) => {
@@ -268,6 +280,9 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
 
   useEffect(() => {
     if (!router.isReady) return;
+    // ?linked is set by the OAuth round trip returning here. Query parameters are not populated
+    // until the router is ready, so this cannot be read during the first render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (router.query.linked) refreshSocial();
   }, [router.isReady, router.query.linked, refreshSocial]);
 

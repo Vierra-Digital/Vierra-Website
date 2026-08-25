@@ -3,6 +3,7 @@ import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { asStr } from "@/lib/api/parsing";
 import { invalidateGmailListCache } from "@/lib/gmail/messageListCache";
+import { invalidateGmailCountsCache } from "@/lib/gmail/countsCache";
 import { mapInBatches } from "@/lib/batch";
 import {
   fetchWithTimeout,
@@ -169,7 +170,11 @@ export default withAuth(
     const succeededAccounts = new Set(results.filter((r) => r.ok).map((r) => r.accountEmail));
     for (const accountEmail of succeededAccounts) {
       const owner = ownerByAccount.get(accountEmail);
-      if (owner) invalidateGmailListCache(owner.ownerUserId, owner.tokenEmail);
+      if (!owner) continue;
+      invalidateGmailListCache(owner.ownerUserId, owner.tokenEmail);
+      // Labelling can move a message out of a mailbox (Gmail labels are the mailbox), so the
+      // cached badge counts for that account are stale too — not just the message list.
+      invalidateGmailCountsCache(owner.ownerUserId, owner.tokenEmail);
     }
 
     const failures = results.filter((r) => !r.ok);

@@ -200,10 +200,15 @@ export default function ProjectManagement() {
   }, [selectedBoard]);
 
   useEffect(() => {
+    // Loading the board list on mount; the fetch flips its own loading and error state after
+    // awaiting, which is what an effect is for.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchBoards();
   }, [fetchBoards]);
 
   useEffect(() => {
+    // Tasks belong to the selected board, so they are re-fetched when the selection changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (selectedBoard) fetchTasks();
   }, [selectedBoard, fetchTasks]);
 
@@ -220,6 +225,8 @@ export default function ProjectManagement() {
   }, []);
 
   useEffect(() => {
+    // Assignable members are the same for every board, so this loads once on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchBoardMembers();
   }, [fetchBoardMembers]);
 

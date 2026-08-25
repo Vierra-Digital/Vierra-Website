@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr } from "@/lib/api/parsing";
+import { invalidateAccessibleAccountsCache } from "@/lib/email/mailboxAccess";
 
 /**
  * Admin-only management of shared-inbox delegation grants (mailbox_grants). An admin grants a
@@ -88,6 +89,9 @@ export default withAuth(
         },
         select: { id: true },
       });
+      // The grantee's accessible-mailbox list just changed — drop their cache so the shared
+      // inbox shows up on their next load instead of after its TTL.
+      invalidateAccessibleAccountsCache(granteeUserId);
       res.status(200).json({ ok: true, id: grant.id });
       return;
     }
@@ -99,7 +103,12 @@ export default withAuth(
         return;
       }
       // Scope the delete to this company so an admin can't revoke another company's grant.
+      const revoked = await prisma.mailboxGrant.findFirst({
+        where: { id, company_id: companyId },
+        select: { grantee_user_id: true },
+      });
       await prisma.mailboxGrant.deleteMany({ where: { id, company_id: companyId } });
+      if (revoked) invalidateAccessibleAccountsCache(revoked.grantee_user_id);
       res.status(200).json({ ok: true });
       return;
     }

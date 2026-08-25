@@ -131,6 +131,7 @@ function Cloud({ paused }: { paused: boolean }) {
   const { gl } = useThree()
   const positions = useMemo(() => fibSphere(BRANDS.length), [])
 
+  // eslint-disable-next-line react-hooks/immutability
   useEffect(() => {
     const el = gl.domElement
     const down = (e: PointerEvent) => {
@@ -149,6 +150,11 @@ function Cloud({ paused }: { paused: boolean }) {
     const up = () => {
       drag.current.active = false
     }
+    // react-three-fiber hands out live objects on purpose: gl.domElement is the canvas node and
+    // group.current is a Three.js Object3D whose transform is meant to be written directly, which
+    // is how a drag becomes a rotation without a React render per frame. The rule objects to
+    // mutating anything a hook returned; here that is the entire point of the API.
+    // eslint-disable-next-line react-hooks/immutability
     el.style.cursor = "grab"
     el.addEventListener("pointerdown", down)
     window.addEventListener("pointermove", move)

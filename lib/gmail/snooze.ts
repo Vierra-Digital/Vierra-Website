@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { getOrCreateLabelId, modifyMessageLabels } from "@/lib/gmail/gmailApi";
 import { invalidateGmailListCache } from "@/lib/gmail/messageListCache";
+import { invalidateGmailCountsCache } from "@/lib/gmail/countsCache";
 
 /**
  * Snooze: hide a message from the inbox until a chosen time, then re-surface it.
@@ -42,7 +43,10 @@ export async function snoozeMessages(
     });
     snoozed += 1;
   }
-  if (snoozed > 0) invalidateGmailListCache(userId, accountEmail);
+  if (snoozed > 0) {
+    invalidateGmailListCache(userId, accountEmail);
+    invalidateGmailCountsCache(userId, accountEmail);
+  }
   return { ok: true, snoozed };
 }
 
@@ -60,6 +64,7 @@ export async function unsnooze(userId: string, id: string): Promise<boolean> {
   }
   await prisma.emailSnooze.update({ where: { id: row.id }, data: { status: "CANCELED", updated_at: new Date() } });
   invalidateGmailListCache(userId, row.account_email);
+  invalidateGmailCountsCache(userId, row.account_email);
   return true;
 }
 
@@ -102,6 +107,7 @@ export async function resurfaceDueSnoozes(now: Date): Promise<{ resurfaced: numb
           await prisma.emailSnooze.update({ where: { id: row.id }, data: { status: "RESURFACED", updated_at: now } });
           resurfaced += 1;
           invalidateGmailListCache(group.userId, group.accountEmail);
+          invalidateGmailCountsCache(group.userId, group.accountEmail);
         } catch {
           /* per-row guard: one failure must not abort the batch (or block the rest of the cron) */
         }
