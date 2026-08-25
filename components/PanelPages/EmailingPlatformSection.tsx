@@ -2991,13 +2991,17 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setSnoozeMenuOpen(false);
     setActionLoading(true);
     try {
-      for (const [accountEmail, items] of byAccount) {
-        await fetch("/api/gmail/snooze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accountEmail, items, snoozeUntil: until.toISOString() }),
-        });
-      }
+      // Independent per-mailbox requests — a selection spanning several accounts shouldn't
+      // wait on each mailbox's round trip in turn.
+      await Promise.all(
+        Array.from(byAccount, ([accountEmail, items]) =>
+          fetch("/api/gmail/snooze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accountEmail, items, snoozeUntil: until.toISOString() }),
+          })
+        )
+      );
       // Snoozed mail leaves the mailbox — remove it in place and let the authoritative
       // refresh happen in the background rather than blocking the click on it.
       removeRowsLocally(rows);
@@ -3022,34 +3026,30 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       // Send the NAME as well as the id: label ids are per-account, so for messages in a second
       // mailbox the server resolves (or creates) the same-named label there instead of failing.
       const labelName = labels.find((entry) => entry.id === labelId)?.name || "";
-      let lastError = "";
-      const results = await Promise.all(
-        gmailRows.map(async (message) => {
-          try {
-            const response = await fetch("/api/gmail/apply-label", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                accountEmail: message.accountEmail,
-                messageId: message.id,
-                labelId,
-                labelName,
-              }),
-            });
-            if (response.ok) return true;
-            const payload = await response.json().catch(() => null);
-            lastError = payload?.message || `Label update failed (${response.status})`;
-            return false;
-          } catch {
-            lastError = "Label update failed — network error.";
-            return false;
-          }
-        })
-      );
-      // Surface WHY rather than doing nothing: a silent no-op here reads as "moving to a
-      // label doesn't work" with nothing to act on.
-      if (!results.some(Boolean) && lastError) setActionError(lastError);
-      return results.some(Boolean);
+      // One request for the whole selection — the server applies bounded concurrency + 429
+      // backoff across all items itself, instead of the client firing N unbounded fetches that
+      // trip Gmail's per-user concurrency limit on anything beyond a handful of messages.
+      const items = gmailRows.map((message) => ({ accountEmail: message.accountEmail, messageId: message.id }));
+      try {
+        const response = await fetch("/api/gmail/apply-label", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items, labelId, labelName }),
+        });
+        const payload = await response.json().catch(() => null);
+        const results: Array<{ ok: boolean; error?: string }> = Array.isArray(payload?.results) ? payload.results : [];
+        const anySucceeded = results.some((r) => r.ok);
+        // Surface WHY rather than doing nothing: a silent no-op here reads as "moving to a
+        // label doesn't work" with nothing to act on.
+        if (!anySucceeded) {
+          const lastError = results.find((r) => !r.ok)?.error || payload?.message || `Label update failed (${response.status})`;
+          setActionError(lastError);
+        }
+        return anySucceeded;
+      } catch {
+        setActionError("Label update failed — network error.");
+        return false;
+      }
     },
     [labels]
   );
@@ -3606,7 +3606,10 @@ ${sourceText}`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accountEmail: selectedMessage.accountEmail, messageId: selectedMessage.id, labelId }),
       });
-      if (response.ok) {
+      // A partial-failure bulk response still comes back as HTTP 207 (in the 2xx range, so
+      // response.ok alone doesn't distinguish it) — check the payload's own ok flag too.
+      const payload = await response.json().catch(() => null);
+      if (response.ok && payload?.ok) {
         const label = labels.find((entry) => entry.id === labelId);
         showSentToast(`Labeled${label ? ` "${label.name}"` : ""}`);
       }

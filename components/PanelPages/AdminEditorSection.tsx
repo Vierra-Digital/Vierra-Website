@@ -12,6 +12,19 @@ import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import Modal from "@/components/ui/Modal"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 
+/**
+ * Sort direction indicator for the session table headers.
+ *
+ * Declared at module scope, not inside the component. A component created during render is a new
+ * type on every render, so React unmounts and remounts it — losing any state and defeating
+ * memoisation. It reads nothing but its props, so hoisting it changes nothing about its behaviour.
+ */
+const SortIcon = ({ active, dir }: { active: boolean; dir: "asc" | "desc" }) => {
+    if (!active) return <ArrowUpDown size={14} className="text-gray-400" />
+    return dir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />
+}
+
+
 
 type ViewType = "users" | "sessions"
 
@@ -847,10 +860,6 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
         }
     }
 
-    const SortIcon = ({ active, dir }: { active: boolean; dir: "asc" | "desc" }) => {
-        if (!active) return <ArrowUpDown size={14} className="text-gray-400" />
-        return dir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-    }
 
 
     const formatDate = (ts?: number | null) => {
