@@ -6,9 +6,24 @@ import { extractHeader, buildAliasScopeQuery } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
 import { collapsesThreads } from "@/lib/gmail/mailboxCollapse";
 import { mapInBatches } from "@/lib/batch";
-import { getAccountBucket, getCacheEntry, freshCacheEntry, putCacheEntry, withListLock } from "@/lib/gmail/messageListCache";
+import {
+  getAccountBucket,
+  getStaleCacheEntry,
+  freshCacheEntry,
+  putCacheEntry,
+  withListLock,
+  type CacheEntry,
+} from "@/lib/gmail/messageListCache";
 
 type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive" | "allmail" | "starred" | "important" | "scheduled";
+/**
+ * Concurrency for per-message GET calls when filling in a list page. Gmail's write endpoints cap
+ * at 5 (see pages/api/gmail/actions.ts) specifically because concurrent *writes* triggered "Too
+ * many concurrent requests for user" — reads carry a materially higher per-user quota, so reusing
+ * the write-path ceiling here just makes a 50-message page wait through ~5 sequential rounds of
+ * latency for no rate-limit benefit.
+ */
+const MESSAGE_DETAIL_CONCURRENCY = 20;
 const OPEN_BASE_WINDOW_MS = 15_000;
 const OPEN_SESSION_GAP_MS = 5 * 60 * 1000;
 const OPEN_MAX_CONTINUOUS_STEP_MS = 60_000;
@@ -225,6 +240,121 @@ async function fetchWithRetry(url: string, init: RequestInit, attempts = 3): Pro
   return lastResponse as Response;
 }
 
+type HistoryLabelId = "INBOX" | "SPAM" | "TRASH" | "STARRED" | "IMPORTANT" | "SENT" | "DRAFT";
+
+/**
+ * Only views that map 1:1 onto a single Gmail system label can be safely repaired via the
+ * History API's `labelId` filter — everything else (free-text search, a custom label, "archive"
+ * which is defined as the ABSENCE of several labels, "allmail"/"scheduled" which are compound
+ * queries) has no equivalent history filter, and always takes the existing full list+get path.
+ */
+function historyLabelIdFor(mailbox: Mailbox, labelIdFilter: string, searchQuery: string): HistoryLabelId | null {
+  if (labelIdFilter || searchQuery.trim()) return null;
+  switch (mailbox) {
+    case "inbox": return "INBOX";
+    case "spam": return "SPAM";
+    case "trash": return "TRASH";
+    case "starred": return "STARRED";
+    case "important": return "IMPORTANT";
+    case "sent": return "SENT";
+    case "drafts": return "DRAFT";
+    default: return null;
+  }
+}
+
+/** The mailbox's current change-cursor — the baseline a later request diffs against via history.list. */
+async function fetchMailboxHistoryId(accessToken: string): Promise<string | null> {
+  const response = await fetchWithRetry("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) return null;
+  const payload = (await response.json()) as { historyId?: string };
+  return payload.historyId || null;
+}
+
+type HistoryListResponse = {
+  history?: Array<{
+    messagesAdded?: Array<{ message?: { id?: string } }>;
+    messagesDeleted?: Array<{ message?: { id?: string } }>;
+    labelsAdded?: Array<{ message?: { id?: string } }>;
+    labelsRemoved?: Array<{ message?: { id?: string } }>;
+  }>;
+  historyId?: string;
+  nextPageToken?: string;
+};
+
+/** Bound the worst case of a very stale historyId — beyond this, trust a full resync instead. */
+const HISTORY_PAGE_CAP = 5;
+
+/**
+ * Which message ids newly entered or left `labelId` since `startHistoryId`. Gmail filters
+ * history records to this label server-side, so a messagesAdded/labelsAdded record always means
+ * "now has this label" and labelsRemoved/messagesDeleted always means "no longer does" — no need
+ * to re-check labelIds locally.
+ *
+ * Returns null when the delta can't be trusted: a 404 means `startHistoryId` fell outside
+ * Gmail's retained history window (it only keeps about a week), and hitting the page cap means
+ * there were too many changes to be sure a partial read isn't missing an add/remove pair split
+ * across the untruncated pages. Either way the caller must fall back to a full list+get, exactly
+ * as it would for a plain cache miss — this is a latency optimization, never a correctness path.
+ */
+async function fetchLabelHistoryDelta(
+  accessToken: string,
+  startHistoryId: string,
+  labelId: HistoryLabelId
+): Promise<{ added: Set<string>; removed: Set<string>; historyId: string } | null> {
+  const added = new Set<string>();
+  const removed = new Set<string>();
+  let latestHistoryId = startHistoryId;
+  let pageToken: string | undefined;
+  let pages = 0;
+
+  do {
+    const params = new URLSearchParams({ startHistoryId, labelId });
+    params.append("historyTypes", "messageAdded");
+    params.append("historyTypes", "messageDeleted");
+    params.append("historyTypes", "labelAdded");
+    params.append("historyTypes", "labelRemoved");
+    if (pageToken) params.set("pageToken", pageToken);
+
+    const response = await fetchWithRetry(`https://gmail.googleapis.com/gmail/v1/users/me/history?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as HistoryListResponse;
+    if (payload.historyId) latestHistoryId = payload.historyId;
+
+    for (const record of payload.history || []) {
+      for (const item of record.messagesAdded || []) {
+        if (!item.message?.id) continue;
+        added.add(item.message.id);
+        removed.delete(item.message.id);
+      }
+      for (const item of record.labelsAdded || []) {
+        if (!item.message?.id) continue;
+        added.add(item.message.id);
+        removed.delete(item.message.id);
+      }
+      for (const item of record.labelsRemoved || []) {
+        if (!item.message?.id) continue;
+        removed.add(item.message.id);
+        added.delete(item.message.id);
+      }
+      for (const item of record.messagesDeleted || []) {
+        if (!item.message?.id) continue;
+        removed.add(item.message.id);
+        added.delete(item.message.id);
+      }
+    }
+
+    pageToken = payload.nextPageToken;
+    pages += 1;
+  } while (pageToken && pages < HISTORY_PAGE_CAP);
+
+  if (pageToken) return null;
+  return { added, removed, historyId: latestHistoryId };
+}
+
 export default withAuth(async (req, res, session) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
@@ -355,17 +485,55 @@ export default withAuth(async (req, res, session) => {
         const cacheSubKey = `${mailbox}::${labelIdFilter}::${effectiveSearch}`;
         const bucket = getAccountBucket(account.ownerUserId, tokenAccountEmail);
         const lockKey = `${account.ownerUserId}::${tokenAccountEmail.toLowerCase()}::${cacheSubKey}`;
+        // Only set for a simple, single-label view — see historyLabelIdFor. Everything else
+        // (search, custom label, "archive"/"allmail"/"scheduled") always takes the full path.
+        const syncLabelId = historyLabelIdFor(mailbox, labelIdFilter, effectiveSearch);
 
         const loadAccountMessages = async (accessToken: string) => {
-          let entry = getCacheEntry<MessageRow>(bucket, cacheSubKey) || freshCacheEntry<MessageRow>();
-          if (entry.rows.length < maxResults && !entry.exhausted) {
+          const cached = getStaleCacheEntry<MessageRow>(bucket, cacheSubKey);
+          const isFresh = !!cached && cached.expiresAt > Date.now();
+          let entry: CacheEntry<MessageRow> = isFresh ? (cached as CacheEntry<MessageRow>) : freshCacheEntry<MessageRow>();
+
+          if (!isFresh || (entry.rows.length < maxResults && !entry.exhausted)) {
             // Serialized: a concurrent request for this same view (e.g. quick back/forward paging)
             // must see this request's progress rather than growing the same entry independently —
             // see withListLock in messageListCache.ts.
             entry = await withListLock(lockKey, async () => {
-              // Re-read: the lock may have queued behind a request that already grew this entry
-              // far enough, in which case there's nothing left to fetch.
-              const current = getCacheEntry<MessageRow>(bucket, cacheSubKey) || entry;
+              // Re-read: the lock may have queued behind a request that already refreshed this
+              // entry far enough, in which case there's nothing left to do.
+              const recheck = getStaleCacheEntry<MessageRow>(bucket, cacheSubKey);
+              let current: CacheEntry<MessageRow>;
+              if (recheck && recheck.expiresAt > Date.now()) {
+                current = recheck;
+              } else {
+                // Cheap path: repair the previous rows via Gmail's History API instead of a full
+                // list+get, when the stale entry still holds rows and a historyId to diff from.
+                // ANY failure (see fetchLabelHistoryDelta) falls straight through to the full
+                // refetch below — this is a latency optimization, never a correctness risk.
+                const delta =
+                  syncLabelId && recheck && recheck.rows.length > 0 && recheck.historyId
+                    ? await fetchLabelHistoryDelta(accessToken, recheck.historyId, syncLabelId).catch(() => null)
+                    : null;
+                if (recheck && delta) {
+                  let rows = recheck.rows.filter((row) => !delta.removed.has(row.id));
+                  const existingIds = new Set(rows.map((row) => row.id));
+                  const newIds = [...delta.added].filter((id) => !existingIds.has(id));
+                  if (newIds.length > 0) {
+                    const detailed = await mapInBatches(newIds, (id) => fetchGmailMessage(accessToken, id), MESSAGE_DETAIL_CONCURRENCY);
+                    rows = [...mapDetailedMessages(detailed), ...rows].sort((a, b) => b.timestamp - a.timestamp);
+                  }
+                  current = {
+                    rows,
+                    nextPageToken: recheck.nextPageToken,
+                    exhausted: recheck.exhausted,
+                    expiresAt: 0,
+                    historyId: delta.historyId,
+                  };
+                } else {
+                  current = freshCacheEntry<MessageRow>();
+                }
+              }
+
               const seenIds = new Set(current.rows.map((row) => row.id));
               while (current.rows.length < maxResults && !current.exhausted) {
                 const needed = maxResults - current.rows.length;
@@ -381,16 +549,18 @@ export default withAuth(async (req, res, session) => {
                   continue;
                 }
 
-                // Bounded, not all at once. A page can be 100 messages and several accounts load in
-                // parallel, so an unbounded fan-out is hundreds of concurrent Gmail calls — the same
-                // shape that returned "Too many concurrent requests for user" on bulk actions, except
-                // here it fails the whole list rather than a few items. Ten at a time is well inside
-                // Gmail's per-user limit and still saturates the round-trip latency.
-                const detailed = await mapInBatches(ids, (id) => fetchGmailMessage(accessToken, id), 10);
+                // Bounded, not all at once — see MESSAGE_DETAIL_CONCURRENCY.
+                const detailed = await mapInBatches(ids, (id) => fetchGmailMessage(accessToken, id), MESSAGE_DETAIL_CONCURRENCY);
                 for (const row of mapDetailedMessages(detailed)) {
                   seenIds.add(row.id);
                   current.rows.push(row);
                 }
+              }
+              // First full fetch for a repairable view: establish the historyId baseline a later
+              // request can diff against. Best-effort — a failure here just means the next stale
+              // read falls back to a full refetch instead of a repair, exactly like today.
+              if (syncLabelId && !current.historyId) {
+                current.historyId = (await fetchMailboxHistoryId(accessToken).catch(() => null)) || undefined;
               }
               putCacheEntry(bucket, cacheSubKey, current);
               return current;
