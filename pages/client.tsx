@@ -29,7 +29,6 @@ const LinkedInContextSection = dynamic(
   { ssr: false }
 )
 
-
 type ClientPageProps = {
   initialUserName: string | null
   initialImageVersion: number | string
@@ -45,6 +44,22 @@ const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) =
   const [imageVersion, setImageVersion] = useState<number | string>(initialImageVersion)
 
   useEffect(() => {
+    // Scoped to the effect that is its only caller. It used to sit further down the component and
+    // be called from up here — legal, since a function declaration is hoisted, but it read as a
+    // use-before-declaration and the compiler flagged it as one.
+    async function fetchCurrentUser() {
+      try {
+        const response = await fetch("/api/profile/getUser")
+        if (response.ok) {
+          const userData = await response.json()
+          setCurrentUserName(userData.name)
+          if (userData.imageVersion) setImageVersion(userData.imageVersion)
+        }
+      } catch (error) {
+        console.error("Failed to fetch current user:", error)
+      }
+    }
+
     fetchCurrentUser()
   }, [])
 
@@ -56,18 +71,7 @@ const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) =
 
   useActivityHeartbeat()
 
-  async function fetchCurrentUser() {
-    try {
-      const response = await fetch("/api/profile/getUser")
-      if (response.ok) {
-        const userData = await response.json()
-        setCurrentUserName(userData.name)
-        if (userData.imageVersion) setImageVersion(userData.imageVersion)
-      }
-    } catch (error) {
-      console.error("Failed to fetch current user:", error)
-    }
-  }
+
 
   if (status === "loading") {
     return (

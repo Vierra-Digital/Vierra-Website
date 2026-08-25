@@ -83,7 +83,6 @@ const UserSettingsPage = dynamic(() => import("@/components/UserSettingsPage"), 
   ssr: false,
 })
 
-
 type PanelPageProps = {
   initialUserRole: "admin" | "staff"
   initialUserName: string | null
@@ -125,6 +124,22 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   const isAdmin = resolvedUserRole === "admin"
   const isStaff = resolvedUserRole === "staff"
   const canAccessEmailPanel = isAdmin || isStaff
+
+  // Moved above the effect that calls it. As a hoisted function declaration its position never
+  // affected behaviour, but referencing it from further up the file read as a use-before-
+  // declaration, and the compiler flagged it as one.
+  async function fetchCurrentUser() {
+    try {
+      const response = await fetch("/api/profile/getUser")
+      if (response.ok) {
+        const userData = await response.json()
+        setCurrentUserName(userData.name)
+        if (userData.imageVersion) setImageVersion(userData.imageVersion)
+      }
+    } catch (error) {
+      console.error("Failed to fetch current user:", error)
+    }
+  }
 
   useEffect(() => {
     fetchCurrentUser()
@@ -223,18 +238,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
 
   useActivityHeartbeat();
 
-  async function fetchCurrentUser() {
-    try {
-      const response = await fetch("/api/profile/getUser")
-      if (response.ok) {
-        const userData = await response.json()
-        setCurrentUserName(userData.name)
-        if (userData.imageVersion) setImageVersion(userData.imageVersion)
-      }
-    } catch (error) {
-      console.error("Failed to fetch current user:", error)
-    }
-  }
+
 
   const enterClientViewMode = (client: { id: string; name: string; email: string }) => {
     setViewClient(client)
