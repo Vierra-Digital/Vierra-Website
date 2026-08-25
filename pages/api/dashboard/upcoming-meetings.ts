@@ -13,9 +13,27 @@ export default withAuth(async (req, res, session) => {
   try {
     const userId = session.user.id
     const cached = await readCachedUpcomingMeetings(userId)
-    if (cached) {
+    // Re-sync when the cache has gone stale, not only when it is missing. The cron is the normal
+    // path, but if it has not ticked for this user the panel was serving yesterday's list — the
+    // meetings it held had already happened, so the future-only read returned fewer than the
+    // five it should, and the panel looked capped.
+    const STALE_AFTER_MS = 30 * 60 * 1000
+    const syncedAt = cached?.syncedAt ? cached.syncedAt.getTime() : 0
+    const isStale = !syncedAt || Date.now() - syncedAt > STALE_AFTER_MS
+    if (cached && !isStale) {
       res.status(200).json(cached)
       return
+    }
+    if (cached && isStale) {
+      try {
+        const refreshed = await syncUpcomingMeetingsForUser(userId)
+        res.status(200).json(refreshed)
+        return
+      } catch {
+        // A failed refresh should still serve what we have rather than erroring the panel.
+        res.status(200).json(cached)
+        return
+      }
     }
 
     const result = await syncUpcomingMeetingsForUser(userId)

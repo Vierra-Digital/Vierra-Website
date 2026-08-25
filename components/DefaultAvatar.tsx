@@ -22,7 +22,7 @@ const DefaultAvatar: React.FC<DefaultAvatarProps> = ({ name, size = 40, classNam
 
   return (
     <div 
-      className={`bg-gray-500 text-white rounded-full flex items-center justify-center font-semibold ${className}`}
+      className={`bg-[#4A1080] text-white rounded-full flex items-center justify-center font-semibold ${className}`}
       style={{ 
         width: size, 
         height: size,

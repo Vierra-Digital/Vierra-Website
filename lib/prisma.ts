@@ -26,10 +26,39 @@ function buildConnectionLimit(): number {
 function getDatasourceUrl(): string {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is required");
+  warnOnSessionModePooler(url);
   if (url.includes("connection_limit=")) return url;
   const limit = process.env.NEXT_PHASE === "phase-production-build" ? buildConnectionLimit() : RUNTIME_CONNECTION_LIMIT;
   const sep = url.includes("?") ? "&" : "?";
   return `${url}${sep}connection_limit=${limit}`;
+}
+
+/**
+ * Supabase exposes two pooler ports on the same host: 6543 is transaction mode, 5432 is
+ * session mode. Session mode pins a server connection for the life of each client and caps
+ * the whole project at 15 of them, so a dev server plus a `next build` plus a script is
+ * enough to exhaust it — at which point every query fails with
+ * "FATAL: (EMAXCONNSESSION) max clients reached in session mode". Prisma should use the
+ * transaction pooler (6543) with `pgbouncer=true`, which is what Supabase documents for it.
+ * Warn rather than rewrite the URL: silently redirecting someone's database connection is
+ * worse than telling them the port is wrong.
+ */
+function warnOnSessionModePooler(url: string) {
+  if (process.env.NODE_ENV === "production") return;
+  try {
+    const parsed = new URL(url);
+    const isSupabasePooler = parsed.hostname.includes("pooler.supabase.com");
+    const isSessionModePort = parsed.port === "5432";
+    if (isSupabasePooler && isSessionModePort) {
+      console.warn(
+        "[prisma] DATABASE_URL points at Supabase's SESSION-mode pooler (port 5432), which " +
+          "caps the project at 15 connections and fails with EMAXCONNSESSION once they're " +
+          "used. Prefer the transaction pooler: port 6543 with ?pgbouncer=true&connection_limit=1"
+      );
+    }
+  } catch {
+    /* an unparseable URL is Prisma's problem to report, not ours */
+  }
 }
 
 export const prisma =

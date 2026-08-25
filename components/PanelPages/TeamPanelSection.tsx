@@ -397,12 +397,12 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
     return (
         <div className="w-full h-full bg-white text-[#111014] flex flex-col">
-            <div className="flex-1 flex justify-center px-6 pt-2">
-                <div className="w-full max-w-6xl flex flex-col h-full">
-            <div className="w-full flex justify-between items-center mb-2">
-                <div>
-                            <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Staff Orbital</h1>
-                </div>
+            <div className="flex-1 px-8 lg:px-14 pt-1 overflow-x-hidden">
+                <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
+            <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em] text-[#111827] mt-8 mb-5">Staff Orbital</h1>
+            {/* Search / filter / invite belong under the title, not competing with it on the
+                same line — at 30px the heading and a row of controls fight for the same band. */}
+            <div className="w-full flex flex-wrap items-center gap-3 mb-5">
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
                         <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
