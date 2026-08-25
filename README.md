@@ -191,6 +191,7 @@ Copy **`.env.example`** → **`.env`**. Never commit `.env`.
 | `MANUS_*` | Manus AI content generation |
 | `ANSWER_THE_PUBLIC_BRIDGE_*` | External research bridge |
 | `GOOGLE_VERIFICATION` | Google Search Console meta verification |
+| `ANALYTICS_VALIDATE_URL` / `_KEY` / `_PROJECT_ID` | Self-hosted analytics licence check. Unset means `/api/analytics/validate` reports `not_configured` and makes no upstream call |
 | `NETLIFY` | Set on Netlify; layout skips duplicate GA scripts (edge injects tag) |
 
 ### Email platform (cron, alerts, AI)
