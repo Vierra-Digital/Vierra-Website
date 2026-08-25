@@ -492,6 +492,16 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     accountEmail: string;
   };
   const [bookings, setBookings] = useState<BookingRow[]>([]);
+  /**
+   * The clock reading each booking's upcoming/past label is measured against, taken when the list
+   * is loaded.
+   *
+   * Calling Date.now() while rendering the list made the render impure: the same render produced
+   * different labels depending on when it ran, and because nothing re-renders as time passes, a
+   * meeting that had just started still read as upcoming until some unrelated state changed.
+   * Anchoring it to the fetch makes the labels consistent with the data they describe.
+   */
+  const [bookingsAsOf, setBookingsAsOf] = useState(() => Date.now());
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null);
   const [promptConfig, setPromptConfig] = useState<PromptConfig>(null);
   const [promptBusy, setPromptBusy] = useState(false);
@@ -894,7 +904,10 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     try {
       const r = await fetch("/api/booking/bookings");
       const d = await r.json().catch(() => ({}));
-      if (r.ok) setBookings(Array.isArray(d?.bookings) ? d.bookings : []);
+      if (r.ok) {
+        setBookings(Array.isArray(d?.bookings) ? d.bookings : []);
+        setBookingsAsOf(Date.now());
+      }
     } catch {
       /* ignore */
     }
@@ -2538,7 +2551,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                       <ul className="space-y-2">
                         {bookings.slice(0, 20).map((b) => {
                           const start = new Date(b.startAt);
-                          const upcoming = start.getTime() >= Date.now();
+                          const upcoming = start.getTime() >= bookingsAsOf;
                           const attendanceLabel =
                             b.attendanceStatus === "held" ? "Held" : b.attendanceStatus === "not_held" ? "Not held" : null;
                           return (

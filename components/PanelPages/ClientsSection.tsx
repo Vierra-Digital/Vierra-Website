@@ -84,6 +84,16 @@ interface ClientsSectionProps {
 
 const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTrigger, onViewClient }) => {
     const [rows, setRows] = useState<ClientRow[]>([])
+    /**
+     * Cache-buster for client avatars, stamped once per load of the list.
+     *
+     * This was Date.now() inline in the image src, evaluated during render — so every render
+     * produced a new URL and the browser re-downloaded every avatar on the page. Any state change
+     * did it: typing in the search box, paging, opening a dialog. Stamping it when the list is
+     * fetched still picks up a newly uploaded image, which is what the buster is for, without
+     * refetching on unrelated renders.
+     */
+    const [imageStamp, setImageStamp] = useState(() => Date.now())
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [currentPage, setCurrentPage] = useState(0)
@@ -103,6 +113,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
             if (!r.ok) throw new Error(`HTTP ${r.status}`)
             const data: ClientRow[] = await r.json()
             setRows(data)
+            setImageStamp(Date.now())
         } catch (e: any) {
             setError(e?.message ?? "Failed to load clients")
         } finally {
@@ -405,7 +416,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                                     <td className="px-4 py-4">
                                                         <div className="flex items-center gap-3">
                                                             <ProfileImage
-                                                                src={r.image ? `/api/admin/getClientImage?clientId=${r.id}&t=${Date.now()}` : null}
+                                                                src={r.image ? `/api/admin/getClientImage?clientId=${r.id}&t=${imageStamp}` : null}
                                                                 name={r.name}
                                                                 size={32}
                                                                 alt={`${r.name}'s profile`}
