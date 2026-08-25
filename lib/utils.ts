@@ -12,3 +12,12 @@ export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Convenience wrapper: trims then format-checks. */
 export const isValidEmail = (value: string): boolean => EMAIL_REGEX.test(value.trim());
+
+/** Escape untrusted text before inserting it into an HTML document. */
+export const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
