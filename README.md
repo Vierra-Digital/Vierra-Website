@@ -163,9 +163,11 @@ Copy **`.env.example`** → **`.env`**. Never commit `.env`.
 
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `NEXTAUTH_URL` | Canonical app URL (e.g. `http://localhost:3000`) |
-| `NEXTAUTH_SECRET` | Random secret for JWT/session signing |
+| `DATABASE_URL` | Pooled PostgreSQL connection the app runs on (Supabase pooler, port 6543) |
+| `DIRECT_URL` | Direct connection (port 5432) for schema work. Prisma reads it via `directUrl`, so every `prisma migrate` / `db pull` / `studio` command fails with `P1012` when it is unset — `prisma generate` and `next build` do not need it |
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project, used by both the browser and server clients |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service-role key for the writes a not-yet-affiliated user has no RLS path for (client backfill, invitation auto-accept). Server only |
+| `NEXT_PUBLIC_APP_URL` | Canonical app origin (e.g. `http://localhost:3000`) |
 | `ENCRYPTION_SECRET` | Base64 key for encrypting stored secrets |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth (login + Gmail) |
 
@@ -177,7 +179,7 @@ Copy **`.env.example`** → **`.env`**. Never commit `.env`.
 | `FROM_EMAIL` / `FROM_NAME` | Default sender |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Billing & webhooks |
 | `GA4_PROPERTY_ID` + `GA4_OAUTH_REFRESH_TOKEN` | Dashboard Website Visits chart (`npm run connect-ga4`) |
-| `NEXT_PUBLIC_APP_URL` / `APP_URL` | Public/base URL fallbacks |
+| `APP_URL` / `NEXT_PUBLIC_SITE_URL` | Base-URL fallbacks for cron and tracking-link builders |
 
 ### Integration-specific (optional)
 
@@ -207,9 +209,15 @@ Full template with comments: [`.env.example`](./.env.example).
 
 ## Authentication & roles
 
-- **NextAuth** entry: `pages/api/auth/[...nextauth].ts`
-- Providers: **Google** + **credentials** (email/password for staff/clients)
-- Session strategy: JWT; user `role` stored on token
+- **Supabase Auth**; there is no NextAuth in this repo (`next-auth` is not a dependency)
+- Providers: **Google** OAuth + email/password, both through Supabase
+- The session cookie is verified per request by `requireSession` (`lib/auth.ts`), which hands the
+  verified user to `resolveUser` (`lib/auth/resolveUser.ts`)
+- `resolveUser` classifies the caller as a company `member`, a `client`, or `unaffiliated` using the
+  `user_company_id()` / `user_company_role()` / `user_client_id()` SQL functions, so the panel role
+  lives on the database rather than on a token
+- API routes authorize with `requireRole(req, res, ["admin", "staff"])`, or the equivalent
+  `requireSessionOrRespond401` + `requireRolesOrRespond403` guards in `lib/api/guards.ts`
 
 | Role | Access |
 |------|--------|
@@ -522,7 +530,8 @@ npm run test:coverage     # run with the coverage gate
 - Build: `npx prisma generate && npm run build`
 - Publish: `.next` (Next.js Netlify plugin)
 - Set all production env vars in the Netlify UI (mirror `.env.example`)
-- `NEXTAUTH_URL` must match the deployed origin (e.g. `https://vierradev.com`)
+- `NEXT_PUBLIC_APP_URL` must match the deployed origin (e.g. `https://vierradev.com`)
+- `DIRECT_URL` is not needed for the Netlify build (it runs `prisma generate`, not `migrate`), but is required wherever migrations are run
 
 ### Build minutes
 
@@ -561,7 +570,7 @@ A quick health check (idempotent): `curl -s -X POST -H "x-cron-secret: <CRON_SEC
 
 ## Security notes
 
-- **Secrets**: Keep `.env` out of git; rotate `NEXTAUTH_SECRET` and `ENCRYPTION_SECRET` if leaked
+- **Secrets**: Keep `.env` out of git; rotate `SUPABASE_SERVICE_ROLE_KEY` and `ENCRYPTION_SECRET` if leaked
 - **Encryption**: Passwords and OAuth tokens encrypted with `lib/crypto.ts` (`ENCRYPTION_SECRET`)
 - **Webhooks**: Stripe webhook verifies signature with `STRIPE_WEBHOOK_SECRET`
 - **Panel routes**: Protected with `getServerSideProps` + role checks
