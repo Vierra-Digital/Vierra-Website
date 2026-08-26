@@ -435,7 +435,13 @@ input[type="search"]::-ms-clear:hover {
    backgrounds and would be unreadable inverted.
    ─────────────────────────────────────────────────────────────────────────────── */
 
-.email-shell {
+/* The mail palette lives at :root, not on .email-shell.
+   Every consumer is a .email-shell descendant and inherits these either way, but modals portal to
+   document.body — outside .email-shell entirely — so a dialog rendered there could not read the
+   palette. That is why each one had picked its own near-miss shade by hand (#171225, #17122A),
+   none of which matched the panel. Defining them here is what lets a portaled dialog be the same
+   surface as the panel it belongs to. */
+:root {
   --mail-surface: #141020;      /* cards, list, reader */
   --mail-surface-2: #1B1529;    /* raised: toolbars, hovers */
   --mail-surface-3: #221A33;    /* active/selected rows */
@@ -518,6 +524,37 @@ input[type="search"]::-ms-clear:hover {
 .email-shell .border-\[\#F2EFF8\]:not(.email-body-card *) {
   border-color: var(--mail-border);
 }
+/* Tailwind's numbered grey palette.
+   The hex lists above cover the panel's own colours, which is everything the mail views use. The
+   campaigns views were written against Tailwind's greys instead (bg-gray-50/100/200,
+   text-gray-500/700/800), so none of them were remapped and that whole surface — list, detail,
+   contacts, analytics — rendered light on the dark panel. Mapped onto the same translucent steps
+   the rest of the shell uses, so a grey fill reads as a raised step rather than a bright patch. */
+.email-shell .bg-gray-50:not(.email-body-card *),
+.email-shell .bg-gray-100:not(.email-body-card *) { background-color: rgba(255, 255, 255, 0.055); }
+.email-shell .bg-gray-200:not(.email-body-card *),
+.email-shell .hover\:bg-gray-200:hover:not(.email-body-card *) { background-color: rgba(255, 255, 255, 0.11); }
+.email-shell .hover\:bg-gray-50:hover:not(.email-body-card *),
+.email-shell .hover\:bg-gray-100:hover:not(.email-body-card *) { background-color: rgba(255, 255, 255, 0.08); }
+.email-shell .text-gray-500:not(.email-body-card *),
+.email-shell .text-gray-600:not(.email-body-card *),
+.email-shell .text-gray-700:not(.email-body-card *),
+.email-shell .text-gray-800:not(.email-body-card *),
+.email-shell .text-gray-900:not(.email-body-card *) { color: var(--mail-text-muted); }
+.email-shell .border-gray-100:not(.email-body-card *),
+.email-shell .border-gray-200:not(.email-body-card *),
+.email-shell .border-gray-300:not(.email-body-card *) { border-color: var(--mail-border); }
+
+/* Stray one-off hexes from the campaigns views: a near-black body colour, two light purple washes
+   and three hairlines that each appear once. */
+.email-shell .text-\[\#111014\]:not(.email-body-card *) { color: var(--mail-text); }
+.email-shell .bg-\[\#F8F4FF\]:not(.email-body-card *),
+.email-shell .bg-\[\#F5EEFC\]:not(.email-body-card *) { background-color: var(--mail-brand-tint); }
+.email-shell .bg-\[\#E5E7EB\]:not(.email-body-card *) { background-color: rgba(255, 255, 255, 0.07); }
+.email-shell .border-\[\#ECEAF1\]:not(.email-body-card *) { border-color: var(--mail-border); }
+.email-shell .divide-\[\#F1EFF6\]:not(.email-body-card *) > * + *,
+.email-shell .divide-\[\#E5E7EB\]:not(.email-body-card *) > * + * { border-color: var(--mail-border); }
+
 .email-shell .divide-gray-100:not(.email-body-card *) > * + * {
   border-color: var(--mail-border);
 }
@@ -599,20 +636,89 @@ input[type="search"]::-ms-clear:hover {
 }
 
 /* Panel dialogs follow the dark theme (New Label, Delete Label, prompts). */
+/* Dialogs opened from the email panel.
+   Portaled to document.body, so none of the .email-shell overrides reach them — this class is the
+   whole theme for that subtree and has to be self-sufficient.
+   Surface is --mail-surface-2, the panel's *raised* step: one stop lighter than the list and reader
+   beneath, which is what makes a dialog read as "on top" without a heavy outline. It used to be a
+   hand-picked #171225, close to but not equal to any panel surface, which is why these dialogs
+   never looked like part of the panel. */
 .email-dialog-dark {
-  background: #171225 !important;
-  border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  background: var(--mail-surface-2) !important;
+  border: 1px solid var(--mail-border) !important;
   box-shadow: 0 30px 80px -28px rgba(0, 0, 0, 0.75) !important;
+  color: var(--mail-text);
 }
-.email-dialog-dark h3 { color: #F1EEFA; }
-.email-dialog-dark p { color: #A29CBB; }
+.email-dialog-dark h1,
+.email-dialog-dark h2,
+.email-dialog-dark h3,
+.email-dialog-dark h4 { color: var(--mail-text); }
+.email-dialog-dark p,
+.email-dialog-dark label,
+.email-dialog-dark span:not([class*="text-red"]):not([class*="text-green"]):not([class*="bg-"]) {
+  color: var(--mail-text-muted);
+}
+
+/* Fields. Recessed rather than outlined: a filled well on a raised surface reads as editable
+   without adding a second border weight next to the dialog's own. */
 .email-dialog-dark input,
-.email-dialog-dark textarea {
-  background-color: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.10);
+.email-dialog-dark textarea,
+.email-dialog-dark select {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
   color: #F1EEFA;
 }
-.email-dialog-dark input::placeholder { color: #6F6889; }
+.email-dialog-dark input::placeholder,
+.email-dialog-dark textarea::placeholder { color: #6F6889; }
+.email-dialog-dark input:focus,
+.email-dialog-dark textarea:focus,
+.email-dialog-dark select:focus {
+  border-color: rgba(185, 140, 255, 0.6);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(143, 66, 255, 0.25);
+}
+/* Native dropdowns render in the OS layer, which does not inherit — set explicitly or the list
+   comes back white on a dark control. */
+.email-dialog-dark select option { background: var(--mail-surface-2); color: var(--mail-text); }
+
+/* Light-theme leftovers in the markup: these dialogs are shared with the light panel, so the
+   surfaces and hairlines they ship still need remapping here — the .email-shell rules that would
+   normally do it cannot reach a portaled subtree. */
+.email-dialog-dark .bg-white { background-color: var(--mail-surface-2); }
+.email-dialog-dark .bg-\[\#F9FAFB\],
+.email-dialog-dark .bg-\[\#F3F4F6\],
+.email-dialog-dark .bg-\[\#FAFAFB\],
+.email-dialog-dark .bg-gray-50 { background-color: rgba(255, 255, 255, 0.04); }
+.email-dialog-dark .bg-\[\#F5EFFF\],
+.email-dialog-dark .bg-\[\#F4F1FA\] { background-color: var(--mail-brand-tint); }
+.email-dialog-dark .text-\[\#111827\],
+.email-dialog-dark .text-\[\#1E1B2E\],
+.email-dialog-dark .text-\[\#241245\] { color: var(--mail-text); }
+.email-dialog-dark .text-\[\#374151\],
+.email-dialog-dark .text-\[\#6B7280\],
+.email-dialog-dark .text-\[\#9CA3AF\],
+.email-dialog-dark .text-\[\#5f6368\] { color: var(--mail-text-muted); }
+.email-dialog-dark .border-\[\#E5E7EB\],
+.email-dialog-dark .border-\[\#EAE5F4\],
+.email-dialog-dark .border-\[\#D1D5DB\],
+.email-dialog-dark .border-gray-200,
+.email-dialog-dark .border-gray-300 { border-color: var(--mail-border); }
+.email-dialog-dark .divide-gray-100 > * + *,
+.email-dialog-dark .divide-gray-200 > * + * { border-color: var(--mail-border); }
+.email-dialog-dark .hover\:bg-gray-50:hover,
+.email-dialog-dark .hover\:bg-\[\#F3F4F6\]:hover { background-color: rgba(255, 255, 255, 0.06); }
+/* Wizard chrome: the step rail's connector hairline, the inactive step discs, and the secondary
+   button all shipped light greys that Tailwind's palette puts outside the hex list above. */
+.email-dialog-dark .bg-gray-100,
+.email-dialog-dark .bg-\[\#E5E7EB\] { background-color: rgba(255, 255, 255, 0.07); }
+.email-dialog-dark .bg-gray-200,
+.email-dialog-dark .hover\:bg-gray-200:hover { background-color: rgba(255, 255, 255, 0.12); }
+.email-dialog-dark .text-gray-500,
+.email-dialog-dark .text-gray-600,
+.email-dialog-dark .text-gray-800 { color: var(--mail-text-muted); }
+/* Selected choice card: the light purple wash becomes the panel's brand tint, so "chosen" reads
+   the same here as it does in the mail list. */
+.email-dialog-dark .bg-\[\#F5EEFC\] { background-color: var(--mail-brand-tint); }
 
 /* Dragged rail item: keep it legible (a faint lift), never a washed-out ghost. */
 .email-shell .email-nav-dragging {
@@ -883,22 +989,11 @@ input[type="search"]::-ms-clear:hover {
 .email-shell .email-content .divide-y > * + *,
 .email-shell .email-content hr { border-color: rgba(255, 255, 255, 0.05); }
 
-/* Panel dialogs (New Label / Rename Label / Delete Label): consistent dark styling for the
-   header, body and both actions, so the three read as one family. */
-.email-dialog-dark h3 { color: #F1EEFA; }
-.email-dialog-dark p,
-.email-dialog-dark label { color: #A29CBB; }
-.email-dialog-dark input,
-.email-dialog-dark textarea {
-  background-color: rgba(255, 255, 255, 0.05) !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
-  color: #F1EEFA !important;
-}
-.email-dialog-dark input:focus,
-.email-dialog-dark textarea:focus {
-  border-color: rgba(185, 140, 255, 0.6) !important;
-  box-shadow: 0 0 0 2px rgba(143, 66, 255, 0.25) !important;
-}
+/* Panel dialogs — heading, body and field styling all live in the single .email-dialog-dark block
+   above. A second copy used to sit here with !important, which meant it silently overrode the
+   canonical rules from further down the file; the two had already drifted apart. Only the
+   destructive-action tuning is specific enough to keep separate. */
+
 /* Destructive confirm keeps its red, but tuned for the dark card. */
 .email-dialog-dark .bg-red-600 { background-color: #DC2626; }
 .email-dialog-dark .bg-red-100 { background-color: rgba(220, 38, 38, 0.16); }
