@@ -12,6 +12,7 @@ import { track } from "@/lib/track"
 import LazyMount from "@/components/LazyMount"
 import { BusinessSolutions } from "@/components/BusinessSection/BusinessSolutions"
 import { SECTION_SCROLL_KEY, scrollWindowToSection } from "@/lib/sectionScroll"
+import { jsonLd } from "@/lib/jsonLd";
 
 // Below-the-fold sections are code-split so they stay out of the homepage's
 // initial JS chunk. Text-bearing sections keep SSR (next/dynamic defaults to
@@ -233,7 +234,7 @@ export default function HomeClient() {
               <script
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
-                  __html: JSON.stringify({
+                  __html: jsonLd({
                     "@context": "https://schema.org",
                     "@type": "WebPage",
                     "@id": "https://vierradev.com/#webpage",

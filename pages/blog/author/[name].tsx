@@ -9,6 +9,7 @@ import { authorSameAs, getAuthorProfile } from "@/lib/authorProfiles"
 import { m as motion } from "framer-motion"
 import { ChevronRight } from "lucide-react"
 import Image from "next/image"
+import { jsonLd } from "@/lib/jsonLd";
 
 
 type AuthorPageProps = {
@@ -59,7 +60,7 @@ export default function AuthorPage({ authorName, posts }: AuthorPageProps) {
         id="schema-org-breadcrumbs-author"
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
+          __html: jsonLd({
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
             itemListElement: [
@@ -74,7 +75,7 @@ export default function AuthorPage({ authorName, posts }: AuthorPageProps) {
         id="schema-org-author-collection"
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
+          __html: jsonLd({
             "@context": "https://schema.org",
             "@type": "ProfilePage",
             name: `Author: ${authorName}`,
