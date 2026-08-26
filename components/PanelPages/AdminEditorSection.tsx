@@ -106,22 +106,41 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ id: userId }),
             })
-            if (r.ok) setResetSent((prev) => ({ ...prev, [userId]: true }))
+            if (r.ok) {
+                setResetSent((prev) => ({ ...prev, [userId]: true }))
+            } else {
+                // A non-ok response used to fall through silently, so a failed send looked identical
+                // to a successful one — the admin had no way to know the email never went out.
+                const body = await r.json().catch(() => ({}))
+                setError(body?.message || `Could not send the reset link (HTTP ${r.status}).`)
+            }
         } catch {
+            setError("Could not send the reset link — the request failed.")
         } finally {
             setResetSending((prev) => ({ ...prev, [userId]: false }))
         }
     }
 
     const updateRole = async (userId: string, role: string) => {
+        setError("")
         try {
-            await fetch("/api/admin/users", {
+            const r = await fetch("/api/admin/users", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ id: userId, role }),
             })
+            // The response was previously never checked, so the row was rewritten locally even when
+            // the server refused the change — the table then showed a role the database did not
+            // have, and it survived until the next reload.
+            if (!r.ok) {
+                const body = await r.json().catch(() => ({}))
+                setError(body?.message || `Could not change the role (HTTP ${r.status}).`)
+                return
+            }
             setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)))
-        } catch {}
+        } catch {
+            setError("Could not change the role — the request failed.")
+        }
     }
 
 

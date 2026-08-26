@@ -263,7 +263,11 @@ const OutreachSection = () => {
             }
             setStats(newStats);
             setHasUnsavedChanges(false)
-        } catch {
+        } catch (e) {
+            // Not surfaced in the UI: this section has no error surface, and adding one is a design
+            // change rather than a fix. Logging at least makes a failed load diagnosable instead of
+            // silently indistinguishable from a month that genuinely has no data.
+            console.error("outreach: load failed", e);
         } finally {
             setIsLoading(false);
         }
@@ -332,7 +336,11 @@ const OutreachSection = () => {
                 attemptsToMeetingsPct: calculatePercentage(yearly.totalMeetingsSet, yearly.totalAttempt),
                 meetingsToClientsPct: calculatePercentage(yearly.totalClientsLosed, yearly.totalMeetingsSet)
             })
-        } catch {
+        } catch (e) {
+            // Not surfaced in the UI: this section has no error surface, and adding one is a design
+            // change rather than a fix. Logging at least makes a failed load diagnosable instead of
+            // silently indistinguishable from a month that genuinely has no data.
+            console.error("outreach: load failed", e);
         } finally {
             setIsLoading(false);
         }
@@ -347,7 +355,11 @@ const OutreachSection = () => {
             setClients(Array.isArray(data.clients) ? data.clients : [])
             setClientData(Array.isArray(data.trackerData) ? data.trackerData : [])
             setClientDirty(false)
-        } catch {
+        } catch (e) {
+            // Not surfaced in the UI: this section has no error surface, and adding one is a design
+            // change rather than a fix. Logging at least makes a failed load diagnosable instead of
+            // silently indistinguishable from a month that genuinely has no data.
+            console.error("outreach: load failed", e);
         } finally {
             setIsLoading(false)
         }
