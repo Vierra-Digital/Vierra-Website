@@ -135,15 +135,13 @@ npm run create-client
 | `dev` | `next dev --turbopack` | Local development server (Turbopack) |
 | `build` | `next build` | Production build |
 | `start` | `next start` | Run production build locally |
-| `lint` | `next lint` | ESLint |
+| `lint` | `eslint .` | ESLint (flat config in `eslint.config.mjs`; `next lint` was removed in Next 16) |
 | `test` | `vitest run` | Unit tests |
 | `test:coverage` | `vitest run --coverage` | Unit tests with the coverage gate |
 | `db:migrate` | `prisma migrate deploy` | Apply pending migrations |
 | `db:generate` | `prisma generate` | Regenerate Prisma Client |
-| `syncdb` | `node scripts/sync-db.js` | DB sync helper (requires script in repo) |
-| `envlocal` | `node scripts/generate-env.js local` | Env generator (requires `scripts/generate-env.js`) |
-| `envprod` | `node scripts/generate-env.js prod` | Env generator for production |
-| `create-client` | `node scripts/create-client.js` | CLI to create a client account (requires script in repo) |
+| `create-client` | `node scripts/create-client.js` | CLI to create a client account |
+| `syncdb`, `envlocal`, `envprod` | `node scripts/…` | Local-only helpers. **The scripts they call are gitignored and not in the repo**, so these fail on a fresh clone — copy `.env.example` to `.env` instead |
 | `connect-ga4` | `node scripts/connect-ga4.js` | OAuth setup for dashboard Website Visits chart |
 
 Netlify production build (see `netlify.toml`):
@@ -242,7 +240,7 @@ Routes use **Pages Router** unless listed under **App Router**.
 | Route | File | Description |
 |-------|------|-------------|
 | `/` | `app/page.tsx` | Marketing homepage (3D hero, services, contact) |
-| `/set-password/[token]` | `app/set-password/[token]/page.tsx` | Set password from email link |
+| `/set-password` | `app/set-password/page.tsx` | Set password from an invite or recovery link (token arrives in the URL hash) |
 | `/stripe/success` | `app/stripe/success/page.tsx` | Post-checkout success |
 | `/sitemap.xml` | `app/sitemap.ts` | Dynamic sitemap |
 | (404) | `app/not-found.tsx` | Not found UI |
@@ -341,7 +339,7 @@ distinguishes "not authorized" from "no data" so the UI can say which.
 | GET | `/api/gmail/status` | Connection status |
 | POST | `/api/gmail/delete` | Disconnect Gmail |
 | GET | `/api/gmail/messages` | List messages |
-| GET | `/api/gmail/message` | Single message |
+| GET | `/api/gmail/message-detail` | Single message, with inline images resolved |
 | POST | `/api/gmail/send` | Send email |
 | POST | `/api/gmail/drafts` | Save draft |
 | … | `/api/gmail/*` | Labels, threads, sync, contacts, signatures, templates, tracking, etc. |
@@ -462,14 +460,23 @@ Settings overlay: `UserSettingsPage` (profile, Gmail reconnect, **Detected Googl
 ### Migrations
 
 ```bash
-npx prisma migrate dev --name describe_change   # local dev
-npm run db:migrate                               # deploy
-npx prisma studio                                # GUI browser
+npm run db:migrate     # prisma migrate deploy — safe, applies pending migrations only
+npx prisma studio      # GUI browser
 ```
 
 **Do not run `prisma db push` or `prisma migrate dev` against this database.** `schema.prisma` cannot express one constraint the database has — the `public.users.id -> auth.users.id` foreign key, because the `auth` schema model is `@@ignore`d — so both commands generate a migration that drops it. Schema changes are applied directly and recorded as SQL in `prisma/manual/`. The `db:push` script was removed for this reason.
 
-Some schema changes are applied **out-of-band** as hand-written SQL in `prisma/manual/*.sql`, run with `npx prisma db execute --file prisma/manual/<name>.sql --schema prisma/schema.prisma`, then mirrored into `schema.prisma` and picked up by `prisma generate`. The email-platform tables (tracking, campaigns, bookings, mailbox grants, nav preferences, account settings) live here.
+Schema changes are applied **out-of-band** as hand-written SQL in `prisma/manual/*.sql`:
+
+```bash
+npx prisma db execute --file prisma/manual/<name>.sql
+```
+
+(no `--schema` flag — Prisma 7 removed it; the schema path comes from `prisma.config.ts`.)
+
+Then mirror the change into `schema.prisma` and run `prisma generate`. `prisma/manual/` is the real change record: the email-platform tables (tracking, campaigns, bookings, mailbox grants, nav preferences, account settings) all arrived this way, as did the unique indexes and the enum-type cleanup.
+
+`prisma/migrations/` is **baselined pre-v2 history**. Every folder is recorded as applied, so `migrate deploy` reports nothing pending, but the contents do not describe the live schema — they reference tables the v2 redesign dropped. Do not expect to replay them.
 
 ---
 
@@ -509,18 +516,21 @@ npm run test:coverage     # run with the coverage gate
 ```
 
 - Specs live in `tests/*.test.ts`.
-- `vitest.config.ts` scopes the coverage `include` list to modules that actually have tests, so the
+- `vitest.config.mts` scopes the coverage `include` list to modules that actually have tests, so the
   threshold is a real gate rather than being diluted toward zero by the whole app. **Add new modules
   to that list as their specs land** — otherwise they are not protected by the gate.
-- CI (`.github/workflows/ci.yml`) runs `prisma generate` → `tsc --noEmit` → `next lint` →
-  `test:coverage`.
+- CI (`.github/workflows/ci.yml`) runs `npm ci` → `prisma generate` → `tsc --noEmit` →
+  `eslint .` → `test:coverage`. The required checks on `master` are `quality` and `ensure-CC`.
+- **Run `npx prisma generate` after pulling a schema change.** The client is generated to
+  `lib/generated/prisma`, which is gitignored, so a fresh clone has no client until you do.
 
 ### Two gotchas
 
-- **`jsx` in `tsconfig.json` is `preserve` on purpose.** `next build` / `next lint` rewrite that key
-  (Next compiles JSX itself), so committing anything else produces a phantom diff on every build.
-  Vitest therefore owns its own JSX transform via `oxc` in `vitest.config.ts` — don't make the test
-  runner depend on the tsconfig value again.
+- **Don't hand-edit `jsx` in `tsconfig.json`.** Next rewrites that key on every build and lint
+  because it compiles JSX itself, and which value it writes depends on the version — 15 forced
+  `preserve`, 16 forces `react-jsx`. Anything else you commit is reverted under you. tsconfig
+  therefore stores whatever the installed Next enforces, and Vitest owns its own JSX transform via
+  `oxc` in `vitest.config.mts` — don't make the test runner depend on the tsconfig value again.
 - **Run `npx prisma generate` after pulling a schema change**, or `tsc` fails locally against a
   stale client while CI (which always regenerates) passes.
 
@@ -572,11 +582,58 @@ A quick health check (idempotent): `curl -s -X POST -H "x-cron-secret: <CRON_SEC
 
 ## Security notes
 
-- **Secrets**: Keep `.env` out of git; rotate `SUPABASE_SERVICE_ROLE_KEY` and `ENCRYPTION_SECRET` if leaked
-- **Encryption**: Passwords and OAuth tokens encrypted with `lib/crypto.ts` (`ENCRYPTION_SECRET`)
-- **Webhooks**: Stripe webhook verifies signature with `STRIPE_WEBHOOK_SECRET`
-- **Panel routes**: Protected with `getServerSideProps` + role checks
-- **Dependencies**: Run `npm audit` periodically; lockfile pinned in `package-lock.json`
+**Secrets**
+- Keep `.env` out of git. Rotate `SUPABASE_SERVICE_ROLE_KEY` and `ENCRYPTION_SECRET` if leaked.
+- Passwords and OAuth tokens are encrypted with `lib/crypto.ts` (`ENCRYPTION_SECRET`).
+- The IndexNow key in `lib/indexnow.ts` is **public by design** — it must match the file served at
+  `/<key>.txt`, which is how IndexNow proves domain ownership. It is not a leak.
+
+**Authorization**
+- `proxy.ts` deliberately does **not** match `/api/`, so every API route is responsible for its own
+  authorization. There is no blanket guard to fall back on.
+- Session routes use `requireRole(req, res, ["admin", "staff"])` from `lib/auth.ts`, or the
+  `requireSessionOrRespond401` / `requireRolesOrRespond403` pair in `lib/api/guards.ts`. Those guards
+  throw a `__handled__` sentinel that `handleApiError` swallows, which is why callers legitimately
+  do not `return` after them.
+- Scheduled functions are gated on `CRON_SECRET` compared with `safeCompare` (timing-safe).
+- The browser extension authenticates with `EXTENSION_TRACK_TOKEN`; it cannot use the session cookie
+  cross-origin.
+- Admin endpoints scope every lookup by `company_id` to prevent cross-tenant reads. See
+  `tests/adminAuthz.test.ts`, which pins that on the representative case.
+
+**Untrusted input**
+- Email HTML is rendered through `sanitizeRichEmailHtml`. The public confidential viewer
+  (`/c/[token]`) additionally passes `restrictStyles`, because an inline `background:url(...)` would
+  otherwise beacon the viewer's IP on render.
+- Structured data goes through `jsonLd()` (`lib/jsonLd.ts`), which escapes `<` so panel-authored
+  content cannot close a `<script type="application/ld+json">` block early.
+- Public form submissions are normalized and length-limited server-side
+  (`lib/publicFormValidation.ts`, `lib/careerApplicationValidation.ts`), with a honeypot and per-IP
+  rate limiting. The client and server share the same rules so the UI cannot be bypassed.
+- Values interpolated into generated email HTML are escaped with `escapeHtml` (`lib/utils.ts`).
+- `/api/careers/apply-chunk` restricts its upload target to the exact Google Drive resumable
+  endpoint, so it cannot be used as a request proxy.
+- The markdown mirror resolves paths through a `STATIC_PAGES` allowlist rather than joining URL
+  segments onto a directory.
+
+**Rate limiting** — `lib/rateLimit.ts` is in-memory and per-instance, so it is a soft limit under
+scaled-out concurrency, not a hard guarantee. Applied to the audit form, career applications,
+confidential-link unlock, and blog view counting. For a hard guarantee, back it with Redis or a
+Netlify rate-limiting rule.
+
+**Transport & headers** — CSP, HSTS, `Referrer-Policy`, `Permissions-Policy`, `X-Content-Type-Options`
+and `X-Frame-Options` are set in `next.config.js`; HSTS is repeated in `netlify.toml` for static files
+that bypass the app. Keep the CSP allowlist minimal — every host in `script-src` is a place a
+compromised CDN could serve executable code from.
+
+**Cookies** — the onboarding cookie is `httpOnly`, `sameSite=lax`, `secure` in production, path-scoped
+and expiring.
+
+**Webhooks** — Stripe verifies its signature with `STRIPE_WEBHOOK_SECRET`.
+
+**Dependencies** — run `npm audit` periodically; the lockfile is committed. Note that `prisma` (a
+devDependency) currently pulls a high-severity `deepmerge-ts` advisory through `@prisma/config`. It is
+build-time only and npm's suggested "fix" is a major downgrade, so it is knowingly accepted.
 
 ---
 

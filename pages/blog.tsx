@@ -8,6 +8,7 @@ import { Search, ChevronRight } from "lucide-react";
 import Footer from "@/components/FooterSection/Footer";
 import { GetStaticProps } from "next";
 import Link from "next/link";
+import { jsonLd } from "@/lib/jsonLd";
 
 type BlogPostType = {
     id: string;
@@ -217,7 +218,7 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                 id="schema-org-breadcrumbs"
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
-                    __html: JSON.stringify({
+                    __html: jsonLd({
                         "@context": "https://schema.org",
                         "@type": "BreadcrumbList",
                         itemListElement: [
@@ -241,7 +242,7 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                 id="schema-org-blog"
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
-                    __html: JSON.stringify({
+                    __html: jsonLd({
                         "@context": "https://schema.org",
                         "@type": "Blog",
                         "@id": "https://vierradev.com/blog",

@@ -7,6 +7,7 @@ import { Header } from '@/components/Header';
 import Footer from '@/components/FooterSection/Footer';
 import { Modal } from '@/components/Modal';
 import { FAQ_ITEMS, FAQ_LAST_UPDATED } from '@/lib/faq';
+import { jsonLd } from "@/lib/jsonLd";
 
 
 const CANONICAL = 'https://vierradev.com/faq';
@@ -73,18 +74,18 @@ const FaqPage: React.FC = () => {
       </Head>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLd(faqLd) }}
       />
       <script
         id="schema-org-breadcrumbs-faq"
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbLd) }}
       />
       <script
         id="schema-org-speakable-faq"
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
+          __html: jsonLd({
             '@context': 'https://schema.org',
             '@type': 'WebPage',
             '@id': 'https://vierradev.com/faq#webpage',
