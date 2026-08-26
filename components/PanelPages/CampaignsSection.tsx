@@ -33,7 +33,7 @@ export type Campaign = {
    not remap — that list covers the panel's own hexes, not Tailwind's numbered palette — so every
    chip rendered as a bright pill on a dark row. A translucent tint with light text of the same hue
    keeps each status distinguishable while sitting on the surface instead of punching through it. */
-const STATUS_STYLE: Record<Campaign["status"], string> = {
+export const STATUS_STYLE: Record<Campaign["status"], string> = {
   draft: "bg-white/10 text-[#C9C4DC]",
   active: "bg-green-500/15 text-green-300",
   paused: "bg-amber-500/15 text-amber-300",

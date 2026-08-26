@@ -142,7 +142,7 @@ const ContactsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
                   </td>
                   <td className="px-4 py-4 text-sm text-[#111827]">{c.contactBusiness || "—"}</td>
                   <td className="px-4 py-4 text-sm">
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-white/10 text-[#C9C4DC]">
                       {LEAD_STATUS_LABELS[c.leadStatus] || c.leadStatus}
                     </span>
                   </td>

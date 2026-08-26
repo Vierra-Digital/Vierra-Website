@@ -536,11 +536,14 @@ input[type="search"]::-ms-clear:hover {
 .email-shell .hover\:bg-gray-200:hover:not(.email-body-card *) { background-color: rgba(255, 255, 255, 0.11); }
 .email-shell .hover\:bg-gray-50:hover:not(.email-body-card *),
 .email-shell .hover\:bg-gray-100:hover:not(.email-body-card *) { background-color: rgba(255, 255, 255, 0.08); }
+/* Tailwind's grey ramp carries emphasis, so it cannot all collapse to one colour: 800/900 are
+   heading and emphasis text, 500-700 are secondary. Mapping the whole range to the muted token
+   (as the first pass here did) would have quietly de-emphasised every heading that uses it. */
+.email-shell .text-gray-800:not(.email-body-card *),
+.email-shell .text-gray-900:not(.email-body-card *) { color: var(--mail-text); }
 .email-shell .text-gray-500:not(.email-body-card *),
 .email-shell .text-gray-600:not(.email-body-card *),
-.email-shell .text-gray-700:not(.email-body-card *),
-.email-shell .text-gray-800:not(.email-body-card *),
-.email-shell .text-gray-900:not(.email-body-card *) { color: var(--mail-text-muted); }
+.email-shell .text-gray-700:not(.email-body-card *) { color: var(--mail-text-muted); }
 .email-shell .border-gray-100:not(.email-body-card *),
 .email-shell .border-gray-200:not(.email-body-card *),
 .email-shell .border-gray-300:not(.email-body-card *) { border-color: var(--mail-border); }
@@ -713,9 +716,11 @@ input[type="search"]::-ms-clear:hover {
 .email-dialog-dark .bg-\[\#E5E7EB\] { background-color: rgba(255, 255, 255, 0.07); }
 .email-dialog-dark .bg-gray-200,
 .email-dialog-dark .hover\:bg-gray-200:hover { background-color: rgba(255, 255, 255, 0.12); }
+.email-dialog-dark .text-gray-800,
+.email-dialog-dark .text-gray-900 { color: var(--mail-text); }
 .email-dialog-dark .text-gray-500,
 .email-dialog-dark .text-gray-600,
-.email-dialog-dark .text-gray-800 { color: var(--mail-text-muted); }
+.email-dialog-dark .text-gray-700 { color: var(--mail-text-muted); }
 /* Selected choice card: the light purple wash becomes the panel's brand tint, so "chosen" reads
    the same here as it does in the mail list. */
 .email-dialog-dark .bg-\[\#F5EEFC\] { background-color: var(--mail-brand-tint); }
