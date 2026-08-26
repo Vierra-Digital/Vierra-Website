@@ -7,7 +7,7 @@ import { getZoomAttendance } from "@/lib/calendar/zoomMeetings";
 import { getTeamsAttendance } from "@/lib/calendar/msTeamsMeetings";
 import { mergePlatformTokenMeta, findPlatformTokenByPrefix } from "@/lib/api/genericOAuthToken";
 import { computeAttendance, type AttendanceParticipant } from "@/lib/booking/attendance";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@/lib/generated/prisma/client";
 
 export type SyncResult = "held" | "not_held" | "skipped" | "no_data";
 

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sendEmailCore, type SendEmailPayload } from "@/lib/gmail/sendCore";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@/lib/generated/prisma/client";
 
 /**
  * Scheduled send — persisted queue dispatched by a cron worker (Netlify Scheduled

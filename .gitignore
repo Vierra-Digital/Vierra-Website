@@ -45,3 +45,6 @@ secrets/
 # Local .env backups — these hold live credentials.
 .env.bak*
 .env.*.bak
+
+# Prisma 7 generates the client here instead of node_modules.
+lib/generated/
