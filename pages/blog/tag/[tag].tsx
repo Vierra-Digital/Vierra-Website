@@ -7,6 +7,7 @@ import { Header } from "@/components/Header"
 import Footer from "@/components/FooterSection/Footer"
 import { m as motion } from "framer-motion"
 import { ChevronRight } from "lucide-react"
+import { jsonLd } from "@/lib/jsonLd";
 
 
 type TagPageProps = {
@@ -58,7 +59,7 @@ export default function TagPage({ tag, posts }: TagPageProps) {
         id="schema-org-breadcrumbs-tag"
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
+          __html: jsonLd({
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
             itemListElement: [
@@ -73,7 +74,7 @@ export default function TagPage({ tag, posts }: TagPageProps) {
         id="schema-org-tag-collection"
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
+          __html: jsonLd({
             "@context": "https://schema.org",
             "@type": "CollectionPage",
             name: `Tag: ${tag}`,
