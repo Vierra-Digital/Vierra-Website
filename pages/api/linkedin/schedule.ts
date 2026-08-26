@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { withSession } from "@/lib/api/withSession";
 import { prisma } from "@/lib/prisma";
 import { resolveClientIdForLinkedIn } from "@/lib/linkedinContext";
