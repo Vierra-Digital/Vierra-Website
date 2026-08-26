@@ -1,5 +1,5 @@
 import type { NextApiRequest } from "next";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { withSession } from "@/lib/api/withSession";
 import { CONTEXT_CATEGORY_LABELS, CONTEXT_FIELDS, CONTEXT_FIELD_KEYS, type ContextCategoryId } from "@/lib/contextFields";

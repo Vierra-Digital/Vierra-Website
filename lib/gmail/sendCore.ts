@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { EmailProviderAccount } from "@prisma/client";
+import type { EmailProviderAccount } from "@/lib/generated/prisma/client";
 import { sanitizeRichEmailHtml } from "@/lib/email/sanitize";
 import { prisma } from "@/lib/prisma";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { EmailProviderAccount } from "@prisma/client";
+import type { EmailProviderAccount } from "@/lib/generated/prisma/client";
 import { withAuth } from "@/lib/api/withAuth";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { asStr, asPort } from "@/lib/api/parsing";

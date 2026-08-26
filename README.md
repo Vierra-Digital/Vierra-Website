@@ -1,6 +1,6 @@
 # Vierra Website
 
-Full-stack marketing site, internal **admin/staff panel**, **client portal**, a full **email & outreach platform** (Gmail + SMTP — open/click tracking, inbound tracker detection, sequenced campaigns, scheduled send, shared inboxes, meeting booker, confidential mode), **document signing**, onboarding flows, and integrations (LinkedIn, Facebook, Google Ads, Stripe). Built with **Next.js 15** (App Router + Pages Router), **PostgreSQL** via **Prisma**, **NextAuth**, deployed on **Netlify** (`vierradev.com` / production marketing domain `vierra.com`).
+Full-stack marketing site, internal **admin/staff panel**, **client portal**, a full **email & outreach platform** (Gmail + SMTP — open/click tracking, inbound tracker detection, sequenced campaigns, scheduled send, shared inboxes, meeting booker, confidential mode), **document signing**, onboarding flows, and integrations (LinkedIn, Facebook, Google Ads, Stripe). Built with **Next.js 16** (App Router + Pages Router), **PostgreSQL** via **Prisma 7**, **Supabase Auth**, deployed on **Netlify** (`vierradev.com` / production marketing domain `vierra.com`).
 
 ---
 
@@ -27,11 +27,11 @@ Full-stack marketing site, internal **admin/staff panel**, **client portal**, a 
 
 | Layer | Technology |
 |--------|------------|
-| Framework | Next.js 15 (hybrid App Router + Pages Router) |
+| Framework | Next.js 16 (hybrid App Router + Pages Router) |
 | Language | TypeScript |
 | UI | React 19, Tailwind CSS, Framer Motion, Radix UI |
-| Auth | NextAuth.js (credentials + Google OAuth) |
-| Database | PostgreSQL + Prisma ORM |
+| Auth | Supabase Auth (email/password + Google OAuth) |
+| Database | PostgreSQL + Prisma 7 ORM (node-postgres driver adapter) |
 | Email | Nodemailer (SMTP), Gmail API (panel email platform) |
 | Payments | Stripe |
 | Analytics | Google Analytics 4 (site tag + server-side GA4 Data API for dashboard) |
@@ -48,7 +48,10 @@ Vierra-Website/
 ├── components/             # Shared & panel UI (DashboardSection, EmailingPlatformSection, …)
 ├── lib/                    # Server utilities (auth, prisma, gmail, googleCalendar, stripe, crypto)
 ├── prisma/
-│   └── schema.prisma       # Database schema
+│   ├── schema.prisma       # Database schema
+│   ├── migrations/         # Baselined pre-v2 history; not applied to the live DB
+│   └── manual/             # Hand-applied SQL, the actual change record
+├── prisma.config.ts        # Prisma 7 CLI config (schema path, migrations, datasource URL)
 ├── public/                 # Static assets
 ├── netlify/
 │   └── edge-functions/     # e.g. GA tag injection at edge
@@ -62,8 +65,8 @@ Vierra-Website/
 
 | Path | Purpose |
 |------|---------|
-| `lib/auth.ts` | NextAuth options, session helpers |
-| `lib/prisma.ts` | Singleton Prisma client |
+| `lib/auth.ts` | `requireSession` / `requireRole` — verifies the Supabase cookie, resolves the caller's company role |
+| `lib/prisma.ts` | Prisma client singleton — lazily constructed, node-postgres driver adapter, connection cap |
 | `lib/crypto.ts` | AES encryption for passwords & OAuth tokens (`ENCRYPTION_SECRET`) |
 | `lib/gmail/tokens.ts` | Gmail OAuth token storage & refresh |
 | `lib/googleCalendar/visibility.ts` | Per-calendar show/hide for dashboard meetings |
@@ -113,9 +116,6 @@ Open [http://localhost:3000](http://localhost:3000).
 # Apply migrations (production / shared DB)
 npm run db:migrate
 
-# Or push schema in dev (no migration history)
-npm run db:push
-
 # Regenerate Prisma Client after schema changes
 npm run db:generate
 ```
@@ -140,7 +140,6 @@ npm run create-client
 | `test:coverage` | `vitest run --coverage` | Unit tests with the coverage gate |
 | `db:migrate` | `prisma migrate deploy` | Apply pending migrations |
 | `db:generate` | `prisma generate` | Regenerate Prisma Client |
-| `db:push` | `prisma db push` | Sync schema without migration files |
 | `syncdb` | `node scripts/sync-db.js` | DB sync helper (requires script in repo) |
 | `envlocal` | `node scripts/generate-env.js local` | Env generator (requires `scripts/generate-env.js`) |
 | `envprod` | `node scripts/generate-env.js prod` | Env generator for production |
@@ -164,7 +163,7 @@ Copy **`.env.example`** → **`.env`**. Never commit `.env`.
 | Variable | Description |
 |----------|-------------|
 | `DATABASE_URL` | Pooled PostgreSQL connection the app runs on (Supabase pooler, port 6543) |
-| `DIRECT_URL` | Direct connection (port 5432) for schema work. Prisma reads it via `directUrl`, so every `prisma migrate` / `db pull` / `studio` command fails with `P1012` when it is unset — `prisma generate` and `next build` do not need it |
+| `DIRECT_URL` | Optional. Direct connection (port 5432) for schema work; `prisma.config.ts` falls back to `DATABASE_URL` when unset, so the CLI still runs either way. Set it if you have it — DDL belongs on a direct connection, not the pooler |
 | `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project, used by both the browser and server clients |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service-role key for the writes a not-yet-affiliated user has no RLS path for (client backfill, invitation auto-accept). Server only |
 | `NEXT_PUBLIC_APP_URL` | Canonical app origin (e.g. `http://localhost:3000`) |
@@ -302,7 +301,8 @@ All live under `pages/api/`. Unless noted, routes expect an authenticated sessio
 
 | Method | Path | Description |
 |--------|------|-------------|
-| * | `/api/auth/[...nextauth]` | NextAuth handlers |
+| GET | `/api/auth/me` | Current session identity (member / client / unaffiliated) |
+| POST | `/api/auth/setPassword` | Set password from an invite or recovery link |
 | GET | `/api/profile/getUser` | Current user profile |
 | GET | `/api/profile/getImage` | Profile image bytes |
 | GET | `/api/profile/getSettings` | User settings |
@@ -442,8 +442,9 @@ Settings overlay: `UserSettingsPage` (profile, Gmail reconnect, **Detected Googl
 ## Database (Prisma)
 
 - Schema: `prisma/schema.prisma`
-- Provider: **PostgreSQL**
-- Client: `@prisma/client` via `lib/prisma.ts`
+- CLI config: `prisma.config.ts` (Prisma 7 reads the schema path, migrations directory and datasource URL from here, not from the datasource block)
+- Provider: **PostgreSQL**, through the `@prisma/adapter-pg` driver adapter — required as of Prisma 7
+- Client: generated to `lib/generated/prisma` (gitignored; `predev` and the Netlify build regenerate it), imported as `@/lib/generated/prisma/client`, wrapped by the singleton in `lib/prisma.ts`
 
 ### Core models (high level)
 
@@ -451,7 +452,7 @@ Settings overlay: `UserSettingsPage` (profile, Gmail reconnect, **Detected Googl
 |-------|---------|
 | `User` | Staff/admin/client login (`role`, encrypted password) |
 | `Client` | Client business record, Stripe fields, linked `User` |
-| `UserToken` | Encrypted OAuth tokens (`gmail:`, `gcalvis:`, etc.) |
+| `PlatformToken` | Encrypted OAuth tokens (`gmail:`, `gcalvis:`, etc.) |
 | `OnboardingSession` | Client onboarding flows |
 | `StoredFile` | Uploaded files |
 | `Contact`, `EmailOutboundMessage`, … | Email platform & CRM |
@@ -466,7 +467,7 @@ npm run db:migrate                               # deploy
 npx prisma studio                                # GUI browser
 ```
 
-If `migrate dev` fails on shadow DB issues, `db:push` can sync schema in development (coordinate with team before using in production).
+**Do not run `prisma db push` or `prisma migrate dev` against this database.** `schema.prisma` cannot express one constraint the database has — the `public.users.id -> auth.users.id` foreign key, because the `auth` schema model is `@@ignore`d — so both commands generate a migration that drops it. Schema changes are applied directly and recorded as SQL in `prisma/manual/`. The `db:push` script was removed for this reason.
 
 Some schema changes are applied **out-of-band** as hand-written SQL in `prisma/manual/*.sql`, run with `npx prisma db execute --file prisma/manual/<name>.sql --schema prisma/schema.prisma`, then mirrored into `schema.prisma` and picked up by `prisma generate`. The email-platform tables (tracking, campaigns, bookings, mailbox grants, nav preferences, account settings) live here.
 
@@ -476,8 +477,8 @@ Some schema changes are applied **out-of-band** as hand-written SQL in `prisma/m
 
 ### Google (Sign-in, Gmail, Calendar)
 
-- **Sign-in**: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` via NextAuth
-- **Gmail panel**: OAuth through `/api/gmail/initiate` → stores tokens in `UserToken` with platform key `gmail`
+- **Sign-in**: `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, exchanged by Supabase Auth
+- **Gmail panel**: OAuth through `/api/gmail/initiate` → stores tokens in `PlatformToken` with platform key `gmail`
 - **Upcoming meetings**: Uses same Gmail-connected tokens + Calendar API; only events with meeting links; respects per-calendar visibility toggles in settings
 
 ### Google Analytics
@@ -532,7 +533,7 @@ npm run test:coverage     # run with the coverage gate
 - Publish: `.next` (Next.js Netlify plugin)
 - Set all production env vars in the Netlify UI (mirror `.env.example`)
 - `NEXT_PUBLIC_APP_URL` must match the deployed origin (e.g. `https://vierradev.com`)
-- `DIRECT_URL` is not needed for the Netlify build (it runs `prisma generate`, not `migrate`), but is required wherever migrations are run
+- `DIRECT_URL` is optional everywhere: the Netlify build only runs `prisma generate`, and `prisma.config.ts` falls back to `DATABASE_URL` for migrations
 
 ### Build minutes
 

@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
 import { invalidateAccessibleAccountsCache } from "@/lib/email/mailboxAccess";
