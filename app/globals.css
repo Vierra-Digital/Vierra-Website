@@ -1147,8 +1147,12 @@ input[type="search"]::-ms-clear:hover {
    surface, the hairlines and the field typography. */
 
 .compose-hud {
-  /* One deep surface, lifted off the page by shadow rather than outlined by a border. */
-  background: #17122A !important;
+  /* One surface, lifted off the page by shadow rather than outlined by a border.
+     Takes --mail-surface-2, the panel's raised step, which is also what the portaled dialogs use —
+     so the composer, the inline reply and every dialog are the same surface. This was a hand-picked
+     #17122A: close to the panel's #1B1529 but not equal to it, and there were four such near-miss
+     shades across the panel, which is why these surfaces never looked like one family. */
+  background: var(--mail-surface-2) !important;
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 16px;
   box-shadow:
@@ -1163,13 +1167,13 @@ input[type="search"]::-ms-clear:hover {
 .compose-hud-header {
   background: transparent;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  color: #F3F0FB;
+  color: var(--mail-text);
   padding-top: 10px;
   padding-bottom: 10px;
 }
-.compose-hud-header p { font-size: 12.5px; letter-spacing: 0.015em; color: #EDE9F8; }
-.compose-hud-header button { color: #9C95B8; border-radius: 9999px; padding: 6px; }
-.compose-hud-header button:hover { background: rgba(255, 255, 255, 0.07); color: #F3F0FB; }
+.compose-hud-header p { font-size: 12.5px; letter-spacing: 0.015em; color: var(--mail-text); }
+.compose-hud-header button { color: var(--mail-text-muted); border-radius: 9999px; padding: 6px; }
+.compose-hud-header button:hover { background: rgba(255, 255, 255, 0.07); color: var(--mail-text); }
 .compose-hud-header button svg { width: 15px; height: 15px; }
 
 /* The rich editor ships its own bordered card — inside the composer the body is
@@ -1186,8 +1190,8 @@ input[type="search"]::-ms-clear:hover {
   border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
   border-radius: 8px;
 }
-.compose-hud .bg-\[\#F6F3FD\] button { color: #C3BCD8 !important; }
-.compose-hud .bg-\[\#F6F3FD\] button:hover { background: rgba(255, 255, 255, 0.08) !important; color: #F3F0FB !important; }
+.compose-hud .bg-\[\#F6F3FD\] button { color: var(--mail-text-muted) !important; }
+.compose-hud .bg-\[\#F6F3FD\] button:hover { background: rgba(255, 255, 255, 0.08) !important; color: var(--mail-text) !important; }
 
 /* Field rows: hairlines only, and the label sits quiet against the value. */
 .compose-hud .border-b { border-color: rgba(255, 255, 255, 0.055) !important; }
@@ -1200,15 +1204,15 @@ input[type="search"]::-ms-clear:hover {
   border-radius: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
-  color: #EDE9F8 !important;
+  color: var(--mail-text) !important;
 }
 .compose-hud input:focus,
 .compose-hud select:focus,
 .compose-hud [contenteditable="true"]:focus { outline: none !important; box-shadow: none !important; }
 .compose-hud input::placeholder { color: #6F6989 !important; }
 /* "From" / "To" / "Subject" labels. */
-.compose-hud span.text-\[\#5f6368\] { color: #837CA0 !important; font-size: 12px; }
-.compose-hud select option { background: #17122A; color: #EDE9F8; }
+.compose-hud span.text-\[\#5f6368\] { color: var(--mail-text-muted) !important; font-size: 12px; }
+.compose-hud select option { background: var(--mail-surface-2); color: var(--mail-text); }
 /* Field + body text one step down from the panel's default, so the taller body
    reads as room to write rather than as oversized chrome. */
 .compose-hud input:not([type="checkbox"]):not([type="radio"]),
@@ -1246,7 +1250,7 @@ input[type="search"]::-ms-clear:hover {
 
 /* Floating menus raised off the composer surface, matching the panel's other cards. */
 .compose-menu {
-  background: #241C3E;
+  background: var(--mail-surface-3);
   border-radius: 12px;
   padding: 5px 0;
   box-shadow:
@@ -1256,14 +1260,14 @@ input[type="search"]::-ms-clear:hover {
 /* The schedule / confidential popovers still use light-theme utility classes. */
 .compose-hud .bg-white.shadow-lg,
 .compose-hud .bg-white.p-3 {
-  background: #241C3E !important;
+  background: var(--mail-surface-3) !important;
   border-color: rgba(255, 255, 255, 0.08) !important;
   border-radius: 12px;
-  color: #EDE9F8;
+  color: var(--mail-text);
 }
 .compose-hud .bg-white.shadow-lg label,
 .compose-hud .bg-white.p-3 label,
-.compose-hud .bg-white.p-3 span { color: #EDE9F8 !important; }
+.compose-hud .bg-white.p-3 span { color: var(--mail-text) !important; }
 .compose-hud .bg-white.p-3 p { color: #A29CBB !important; }
 .compose-hud .bg-white.p-3 input[type="datetime-local"],
 .compose-hud .bg-white.p-3 input[type="text"],
@@ -1272,7 +1276,7 @@ input[type="search"]::-ms-clear:hover {
   border: 1px solid rgba(255, 255, 255, 0.09) !important;
   border-radius: 8px !important;
   padding: 7px 10px !important;
-  color: #EDE9F8 !important;
+  color: var(--mail-text) !important;
 }
 /* Attachment chips. */
 .compose-hud .bg-\[\#f8f9fa\] {
@@ -1319,7 +1323,7 @@ input[type="search"]::-ms-clear:hover {
   width: 32px;
   flex-shrink: 0;
   border-radius: 9999px;
-  color: #9C95B8;
+  color: var(--mail-text-muted);
   transition: background-color 140ms ease, color 140ms ease;
 }
 .email-shell .inline-reply-icon:hover:not(:disabled) { background: rgba(255, 255, 255, 0.07); color: #E7E2F5; }
@@ -1333,7 +1337,7 @@ input[type="search"]::-ms-clear:hover {
 /* ── Inline reply: one surface, not a card inside a card ───────────────────────
    ComposeRichEditor draws its own bordered card, correct standalone but a second
    frame inside the reply card. Same treatment the compose HUD already gets. */
-.email-shell .inline-reply-card { background: #17122A !important; border-color: rgba(255, 255, 255, 0.08) !important; }
+.email-shell .inline-reply-card { background: var(--mail-surface-2) !important; border-color: rgba(255, 255, 255, 0.08) !important; }
 .email-shell .inline-reply-card .rounded-md.border,
 .email-shell .inline-reply-card [class*="rounded-md"][class*="border-[#EAE5F4]"] {
   border: 0 !important;
@@ -1343,10 +1347,10 @@ input[type="search"]::-ms-clear:hover {
 .email-shell .inline-reply-card .border-b,
 .email-shell .inline-reply-card .border-t { border-color: rgba(255, 255, 255, 0.06) !important; }
 .email-shell .inline-reply-card input,
-.email-shell .inline-reply-card [contenteditable="true"] { color: #EDE9F8 !important; background: transparent !important; }
+.email-shell .inline-reply-card [contenteditable="true"] { color: var(--mail-text) !important; background: transparent !important; }
 .email-shell .inline-reply-card input::placeholder { color: #6F6989 !important; }
-.email-shell .inline-reply-card .text-\[\#6B7280\] { color: #837CA0 !important; }
-.email-shell .inline-reply-card .text-\[\#1E1B2E\] { color: #EDE9F8 !important; }
+.email-shell .inline-reply-card .text-\[\#6B7280\] { color: var(--mail-text-muted) !important; }
+.email-shell .inline-reply-card .text-\[\#1E1B2E\] { color: var(--mail-text) !important; }
 
 /* The editor's toolbar was authored for a light panel — lilac chips on #F6F3FD,
    which fought the dark reader. Same controls, panel palette. */
@@ -1356,11 +1360,11 @@ input[type="search"]::-ms-clear:hover {
   border-radius: 0;
 }
 .email-shell .inline-reply-card .bg-\[\#F6F3FD\] button,
-.email-shell .inline-reply-card .bg-\[\#F6F3FD\] span { color: #C3BCD8 !important; }
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] span { color: var(--mail-text-muted) !important; }
 .email-shell .inline-reply-card .bg-\[\#F6F3FD\] button:hover {
   background: rgba(255, 255, 255, 0.09) !important;
   border-color: transparent !important;
-  color: #F3F0FB !important;
+  color: var(--mail-text) !important;
 }
 .email-shell .inline-reply-card .bg-\[\#F6F3FD\] select {
   background: rgba(255, 255, 255, 0.05) !important;
@@ -1370,7 +1374,7 @@ input[type="search"]::-ms-clear:hover {
   font-size: 12px;
   padding: 2px 6px;
 }
-.email-shell .inline-reply-card .bg-\[\#F6F3FD\] select option { background: #241C3E; color: #EDE9F8; }
+.email-shell .inline-reply-card .bg-\[\#F6F3FD\] select option { background: var(--mail-surface-3); color: var(--mail-text); }
 /* The two colour swatches read as filled blocks; make them read as swatches. */
 .email-shell .inline-reply-card input[type="color"] { border-radius: 6px !important; height: 22px !important; width: 26px !important; }
 .email-shell .inline-reply-card .bg-\[\#DEC9F6\] { background: rgba(255, 255, 255, 0.12) !important; }
