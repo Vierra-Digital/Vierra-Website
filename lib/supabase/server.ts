@@ -1,5 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
-import { parse as parseCookie, serialize as serializeCookie } from "cookie";
+import { parseCookie, stringifySetCookie as serializeCookie } from "cookie";
 
 /**
  * Supabase server client for Pages Router (API routes + getServerSideProps).

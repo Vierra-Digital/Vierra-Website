@@ -1,6 +1,6 @@
 import { randomBytes } from "crypto";
 import type { NextApiRequest, NextApiResponse } from "next";
-import { parse as parseCookie, serialize as serializeCookie } from "cookie";
+import { parseCookie, stringifySetCookie as serializeCookie } from "cookie";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { requireSession } from "@/lib/auth";

@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { saveSessionData } from "@/lib/sessionStore"
 import { getPresetById } from "@/lib/presets"
 import { getPresetFieldsOverride } from "@/lib/presetOverrides"
-import { parse as parseCookie } from "cookie"
+import { parseCookie } from "cookie"
 
 const NDA_PRESET_ID = "non-disclosure-agreement"
 

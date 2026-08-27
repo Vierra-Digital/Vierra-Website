@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth";
 import { appendSetCookie, asStr, clearOauthStateCookie, readCookies, setOnboardingSessionCookie } from "@/lib/api/oauth";
 import { persistPlatformToken, persistOnboardingPlatformToken } from "@/lib/api/oauthTokens";
-import { serialize as serializeCookie } from "cookie";
+import { stringifySetCookie as serializeCookie } from "cookie";
 
 type TokenExchangeResult = {
   access_token: string;

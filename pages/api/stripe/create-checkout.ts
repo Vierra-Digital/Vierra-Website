@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next"
-import { parse as parseCookie } from "cookie"
+import { parseCookie } from "cookie"
 import { prisma } from "@/lib/prisma"
 import { stripe } from "@/lib/stripe"
 import { resolveBaseUrl } from "@/lib/api/url"

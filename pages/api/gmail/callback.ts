@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { requireSession } from "@/lib/auth";
 import { appendSetCookie, asStr, clearOauthStateCookie, readCookies, resolveGoogleWebClientCredentials, resolveRuntimeBaseUrl } from "@/lib/api/oauth";
 import { persistPlatformToken } from "@/lib/api/oauthTokens";
-import { serialize as serializeCookie } from "cookie";
+import { stringifySetCookie as serializeCookie } from "cookie";
 
 type GoogleTokenResponse = {
   access_token: string;
