@@ -449,6 +449,12 @@ input[type="search"]::-ms-clear:hover {
   --mail-border: #2B2340;
   --mail-text: #EDEBF5;
   --mail-text-muted: #A29CBB;
+  /* Placeholder text. Deliberately dimmer than --mail-text-muted, but not so dim that it fails
+     legibility: the previous #6F6989 measured 3.42:1 on the composer surface, below the 4.5:1 WCAG
+     AA needs for small text, and compose renders its fields at 13px. #857F9B is the smallest step
+     up that clears AA on both panel surfaces (4.64 on #1B1529, 4.90 on #141020) while staying
+     clearly below the muted token's 6.75, so the hierarchy is intact. */
+  --mail-placeholder: #857F9B;
   /* The message sheet.
      Near-white on purpose, and this is a correction: a strongly tinted sheet (#E8E2F4) cannot work
      here. Measured against real messages, HTML email paints its own background — a marketing
@@ -571,7 +577,7 @@ input[type="search"]::-ms-clear:hover {
 }
 .email-shell input::placeholder,
 .email-shell textarea::placeholder {
-  color: #6F6889;
+  color: var(--mail-placeholder);
 }
 
 /* The sender's own HTML keeps its light card — see note above. */
@@ -672,7 +678,7 @@ input[type="search"]::-ms-clear:hover {
   color: #F1EEFA;
 }
 .email-dialog-dark input::placeholder,
-.email-dialog-dark textarea::placeholder { color: #6F6889; }
+.email-dialog-dark textarea::placeholder { color: var(--mail-placeholder); }
 .email-dialog-dark input:focus,
 .email-dialog-dark textarea:focus,
 .email-dialog-dark select:focus {
@@ -1117,7 +1123,7 @@ input[type="search"]::-ms-clear:hover {
   color: #F1EEFA;
 }
 .email-shell main input::placeholder,
-.email-shell main textarea::placeholder { color: #6F6889; }
+.email-shell main textarea::placeholder { color: var(--mail-placeholder); }
 
 /* Sticky save bar. */
 .email-shell main .sticky.bottom-4 {
@@ -1209,7 +1215,7 @@ input[type="search"]::-ms-clear:hover {
 .compose-hud input:focus,
 .compose-hud select:focus,
 .compose-hud [contenteditable="true"]:focus { outline: none !important; box-shadow: none !important; }
-.compose-hud input::placeholder { color: #6F6989 !important; }
+.compose-hud input::placeholder { color: var(--mail-placeholder) !important; }
 /* "From" / "To" / "Subject" labels. */
 .compose-hud span.text-\[\#5f6368\] { color: var(--mail-text-muted) !important; font-size: 12px; }
 .compose-hud select option { background: var(--mail-surface-2); color: var(--mail-text); }
@@ -1348,7 +1354,7 @@ input[type="search"]::-ms-clear:hover {
 .email-shell .inline-reply-card .border-t { border-color: rgba(255, 255, 255, 0.06) !important; }
 .email-shell .inline-reply-card input,
 .email-shell .inline-reply-card [contenteditable="true"] { color: var(--mail-text) !important; background: transparent !important; }
-.email-shell .inline-reply-card input::placeholder { color: #6F6989 !important; }
+.email-shell .inline-reply-card input::placeholder { color: var(--mail-placeholder) !important; }
 .email-shell .inline-reply-card .text-\[\#6B7280\] { color: var(--mail-text-muted) !important; }
 .email-shell .inline-reply-card .text-\[\#1E1B2E\] { color: var(--mail-text) !important; }
 
