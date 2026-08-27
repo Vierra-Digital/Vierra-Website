@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { requireRole } from "@/lib/auth";
 import { appendSetCookie, issueOauthStateCookie, resolveRuntimeBaseUrl } from "@/lib/api/oauth";
 import { MSTEAMS_SCOPES } from "@/lib/msteams/tokens";
-import { stringifySetCookie as serializeCookie } from "cookie";
+import { serializeCookie } from "@/lib/api/cookies";
 
 /** Microsoft Teams (Graph) OAuth connect — mirrors pages/api/gmail/initiate.ts's cookie state pattern. */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { parseCookie, stringifySetCookie as serializeCookie } from "cookie";
+import { parseCookie, serializeCookie } from "@/lib/api/cookies";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") return res.status(405).json({ message: "Method Not Allowed" });
