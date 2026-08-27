@@ -455,6 +455,16 @@ input[type="search"]::-ms-clear:hover {
      up that clears AA on both panel surfaces (4.64 on #1B1529, 4.90 on #141020) while staying
      clearly below the muted token's 6.75, so the hierarchy is intact. */
   --mail-placeholder: #857F9B;
+  /* Chrome surfaces, a different axis from the --mail-surface stack.
+     The rail and toolbar form one continuous band over the shell's brand glow; the content pane and
+     the settings cards are the surface mail sits on. Both were repeated as literals in three places
+     each and had to be kept in sync by hand — naming them is the fix, not folding them into
+     --mail-surface-3, which would flatten a real distinction. */
+  --mail-rail: #211935;
+  --mail-pane: #231A36;
+  /* The rail's gradient, defined once. The settings nav claimed in a comment to match the panel's
+     rail but ended on #1B1429 where the panel ends on #171021, so the two visibly disagreed. */
+  --mail-rail-gradient: linear-gradient(180deg, var(--mail-rail) 0%, #171021 100%);
   /* The message sheet.
      Near-white on purpose, and this is a correction: a strongly tinted sheet (#E8E2F4) cannot work
      here. Measured against real messages, HTML email paints its own background — a marketing
@@ -606,13 +616,13 @@ input[type="search"]::-ms-clear:hover {
 /* Left rail. Translucent over the shell's brand glow (glassmorphic), separated from
    the content by a single hairline instead of a floating card with a ridge. */
 .email-shell .email-rail {
-  background: linear-gradient(180deg, #211935 0%, #171021 100%);
+  background: var(--mail-rail-gradient);
   border-right: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 /* Mail content sits flush against the rail — no border, no radius, no shadow. */
 .email-shell .email-content {
-  background: #231A36;
+  background: var(--mail-pane);
 }
 
 /* The rail's own controls shouldn't paint opaque light boxes over the glass. */
@@ -632,7 +642,7 @@ input[type="search"]::-ms-clear:hover {
 /* Active mailbox row in the rail. */
 .email-shell .email-nav-active {
   background-color: rgba(143, 66, 255, 0.16);
-  color: #F1EEFA;
+  color: var(--mail-text);
 }
 
 /* Empty states: no stark white card outline against the dark canvas. */
@@ -675,7 +685,7 @@ input[type="search"]::-ms-clear:hover {
 .email-dialog-dark select {
   background-color: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.12);
-  color: #F1EEFA;
+  color: var(--mail-text);
 }
 .email-dialog-dark input::placeholder,
 .email-dialog-dark textarea::placeholder { color: var(--mail-placeholder); }
@@ -915,7 +925,7 @@ input[type="search"]::-ms-clear:hover {
 
 /* Same surface as the rail, so the header reads as one continuous chrome band. */
 .email-shell .email-toolbar {
-  background: #211935;
+  background: var(--mail-rail);
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
@@ -946,7 +956,7 @@ input[type="search"]::-ms-clear:hover {
   height: 1.75rem;
   width: 1.75rem;
   border-radius: 0.5rem;
-  color: #A8A2C0;
+  color: var(--mail-text-muted);
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
   transition: color .15s ease, background-color .15s ease, border-color .15s ease;
@@ -984,7 +994,7 @@ input[type="search"]::-ms-clear:hover {
   border-radius: 6px;
   font-size: 11px;
   line-height: 1;
-  color: #F1EEFA;
+  color: var(--mail-text);
   background: #241B38;
   border: 1px solid rgba(255, 255, 255, 0.10);
   box-shadow: 0 8px 20px -10px rgba(0, 0, 0, 0.8);
@@ -1043,7 +1053,7 @@ input[type="search"]::-ms-clear:hover {
   font-weight: 600;
   letter-spacing: .06em;
   text-transform: uppercase;
-  color: #7E7897;
+  color: var(--mail-placeholder);
 }
 .email-shell .email-menu-item svg { color: #8F88A8; }
 .email-shell .email-menu-item:hover svg { color: #FFFFFF; }
@@ -1051,7 +1061,7 @@ input[type="search"]::-ms-clear:hover {
 .email-dialog-dark .text-\[\#1E1B2E\],
 .email-dialog-dark .text-\[\#111827\],
 .email-dialog-dark .text-\[\#374151\] {
-  color: #F1EEFA;
+  color: var(--mail-text);
 }
 .email-dialog-dark .text-\[\#6B7280\] { color: #A29CBB; }
 
@@ -1094,14 +1104,14 @@ input[type="search"]::-ms-clear:hover {
 
 /* Section cards read as panels on the dark canvas, not floating white sheets. */
 .email-shell section[id] {
-  background: #231A36;
+  background: var(--mail-pane);
   border: 1px solid rgba(255, 255, 255, 0.07);
   box-shadow: none;
 }
 
 /* Section nav: quiet by default, brand-lit for the section you're in. */
 .email-shell nav[aria-label="Settings sections"] a {
-  color: #A8A2C0;
+  color: var(--mail-text-muted);
   border-radius: 7px;
 }
 .email-shell nav[aria-label="Settings sections"] a:hover {
@@ -1120,7 +1130,7 @@ input[type="search"]::-ms-clear:hover {
 .email-shell main textarea {
   background-color: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.12);
-  color: #F1EEFA;
+  color: var(--mail-text);
 }
 .email-shell main input::placeholder,
 .email-shell main textarea::placeholder { color: var(--mail-placeholder); }
@@ -1135,13 +1145,13 @@ input[type="search"]::-ms-clear:hover {
 .email-shell main .divide-gray-100 > * + * { border-color: rgba(255, 255, 255, 0.07); }
 
 /* Settings shell: nav rail matches the panel's rail; content pane matches its list pane. */
-.email-shell main > aside { background: linear-gradient(180deg, #211935 0%, #1B1429 100%); }
-.email-shell main > div.flex-1 { background: #231A36; }
+.email-shell main > aside { background: var(--mail-rail-gradient); }
+.email-shell main > div.flex-1 { background: var(--mail-pane); }
 /* The account switcher sits on the header surface. */
 .email-shell header select {
   background-color: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.10);
-  color: #F1EEFA;
+  color: var(--mail-text);
 }
 
 /* ── Compose window ────────────────────────────────────────────────────────────
