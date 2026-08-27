@@ -17,8 +17,8 @@ import {
   FiFileText,
 } from "react-icons/fi"
 import { FaRegFilePdf } from "react-icons/fa6"
-import "react-pdf/dist/Page/AnnotationLayer.css"
-import "react-pdf/dist/Page/TextLayer.css"
+import "react-pdf/dist/esm/Page/AnnotationLayer.css"
+import "react-pdf/dist/esm/Page/TextLayer.css"
 import type { PdfField } from "@/lib/sessionStore"
 
 type StaffOption = { id: string; name: string | null; role: string }

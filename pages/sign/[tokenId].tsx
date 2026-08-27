@@ -8,8 +8,8 @@ import SignatureCanvas from 'react-signature-canvas';
 import { inter } from "@/lib/fonts";
 import Image from 'next/image';
 import { FiCheck, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
-import 'react-pdf/dist/Page/AnnotationLayer.css';
-import 'react-pdf/dist/Page/TextLayer.css';
+import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
+import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { getSessionData } from '@/lib/sessionStore';
 import type { PdfField } from '@/lib/sessionStore';
 
