@@ -163,7 +163,7 @@ function ToolbarButton({
       disabled={disabled}
       onClick={onClick}
       className={`inline-flex h-8 min-w-[28px] shrink-0 items-center justify-center rounded px-1.5 text-[13px] font-medium ${
-        active ? "bg-[#EAE5F4] text-[#1E1B2E]" : "text-[#4A465C] hover:bg-[#F5EFFF]"
+        active ? "bg-white/[0.14] text-[#EDEBF5]" : "text-[#4A465C] hover:bg-[#F5EFFF]"
       } disabled:pointer-events-none disabled:opacity-40`}
     >
       {children}

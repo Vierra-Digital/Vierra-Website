@@ -75,10 +75,23 @@ const humanDuration = (ms: number): string => {
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+/* Tone chips for deliverability results.
+   One palette, referenced by both call sites. The same four colours were previously written out
+   twice — here keyed pass/warn/fail and again inline keyed good/warn/bad/neutral — so the two could
+   drift apart, and both used light pairs the .email-shell overrides do not remap (that list covers
+   the panel's own hexes). On the dark panel they rendered as bright pills. Translucent tints with
+   light text of the same hue keep each result readable against the surface. */
+const TONE_STYLE = {
+  good: "bg-green-500/15 text-green-300",
+  warn: "bg-amber-500/15 text-amber-300",
+  bad: "bg-red-500/15 text-red-300",
+  neutral: "bg-white/10 text-[#C9C4DC]",
+} as const;
+
 const STATUS_STYLES: Record<RecordStatus, string> = {
-  pass: "bg-[#ECFDF5] text-[#047857]",
-  warn: "bg-[#FFFBEB] text-[#B45309]",
-  fail: "bg-[#FEF2F2] text-[#B91C1C]",
+  pass: TONE_STYLE.good,
+  warn: TONE_STYLE.warn,
+  fail: TONE_STYLE.bad,
 };
 
 const pct = (num: number, den: number) => (den > 0 ? Math.round((num / den) * 100) : 0);
@@ -588,12 +601,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                   const spamPct = entry.stats.userReportedSpamRatio === null ? null : entry.stats.userReportedSpamRatio * 100;
                   const tone =
                     spamPct === null ? "neutral" : spamPct < 0.1 ? "good" : spamPct < 0.3 ? "warn" : "bad";
-                  const toneStyle = {
-                    good: "bg-[#ECFDF5] text-[#047857]",
-                    warn: "bg-[#FFFBEB] text-[#B45309]",
-                    bad: "bg-[#FEF2F2] text-[#B91C1C]",
-                    neutral: "bg-[#F4F2F8] text-[#5B5670]",
-                  }[tone];
+                  const toneStyle = TONE_STYLE[tone];
                   const ratio = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
                   return (
                     <div key={entry.stats.domain} className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px]">
