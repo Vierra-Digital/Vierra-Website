@@ -5,17 +5,11 @@ import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import type { Campaign } from "../CampaignsSection";
 import ContactsTab from "./ContactsTab";
 import AnalyticsTab from "./AnalyticsTab";
+import { STATUS_STYLE } from "../CampaignsSection";
 
 const TABS = ["Overview", "Contacts", "Analytics"] as const;
 type Tab = (typeof TABS)[number];
 
-const STATUS_STYLE: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-800",
-  active: "bg-green-100 text-green-800",
-  paused: "bg-amber-100 text-amber-800",
-  completed: "bg-blue-100 text-blue-800",
-  cancelled: "bg-red-100 text-red-800",
-};
 
 type CampaignStep = {
   id: string;
