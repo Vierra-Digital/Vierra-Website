@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { requireSession } from "@/lib/auth";
 import { appendSetCookie, asStr, clearOauthStateCookie, readCookies, resolveRuntimeBaseUrl } from "@/lib/api/oauth";
 import { persistPlatformToken } from "@/lib/api/oauthTokens";
-import { serialize as serializeCookie } from "cookie";
+import { serializeCookie } from "@/lib/api/cookies";
 
 type ZoomTokenResponse = { access_token: string; refresh_token?: string; expires_in?: number };
 // type: 1 = Basic (free), 2 = Licensed, 3 = On-prem.
