@@ -25,9 +25,13 @@ jobs:
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        # Pinned by SHA like the other actions here. v5 moved the action itself onto node24;
+        # on v4 every run logged "Node.js 20 is deprecated ... forced to run on Node.js 24".
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "20"
+          # Node 20 left maintenance in April 2026, so CI was gating on an end-of-life runtime
+          # while development happens on 24. Keep these on the same major.
+          node-version: "24"
           cache: "npm"
 
       - name: Install dependencies
