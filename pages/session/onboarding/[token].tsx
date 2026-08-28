@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useRouter } from "next/router";
 import { inter } from "@/lib/fonts";
 import type { GetServerSideProps } from "next"; import { prisma } from "@/lib/prisma";
-import { serialize as serializeCookie } from "cookie";
+import { serializeCookie } from "@/lib/api/cookies";
 
 
 interface ClientSessionData {

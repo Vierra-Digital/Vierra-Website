@@ -8,6 +8,8 @@ import { ArrowUpRight } from "lucide-react"
 import { Modal } from "@/components/Modal"
 import type { IconType } from "react-icons"
 import { FaComment, FaLinkedin } from "react-icons/fa6"
+// react-icons is pinned to exactly 5.6.0 in package.json: 5.7.0 drops SiSalesforce and
+// SiSlack, which Simple Icons removed upstream. Bumping it breaks this import.
 import {
   SiGmail,
   SiSlack,
