@@ -104,9 +104,15 @@ without the exclusion these greps return false positives (six, last time).
 
 ```bash
 # Routes with no auth guard. proxy.ts deliberately skips /api/, so every route owns its own.
-# ~47 files match: that is the public-by-design set (tracking pixels, booking, webhooks, health,
-# the markdown mirror). Read them, don't assume — two real gaps were found this way.
-grep -rLE "withAuth|requireRole|requireSession|CRON_SECRET|requireExtensionAuth" pages/api app/api --include=*.ts
+# withSession must be in this pattern: without it the grep called 8 guarded routes public,
+# including admin/files.ts and linkedin/publish.ts, which is exactly the alarming-looking
+# false positive that trains you to skim the list instead of reading it.
+grep -rLE "withAuth|withSession|requireRole|requireRolesOrRespond|requireSession|requireSessionOrRespond|CRON_SECRET|requireExtensionAuth" pages/api app/api --include=*.ts
+
+# ~39 files match, and that is still an over-count: a route whose guard lives in a shared handler
+# one level down (facebook/googleads/linkedin status.ts all defer to handlePlatformStatus, which
+# calls requireSession and 401s) cannot be seen by any grep over the route file. Open the ones you
+# do not recognise and follow what they delegate to. Two real gaps were found this way before.
 
 # Raw SQL that isn't parameterised — expect 0
 grep -rn "queryRawUnsafe\|executeRawUnsafe" --include=*.ts --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=generated .
