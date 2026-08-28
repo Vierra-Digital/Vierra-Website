@@ -4826,7 +4826,7 @@ ${sourceText}`;
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     placeholder="Search"
-                                    className="w-full border-0 bg-transparent text-sm text-[#D6D1E6] placeholder:text-[#6F6889] shadow-none outline-none focus:ring-0"
+                                    className="w-full border-0 bg-transparent text-sm text-[#D6D1E6] placeholder:text-[#857F9B] shadow-none outline-none focus:ring-0"
                                   />
                                   {searchTerm.trim() ? (
                                     <button

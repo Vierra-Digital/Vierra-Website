@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { requireRole } from "@/lib/auth";
 import { appendSetCookie, issueOauthStateCookie, resolveRuntimeBaseUrl } from "@/lib/api/oauth";
-import { serialize as serializeCookie } from "cookie";
+import { serializeCookie } from "@/lib/api/cookies";
 
 /** Zoom OAuth connect — mirrors pages/api/gmail/initiate.ts's cookie-based state pattern. */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

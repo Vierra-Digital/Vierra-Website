@@ -4,6 +4,8 @@ import { m as motion, useReducedMotion } from "framer-motion"
 import { inter } from "@/lib/fonts";
 import type { IconType } from "react-icons"
 import { FaLinkedin, FaInstagram, FaFacebook, FaWhatsapp, FaCalendarCheck, FaUsers, FaBullseye, FaPlug } from "react-icons/fa6"
+// react-icons is pinned to exactly 5.6.0 in package.json: 5.7.0 drops SiSalesforce and
+// SiSlack, which Simple Icons removed upstream. Bumping it breaks this import.
 import { SiGmail, SiGoogle, SiHubspot, SiSalesforce, SiZoho, SiClickup, SiSlack } from "react-icons/si"
 
 

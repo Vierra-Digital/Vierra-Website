@@ -28,12 +28,17 @@ export type Campaign = {
   contactCount?: number;
 };
 
-const STATUS_STYLE: Record<Campaign["status"], string> = {
-  draft: "bg-gray-100 text-gray-800",
-  active: "bg-green-100 text-green-800",
-  paused: "bg-amber-100 text-amber-800",
-  completed: "bg-blue-100 text-blue-800",
-  cancelled: "bg-red-100 text-red-800",
+/* Status chips on the panel's dark surface.
+   These were Tailwind's light pairs (bg-*-100 with text-*-800), which the .email-shell overrides do
+   not remap — that list covers the panel's own hexes, not Tailwind's numbered palette — so every
+   chip rendered as a bright pill on a dark row. A translucent tint with light text of the same hue
+   keeps each status distinguishable while sitting on the surface instead of punching through it. */
+export const STATUS_STYLE: Record<Campaign["status"], string> = {
+  draft: "bg-white/10 text-[#C9C4DC]",
+  active: "bg-green-500/15 text-green-300",
+  paused: "bg-amber-500/15 text-amber-300",
+  completed: "bg-blue-500/15 text-blue-300",
+  cancelled: "bg-red-500/15 text-red-300",
 };
 
 const STATUS_LABEL: Record<Campaign["status"], string> = {
@@ -316,6 +321,7 @@ const CampaignsSection: React.FC = () => {
       )}
 
       <ConfirmActionModal
+        dark
         isOpen={campaignToDelete !== null}
         title="Delete campaign?"
         message={
@@ -586,8 +592,8 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
   return (
     <Modal
       zIndexClass="z-50"
-      backdropClassName="bg-black/50 backdrop-blur-sm"
-      cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+      backdropClassName="bg-[#14101E]/55 backdrop-blur-sm"
+      cardClassName="email-dialog-dark rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
       label="New Campaign"
       onClose={onClose}
       closeOnBackdrop={!saving}

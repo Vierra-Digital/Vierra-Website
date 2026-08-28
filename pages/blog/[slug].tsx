@@ -11,6 +11,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getPostBySlug, getRelatedPosts, getAllSlugs } from '@/lib/blog';
 import { GetStaticPaths, GetStaticProps } from 'next';
+import { jsonLd } from "@/lib/jsonLd";
 
 type BlogPostProps = {
     title: string;
@@ -118,7 +119,7 @@ const BlogViewPage = ({
                 id="schema-org-breadcrumbs"
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
-                    __html: JSON.stringify({
+                    __html: jsonLd({
                         "@context": "https://schema.org",
                         "@type": "BreadcrumbList",
                         itemListElement: [
@@ -148,7 +149,7 @@ const BlogViewPage = ({
                 id="schema-org-article"
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
-                    __html: JSON.stringify({
+                    __html: jsonLd({
                         "@context": "https://schema.org",
                         "@type": "BlogPosting",
                         headline: title,

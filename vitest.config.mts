@@ -51,6 +51,8 @@ export default defineConfig({
         "lib/publicFormValidation.ts",
         "lib/careerApplicationValidation.ts",
         "lib/api/url.ts",
+        "lib/jsonLd.ts",
+        "lib/api/cookies.ts",
       ],
       // Floor set below current levels (~93% stmts/branch, 100% funcs) with margin: passes today,
       // blocks regressions, raise further as tests grow.

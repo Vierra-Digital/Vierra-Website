@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import type { BookingLink } from "@prisma/client";
+import type { BookingLink } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { computeSlots, DEFAULT_AVAILABILITY, type Availability } from "@/lib/booking/slots";
 import { getTeamBusyIntersection } from "@/lib/booking/teamAvailability";
