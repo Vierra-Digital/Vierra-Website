@@ -59,3 +59,19 @@ Non-negotiables:
 - `master` is protected; required checks are `quality` and `ensure-CC`. Conventional-commit subjects
   must not start with a capital.
 - No Claude co-author or footer lines in commits.
+
+<!--
+Next writes this managed block on every `next dev` (node_modules/next/dist/server/lib/
+generate-agent-files.js). With it committed here and current, hasCurrentAgentRules() short-circuits
+and nothing is rewritten. Without it, and with AGENTS.md gitignored, a fresh clone gets 675 bytes
+injected into this file on the first dev run. Leave it at the end of the file; do not hand-edit it.
+-->
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
