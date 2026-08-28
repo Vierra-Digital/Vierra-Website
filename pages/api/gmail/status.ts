@@ -48,13 +48,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const email = row.platform.replace(/^gmail:/, "").toLowerCase();
         // Reuse the row we already fetched above instead of re-querying it inside
         // getValidGmailAccessToken (it only re-hits Prisma if it needs to persist a refreshed token).
-        const tokenResult = await getValidGmailAccessToken(userId, email, {
+        let tokenResult = await getValidGmailAccessToken(userId, email, {
           preloadedRow: {
             access_token: row.access_token,
             refresh_token: row.refresh_token,
             expires_at: row.expires_at,
           },
         });
+        // A page load fires this alongside /api/gmail/messages and /api/gmail/counts, all racing
+        // to refresh the same near-expiry token (see the in-flight dedup in lib/gmail/tokens.ts).
+        // Unlike those two callers, this endpoint used to report "disconnected" on the first
+        // failure with no retry — losing that race flipped the whole panel to the reconnect gate
+        // even though the account was fine. One forced retry matches messages.ts/counts.ts.
+        if (!tokenResult.ok && tokenResult.reason === "refresh_failed") {
+          tokenResult = await getValidGmailAccessToken(userId, email, { forceRefresh: true });
+        }
         const connected = tokenResult.ok;
         return {
           email,
