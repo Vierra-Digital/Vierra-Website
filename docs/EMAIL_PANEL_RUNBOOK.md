@@ -10,7 +10,8 @@ out-of-band (Supabase); the build only runs `prisma generate`.
 | `CRON_SECRET` | ✅ set | **all 4 crons** — without it they 401/no-op |
 | `DISCORD_WEBHOOK_URL` | ✅ set | reply alerts + high-intent signal alerts (+ deep link) |
 | `ENCRYPTION_SECRET` | required | AES-256-GCM for domain-SMTP passwords (module throws at import if unset) |
-| `ANTHROPIC_API_KEY` / `ARTEMIS_*` | deferred | Artemis AI (compose/reply/rewrite/summarize/auto-draft) — off until set |
+| `ARTEMIS_PROVIDER` / `_BASE_URL` / `_MODEL` / `_API_KEY` | set | Artemis AI (compose/reply/rewrite/summarize/auto-draft/reply-classify) |
+| `ARTEMIS_DISABLE_THINKING` | **required for the Qwen model** | The self-hosted model reasons before answering and will otherwise spend the entire completion budget doing it — compose/reply/rewrite/classify all come back empty. Set to `1`. |
 | `GMAIL_PUBSUB_TOPIC` | not set | Gmail push (near-real-time inbound); polling covers it until set |
 
 ## 2. Scheduled functions (`netlify/functions/`, auto-registered via `config.schedule`)
@@ -47,4 +48,4 @@ Expect `{"ok":true,...}` JSON.
 ## 6. Still pending
 - **Spam-placement testing** — needs a 2nd Gmail seed inbox (or Outlook/Yahoo IMAP creds).
 - **Gmail push** — needs the GCP topic above.
-- **Artemis AI** — deferred (needs the AI provider key / Hermes).
+- **Artemis AI** — live against the self-hosted endpoint. `ARTEMIS_DISABLE_THINKING=1` must be set wherever it runs (Netlify included), or every AI action returns empty.
