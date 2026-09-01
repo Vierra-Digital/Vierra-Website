@@ -2165,3 +2165,133 @@ model FinanceEntry {
   @@index([company_id, occurred_at], map: "idx_finance_entries_company_occurred")
   @@schema("public")
 }
+
+/// Lead-sourcing candidates (see docs/CARTOGRAPHY_DESIGN.md). Pre-contacts — only a
+/// reviewed/promoted row becomes a real Contact. See prisma/manual/20260831_cartography_schema.sql.
+///
+/// Cartography is meant to be extractable later into its own gRPC-reached service (see the
+/// design doc's Storage section), so company_id/created_by/client_id/campaign_id/
+/// promoted_contact_id below are deliberately PLAIN SCALAR COLUMNS, not Prisma relations —
+/// there is no real Postgres FK backing them (Postgres can't enforce one across two separate
+/// database instances), so no @relation is declared for them either. Only relations entirely
+/// internal to the Cartography store (run -> run_tasks -> contacts, company -> contacts) are
+/// real Prisma relations, matching the real FKs in the SQL migration.
+model CartographyCompany {
+  id                 String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /** Soft reference to companies.id — see the model doc comment. */
+  company_id         String                 @db.Uuid
+  name               String
+  domain             String?
+  industry           String?
+  description        String?
+  address            String?
+  lat                Float?
+  lng                Float?
+  /** "google_business" | "linkedin_sales_nav" | "general" */
+  source_method      String                 @default("general")
+  /** Non-null only for rows in the standing "General Cartography" pool. */
+  brand_universe_tag String?
+  created_at         DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime               @default(now()) @db.Timestamptz(6)
+  cartography_contacts CartographyContact[]
+
+  @@map("cartography_companies")
+  @@index([company_id], map: "idx_cartography_companies_company_id")
+  @@index([company_id, industry], map: "idx_cartography_companies_industry")
+  @@index([lat, lng], map: "idx_cartography_companies_lat_lng")
+  @@schema("public")
+}
+
+/// One agentic discovery run (see docs/CARTOGRAPHY_DESIGN.md's "Two run modes" and "Sub-agent
+/// orchestration"). No `method` field — a run fans out into per-method sub-agents, tracked
+/// individually in CartographyRunTask, rather than running a single method itself.
+model CartographyRun {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /** Soft references — see CartographyCompany's doc comment. */
+  company_id      String               @db.Uuid
+  created_by      String?              @db.Uuid
+  /** "general" | "client_spec" */
+  mode            String
+  client_id       String?              @db.Uuid
+  campaign_id     String?              @db.Uuid
+  icp_description String?
+  target_count    Int?
+  /** "running" | "review_pending" | "completed" | "failed" — rolled up from
+   * cartography_run_tasks by the application layer, not a DB trigger. */
+  status          String               @default("running")
+  /** Set by screenCartographyQuery() when it rejects/flags this run's query; null if clean. */
+  screening_note  String?
+  created_at      DateTime             @default(now()) @db.Timestamptz(6)
+  completed_at    DateTime?            @db.Timestamptz(6)
+  cartography_run_tasks CartographyRunTask[]
+  cartography_contacts CartographyContact[]
+
+  @@map("cartography_runs")
+  @@index([company_id], map: "idx_cartography_runs_company_id")
+  @@index([client_id], map: "idx_cartography_runs_client_id")
+  @@index([company_id, status], map: "idx_cartography_runs_status")
+  @@schema("public")
+}
+
+/// One sub-agent invocation within a run (see docs/CARTOGRAPHY_DESIGN.md's "Sub-agent
+/// orchestration"). A real Prisma relation to CartographyRun — entirely internal to the
+/// Cartography store, so it stays a real FK regardless of where that store ends up living.
+model CartographyRunTask {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  run_id          String              @db.Uuid
+  /** "google_business" | "linkedin_sales_nav" | "general" */
+  method          String
+  /** "pending" | "running" | "completed" | "failed" | "not_implemented" */
+  status          String              @default("pending")
+  candidate_count Int?
+  error           String?
+  started_at      DateTime?           @db.Timestamptz(6)
+  completed_at    DateTime?           @db.Timestamptz(6)
+  created_at      DateTime            @default(now()) @db.Timestamptz(6)
+  cartography_runs CartographyRun     @relation(fields: [run_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  cartography_contacts CartographyContact[]
+
+  @@map("cartography_run_tasks")
+  @@index([run_id], map: "idx_cartography_run_tasks_run_id")
+  @@unique([run_id, method], map: "uq_cartography_run_tasks_run_method")
+  @@schema("public")
+}
+
+/// One sourced person, tied to a CartographyCompany (see docs/CARTOGRAPHY_DESIGN.md's
+/// "Review -> import flow"). promoted_contact_id is set once staff import it into Contact.
+model CartographyContact {
+  id                      String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /** Soft reference — see CartographyCompany's doc comment. */
+  company_id              String              @db.Uuid
+  cartography_company_id  String              @db.Uuid
+  /** Denormalized off task_id purely to avoid a join for "all candidates for this run". */
+  run_id                  String?             @db.Uuid
+  task_id                 String?             @db.Uuid
+  name                    String?
+  /** Drives the CEO/CMO-first relevance sort. */
+  title                   String?
+  email                   String?
+  phone                   String?
+  linkedin_url            String?
+  /** "pending" | "enriched" | "failed" */
+  enrichment_status       String              @default("pending")
+  /** "candidate" | "reviewed" | "promoted" | "rejected" | "duplicate" */
+  status                  String              @default("candidate")
+  /** Soft reference to contacts.id — see CartographyCompany's doc comment. Promotion becomes
+   * a real cross-service call once Cartography is genuinely separate, not a DB write. */
+  promoted_contact_id     String?             @unique @db.Uuid
+  created_at              DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime            @default(now()) @db.Timestamptz(6)
+  cartography_companies   CartographyCompany  @relation(fields: [cartography_company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  cartography_runs        CartographyRun?     @relation(fields: [run_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  cartography_run_tasks   CartographyRunTask? @relation(fields: [task_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@map("cartography_contacts")
+  @@index([company_id], map: "idx_cartography_contacts_company_id")
+  @@index([cartography_company_id], map: "idx_cartography_contacts_cartography_company_id")
+  @@index([run_id], map: "idx_cartography_contacts_run_id")
+  @@index([task_id], map: "idx_cartography_contacts_task_id")
+  @@index([company_id, status], map: "idx_cartography_contacts_status")
+  @@unique([company_id, email], map: "uq_cartography_contacts_company_email")
+  @@schema("public")
+}

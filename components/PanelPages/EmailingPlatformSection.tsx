@@ -142,6 +142,16 @@ const CampaignsView = dynamic(() => import("@/components/PanelPages/CampaignsSec
   ),
 });
 
+// Lazy-load the Cartography view so its bundle only loads when that module is opened.
+const CartographyView = dynamic(() => import("@/components/PanelPages/CartographySection"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center">
+      <div className="w-10 h-10 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] motion-safe:animate-spin" />
+    </div>
+  ),
+});
+
 // Lazy-load the compose editor (~13 @tiptap/* packages — a real chunk of the panel's Script
 // Evaluation time) so it's fetched/parsed/evaluated only when the user actually opens
 // compose/reply, not on every inbox load. printComposeContent is a plain window.print() helper
@@ -4569,6 +4579,10 @@ ${sourceText}`;
                   {activeModule === "campaigns" ? (
                     <div className="h-full overflow-y-auto">
                       <CampaignsView />
+                    </div>
+                  ) : activeModule === "cryptography" ? (
+                    <div className="h-full overflow-y-auto">
+                      <CartographyView />
                     </div>
                   ) : activeModule === "scheduled" ? (
                     <div className="flex h-full flex-col">
