@@ -16,6 +16,9 @@
 
 [build.environment]
   NODE_OPTIONS = "--max-old-space-size=4096"
+  # Node itself is pinned by .nvmrc, which Netlify reads automatically — not repeated here, so
+  # there is one place to change it. Without it Netlify picked its own default (22.23.2) while
+  # CI and local dev were on a different major.
 
 [functions]
   included_files = ["data/presets/**"]
