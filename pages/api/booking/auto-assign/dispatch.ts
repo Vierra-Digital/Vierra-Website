@@ -10,7 +10,8 @@ import { claimBookingSlot } from "@/lib/booking/claimSlot";
  * to whichever free company member has claimed the fewest meetings historically (simple fairness
  * proxy — least-loaded, not a strict rotation queue). Runs every few minutes so the "12 hours"
  * deadline and any availability change (someone else gets booked, frees up, etc.) both get
- * picked up promptly, not just at a single fixed check — see netlify/functions/auto-assign-meetings.ts.
+ * picked up promptly, not just at a single fixed check — see the `auto-assign-meetings` pg_cron
+ * job in prisma/manual/20260901_migrate_cron_to_pg_cron.sql.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST" && req.method !== "GET") {

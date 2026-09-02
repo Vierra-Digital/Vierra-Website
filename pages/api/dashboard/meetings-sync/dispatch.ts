@@ -5,7 +5,8 @@ import { syncUpcomingMeetingsForUser } from "@/lib/dashboard/upcomingMeetings";
 
 /**
  * Cron dispatch endpoint for the upcoming-meetings background sync (every 5 min, see
- * netlify/functions/sync-upcoming-meetings.ts). CRON_SECRET-protected, same shape as
+ * the `sync-upcoming-meetings` pg_cron job in prisma/manual/20260901_migrate_cron_to_pg_cron.sql).
+ * CRON_SECRET-protected, same shape as
  * booking/sync-attendance/dispatch. Moves the expensive per-login Google Calendar API calls
  * (pages/api/dashboard/upcoming-meetings.ts used to make these synchronously on every
  * dashboard load) onto a schedule instead — the GET endpoint now just reads the cache this

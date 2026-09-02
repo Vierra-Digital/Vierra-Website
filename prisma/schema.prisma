@@ -1158,8 +1158,9 @@ model BookingLink {
 }
 
 // DB cache for the dashboard's "Upcoming Meetings" card, refreshed on a schedule by
-// pages/api/dashboard/meetings-sync/dispatch.ts (see netlify/functions/sync-upcoming-meetings.ts)
-// instead of hitting the Google Calendar API on every dashboard load. Always the top 3
+// pages/api/dashboard/meetings-sync/dispatch.ts (see the `sync-upcoming-meetings` pg_cron job
+// in prisma/manual/20260901_migrate_cron_to_pg_cron.sql) instead of hitting the Google Calendar
+// API on every dashboard load. Always the top 3
 // upcoming meetings for the user — see lib/dashboard/upcomingMeetings.ts.
 model DashboardUpcomingMeeting {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
