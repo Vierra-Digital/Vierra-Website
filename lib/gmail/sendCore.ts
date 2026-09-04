@@ -8,6 +8,7 @@ import { createSmtpTransport, requireSmtpCredentials } from "@/lib/email/smtp";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { asStr } from "@/lib/api/parsing";
 import { escapeHtml } from "@/lib/utils";
+import { linkifyTextWithTrackedHrefs, mergeClickTrackUrls, rewriteTrackedLinksInHtml } from "@/lib/gmail/clickTracking";
 
 export { escapeHtml };
 
@@ -63,60 +64,6 @@ function linkifyText(value: string) {
     .replace(/\n/g, "<br>");
 }
 
-export function rewriteTrackedLinksInHtml(value: string, replacements: Map<string, string>) {
-  if (!value || replacements.size === 0) return value;
-  return value.replace(/href=(['"])(https?:\/\/[^\s"'<>]+)\1/gi, (match, quote: string, href: string) => {
-    const trackedHref = replacements.get(href);
-    if (!trackedHref) return match;
-    return `href=${quote}${escapeHtml(trackedHref)}${quote}`;
-  });
-}
-
-function linkifyTextWithTrackedHrefs(value: string, replacements: Map<string, string>) {
-  if (!value) return "";
-  const urlRegex = /https?:\/\/[^\s<>"']+/g;
-  const chunks: string[] = [];
-  let lastIndex = 0;
-  let match = urlRegex.exec(value);
-  while (match) {
-    const rawUrl = match[0];
-    const start = match.index;
-    if (start > lastIndex) {
-      chunks.push(escapeHtml(value.slice(lastIndex, start)).replace(/\n/g, "<br>"));
-    }
-    const href = replacements.get(rawUrl) || rawUrl;
-    chunks.push(
-      `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="color:#5B21B6;text-decoration:underline;">${escapeHtml(rawUrl)}</a>`
-    );
-    lastIndex = start + rawUrl.length;
-    match = urlRegex.exec(value);
-  }
-  if (lastIndex < value.length) {
-    chunks.push(escapeHtml(value.slice(lastIndex)).replace(/\n/g, "<br>"));
-  }
-  return chunks.join("");
-}
-
-function uniqueUrls(value: string) {
-  const matches = value.match(/https?:\/\/[^\s<>"']+/g) || [];
-  return Array.from(new Set(matches));
-}
-
-function uniqueUrlsFromHtmlHref(html: string) {
-  const set = new Set<string>();
-  // MUST match rewriteTrackedLinksInHtml's pattern exactly, or a URL gets a tracking token +
-  // DB row here but is never rewritten in the sent HTML (orphan token, untracked link).
-  const re = /href=(["'])(https?:\/\/[^\s"'<>]+)\1/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html))) {
-    set.add(m[2]);
-  }
-  return Array.from(set);
-}
-
-export function mergeClickTrackUrls(plain: string, html: string) {
-  return Array.from(new Set([...uniqueUrls(plain), ...uniqueUrlsFromHtmlHref(html)]));
-}
 
 
 const ATTACHMENTS_MAX_BYTES = 24 * 1024 * 1024;
@@ -608,3 +555,6 @@ export async function sendEmailCore(
     outboundId: outbound?.id ?? null,
   };
 }
+
+// Re-exported so existing importers of the send path keep working.
+export { mergeClickTrackUrls, rewriteTrackedLinksInHtml } from "@/lib/gmail/clickTracking";
