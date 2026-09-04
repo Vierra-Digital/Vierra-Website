@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { asStr } from "@/lib/api/parsing";
+import { asStr, isUuid } from "@/lib/api/parsing";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { getBusy, type BusyInterval } from "@/lib/calendar/googleCalendar";
 import { getTeamBusyIntersection } from "@/lib/booking/teamAvailability";
@@ -13,6 +13,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
   const id = asStr(req.query.id).trim();
+  if (id && !isUuid(id)) {
+    res.status(404).json({ message: "Not found." });
+    return;
+  }
   const booking = await prisma.booking.findUnique({ where: { id }, include: { booking_links: true } });
   if (!booking) {
     res.status(404).json({ message: "Not found." });

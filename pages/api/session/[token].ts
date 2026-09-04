@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { parseCookie, serializeCookie } from "@/lib/api/cookies";
+import { parseCookie, serializeCookie } from "@/lib/api/cookies";
+import { isUuid } from "@/lib/api/parsing";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") return res.status(405).json({ message: "Method Not Allowed" });
@@ -8,6 +9,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const token = req.query.token;
   if (typeof token !== "string" || !token) {
     return res.status(400).json({ message: "Missing or invalid token" });
+  }
+  // Session tokens are uuids. A malformed one is not a session, so say so rather than letting
+  // Postgres reject the cast and the catch block report a server error.
+  if (!isUuid(token)) {
+    return res.status(404).json({ message: "Session not found" });
   }
 
   try {

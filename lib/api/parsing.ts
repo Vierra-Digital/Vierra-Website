@@ -19,6 +19,25 @@ export function asQueryStr(value: string | string[] | undefined): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
+/**
+ * Whether a string is a well-formed UUID.
+ *
+ * Several public routes take an id straight from the URL into a `@db.Uuid` column. Postgres
+ * rejects anything that is not a UUID before the row lookup happens, Prisma raises P2007, and the
+ * route's catch block turns that into a 500 — so /api/blog/image/abc answered 500 while
+ * /api/blog/image/<a real-looking but absent uuid> correctly answered 404. Same class of request,
+ * two different answers, and the 500s fill the error log with traffic that is just scanners.
+ *
+ * Checking the shape first lets those routes answer 404 for both cases. Deliberately a shape test
+ * and not a version/variant test: the point is to avoid handing Postgres something it will reject,
+ * not to police which UUID version generated it.
+ */
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value: string): boolean {
+  return UUID_SHAPE.test(value);
+}
+
 /** Coerce to a positive integer port, falling back when invalid. */
 export function asPort(value: unknown, fallback: number): number {
   const numeric = Number(value);
