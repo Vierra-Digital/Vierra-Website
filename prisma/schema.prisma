@@ -770,6 +770,9 @@ model Company {
   @@map("companies")
   @@schema("public")
   finance_entries                            FinanceEntry[]
+  artemis_knowledge_docs                     ArtemisKnowledgeDoc[]
+  artemis_review_items                       ArtemisReviewItem[]
+  artemis_runs                               ArtemisRun[]
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
@@ -2144,6 +2147,9 @@ model User {
   assignment_events_assignment_events_from_user_idTousers AssignmentEvent[] @relation("assignment_events_from_user_idTousers")
   assignment_events_assignment_events_to_user_idTousers AssignmentEvent[] @relation("assignment_events_to_user_idTousers")
   assignment_events_assignment_events_changed_by_user_idTousers AssignmentEvent[] @relation("assignment_events_changed_by_user_idTousers")
+  artemis_knowledge_docs ArtemisKnowledgeDoc[]
+  artemis_review_items ArtemisReviewItem[]
+  artemis_runs ArtemisRun[]
 
   @@map("users")
   @@schema("public")
@@ -2294,5 +2300,95 @@ model CartographyContact {
   @@index([task_id], map: "idx_cartography_contacts_task_id")
   @@index([company_id, status], map: "idx_cartography_contacts_status")
   @@unique([company_id, email], map: "uq_cartography_contacts_company_email")
+  @@schema("public")
+}
+
+/// Artemis control plane — the panel-side state for the self-hosted AI box (Sparkey).
+/// Applied to the database by prisma/manual/20260902_artemis_control_plane.sql; these models are
+/// hand-written to match it. `brain_id` mirrors the box's per-project isolation (vierra,
+/// ndimensions, personal, client:<name>) and is text so a new client brain needs no migration.
+
+/// A document uploaded into a brain's knowledge base. The vectors live in Qdrant on the box; this
+/// row is the panel's record of what was sent and whether ingest succeeded.
+model ArtemisKnowledgeDoc {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id   String    @db.Uuid
+  brain_id     String
+  title        String
+  /** "upload" | "url" | "paste" */
+  source       String    @default("upload")
+  source_ref   String?
+  content      String
+  /** "pending" | "ingested" | "failed" */
+  status       String    @default("pending")
+  ingest_error String?
+  ingested_at  DateTime? @db.Timestamptz(6)
+  created_by   String?   @db.Uuid
+  created_at   DateTime  @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime  @default(now()) @db.Timestamptz(6)
+  companies    Company   @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users        User?     @relation(fields: [created_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@map("artemis_knowledge_docs")
+  @@index([company_id, brain_id, created_at(sort: Desc)], map: "idx_artemis_kb_company_brain")
+  @@schema("public")
+}
+
+/// The human-in-the-loop gate: nothing Artemis writes is published, sent or posted from a row that
+/// is not `approved`. `edited_content` keeps the reviewer's version without losing the original.
+model ArtemisReviewItem {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id     String       @db.Uuid
+  brain_id       String
+  /** "social" | "blog" | "email" | "research" */
+  kind           String
+  title          String?
+  content        String
+  edited_content String?
+  /** Generator context kept with the draft: topic, platform, sources, prompt. */
+  meta           Json         @default("{}")
+  /** "pending" | "approved" | "rejected" | "edited" */
+  status         String       @default("pending")
+  review_note    String?
+  reviewed_by    String?      @db.Uuid
+  reviewed_at    DateTime?    @db.Timestamptz(6)
+  created_at     DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime     @default(now()) @db.Timestamptz(6)
+  companies      Company      @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users          User?        @relation(fields: [reviewed_by], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  artemis_runs   ArtemisRun[]
+
+  @@map("artemis_review_items")
+  @@index([company_id, status, created_at(sort: Desc)], map: "idx_artemis_review_company_status")
+  @@schema("public")
+}
+
+/// One row per call to the box — tokens, latency and outcome. Feeds the dashboards and the
+/// cost/error-spike auto-trip on the kill switch.
+model ArtemisRun {
+  id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  company_id      String?            @db.Uuid
+  user_id         String?            @db.Uuid
+  brain_id        String             @default("vierra")
+  /** Which panel feature called: compose | reply | rewrite | summarize | generate | research | blog */
+  endpoint        String
+  model           String?
+  /** "ok" | "error" */
+  status          String             @default("ok")
+  error           String?
+  prompt_tokens   Int?
+  output_tokens   Int?
+  latency_ms      Int?
+  /** Integer tenths of a cent — money in floating point accumulates rounding error. */
+  cost_millicents Int?
+  review_item_id  String?            @db.Uuid
+  created_at      DateTime           @default(now()) @db.Timestamptz(6)
+  companies       Company?           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users           User?              @relation(fields: [user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  review_item     ArtemisReviewItem? @relation(fields: [review_item_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@map("artemis_runs")
+  @@index([company_id, created_at(sort: Desc)], map: "idx_artemis_runs_company_created")
+  @@index([endpoint, created_at(sort: Desc)], map: "idx_artemis_runs_endpoint_created")
   @@schema("public")
 }

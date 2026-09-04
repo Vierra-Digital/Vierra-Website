@@ -8,6 +8,12 @@ import nextTypescript from "eslint-config-next/typescript"
 // "Converting circular structure to JSON" and ESLint exits 2 — linting the repo failed outright
 // rather than reporting problems. Importing the flat entry points is both the fix and what the
 // package now expects.
+// eslint-plugin-react (nested inside eslint-config-next) auto-detects the React version by
+// reading package.json relative to the file being linted, and its resolveBasedir() calls
+// context.getFilename() — removed in ESLint 10, so every rule that consults the version threw
+// "contextOrFilename.getFilename is not a function" and linting exited 2. Stating the version
+// here skips detectReactVersion() altogether, which is both the fix and one fewer thing done by
+// guesswork on every run. Keep this in step with the installed react.
 const eslintConfig = [
   {
     ignores: [
@@ -28,6 +34,7 @@ const eslintConfig = [
   ...nextCoreWebVitals,
   ...nextTypescript,
   {
+    settings: { react: { version: "19" } },
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       // The React Compiler rules arrived as errors with Next 16 and flag 82 existing patterns

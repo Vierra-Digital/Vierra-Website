@@ -142,11 +142,73 @@ export async function getPostBySlug(slug: string): Promise<SerializedPost | null
   return post ? serialize(post) : null;
 }
 
+/**
+ * A related-post card shows a title, date, author and tag — never the body. Selecting `content`
+ * meant every render pulled three full post bodies out of Postgres and dropped them.
+ */
+export type RelatedPost = Omit<SerializedPost, "content">;
+
+/** The columns a related-post card actually needs. */
+const relatedSelect = {
+  id: true,
+  title: true,
+  description: true,
+  slug: true,
+  tag: true,
+  visits: true,
+  published_date: true,
+  updated_date: true,
+  authors: { select: { name: true } },
+} as const;
+
+function serializeRelated(post: {
+  id: string; title: string; description: string | null; slug: string; tag: string | null;
+  visits: number | null; published_date: Date; updated_date: Date | null; authors: { name: string } | null;
+}): RelatedPost {
+  return {
+    id: post.id,
+    title: post.title,
+    description: post.description ?? null,
+    slug: post.slug,
+    tag: post.tag ?? null,
+    visits: post.visits ?? null,
+    published_date: post.published_date.toISOString(),
+    updated_date: post.updated_date ? post.updated_date.toISOString() : null,
+    author: { name: post.authors?.name ?? "Vierra" },
+  };
+}
+
+/**
+ * `next build` prerenders every post, and each one asked the database for its own related posts —
+ * 28 extra round-trips over the Supabase pooler, which is most of the 7.2s the /blog/[slug] route
+ * cost in the Netlify build. The candidate set is identical for every post in a single build, so
+ * read it once per worker and match in memory instead.
+ *
+ * Build phase only. At runtime each ISR regeneration must see current data, and a module-level
+ * cache in a long-lived server would go stale; NEXT_PHASE is set by Next itself, the same signal
+ * lib/prisma.ts uses to size its connection pool. Only the card columns are held, so the memory
+ * cost stays proportional to the post count rather than to the total size of every post body.
+ */
+let buildRelatedCatalog: Promise<RelatedPost[]> | null = null;
+
+function relatedCatalogForBuild(): Promise<RelatedPost[]> {
+  buildRelatedCatalog ??= prisma.blogPost
+    .findMany({ orderBy: { published_date: "desc" }, select: relatedSelect })
+    .then((rows) => rows.map(serializeRelated));
+  return buildRelatedCatalog;
+}
+
 export async function getRelatedPosts(
   opts: { slug: string; tag: string | null; authorName: string },
   limit = 3
-): Promise<SerializedPost[]> {
+): Promise<RelatedPost[]> {
   const tagList = opts.tag ? opts.tag.split(",").map((t) => t.trim()).filter(Boolean) : [];
+
+  if (process.env.NEXT_PHASE === "phase-production-build") {
+    const all = await relatedCatalogForBuild();
+    return matchRelated(all, opts, tagList, limit);
+  }
+
   const posts = await prisma.blogPost.findMany({
     where: {
       AND: [
@@ -161,9 +223,32 @@ export async function getRelatedPosts(
     },
     orderBy: { published_date: "desc" },
     take: limit,
-    ...withAuthorName,
+    select: relatedSelect,
   });
-  return posts.map(serialize);
+  return posts.map(serializeRelated);
+}
+
+/**
+ * The in-memory equivalent of the query above, kept deliberately close to it: a different slug,
+ * and either any of this post's comma-separated tags appearing case-insensitively inside another
+ * post's tag string, or the same author. The catalog is already ordered by published_date desc.
+ *
+ * Exported so the equivalence can be tested without a database; nothing else should call it.
+ */
+export function matchRelated(
+  all: RelatedPost[],
+  opts: { slug: string; authorName: string },
+  tagList: string[],
+  limit: number
+): RelatedPost[] {
+  const needles = tagList.map((t) => t.toLowerCase());
+  return all
+    .filter((p) => {
+      if (p.slug === opts.slug) return false;
+      const tag = p.tag?.toLowerCase() ?? "";
+      return needles.some((n) => tag.includes(n)) || p.author.name === opts.authorName;
+    })
+    .slice(0, limit);
 }
 
 export async function getPostsByTag(tag: string, limit = 50): Promise<SerializedPost[]> {
