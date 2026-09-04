@@ -12,6 +12,16 @@ import { asQueryStr } from "@/lib/api/parsing";
 export const asStr = asQueryStr;
 
 /** Append a Set-Cookie value without clobbering any already set on the response. */
+/**
+ * Add a Set-Cookie header without discarding the ones already there.
+ *
+ * Every cookie helper below goes through this. Three of them used res.setHeader directly, which
+ * replaces the whole header: in /api/googleads/callback and /api/linkedin/callback,
+ * clearOauthStateCookie ran first and setOnboardingSessionCookie ran second, so the clear was
+ * dropped and the OAuth state cookie was never actually cleared. Reversing that order would have
+ * dropped the session cookie instead. Appending removes the ordering hazard rather than
+ * documenting it.
+ */
 export function appendSetCookie(res: NextApiResponse, value: string) {
   const existing = res.getHeader("Set-Cookie");
   const next = Array.isArray(existing) ? [...existing, value] : existing ? [String(existing), value] : [value];
@@ -34,8 +44,8 @@ export function resolveRuntimeBaseUrl(req: NextApiRequest) {
 
 export function issueOauthStateCookie(res: NextApiResponse, cookieName: string, callbackPath: string): string {
   const state = randomBytes(16).toString("hex");
-  res.setHeader(
-    "Set-Cookie",
+  appendSetCookie(
+    res,
     serializeCookie(cookieName, state, {
       httpOnly: true,
       sameSite: "lax",
@@ -72,8 +82,8 @@ export function setScopedOauthCookie(
 }
 
 export function clearOauthStateCookie(res: NextApiResponse, cookieName: string, callbackPath: string) {
-  res.setHeader(
-    "Set-Cookie",
+  appendSetCookie(
+    res,
     serializeCookie(cookieName, "", {
       httpOnly: true,
       sameSite: "lax",
@@ -89,8 +99,8 @@ export function readCookies(rawCookie: string | undefined) {
 }
 
 export function setOnboardingSessionCookie(res: NextApiResponse, sessionId: string) {
-  res.setHeader(
-    "Set-Cookie",
+  appendSetCookie(
+    res,
     serializeCookie("ob_session", sessionId, {
       httpOnly: true,
       sameSite: "lax",

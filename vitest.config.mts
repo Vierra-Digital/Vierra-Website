@@ -57,6 +57,7 @@ export default defineConfig({
           "lib/api/contacts.ts",
           "lib/email/htmlSafety.ts",
           "lib/gmail/clickTracking.ts",
+          "lib/api/oauth.ts",
       ],
       // Floor set below current levels (~93% stmts/branch, 100% funcs) with margin: passes today,
       // blocks regressions, raise further as tests grow.
