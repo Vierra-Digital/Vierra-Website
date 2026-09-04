@@ -4,7 +4,7 @@ import { readCachedUpcomingMeetings, syncUpcomingMeetingsForUser } from "@/lib/d
 
 /**
  * Serves the DB-cached result written by the meetings-sync cron (see
- * lib/dashboard/upcomingMeetings.ts and pages/api/dashboard/meetings-sync/dispatch.ts) instead
+ * lib/dashboard/upcomingMeetings.ts and supabase/functions/dashboard-meetings-sync/) instead
  * of hitting the live Google Calendar API on every dashboard load. Falls back to a one-time
  * inline sync only when this user has never been synced yet (e.g. they just connected Gmail
  * and no cron tick has run for them) — every request after that reads the cache.
