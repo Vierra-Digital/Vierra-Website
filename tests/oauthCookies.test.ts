@@ -94,6 +94,35 @@ describe("cookie helpers compose", () => {
   });
 });
 
+describe("the supabase session-refresh scenario", () => {
+  /**
+   * All six OAuth callbacks go through requireSession, which builds a Supabase server client.
+   * When that client refreshes the access token it writes the new auth cookies through its own
+   * setAll, as a single setHeader carrying an array. The callback body then sets its own cookies
+   * afterwards.
+   *
+   * This is the case that made the overwrite worth fixing beyond the state cookie itself: with the
+   * old res.setHeader setters, the callback discarded the refreshed sb-access-token and
+   * sb-refresh-token, so a user who happened to connect an integration during a token refresh
+   * lost the refresh and was signed out earlier than they should have been.
+   */
+  it("keeps the refreshed auth cookies when a callback then sets its own", () => {
+    const { res, cookies } = fakeRes();
+    // Exactly what lib/supabase/server.ts setAll does: one setHeader, an array of cookies.
+    res.setHeader("Set-Cookie", ["sb-access-token=new1; Path=/", "sb-refresh-token=new2; Path=/"]);
+
+    clearOauthStateCookie(res, "ga_oauth_state", "/api/googleads/callback");
+    setOnboardingSessionCookie(res, "sess-1");
+
+    expect(names(cookies())).toEqual([
+      "sb-access-token",
+      "sb-refresh-token",
+      "ga_oauth_state",
+      "ob_session",
+    ]);
+  });
+});
+
 describe("appendSetCookie", () => {
   it("handles no header, a single string header, and an existing array", () => {
     const { res, cookies } = fakeRes();
