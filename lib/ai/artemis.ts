@@ -15,6 +15,8 @@
  * Server-side only — never import into client bundles.
  */
 
+import { cleanAiTells, withHumanizedSystem } from "@/lib/ai/humanize";
+
 export type ArtemisMessage = { role: "user" | "assistant"; content: string };
 export type ArtemisResult = { ok: true; text: string } | { ok: false; error: string };
 
@@ -52,10 +54,15 @@ export function artemisConfigured(): boolean {
  * "reply" status on every message without ever reporting a problem. A failure has to look like one.
  */
 function emptyContentError(finishReason?: string, reasoning?: string | null): string {
+  // Check `reasoning` before `finish_reason`. A model can stop for its own reasons mid-thought and
+  // still hand back a null `content` with the whole budget sitting in `reasoning`, so gating this
+  // message on finish_reason === "length" reported a bare "empty response" for the one case where
+  // the cause is knowable and the fix is a named env var.
+  if (reasoning) {
+    return "The model spent its whole token budget on a reasoning pass and returned no answer. Set ARTEMIS_DISABLE_THINKING=1, or raise maxTokens.";
+  }
   if (finishReason === "length") {
-    return reasoning
-      ? "The model spent its whole token budget on a reasoning pass and returned no answer. Set ARTEMIS_DISABLE_THINKING=1, or raise maxTokens."
-      : "The model hit the token limit before returning any text. Raise maxTokens.";
+    return "The model hit the token limit before returning any text. Raise maxTokens.";
   }
   return "The model returned an empty response.";
 }
@@ -64,8 +71,15 @@ export async function artemisGenerate(opts: {
   system: string;
   messages: ArtemisMessage[];
   maxTokens?: number;
+  /**
+   * Prepend the house style guide and clean the reply. On by default: the passthrough this client
+   * talks to applies neither, so without it every panel feature writes like stock AI. Pass false
+   * only when the output is parsed by code rather than read by a person.
+   */
+  humanize?: boolean;
 }): Promise<ArtemisResult> {
-  const { system, messages, maxTokens = 1024 } = opts;
+  const { messages, maxTokens = 1024, humanize = true } = opts;
+  const system = humanize ? withHumanizedSystem(opts.system) : opts.system;
   if (!artemisConfigured()) {
     return { ok: false, error: "Artemis AI isn't configured yet. Set ARTEMIS_* environment variables." };
   }
@@ -86,8 +100,9 @@ export async function artemisGenerate(opts: {
         return { ok: false, error: err || `AI request failed (${res.status})` };
       }
       const content = (data as { content?: Array<{ text?: string }> })?.content;
-      const text = Array.isArray(content) ? content.map((c) => c?.text || "").join("").trim() : "";
-      if (!text) return { ok: false, error: emptyContentError((data as { stop_reason?: string })?.stop_reason) };
+        const raw = Array.isArray(content) ? content.map((c) => c?.text || "").join("").trim() : "";
+        const text = humanize ? cleanAiTells(raw) : raw;
+        if (!text) return { ok: false, error: emptyContentError((data as { stop_reason?: string })?.stop_reason) };
       return { ok: true, text };
     }
 
@@ -110,11 +125,12 @@ export async function artemisGenerate(opts: {
       const err = (data as { error?: { message?: string } })?.error?.message;
       return { ok: false, error: err || `AI request failed (${res.status})` };
     }
-    const choice = (data as {
-      choices?: Array<{ message?: { content?: string | null; reasoning?: string | null }; finish_reason?: string }>;
-    })?.choices?.[0];
-    const text = (choice?.message?.content || "").trim();
-    if (!text) return { ok: false, error: emptyContentError(choice?.finish_reason, choice?.message?.reasoning) };
+      const choice = (data as {
+        choices?: Array<{ message?: { content?: string | null; reasoning?: string | null }; finish_reason?: string }>;
+      })?.choices?.[0];
+      const raw = (choice?.message?.content || "").trim();
+      const text = humanize ? cleanAiTells(raw) : raw;
+      if (!text) return { ok: false, error: emptyContentError(choice?.finish_reason, choice?.message?.reasoning) };
     return { ok: true, text };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "AI request error" };
