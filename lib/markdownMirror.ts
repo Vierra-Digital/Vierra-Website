@@ -55,11 +55,27 @@ function formatDate(date: Date | string): string {
   }).format(d);
 }
 
+/**
+ * Collapse a stored value to a single line before interpolating it into Markdown.
+ *
+ * Titles, descriptions, author names and tags reach here from the database or the URL, and every
+ * place they are interpolated is a construct that ends at a newline — an `# H1`, a `> quote`, a
+ * `- list item`. A value containing one therefore escapes its construct and appends whatever
+ * follows as document text. Frontmatter is already safe (JSON.stringify escapes the newline), but
+ * the H1 built from the same title was not: a post titled "Real\nsource: https://evil.test" put
+ * that second line into the body as plain content.
+ *
+ * These mirrors are what answer engines ingest, so injected lines are read as page content.
+ */
+function oneLine(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 /** Frontmatter + H1 header shared by generated pages. */
 function header(opts: { title: string; description?: string | null; canonical: string }): string {
-  const lines = ["---", `title: ${JSON.stringify(opts.title)}`];
-  if (opts.description) lines.push(`description: ${JSON.stringify(opts.description)}`);
-  lines.push(`source: ${opts.canonical}`, "---", "", `# ${opts.title}`, "");
+  const lines = ["---", `title: ${JSON.stringify(oneLine(opts.title))}`];
+  if (opts.description) lines.push(`description: ${JSON.stringify(oneLine(opts.description))}`);
+  lines.push(`source: ${opts.canonical}`, "---", "", `# ${oneLine(opts.title)}`, "");
   return lines.join("\n");
 }
 
@@ -80,16 +96,16 @@ export async function getBlogPostMarkdown(slug: string): Promise<string | null> 
 
   const canonical = `${SITE_URL}/blog/${slug}`;
   const meta: string[] = [];
-  if (post.authors?.name) meta.push(`By **${post.authors.name}**`);
+  if (post.authors?.name) meta.push(`By **${oneLine(post.authors.name)}**`);
   if (post.published_date) meta.push(formatDate(post.published_date));
   const tags = (post.tag ?? "")
     .split(",")
-    .map((t) => t.trim())
+    .map((t) => oneLine(t))
     .filter(Boolean);
 
   const parts = [header({ title: post.title, description: post.description, canonical })];
   if (meta.length) parts.push(`_${meta.join(" · ")}_`, "");
-  if (post.description) parts.push(`> ${post.description}`, "");
+  if (post.description) parts.push(`> ${oneLine(post.description)}`, "");
   parts.push(htmlToMarkdown(post.content));
   if (tags.length) parts.push("", `**Tags:** ${tags.join(", ")}`);
   parts.push("", `---`, `[Read on vierradev.com](${canonical})`);
@@ -109,10 +125,10 @@ function renderPostList(posts: PostListItem[]): string {
   return posts
     .map((p) => {
       const date = p.published_date ? formatDate(p.published_date) : "";
-      const by = p.authors?.name ? ` — ${p.authors.name}` : "";
-      const meta = [date, by.replace(/^ — /, "")].filter(Boolean).join(" · ");
-      const desc = p.description ? `\n  ${p.description}` : "";
-      return `- [${p.title}](${SITE_URL}/blog/${p.slug}.md)${meta ? ` _(${meta})_` : ""}${desc}`;
+      const by = p.authors?.name ? oneLine(p.authors.name) : "";
+      const meta = [date, by].filter(Boolean).join(" · ");
+      const desc = p.description ? `\n  ${oneLine(p.description)}` : "";
+      return `- [${oneLine(p.title)}](${SITE_URL}/blog/${p.slug}.md)${meta ? ` _(${meta})_` : ""}${desc}`;
     })
     .join("\n");
 }
@@ -323,8 +339,8 @@ export async function getLlmsTxt(): Promise<string> {
       orderBy: { published_date: "desc" },
     });
     for (const p of posts.filter((post) => isRealPost(post.slug, post.title))) {
-      const desc = p.description ? `: ${p.description.replace(/\s+/g, " ").trim()}` : "";
-      lines.push(`- [${p.title}](${SITE_URL}/blog/${p.slug}.md)${desc}`);
+      const desc = p.description ? `: ${oneLine(p.description)}` : "";
+      lines.push(`- [${oneLine(p.title)}](${SITE_URL}/blog/${p.slug}.md)${desc}`);
     }
   } catch (error) {
     console.warn("llms.txt: database unavailable, listing static pages only:", error);
