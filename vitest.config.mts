@@ -61,6 +61,7 @@ export default defineConfig({
           "lib/campaigns/replyStatus.ts",
           "lib/api/campaigns.ts",
           "lib/markdownMirror.ts",
+          "lib/gmail/inboundActions.ts",
       ],
       // Floor set below current levels (~93% stmts/branch, 100% funcs) with margin: passes today,
       // blocks regressions, raise further as tests grow.
