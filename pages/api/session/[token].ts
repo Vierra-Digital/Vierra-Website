@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { parseCookie, serializeCookie } from "@/lib/api/cookies";
+import { parseCookie, serializeCookie } from "@/lib/api/cookies";
 import { isUuid } from "@/lib/api/parsing";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

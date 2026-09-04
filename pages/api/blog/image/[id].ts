@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { sendImageAsset } from "@/lib/api/image";
-import { STORAGE_BUCKETS } from "@/lib/storage";
+import { STORAGE_BUCKETS } from "@/lib/storage";
 import { isUuid } from "@/lib/api/parsing";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
