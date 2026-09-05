@@ -4,6 +4,8 @@ export interface PanelFile {
   date: string;
   fileType: string;
   signingTokenId?: string | null;
+  /** Whether this file has bytes retrievable at all (signing-flow token or storage_key). */
+  hasContent?: boolean;
   owner?: string;
   isDeletionProtected?: boolean;
 }
@@ -23,6 +25,46 @@ export async function loadPanelFiles(fileFilter?: string): Promise<PanelFile[]> 
     return data;
   } catch {
     throw new Error("Could not load files. Try again.");
+  }
+}
+
+/**
+ * Uploads a file straight to storage via a signed URL (see /api/admin/uploadFileUrl), then
+ * confirms it into a `stored_files` row (/api/admin/uploadFile) — same two-step shape as the
+ * blog editor's image upload, so the bytes never pass through a serverless function.
+ */
+export async function uploadPanelFile(file: File, clientId?: string): Promise<void> {
+  const signResp = await fetch("/api/admin/uploadFileUrl", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename: file.name }),
+  });
+  if (!signResp.ok) {
+    const body = await signResp.json().catch(() => ({}));
+    throw new Error(body?.message || "Could not start the upload.");
+  }
+  const { signedUrl, storageKey } = await signResp.json();
+  if (!signedUrl || !storageKey) {
+    throw new Error("Could not start the upload.");
+  }
+
+  const put = await fetch(signedUrl, {
+    method: "PUT",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  if (!put.ok) {
+    throw new Error("Upload failed. Try again.");
+  }
+
+  const confirmResp = await fetch("/api/admin/uploadFile", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ storageKey, filename: file.name, clientId }),
+  });
+  if (!confirmResp.ok) {
+    const body = await confirmResp.json().catch(() => ({}));
+    throw new Error(body?.message || "Could not save the uploaded file.");
   }
 }
 

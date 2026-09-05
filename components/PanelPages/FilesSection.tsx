@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useRef } from "react"
 import { inter } from "@/lib/fonts";
-import { FiFolder, FiTrash2, FiDownload, FiLock } from "react-icons/fi"
+import { FiFolder, FiTrash2, FiDownload, FiLock, FiUpload } from "react-icons/fi"
 import PanelSearchInput from "@/components/ui/PanelSearchInput"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import PanelSectionHeader from "@/components/ui/PanelSectionHeader"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
+import PaginationControls from "@/components/ui/PaginationControls"
 import { useFetch } from "@/hooks/useFetch"
-import { deletePanelFile, loadPanelFiles, type PanelFile } from "@/lib/panel/files"
+import { deletePanelFile, loadPanelFiles, uploadPanelFile, type PanelFile } from "@/lib/panel/files"
 
 
 const getNameWithoutExtension = (name: string) =>
@@ -31,15 +32,24 @@ const FilesContent: React.FC<FilesSectionProps> = ({
   allowDelete = false,
   showOwnerInReadOnly = false,
 }) => {
+  const canUpload = !readOnly || allowDelete
+  const canDelete = !readOnly || allowDelete
+  const showOwnerColumn = !readOnly || showOwnerInReadOnly
+
   const [search, setSearch] = useState("")
   const [fileType, setFileType] = useState("")
   const [owner, setOwner] = useState("")
   const [sort, setSort] = useState("name")
+  const [currentPage, setCurrentPage] = useState(0)
+  const pageSize = 10
   const [fileToDelete, setFileToDelete] = useState<PanelFile | null>(null)
   const [deleting, setDeleting] = useState(false)
   const deletePending = useRef(false)
   const [deleteError, setDeleteError] = useState("")
-  const [notice, setNotice] = useState("")
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState("")
+  const uploadPending = useRef(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const refreshButtonRef = useRef<HTMLButtonElement>(null)
   const {
     data: filesData,
@@ -56,18 +66,75 @@ const FilesContent: React.FC<FilesSectionProps> = ({
     return files.filter(f => f.name.toLowerCase().includes(q) && (!fileType || f.fileType === fileType) && (!owner || f.owner === owner)).sort((a, b) => sort === "type" ? a.fileType.localeCompare(b.fileType) || a.name.localeCompare(b.name) : a.name.localeCompare(b.name))
   }, [files, search, fileType, owner, sort])
   const hasFilters = Boolean(search.trim() || fileType || owner)
-  const clearFilters = () => { setSearch(""); setFileType(""); setOwner(""); setSort("name"); }
+  const clearFilters = () => { setSearch(""); setFileType(""); setOwner(""); setSort("name"); setCurrentPage(0); }
+
+  // Clamped rather than reset from an effect (see ClientsSection's identical comment): searching
+  // to a shorter list could leave currentPage past the end, and slicing beyond the array renders
+  // an empty table with nothing to explain it.
+  const totalPages = Math.max(1, Math.ceil(filteredFiles.length / pageSize))
+  const page = Math.min(currentPage, totalPages - 1)
+  const paginatedFiles = filteredFiles.slice(page * pageSize, (page + 1) * pageSize)
+
+  const handleUploadClick = () => { if (!uploadPending.current) fileInputRef.current?.click() }
+
+  const runUpload = async (file: File) => {
+    if (uploadPending.current) return
+    uploadPending.current = true
+    setUploading(true)
+    setUploadError("")
+    try {
+      await uploadPanelFile(file, fileFilter)
+      await fetchFiles()
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "Could not upload this file. Try again.")
+    } finally {
+      uploadPending.current = false
+      setUploading(false)
+    }
+  }
+
+  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (file) await runUpload(file)
+  }
+
+  const dragCounter = useRef(0)
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!canUpload || !e.dataTransfer.types.includes("Files")) return
+    e.preventDefault()
+    dragCounter.current += 1
+    setIsDragging(true)
+  }
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!canUpload || !e.dataTransfer.types.includes("Files")) return
+    e.preventDefault()
+  }
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!canUpload) return
+    e.preventDefault()
+    dragCounter.current = Math.max(0, dragCounter.current - 1)
+    if (dragCounter.current === 0) setIsDragging(false)
+  }
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    if (!canUpload) return
+    e.preventDefault()
+    dragCounter.current = 0
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) await runUpload(file)
+  }
 
   const handleConfirmDelete = async () => {
     if (!fileToDelete || deletePending.current || loading) return
     deletePending.current = true
     setDeleting(true)
     setDeleteError("")
-    setNotice("")
     try {
       await deletePanelFile(fileToDelete.id)
       setFiles((prev) => (prev ?? []).filter((f) => f.id !== fileToDelete.id))
-      setNotice(`Deleted ${fileToDelete.name}.`)
       setFileToDelete(null)
       requestAnimationFrame(() => refreshButtonRef.current?.focus())
     } catch (e) {
@@ -84,11 +151,13 @@ const FilesContent: React.FC<FilesSectionProps> = ({
         `/api/admin/file/${encodeURIComponent(file.name)}?tokenId=${encodeURIComponent(file.signingTokenId)}`,
         "_blank", "noopener,noreferrer"
       )
+    } else if (file.hasContent) {
+      window.open(
+        `/api/admin/file/${encodeURIComponent(file.name)}?id=${encodeURIComponent(file.id)}`,
+        "_blank", "noopener,noreferrer"
+      )
     }
   }
-
-  const canDelete = !readOnly || allowDelete
-  const showOwnerColumn = !readOnly || showOwnerInReadOnly
 
   return (
     <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
@@ -97,29 +166,70 @@ const FilesContent: React.FC<FilesSectionProps> = ({
           <PanelSectionHeader
             title="Files"
             actions={
-              <PanelSearchInput
-                id="files-search"
-                value={search}
-                onChange={setSearch}
-                placeholder="Search by File Name"
-                label="Search files"
-              />
+              <>
+                <PanelSearchInput
+                  id="files-search"
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="Search by File Name"
+                  label="Search files"
+                />
+                {canUpload && (
+                  <>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      onChange={handleFileSelected}
+                      className="hidden"
+                      aria-hidden="true"
+                      tabIndex={-1}
+                    />
+                    <button
+                      type="button"
+                      disabled={uploading}
+                      onClick={handleUploadClick}
+                      className="inline-flex items-center gap-2 rounded-lg bg-[#701CC0] px-4 py-2 text-sm font-medium text-white hover:bg-[#5f17a5] disabled:opacity-50"
+                    >
+                      <FiUpload className="w-4 h-4" />
+                      {uploading ? "Uploading…" : "Upload File"}
+                    </button>
+                  </>
+                )}
+              </>
             }
           />
 
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-[#6B7280]">
             <p>{filesData !== null ? `${filteredFiles.length} of ${files.length} files` : "Files"}</p>
-            <button ref={refreshButtonRef} type="button" disabled={loading || deleting} onClick={() => { setNotice(""); void fetchFiles(); }} className="rounded-md border border-[#E5E7EB] px-3 py-2 text-[#374151] hover:bg-gray-50 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#701CC0]">
+            <button ref={refreshButtonRef} type="button" disabled={loading || deleting} onClick={() => void fetchFiles()} className="rounded-md border border-[#E5E7EB] px-3 py-2 text-[#374151] hover:bg-gray-50 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#701CC0]">
               {loading ? "Refreshing…" : "Refresh files"}
             </button>
           </div>
+          {uploadError && (
+            <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              {uploadError}
+            </div>
+          )}
           <div className="mb-4 flex flex-wrap gap-3 text-sm">
             <label>Type <select value={fileType} onChange={e => setFileType(e.target.value)} className="rounded border p-2"><option value="">All types</option>{Array.from(new Set(files.map(f => f.fileType))).sort().map(type => <option key={type}>{type}</option>)}</select></label>
             {showOwnerColumn && <label>Owner <select value={owner} onChange={e => setOwner(e.target.value)} className="rounded border p-2"><option value="">All owners</option>{Array.from(new Set(files.map(f => f.owner).filter((value): value is string => Boolean(value)))).sort().map(value => <option key={value}>{value}</option>)}</select></label>}
-            <label>Sort <select value={sort} onChange={e => setSort(e.target.value)} className="rounded border p-2"><option value="name">Name A?Z</option><option value="type">File type</option></select></label>
+            <label>Sort <select value={sort} onChange={e => setSort(e.target.value)} className="rounded border p-2"><option value="name">Name A-Z</option><option value="type">File type</option></select></label>
             {hasFilters && <button onClick={clearFilters} className="underline">Clear filters</button>}
           </div>
-          {notice && <p role="status" className="mb-4 text-sm text-green-700">{notice}</p>}
+          <div
+            className={`relative flex flex-1 flex-col rounded-xl ${isDragging ? "outline outline-2 outline-dashed outline-[#701CC0] outline-offset-4" : ""}`}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => void handleDrop(e)}
+          >
+          {isDragging && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-[#701CC0]/5">
+              <p className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-[#701CC0] shadow-sm">
+                Drop to upload
+              </p>
+            </div>
+          )}
           {error && (
             <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
               <p>{error}</p>
@@ -173,7 +283,7 @@ const FilesContent: React.FC<FilesSectionProps> = ({
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-[#E5E7EB]">
-                    {filteredFiles.map((file) => (
+                    {paginatedFiles.map((file) => (
                       <tr key={file.id} className="hover:bg-purple-50">
                         <td className="px-4 py-4">
                           <button
@@ -191,7 +301,8 @@ const FilesContent: React.FC<FilesSectionProps> = ({
                           >
                             {getNameWithoutExtension(file.name)}
                           </button>
-                          {!file.signingTokenId && <p className="mt-1 text-xs text-[#6B7280]">Preview and download unavailable</p>}
+                          {!file.hasContent && <p className="mt-1 text-xs text-[#6B7280]">Preview and download unavailable</p>}
+                          {file.hasContent && !file.signingTokenId && <p className="mt-1 text-xs text-[#6B7280]">Preview unavailable — download only</p>}
                           {file.isDeletionProtected && <p className="mt-1 text-xs text-[#6B7280]">Protected file — cannot be deleted</p>}
                         </td>
                         <td className="px-4 py-4 text-sm text-[#374151]">
@@ -210,7 +321,7 @@ const FilesContent: React.FC<FilesSectionProps> = ({
                             <button
                               type="button"
                               onClick={() => handleDownload(file)}
-                              disabled={!file.signingTokenId}
+                              disabled={!file.hasContent}
                               className="p-1.5 rounded-md hover:bg-gray-100 text-[#374151] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               aria-label={`Download ${file.name}`}
                             >
@@ -245,6 +356,16 @@ const FilesContent: React.FC<FilesSectionProps> = ({
               </div>
             </div>
           )}
+
+          {filesData !== null && filteredFiles.length > 0 && (
+            <PaginationControls
+              currentPage={page}
+              totalPages={totalPages}
+              onPrevious={() => setCurrentPage(Math.max(0, page - 1))}
+              onNext={() => setCurrentPage(Math.min(totalPages - 1, page + 1))}
+            />
+          )}
+          </div>
 
           {canDelete && (
             <ConfirmActionModal
