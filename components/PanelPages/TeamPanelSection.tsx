@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { FiSearch, FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck } from "react-icons/fi";
+import { FiSearch, FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import Image from "next/image";
 import ProfileImage from "../ProfileImage";
 import { inter } from "@/lib/fonts";
@@ -572,22 +572,22 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                             )}
 
                             {!loading && filteredRows.length > 0 && (
-                                <div className="bg-[#F1EFF6] rounded-xl">
+                                <div className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white">
                             <div className="overflow-x-auto">
                                 <table className="w-full">
-                                    <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
+                                    <thead className="bg-[#F7F5FB] border-b border-[#E4E0EC]">
                                         <tr>
                                             {columns.map((column) => (
-                                                <th key={column.key} className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
+                                                <th key={column.key} className="px-5 py-3.5 first:pl-6 last:pr-6 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-[#6B7280]">
                                                     {column.header}
                                                 </th>
                                             ))}
                                         </tr>
                                     </thead>
-                                    <tbody className="bg-white divide-y divide-[#E5E7EB]">
+                                    <tbody className="bg-white divide-y divide-[#EFECF4]">
                                         {paginatedRows.map((r) => (
-                                            <tr key={r.id} className="hover:bg-purple-50">
-                                                <td className="px-4 py-4">
+                                            <tr key={r.id} className="transition-colors hover:bg-[#F9F7FD]">
+                                                <td className="px-5 py-4 first:pl-6 last:pr-6">
                                                     <div className="flex items-center">
                                                         <ProfileImage
                                                             src={r.image ? `/api/admin/getUserImage?userId=${r.id}&v=${r.imageVersion ?? 0}` : null}
@@ -601,23 +601,29 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td className="px-4 py-4 text-sm">
-                                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPositionColor(r.position)}`}>
-                                                        {r.position}
-                                                    </span>
+                                                <td className="px-5 py-4 first:pl-6 last:pr-6 text-sm">
+                                                    {/* No position renders an em-dash like every other blank column; the
+                                                        badge with nothing in it read as a grey smudge. */}
+                                                    {r.position ? (
+                                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPositionColor(r.position)}`}>
+                                                            {r.position}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[#111827]">—</span>
+                                                    )}
                                                 </td>
-                                                <td className="px-4 py-4 text-sm text-[#111827]">
-                                                    <div>{r.country}</div>
-                                                    <div className="text-xs text-[#6B7280]">{r.time_zone}</div>
+                                                <td className="px-5 py-4 first:pl-6 last:pr-6 text-sm text-[#111827]">
+                                                    <div>{r.country || "—"}</div>
+                                                    {r.time_zone ? <div className="text-xs text-[#6B7280]">{r.time_zone}</div> : null}
                                                 </td>
-                                                <td className="px-4 py-4 text-sm text-[#111827]">{r.company_email || "—"}</td>
-                                                <td className="px-4 py-4 text-sm text-[#111827]">{r.mentor || "—"}</td>
-                                                <td className="px-4 py-4 text-sm">{r.strikes || "0/3"}</td>
-                                                <td className="px-4 py-4 text-sm">
+                                                <td className="px-5 py-4 first:pl-6 last:pr-6 text-sm text-[#111827]">{r.company_email || "—"}</td>
+                                                <td className="px-5 py-4 first:pl-6 last:pr-6 text-sm text-[#111827]">{r.mentor || "—"}</td>
+                                                <td className="px-5 py-4 first:pl-6 last:pr-6 text-sm">{r.strikes || "0/3"}</td>
+                                                <td className="px-5 py-4 first:pl-6 last:pr-6 text-sm">
                                                     <StatusBadge lastActiveAt={r.lastActiveAt} isPending={r.isPending} />
                                     </td>
                                                 {userRole === "admin" && (
-                                                    <td className="px-4 py-4 text-sm text-[#6B7280] relative">
+                                                    <td className="px-5 py-4 first:pl-6 last:pr-6 text-sm text-[#6B7280] relative">
                                                         {r.isPending ? (
                                                             <InviteActionsMenu
                                                                 inviteEmail={r.email}
@@ -639,36 +645,46 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                         </tbody>
                             </table>
                         </div>
+                        {/* Range left, controls right — the shape a table footer usually takes,
+                            rather than a centred huddle of three small elements. Inside the card
+                            so the range lines up with the first column's gutter. */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#EFECF4] bg-[#FCFBFE] px-6 py-3.5">
+                            <p className="text-[12.5px] text-[#6B7280]">
+                                Showing{" "}
+                                <span className="font-medium text-[#374151]">
+                                    {page * pageSize + 1}–{Math.min((page + 1) * pageSize, filteredRows.length)}
+                                </span>{" "}
+                                of <span className="font-medium text-[#374151]">{filteredRows.length}</span>
+                            </p>
+                            <div className="flex items-center gap-1.5">
+                                <button
+                                    onClick={() => setCurrentPage(Math.max(0, page - 1))}
+                                    disabled={page === 0}
+                                    aria-label="Previous page"
+                                    className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#374151] transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-40"
+                                >
+                                    <FiChevronLeft className="h-3.5 w-3.5" aria-hidden />
+                                    Previous
+                                </button>
+                                <span className="px-1 text-[12.5px] tabular-nums text-[#6B7280]">
+                                    {page + 1} / {totalPages}
+                                </span>
+                                <button
+                                    onClick={() => setCurrentPage(Math.min(totalPages - 1, page + 1))}
+                                    disabled={page >= totalPages - 1}
+                                    aria-label="Next page"
+                                    className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#374151] transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-40"
+                                >
+                                    Next
+                                    <FiChevronRight className="h-3.5 w-3.5" aria-hidden />
+                                </button>
+                            </div>
+                        </div>
                                 </div>
                             )}
                         </>
                     )}
 
-                    {!loading && filteredRows.length > 0 && (
-                        <div className="mt-4 pt-4 text-xs text-[#677489]">
-                            <div className="w-full flex items-center justify-center">
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => setCurrentPage(Math.max(0, page - 1))}
-                                        disabled={page === 0}
-                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Previous
-                                    </button>
-                                    <span className="text-xs text-[#6B7280]">
-                                        Page {page + 1} of {totalPages}
-                                    </span>
-                                    <button
-                                        onClick={() => setCurrentPage(Math.min(totalPages - 1, page + 1))}
-                                        disabled={page >= totalPages - 1}
-                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Next
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
                 </div>
             </div>
 
