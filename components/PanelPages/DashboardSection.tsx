@@ -586,7 +586,7 @@ const DashboardSection = () => {
                             <button
                                 type="button"
                                 onClick={() => setLtvOpen(true)}
-                                className="group flex w-full flex-col justify-between rounded-xl bg-gradient-to-br from-[#701CC0] to-[#8F42FF] p-4 text-left text-white transition-[filter] duration-200 hover:brightness-[1.06]"
+                                className="group flex w-full max-w-[224px] flex-col justify-between rounded-xl bg-gradient-to-br from-[#701CC0] to-[#8F42FF] p-4 text-left text-white transition-[filter] duration-200 hover:brightness-[1.06]"
                             >
                                 <div>
                                     <h3 className="text-lg font-semibold text-white">LTV Calculator</h3>
@@ -629,7 +629,7 @@ const DashboardSection = () => {
                                                     })}
                                                 </p>
                                             </div>
-                                            <span className="mt-0.5 shrink-0 rounded-full bg-[#F3EDFB] px-2 py-0.5 text-[11px] font-medium text-[#701CC0]">
+                                            <span className="shrink-0 rounded-full bg-[#F3EDFB] px-2 py-0.5 text-[11px] font-medium text-[#701CC0]">
                                                 {post.views.toLocaleString()} {post.views === 1 ? "View" : "Views"}
                                             </span>
                                         </li>
