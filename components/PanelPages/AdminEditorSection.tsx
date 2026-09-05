@@ -21,6 +21,7 @@ import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import Modal from "@/components/ui/Modal"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import ProfileImage from "@/components/ProfileImage"
 import {
     PanelBadge,
     PanelButton,
@@ -49,6 +50,7 @@ type ListedUser = {
     role: string
     clientName: string | null
     companyName: string | null
+    imageVersion?: number | string
     isPlatformAdmin?: boolean
     isSelf?: boolean
     hasAccount?: boolean
@@ -114,11 +116,6 @@ const ROLE_CHOICES: Array<{ value: RoleKey; label: string }> = [
     { value: "staff", label: "Staff" },
     { value: "client", label: "Client" },
 ]
-
-const formatSessionDate = (ts?: number | null) => {
-    if (!ts) return "N/A"
-    return new Date(ts).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
-}
 
 const AdminEditorSection = () => <UsersPanel />
 
@@ -612,9 +609,17 @@ function UsersPanel() {
                                         return (
                                             <PanelTr key={u.id}>
                                                 <PanelTd>
-                                                    <div className="min-w-0">
-                                                        <div className="truncate font-medium text-[#111827]">{u.name || "—"}</div>
-                                                        <div className="truncate text-[12px] text-[#6B7280]">{u.email || "—"}</div>
+                                                    <div className="flex items-center gap-3">
+                                                        <ProfileImage
+                                                            src={u.image ? `/api/admin/getUserImage?userId=${u.id}&v=${u.imageVersion ?? 0}` : null}
+                                                            name={u.name || u.email || "User"}
+                                                            size={32}
+                                                            alt={`${u.name || u.email || "User"}'s profile`}
+                                                        />
+                                                        <div className="min-w-0">
+                                                            <div className="truncate font-medium text-[#111827]">{u.name || "—"}</div>
+                                                            <div className="truncate text-[12px] text-[#6B7280]">{u.email || "—"}</div>
+                                                        </div>
                                                     </div>
                                                 </PanelTd>
                                                 <PanelTd>
@@ -622,23 +627,15 @@ function UsersPanel() {
                                                         <PanelBadge tone={ROLE_TONES[normalizeRole(u.role)]}>
                                                             {ROLE_LABELS[normalizeRole(u.role)]}
                                                         </PanelBadge>
-                                                        {u.isPlatformAdmin && <PanelBadge tone="accent">Superadmin</PanelBadge>}
                                                         {!canManageAccount && <PanelBadge tone="neutral">No account</PanelBadge>}
                                                     </div>
                                                 </PanelTd>
                                                 {showCompanyColumn && <PanelTd>{u.companyName || <PanelEmptyCell />}</PanelTd>}
                                                 <PanelTd>
                                                     {session ? (
-                                                        <div className="flex flex-col items-start gap-1">
-                                                            <PanelBadge tone={SESSION_TONES[session.status]}>
-                                                                {SESSION_LABELS[session.status]}
-                                                            </PanelBadge>
-                                                            <span className="text-[11.5px] text-[#9CA3AF]">
-                                                                {session.lastUpdatedAt
-                                                                    ? `Updated ${formatSessionDate(session.lastUpdatedAt)}`
-                                                                    : `Created ${formatSessionDate(session.createdAt)}`}
-                                                            </span>
-                                                        </div>
+                                                        <PanelBadge tone={SESSION_TONES[session.status]}>
+                                                            {SESSION_LABELS[session.status]}
+                                                        </PanelBadge>
                                                     ) : (
                                                         <PanelEmptyCell />
                                                     )}

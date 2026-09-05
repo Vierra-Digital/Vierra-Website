@@ -207,9 +207,9 @@ export const PanelBadge: React.FC<{ tone?: BadgeTone; icon?: React.ReactNode; ch
 )
 
 /**
- * Pagination as a footer inside the card: range on the left, controls on the right, sharing the
- * card's 24px gutter so the range lines up with the first column. It used to be three small
- * controls huddled in the centre below the table, joined to it by nothing but margin.
+ * Pagination as a footer inside the card, centred. It used to hang below the table joined to it
+ * by nothing but margin; the row count that sat opposite the controls has gone, since the table
+ * above it is the count.
  */
 export const PanelPagination: React.FC<{
   page: number
@@ -219,14 +219,7 @@ export const PanelPagination: React.FC<{
 }> = ({ page, pageSize, total, onPageChange }) => {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#EFECF4] bg-[#FCFBFE] px-6 py-3.5">
-      <p className="text-[12.5px] text-[#6B7280]">
-        Showing{" "}
-        <span className="font-medium text-[#374151]">
-          {total === 0 ? 0 : page * pageSize + 1}–{Math.min((page + 1) * pageSize, total)}
-        </span>{" "}
-        of <span className="font-medium text-[#374151]">{total}</span>
-      </p>
+    <div className="flex items-center justify-center border-t border-[#EFECF4] bg-[#FCFBFE] px-6 py-3.5">
       <div className="flex items-center gap-1.5">
         <button
           type="button"
