@@ -100,9 +100,9 @@ export async function artemisGenerate(opts: {
         return { ok: false, error: err || `AI request failed (${res.status})` };
       }
       const content = (data as { content?: Array<{ text?: string }> })?.content;
-        const raw = Array.isArray(content) ? content.map((c) => c?.text || "").join("").trim() : "";
-        const text = humanize ? cleanAiTells(raw) : raw;
-        if (!text) return { ok: false, error: emptyContentError((data as { stop_reason?: string })?.stop_reason) };
+      const raw = Array.isArray(content) ? content.map((c) => c?.text || "").join("").trim() : "";
+      const text = humanize ? cleanAiTells(raw) : raw;
+      if (!text) return { ok: false, error: emptyContentError((data as { stop_reason?: string })?.stop_reason) };
       return { ok: true, text };
     }
 
@@ -125,12 +125,12 @@ export async function artemisGenerate(opts: {
       const err = (data as { error?: { message?: string } })?.error?.message;
       return { ok: false, error: err || `AI request failed (${res.status})` };
     }
-      const choice = (data as {
-        choices?: Array<{ message?: { content?: string | null; reasoning?: string | null }; finish_reason?: string }>;
-      })?.choices?.[0];
-      const raw = (choice?.message?.content || "").trim();
-      const text = humanize ? cleanAiTells(raw) : raw;
-      if (!text) return { ok: false, error: emptyContentError(choice?.finish_reason, choice?.message?.reasoning) };
+    const choice = (data as {
+      choices?: Array<{ message?: { content?: string | null; reasoning?: string | null }; finish_reason?: string }>;
+    })?.choices?.[0];
+    const raw = (choice?.message?.content || "").trim();
+    const text = humanize ? cleanAiTells(raw) : raw;
+    if (!text) return { ok: false, error: emptyContentError(choice?.finish_reason, choice?.message?.reasoning) };
     return { ok: true, text };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "AI request error" };
