@@ -27,6 +27,7 @@ type GmailAccountConnection = {
 };
 
 type DetectedCalendar = {
+  primary?: boolean;
   id: string;
   summary: string;
   timeZone: string;
@@ -59,6 +60,34 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
     </button>
   );
 }
+
+/**
+ * The shell every settings card shares: heading row, optional action cluster, optional
+ * description. Each card used to re-declare its own icon chip, heading and spacing, which is how
+ * they drifted into slightly different paddings and type sizes.
+ */
+const SettingsCard: React.FC<{
+  title: string;
+  icon: React.ReactNode;
+  description?: string;
+  action?: React.ReactNode;
+  cardClass: string;
+  titleClass: string;
+  descriptionClass: string;
+  children: React.ReactNode;
+}> = ({ title, icon, description, action, cardClass, titleClass, descriptionClass, children }) => (
+  <div className={cardClass}>
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-2">
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">{icon}</span>
+        <h3 className={`text-[15px] font-semibold ${titleClass}`}>{title}</h3>
+      </div>
+      {action}
+    </div>
+    {description ? <p className={`mb-4 text-[13px] ${descriptionClass}`}>{description}</p> : null}
+    {children}
+  </div>
+);
 
 const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate, onImageUpdate, onClose, variant = "panel", userRole: userRoleProp = null }) => {
   const [name, setName] = useState(user.name || "");
@@ -217,6 +246,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                   id: typeof calendar?.id === "string" ? calendar.id : "",
                   summary: typeof calendar?.summary === "string" ? calendar.summary : "Untitled Calendar",
                   timeZone: typeof calendar?.timeZone === "string" ? calendar.timeZone : "UTC",
+                  primary: calendar?.primary === true,
                   enabled: calendar?.enabled !== false,
                 }))
                 .filter((calendar: DetectedCalendar) => calendar.id.length > 0)
@@ -634,7 +664,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
 
   const isDark = variant === "dark";
   const isPanel = variant === "panel";
-  const cardBg = isDark ? "bg-[#2E0A4F]/90 border-white/10" : "bg-white border-gray-100";
+  const cardBg = isDark ? "bg-[#2E0A4F]/90 border-white/10" : "bg-[#F1EFF6] border-transparent";
   const textPrimary = isDark ? "text-white" : "text-[#111827]";
   const textSecondary = isDark ? "text-white/70" : "text-[#6B7280]";
   const inputBg = isDark ? "bg-white/10 border-white/20 text-white placeholder-white/50" : "bg-white border-[#E5E7EB]";
@@ -643,12 +673,13 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const gmailSettingsSource = userRole === "admin" || userRole === "staff" ? "panel-settings" : "settings";
 
   const cardsContent = (
-    /* Two balanced columns on wide screens. A single stacked column meant scrolling past
-       everything to reach anything, and left most of a 1680px page empty. CSS columns keep the
-       cards in source order while filling both sides; break-inside stops a card splitting. */
-    <div className="space-y-4 xl:space-y-0 xl:[column-count:2] xl:[column-gap:1rem] [&>div]:break-inside-avoid xl:[&>div]:mb-4">
+    /* A grid, not CSS columns. Masonry filled both sides of the page but let each card start
+       wherever the previous one happened to end, so nothing lined up with anything and the page
+       read as a pile of boxes. Rows here are explicit: profile spans the width, security and
+       preferences share the row under it, and the wide cards below span again. */
+    <div className="space-y-4">
       
-      <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
+      <div className={`rounded-2xl ${cardBg} border p-5`}>
         <div className="flex flex-col sm:flex-row gap-6">
           <div className="relative flex-shrink-0 self-start" ref={avatarMenuRef}>
             <div className="relative inline-block">
@@ -777,9 +808,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       </div>
 
       
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         
-        <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
+        <div className={`rounded-2xl ${cardBg} border p-5`}>
           <div className="flex items-center gap-2 mb-5">
             <div className="p-1.5 rounded-lg bg-[#701CC0]/10">
               <FiShield className="w-4 h-4 text-[#701CC0]" />
@@ -823,7 +854,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         </div>
 
         
-        <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
+        <div className={`rounded-2xl ${cardBg} border p-5`}>
           <div className="flex items-center gap-2 mb-5">
             <div className="p-1.5 rounded-lg bg-[#701CC0]/10">
               <FiSettings className="w-4 h-4 text-[#701CC0]" />
@@ -871,7 +902,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
 
       {userRole === "user" && (
         <>
-          <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
+          <div className={`rounded-2xl ${cardBg} border p-5`}>
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-lg bg-[#701CC0]/10">
@@ -970,171 +1001,136 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         </>
       )}
 
+      {/* One card, not two.
+          Connected accounts were listed here as a grid of small tiles whose emails were truncated
+          to "alex…", and then listed again below under "Detected Google Calendars" — same
+          addresses, same status pills, twice. A calendar belongs to an account, so each account is
+          one row and its calendars sit under it. */}
       {canManageGmailAccounts && (
-        <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
-          <div className="flex items-center justify-between mb-5">
+        <SettingsCard
+          title="Google Accounts"
+          icon={<FaGoogle className="w-4 h-4 text-[#EA4335]" />}
+          description="Connected Gmail accounts, and which of their calendars count towards upcoming meetings."
+          cardClass={`rounded-2xl ${cardBg} border p-5`}
+          titleClass={textPrimary}
+          descriptionClass={textSecondary}
+          action={
             <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-[#701CC0]/10">
-                <FaGoogle className="w-3.5 h-3.5 text-[#EA4335]" />
-              </div>
-              <h3 className={`font-semibold ${textPrimary}`}>Google Gmail Accounts</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  loadGmailConnections();
+                  loadDetectedCalendars();
+                }}
+                disabled={gmailLoading || calendarSettingsLoading}
+                className={`h-8 rounded-lg border px-3 text-[12.5px] font-medium transition-colors disabled:opacity-50 ${
+                  isDark ? "border-white/15 text-white hover:bg-white/10" : "border-[#E4E0EC] text-[#374151] hover:bg-[#FAF9FD]"
+                }`}
+              >
+                {gmailLoading || calendarSettingsLoading ? "Refreshing…" : "Refresh"}
+              </button>
+              <button
+                type="button"
+                onClick={() => window.open(`/api/gmail/initiate?from=${encodeURIComponent(gmailSettingsSource)}`, "_self")}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#701CC0] px-3 text-[12.5px] font-medium text-white transition-colors hover:bg-[#5f17a5]"
+              >
+                <FiPlus className="w-3.5 h-3.5" />
+                Add account
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                loadGmailConnections();
-                loadDetectedCalendars();
-              }}
-              disabled={gmailLoading || calendarSettingsLoading}
-              className="text-sm px-3 py-1.5 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 disabled:opacity-50"
-            >
-              {gmailLoading || calendarSettingsLoading ? "Refreshing..." : "Refresh"}
-            </button>
-          </div>
-          <p className={`text-sm ${textSecondary} mb-4`}>
-            Connect one or more Gmail accounts.
-          </p>
-
-          <div className="flex flex-wrap gap-2 mb-4">
-            <button
-              type="button"
-              onClick={() => window.open(`/api/gmail/initiate?from=${encodeURIComponent(gmailSettingsSource)}`, "_self")}
-              className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium bg-[#701CC0] text-white hover:bg-[#5f17a5] transition-colors"
-            >
-              <FiPlus className="w-4 h-4" />
-              {gmailAccounts.length > 0 ? "Add Gmail Account" : "Connect Gmail Account"}
-            </button>
-          </div>
-
+          }
+        >
           {gmailAccounts.length === 0 ? (
-            <div className={`rounded-xl border p-4 text-sm ${isDark ? "border-white/10 text-white/70" : "border-[#E5E7EB] text-[#6B7280]"}`}>
-              No Gmail accounts connected yet.
-            </div>
+            <p className={`text-[13px] ${textSecondary}`}>No Gmail accounts connected yet.</p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {gmailAccounts.map((account) => (
-                <div
-                  key={account.email}
-                  className={`rounded-xl border p-3 ${isDark ? "border-white/10 bg-white/5" : "border-[#E5E7EB] bg-[#FAFAFA]"}`}
-                >
-                  <div className="flex items-center justify-between gap-3 mb-3">
-                    <div className="min-w-0">
-                      <p className={`text-sm font-medium truncate ${textPrimary}`}>{account.email}</p>
+            <div className={`divide-y ${isDark ? "divide-white/10" : "divide-[#E6E2EE]"}`}>
+              {gmailAccounts.map((account) => {
+                const calendarAccount = detectedCalendarAccounts.find((entry) => entry.email === account.email);
+                const calendars = calendarAccount?.calendars ?? [];
+                return (
+                  <div key={account.email} className="py-3.5 first:pt-0 last:pb-0">
+                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        {/* The full address, not the first four characters of it. */}
+                        <span className={`truncate text-[13px] font-medium ${textPrimary}`}>{account.email}</span>
+                        <span
+                          className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                            account.connected ? "bg-[#E7F7EE] text-[#11734B]" : "bg-[#FDF3E2] text-[#8A5A00]"
+                          }`}
+                        >
+                          {account.connected ? "Connected" : "Needs reconnect"}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            window.open(
+                              `/api/gmail/initiate?from=${encodeURIComponent(gmailSettingsSource)}&account=${encodeURIComponent(account.email)}`,
+                              "_self"
+                            )
+                          }
+                          className={`h-8 rounded-lg px-3 text-[12.5px] font-medium transition-colors ${
+                            isDark ? "text-white hover:bg-white/10" : "text-[#374151] hover:bg-[#F5F3F9]"
+                          }`}
+                        >
+                          Reconnect
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openDeleteGmailModal(account.email)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#9CA3AF] transition-colors hover:bg-red-50 hover:text-red-600"
+                          aria-label={`Remove Gmail account ${account.email}`}
+                          title="Remove account"
+                        >
+                          <FiTrash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        account.connected ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
-                      }`}
-                    >
-                      {account.connected ? "Connected" : "Needs Reconnect"}
-                    </span>
+
+                    {calendarSettingsLoading && calendars.length === 0 ? (
+                      <p className={`mt-1.5 text-[12px] ${textSecondary}`}>Loading calendars…</p>
+                    ) : calendars.length === 0 ? (
+                      <p className={`mt-1.5 text-[12px] ${textSecondary}`}>No readable calendars on this account.</p>
+                    ) : (
+                      <ul className="mt-2 space-y-1">
+                        {calendars.map((calendar) => {
+                          const toggleKey = `${account.email}::${calendar.id}`;
+                          return (
+                            <li key={toggleKey} className="flex items-center justify-between gap-3 py-0.5 pl-1">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <FiCalendar className={`w-3.5 h-3.5 shrink-0 ${textSecondary}`} />
+                                <span className={`truncate text-[12.5px] ${textPrimary}`}>{calendar.summary}</span>
+                                {calendar.primary && (
+                                  <span className="shrink-0 rounded-full bg-[#F2E9FE] px-1.5 py-0.5 text-[10px] font-medium text-[#5F17A5]">
+                                    Primary
+                                  </span>
+                                )}
+                                <span className={`hidden shrink-0 text-[11px] sm:inline ${textSecondary}`}>
+                                  {calendar.timeZone}
+                                </span>
+                              </div>
+                              <Toggle
+                                checked={calendar.enabled}
+                                onChange={(value) => handleCalendarToggle(account.email, calendar.id, value)}
+                                disabled={calendarToggleKeyLoading === toggleKey}
+                              />
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
                   </div>
-                  <div className="grid grid-cols-[1fr_auto] gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        window.open(
-                          `/api/gmail/initiate?from=${encodeURIComponent(gmailSettingsSource)}&account=${encodeURIComponent(account.email)}`,
-                          "_self"
-                        )
-                      }
-                      className="rounded-lg px-3 py-2 text-sm font-medium bg-[#701CC0] text-white hover:bg-[#5f17a5] transition-colors"
-                    >
-                      Reconnect
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openDeleteGmailModal(account.email)}
-                      className="rounded-lg px-3 py-2 border border-red-200 text-red-600 hover:bg-red-50 transition-colors"
-                      aria-label={`Delete Gmail account ${account.email}`}
-                      title="Remove account"
-                    >
-                      <FiTrash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
-        </div>
-      )}
-
-      {canManageGmailAccounts && (
-        <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-1.5 rounded-lg bg-[#701CC0]/10">
-              <FiCalendar className="w-4 h-4 text-[#701CC0]" />
-            </div>
-            <h3 className={`font-semibold ${textPrimary}`}>Detected Google Calendars</h3>
-          </div>
-          <p className={`text-sm ${textSecondary} mb-4`}>
-            Toggle calendars on or off to control which calendars are used for upcoming meeting detection.
-          </p>
-
-          {calendarSettingsLoading ? (
-            <div className={`rounded-xl border p-4 text-sm ${isDark ? "border-white/10 text-white/70" : "border-[#E5E7EB] text-[#6B7280]"}`}>
-              Loading detected calendars...
-            </div>
-          ) : detectedCalendarAccounts.length === 0 ? (
-            <div className={`rounded-xl border p-4 text-sm ${isDark ? "border-white/10 text-white/70" : "border-[#E5E7EB] text-[#6B7280]"}`}>
-              No calendars detected yet. Connect a Gmail account and refresh.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {detectedCalendarAccounts.map((account) => (
-                <div
-                  key={account.email}
-                  className={`rounded-xl border p-4 ${isDark ? "border-white/10 bg-white/5" : "border-[#E5E7EB] bg-[#FAFAFA]"}`}
-                >
-                  <div className="flex items-center justify-between gap-3 mb-3">
-                    <p className={`text-sm font-semibold truncate ${textPrimary}`}>{account.email}</p>
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        account.connected ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
-                      }`}
-                    >
-                      {account.connected ? "Connected" : "Needs Reconnect"}
-                    </span>
-                  </div>
-
-                  {account.calendars.length === 0 ? (
-                    <p className={`text-xs ${textSecondary}`}>No readable calendars found for this account.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {account.calendars.map((calendar) => {
-                        const toggleKey = `${account.email}::${calendar.id}`;
-                        const isSaving = calendarToggleKeyLoading === toggleKey;
-                        return (
-                          <div
-                            key={toggleKey}
-                            className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${
-                              isDark ? "border-white/10 bg-white/5" : "border-[#E5E7EB] bg-white"
-                            }`}
-                          >
-                            <div className="min-w-0">
-                              <p className={`text-sm font-medium truncate ${textPrimary}`}>{calendar.summary}</p>
-                              <p className={`text-xs truncate ${textSecondary}`}>{calendar.timeZone}</p>
-                            </div>
-                            <Toggle
-                              checked={calendar.enabled}
-                              onChange={(value) => handleCalendarToggle(account.email, calendar.id, value)}
-                              disabled={isSaving}
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        </SettingsCard>
       )}
 
       {/* Sign out lives here, not on the nav rail: the rail is for navigation, and a destructive
           action sitting one row below it was easy to mis-click. */}
-      <div className={`rounded-xl ${cardBg} border p-5 shadow-sm`}>
+      <div className={`rounded-2xl ${cardBg} border p-5`}>
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Sign out</h3>
