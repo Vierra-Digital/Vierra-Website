@@ -145,7 +145,7 @@ const DashboardSection = () => {
 
         const loadStaff = async () => {
             try {
-                const res = await fetch("/api/dashboard/staff-activity")
+                const res = await fetch("/api/dashboard/staff-activity", { cache: "no-store" })
                 if (!res.ok) return
                 const data = await res.json()
                 if (!cancelled && Array.isArray(data?.staff)) setStaffActivity(data.staff)
@@ -172,6 +172,14 @@ const DashboardSection = () => {
         void loadStaff()
         void loadPosts()
 
+        // The presence heartbeat (useActivityHeartbeat) also fires on mount, so the first staff
+        // fetch can race it and read the PREVIOUS session's timestamp — which is why you could
+        // be sitting on the dashboard and see yourself listed as offline. Re-read shortly after,
+        // once that heartbeat has landed, instead of waiting a full poll interval.
+        const settleTimer = window.setTimeout(() => {
+            void loadStaff()
+        }, 4000)
+
         // Only poll while the tab is visible. A backgrounded dashboard hitting the API every
         // minute is pure waste, and the value is stale the moment you look away anyway.
         const tick = () => {
@@ -183,6 +191,7 @@ const DashboardSection = () => {
 
         return () => {
             cancelled = true
+            window.clearTimeout(settleTimer)
             window.clearInterval(timer)
             document.removeEventListener("visibilitychange", tick)
         }

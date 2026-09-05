@@ -42,8 +42,8 @@ const LTVCalculatorSection = () => {
 
     return (
         <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
-            <div className="flex-1 px-8 lg:px-14 pt-1 overflow-x-hidden">
-                <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
+            <div className="flex-1 px-8 lg:px-14 pt-1 overflow-y-auto overflow-x-hidden">
+                <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full pb-16">
                     <div className="w-full flex justify-between items-center">
                         <div>
                             <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em] text-[#111827] mt-8 mb-6">LTV Calculator</h1>
@@ -140,15 +140,15 @@ const LTVCalculatorSection = () => {
 
                         
                         <div className="lg:col-span-1">
-                            <div className="bg-[#F1EFF6] rounded-xl p-5 sticky top-6">
-                                <h2 className="text-lg font-semibold text-[#111827] mb-4">Calculated Results</h2>
+                            <div className="bg-gradient-to-br from-[#701CC0] to-[#8F42FF] rounded-xl p-5 text-white sticky top-6">
+                                <h2 className="text-lg font-semibold text-white mb-4">Calculated Results</h2>
                                 <div className="space-y-4">
                                     <div>
-                                        <div className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598] mb-1.5">Lifetime Value</div>
-                                        <div className="text-[28px] font-semibold leading-none tracking-[-0.02em] text-[#701CC0]">${isNaN(LTV) ? (0).toLocaleString() : Math.round(LTV).toLocaleString()}</div>
+                                        <div className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-white/70 mb-1.5">Lifetime Value</div>
+                                        <div className="text-[28px] font-semibold leading-none tracking-[-0.02em] text-white">${isNaN(LTV) ? (0).toLocaleString() : Math.round(LTV).toLocaleString()}</div>
                                     </div>
-                                    <div className="pt-4 border-t border-[#E2DEEC]">
-                                        <div className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598] mb-1.5">Retainer Pricing</div>
+                                    <div className="pt-4 border-t border-white/25">
+                                        <div className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-white/70 mb-1.5">Retainer Pricing</div>
                                         <div className="text-[28px] font-semibold leading-none tracking-[-0.02em] text-[#701CC0]">${isNaN(retainer) ? (0).toLocaleString() : Math.round(retainer).toLocaleString()}</div>
                                     </div>
                                 </div>
