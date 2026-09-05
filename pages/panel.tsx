@@ -19,7 +19,6 @@ import {
   FiGlobe,
   FiFileText,
   FiUsers,
-  FiPercent,
   FiFile,
   FiUserCheck,
 } from "react-icons/fi"
@@ -45,10 +44,6 @@ const ClientsSection = dynamic(
 )
 const TeamPanelSection = dynamic(
   () => import("@/components/PanelPages/TeamPanelSection"),
-  { ssr: false }
-)
-const LtvCalculatorSection = dynamic(
-  () => import("@/components/PanelPages/LTVCalculatorSection"),
   { ssr: false }
 )
 const OutreachSection = dynamic(
@@ -368,16 +363,6 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                 )}
                 <div
                   id="panel-nav-item"
-                  onClick={() => { setCurrentSection(4); setShowSettings(false); setIsSidebarOpen(false)}}
-                  className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 4 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
-                >
-                  <FiPercent className="w-4 h-4 shrink-0" />
-                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
-                    LTV Calculator
-                  </span>
-                </div>
-                <div
-                  id="panel-nav-item"
                   onClick={() => { setCurrentSection(7); setShowSettings(false); setIsSidebarOpen(false)}}
                   className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 7 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
                 >
@@ -526,11 +511,6 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                       {visitedSections.has(2) && (
                         <div key={`section-2-${sectionEpoch[2] || 0}`} style={{ display: currentSection === 2 ? undefined : "none" }}>
                           <TeamPanelSection userRole={resolvedUserRole} />
-                        </div>
-                      )}
-                      {visitedSections.has(4) && (
-                        <div style={{ display: currentSection === 4 ? undefined : "none" }}>
-                          <LtvCalculatorSection />
                         </div>
                       )}
                       {visitedSections.has(5) && (

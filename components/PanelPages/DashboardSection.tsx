@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { RiArrowDropDownLine } from "react-icons/ri"
+import { FiArrowRight } from "react-icons/fi"
+import LTVCalculatorModal from "@/components/panel/LTVCalculatorModal"
 import { FiTrendingUp, FiTrendingDown, FiMinus, FiCalendar, FiClock } from "react-icons/fi"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -72,6 +74,7 @@ type WebsiteVisitsPoint = { week: string; visits: number }
 
 const DashboardSection = () => {
     const [clientNow, setClientNow] = useState<Date | null>(null)
+    const [ltvOpen, setLtvOpen] = useState(false)
     useEffect(() => {
         // Deliberately after mount. Reading the clock during render is impure and would make the
         // server's HTML disagree with the client's first render, since everything below keys off
@@ -608,9 +611,8 @@ const DashboardSection = () => {
                         </div>
                     </div>
 
-                    {/* Staff Activity sits under the chart at the same width as Recent Posts, so
-                        the two read as a matched pair rather than one wide and one narrow. */}
-                    <div className="mb-4 w-full max-w-[320px]">
+                    {/* Staff Activity and the LTV launcher share the row under the chart. */}
+                    <div className="mb-4 grid w-full max-w-[820px] grid-cols-1 gap-4 sm:grid-cols-[320px_minmax(0,1fr)]">
                         <div className="bg-[#F1EFF6] rounded-xl p-4">
                             <h3 className="text-lg font-semibold text-[#111827] mb-3">Staff Activity</h3>
                             {staffLoading ? (
@@ -646,6 +648,29 @@ const DashboardSection = () => {
                                 </ul>
                             )}
                         </div>
+
+                        {/* LTV lives here rather than in the rail: it is a scratchpad you open,
+                            try numbers in, and close — not a destination worth a permanent tab. */}
+                        <button
+                            type="button"
+                            onClick={() => setLtvOpen(true)}
+                            className="group flex w-full flex-col justify-between rounded-xl bg-gradient-to-br from-[#701CC0] to-[#8F42FF] p-4 text-left text-white transition-[filter] duration-200 hover:brightness-[1.06]"
+                        >
+                            <div>
+                                <div className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-white/70">
+                                    Tool
+                                </div>
+                                <h3 className="mt-1 text-lg font-semibold text-white">LTV Calculator</h3>
+                                <p className="mt-1 text-[12.5px] leading-relaxed text-white/75">
+                                    Model lifetime value and retainer pricing from purchase value, term and referrals.
+                                </p>
+                            </div>
+                            <span className="mt-4 inline-flex items-center gap-1.5 self-start rounded-full bg-white/15 px-3 py-1.5 text-[12px] font-medium text-white transition-colors group-hover:bg-white/25">
+                                Open calculator
+                                <FiArrowRight className="h-3.5 w-3.5" aria-hidden />
+                            </span>
+                        </button>
+
                     </div>
 
                 </div>
@@ -781,6 +806,8 @@ const DashboardSection = () => {
                 }
             }
         `}</style>
+
+        <LTVCalculatorModal open={ltvOpen} onClose={() => setLtvOpen(false)} />
         </div>
     )
 }
