@@ -50,6 +50,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     await persistOnboardingPlatformToken(sessionId, { platform: "facebook", accessToken: access_token, expiresAt });
 
-    return res.redirect(`/onboarding/${sessionId}?linked=facebook`);
+    // This is always opened as a popup (window.open, never same-tab) — land on a small page that
+    // posts back to the opener and closes itself, rather than redirecting into the onboarding
+    // wizard itself, which would mount a second full copy of it inside the popup.
+    return res.redirect("/facebook/connected");
   }
 }

@@ -48,6 +48,12 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
   const [socialLoading, setSocialLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [redirectCountdown, setRedirectCountdown] = useState<number>(5);
+  // Where the post-completion countdown sends the client — a one-time Supabase recovery link
+  // (see /api/session/submitClientAnswers) that lands them straight on /set-password already
+  // authenticated, same link that's also emailed to them as a fallback. Falls back to /login
+  // (not "/") if link generation failed server-side, since that's still actionable — they can
+  // use "Forgot password?" there — where the homepage would just be a dead end.
+  const [postCompletionRedirect, setPostCompletionRedirect] = useState("/login");
   const [stripeConnected, setStripeConnected] = useState(false);
   const [stripeLoading, setStripeLoading] = useState(false);
   const [video3SubStep, setVideo3SubStep] = useState<0 | 1 | 2>(() => {
@@ -62,6 +68,11 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
   const [aboutYouSubStep, setAboutYouSubStep] = useState<0 | 1>(0);
   const [video4SubStep, setVideo4SubStep] = useState<0 | 1>(0);
   const [maxStepReached, setMaxStepReached] = useState(0);
+  const socialWindowRefs = useRef<Record<"facebook" | "linkedin" | "googleads", Window | null>>({
+    facebook: null,
+    linkedin: null,
+    googleads: null,
+  });
 
   const token =
     router.query.token
@@ -74,7 +85,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
 
   function startOauth(provider: "facebook" | "linkedin" | "googleads") {
     if (!sessionIdForOauth) return;
-    window.open(`/api/${provider}/initiate?session=${encodeURIComponent(sessionIdForOauth)}`, "_blank");
+    socialWindowRefs.current[provider] = window.open(`/api/${provider}/initiate?session=${encodeURIComponent(sessionIdForOauth)}`, "_blank");
   }
 
   const refreshSocial = useCallback(async () => {
@@ -109,6 +120,17 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
 
       if (ndaPollRef.current) clearInterval(ndaPollRef.current);
       ndaPollRef.current = setInterval(async () => {
+        // The tab tracking this loop needs: if the user closed the sign window without
+        // finishing, nothing else here ever fires again (no "nda-signed" postMessage, no status
+        // flip) — the previous version left ndaLoading stuck true and the button showing
+        // "Waiting..." forever, with no way to retry. Detect the close and hand control back.
+        if (ndaSignWindowRef.current?.closed) {
+          if (ndaPollRef.current) clearInterval(ndaPollRef.current);
+          ndaPollRef.current = null;
+          ndaSignWindowRef.current = null;
+          setNdaLoading(false);
+          return;
+        }
         try {
           const statusResp = await fetch(`/api/onboarding/ndaStatus?tokenId=${encodeURIComponent(tokenId)}`);
           if (!statusResp.ok) return;
@@ -192,6 +214,16 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
 
       if (stripePollRef.current) clearInterval(stripePollRef.current);
       stripePollRef.current = setInterval(async () => {
+        // Same tab-tracking fix as the NDA flow: if the user closed the Stripe window without
+        // finishing checkout, nothing else here ever fires again, and stripeLoading was left
+        // stuck true forever with no way to retry.
+        if (stripeWindowRef.current?.closed) {
+          if (stripePollRef.current) clearInterval(stripePollRef.current);
+          stripePollRef.current = null;
+          stripeWindowRef.current = null;
+          setStripeLoading(false);
+          return;
+        }
         const connected = await checkStripeStatus();
         if (connected) {
           if (stripePollRef.current) clearInterval(stripePollRef.current);
@@ -223,6 +255,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
 
   useEffect(() => {
     const onStripeConnected = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
       if (event.data !== "stripe-connected") return;
       if (stripePollRef.current) clearInterval(stripePollRef.current);
       stripePollRef.current = null;
@@ -268,7 +301,9 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
       setRedirectCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(interval);
-          router.push("/");
+          // A full navigation, not router.push: postCompletionRedirect is a Supabase verify URL
+          // on Supabase's own domain when present, which Next's client-side router can't handle.
+          window.location.href = postCompletionRedirect;
           return 0;
         }
         return prev - 1;
@@ -276,15 +311,30 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [showSuccessModal, router]);
+  }, [showSuccessModal, postCompletionRedirect]);
 
   useEffect(() => {
-    if (!router.isReady) return;
-    // ?linked is set by the OAuth round trip returning here. Query parameters are not populated
-    // until the router is ready, so this cannot be read during the first render.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (router.query.linked) refreshSocial();
-  }, [router.isReady, router.query.linked, refreshSocial]);
+    // The OAuth popups land on a small dedicated page (app/facebook/connected,
+    // app/linkedin/connected, app/googleads/connected) that posts one of these messages and
+    // closes itself, rather than redirecting back into this same wizard component — a redirect
+    // back here would mount a second full copy of the wizard inside the popup (at step 0), which
+    // never updates this tab's connection state and never closes itself.
+    const messages: Record<string, "facebook" | "linkedin" | "googleads"> = {
+      "facebook-connected": "facebook",
+      "linkedin-connected": "linkedin",
+      "googleads-connected": "googleads",
+    };
+    const onSocialConnected = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const provider = messages[event.data];
+      if (!provider) return;
+      try { socialWindowRefs.current[provider]?.close(); } catch {}
+      socialWindowRefs.current[provider] = null;
+      refreshSocial();
+    };
+    window.addEventListener("message", onSocialConnected);
+    return () => window.removeEventListener("message", onSocialConnected);
+  }, [refreshSocial]);
 
   useEffect(() => {
     async function fetchSession() {
@@ -490,7 +540,7 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
               <h2 className="text-xl font-semibold text-[#111827] mb-2">Modules Completed Successfully!</h2>
               <p className="text-sm text-[#6B7280]">You&apos;ve completed all modules. Thank you for your time.</p>
               <p className="text-sm text-[#6B7280] mt-4">
-                Redirecting in {redirectCountdown} second{redirectCountdown !== 1 ? "s" : ""}...
+                Redirecting you to set your password in {redirectCountdown} second{redirectCountdown !== 1 ? "s" : ""}...
               </p>
             </div>
           </div>
@@ -509,8 +559,8 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
     : aboutYouComplete;
   const disableNext = q.type === "text" ? (questions[step]?.name === "AboutYou" ? !currentSectionComplete : !answers[(q as { name: string }).name]) : false;
   const meetingAvailabilityComplete = (answers.meetingAvailability || "").trim().length > 0;
-  const showContinueInNav = !isVideo3 || video3SubStep !== 1 || ndaSigned;
-  const isNextDisabled = disableNext || (isVideo3 && video3SubStep === 1 && !ndaSigned) || (isVideo4 && video4SubStep === 1 && !meetingAvailabilityComplete);
+  const showContinueInNav = !isVideo3 || (video3SubStep !== 1 && video3SubStep !== 2) || (video3SubStep === 1 ? ndaSigned : stripeConnected);
+  const isNextDisabled = disableNext || (isVideo3 && video3SubStep === 1 && !ndaSigned) || (isVideo3 && video3SubStep === 2 && !stripeConnected) || (isVideo4 && video4SubStep === 1 && !meetingAvailabilityComplete);
   const TOTAL_SLIDES = 11;
   const getCompletedSlides = () => {
     const effectiveStep = step < maxStepReached ? maxStepReached : step;
@@ -913,6 +963,10 @@ export default function SessionQuestionnaire({ initialSession }: { initialSessio
                         if (!completeResp.ok) {
                           const errData = await completeResp.json().catch(() => ({}));
                           throw new Error(errData?.message || "Failed to complete modules");
+                        }
+                        const completeData = await completeResp.json().catch(() => ({}));
+                        if (typeof completeData?.setPasswordLink === "string" && completeData.setPasswordLink) {
+                          setPostCompletionRedirect(completeData.setPasswordLink);
                         }
                         setShowSuccessModal(true);
                       } catch (err) {
