@@ -3,9 +3,15 @@ import { withAuth } from "@/lib/api/withAuth";
 import { toContactsCsv } from "@/lib/contacts/csv";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { asQueryStr } from "@/lib/api/parsing";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
+  const companyId = resolveTargetCompanyId(session, req);
+  if (!companyId) {
+    res.status(400).json({ message: "companyId is required" });
+    return;
+  }
 
   const accountEmail = asQueryStr(req.query.accountEmail).toLowerCase();
   const search = asQueryStr(req.query.search);
@@ -15,7 +21,7 @@ export default withAuth(async (req, res, session) => {
     .map((entry) => entry.trim())
     .filter(Boolean);
 
-  const where: any = { user_id: userId };
+  const where: any = { company_id: companyId };
   if (accountEmail) {
     const accountId = await resolveAccountId(userId, accountEmail);
     where.account_id = accountId ?? "__none__";

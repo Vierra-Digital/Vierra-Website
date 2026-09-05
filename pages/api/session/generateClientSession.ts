@@ -1,13 +1,20 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { requireRole } from "@/lib/auth";
+import { createCompanyWithSlug } from "@/lib/api/createCompany";
 
+/**
+ * "Add Client" — a staff member onboards a brand-new client business on their behalf. Role
+ * model v2 (docs/ROLE_MODEL_REDESIGN.md): this creates a real new `companies` row (the client
+ * business) plus its first representative, rather than adding a row under the caller's own
+ * company — a staff member's own `companyId` is Vierra's fixed company now, not a client's, so
+ * reusing it here would have silently filed the new client under Vierra itself.
+ */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
 
   const session = await requireRole(req, res);
   if (!session) return;
-  const { companyId } = session;
 
   const { clientName, clientEmail, businessName, industry, monthlyRetainer, clientGoal } = req.body ?? {};
   if (!clientName || !clientEmail || !businessName) {
@@ -27,23 +34,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const email = String(clientEmail).toLowerCase();
     const token = crypto.randomUUID();
 
-    let client = await prisma.client.findFirst({ where: { company_id: companyId, email } });
-    if (client) {
-      client = await prisma.client.update({
-        where: { id: client.id },
-        data: { name: clientName, business_name: businessName, client_goal: clientGoalAmount },
-      });
-    } else {
-      client = await prisma.client.create({
-        data: {
-          company_id: companyId,
-          name: clientName,
-          email,
-          business_name: businessName,
-          client_goal: clientGoalAmount,
-        },
-      });
-    }
+    // Always a brand-new client business — "Add Client" onboards one, it doesn't add a contact
+    // to an existing one (that's the client's own self-service "invite a teammate" flow at
+    // pages/api/client/team/index.ts instead).
+    const company = await createCompanyWithSlug(businessName);
+    const client = await prisma.client.create({
+      data: {
+        company_id: company.id,
+        name: clientName,
+        email,
+        business_name: businessName,
+        client_goal: clientGoalAmount,
+      },
+    });
     await prisma.clientBilling.upsert({
       where: { client_id: client.id },
       create: { client_id: client.id, monthly_retainer_cents: monthlyRetainerCents },
@@ -54,7 +57,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       data: {
         id: token,
         client_id: client.id,
-        company_id: companyId,
+        company_id: company.id,
         status: "pending",
         expires_at: new Date(Date.now() + 60 * 60 * 1000),
         answers: { industry },

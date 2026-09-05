@@ -8,7 +8,7 @@ import { resolveCronBaseUrl } from "@/lib/api/url";
 /**
  * Cron endpoint that polls all connected Gmail accounts for new mail and runs the
  * inbound hooks (filters, vacation reply, auto-draft, MDN). Session-less; guarded by
- * CRON_SECRET. Invoked by netlify/functions/poll-inbound.
+ * CRON_SECRET. Invoked by the `poll-inbound` pg_cron job (prisma/manual/20260901_migrate_cron_to_pg_cron.sql).
  */
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {

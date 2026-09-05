@@ -13,7 +13,8 @@ export type ClaimResult =
  * atomically claims the row (guards two members racing the same slot), provisions the real
  * meeting under that host's own tokens, and emails the prospect. Shared by the manual claim
  * endpoint (pages/api/booking/[id]/claim.ts) and the round-robin auto-assign job
- * (netlify/functions/auto-assign-meetings.ts) so there's exactly one place this happens.
+ * (the `auto-assign-meetings` pg_cron job, prisma/manual/20260901_migrate_cron_to_pg_cron.sql)
+ * so there's exactly one place this happens.
  */
 export async function claimBookingSlot(bookingId: string, hostUserId: string): Promise<ClaimResult> {
   // Snapshotted onto the booking so "who took this meeting" survives the host's users row

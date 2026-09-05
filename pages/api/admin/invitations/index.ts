@@ -19,12 +19,9 @@ export default withAuth(
       return res.status(200).json(data);
     }
 
-    const { email, role } = req.body ?? {};
+    const { email } = req.body ?? {};
     if (!email || typeof email !== "string") {
       return res.status(400).json({ message: "email is required" });
-    }
-    if (role !== "admin" && role !== "staff") {
-      return res.status(400).json({ message: "role must be 'admin' or 'staff'" });
     }
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -37,12 +34,15 @@ export default withAuth(
 
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    // role model v2: every invite created here targets Vierra's own fixed company (session.companyId,
+    // for a member session, always resolves there post-migration) and always becomes "staff" on
+    // acceptance (lib/auth/resolveUser.ts) — there is no admin-via-invite path.
     const { data, error } = await admin
       .from("invitations")
       .insert({
         company_id: session.companyId,
         email: normalizedEmail,
-        role,
+        role: "staff",
         token,
         invited_by: session.user.id,
         expires_at: expiresAt,

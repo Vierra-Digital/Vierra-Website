@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { panelFetch } from "@/lib/panelFetch";
 
 type TimelineEvent = { type: string; at: string; label: string; detail?: string };
 
@@ -25,7 +26,7 @@ export default function ContactTimelineModal({ email, onClose }: { email: string
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/contacts/timeline?email=${encodeURIComponent(email)}`)
+    panelFetch(`/api/contacts/timeline?email=${encodeURIComponent(email)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!cancelled) setEvents(Array.isArray(d?.events) ? d.events : []);

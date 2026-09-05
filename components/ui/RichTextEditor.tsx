@@ -586,25 +586,63 @@ const RichTextEditor: React.FC<{
       })
     }
   }, [value, history, historyIndex, toDisplay, setupEmbedHandlers])
+  // Base64-in-JSON put the whole image through the API route, inflated ~33%, and could not exceed
+  // the serverless request body limit however high bodyParser.sizeLimit was set. Ask for a signed
+  // URL and PUT the file straight to storage instead; the route then only records the key.
+  // Falls back to the inline path when storage is unconfigured (the route says so with 503
+  // + fallback:"inline") or when signing fails, so an upload never breaks outright.
+  const uploadBlogImageInline = async (file: File): Promise<string | null> => {
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve((reader.result as string).split(',')[1])
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+    const resp = await fetch('/api/blog/admin/uploadImage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageData: base64, mimeType: file.type, filename: file.name }),
+    })
+    if (!resp.ok) {
+      console.error('Image upload failed:', resp.status)
+      return null
+    }
+    return (await resp.json()).url
+  }
+
   const uploadBlogImage = async (file: File): Promise<string | null> => {
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1])
-        reader.onerror = reject
-        reader.readAsDataURL(file)
+      const signResp = await fetch('/api/blog/admin/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mimeType: file.type, filename: file.name }),
       })
+      if (!signResp.ok) return uploadBlogImageInline(file)
+
+      const { signedUrl, storageKey } = await signResp.json()
+      if (!signedUrl || !storageKey) return uploadBlogImageInline(file)
+
+      // Straight to storage — this request never touches a function.
+      const put = await fetch(signedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      })
+      if (!put.ok) {
+        console.error('Direct image upload failed:', put.status)
+        return null
+      }
+
       const resp = await fetch('/api/blog/admin/uploadImage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageData: base64, mimeType: file.type, filename: file.name }),
+        body: JSON.stringify({ storageKey, mimeType: file.type, filename: file.name }),
       })
       if (!resp.ok) {
-        console.error('Image upload failed:', resp.status)
+        console.error('Recording the uploaded image failed:', resp.status)
         return null
       }
-      const data = await resp.json()
-      return data.url
+      return (await resp.json()).url
     } catch (err) {
       console.error('Image upload error:', err)
       return null

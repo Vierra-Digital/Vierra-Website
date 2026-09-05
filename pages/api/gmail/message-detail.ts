@@ -1,90 +1,19 @@
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
-import { extractHeader, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
+import { parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
 import { scanHtmlForTrackers } from "@/lib/email/trackerDetection";
 import { senderAvatarSources, senderDomain } from "@/lib/email/senderAvatar";
 import { resolveBimiLogoUrl } from "@/lib/email/bimi";
 import { getCachedSenderPhoto, setCachedSenderPhoto } from "@/lib/gmail/senderPhotoCache";
-
-function decodeBase64Url(data: string) {
-  const padded = data.replace(/-/g, "+").replace(/_/g, "/");
-  return Buffer.from(padded, "base64").toString("utf8");
-}
-
-/**
- * An inline image referenced from the HTML body by `cid:` — signature logos and pasted images are
- * sent this way, so without resolving them the reader shows a broken image.
- */
-type InlinePart = { contentId: string; mimeType: string; attachmentId: string; size: number };
+import { parseIcsCalendar } from "@/lib/email/ics";
+import { prisma } from "@/lib/prisma";
+import { parseThreadMessage, fetchWithAuthRetry, resolveIcsText, type InlinePart } from "@/lib/gmail/messageParsing";
 
 /** Per-image and total budget for inlining as data URIs, so a heavy thread can't balloon the response. */
 const MAX_INLINE_IMAGE_BYTES = 2 * 1024 * 1024;
 const MAX_INLINE_TOTAL_BYTES = 6 * 1024 * 1024;
-
-function extractBodies(payload: any): { bodyText: string; bodyHtml: string; inlineParts: InlinePart[] } {
-  let bodyText = "";
-  let bodyHtml = "";
-  const inlineParts: InlinePart[] = [];
-
-  const walk = (part: any) => {
-    if (!part) return;
-    const mimeType = String(part?.mimeType || "").toLowerCase();
-    const data = typeof part?.body?.data === "string" ? part.body.data : "";
-    if (data) {
-      const decoded = decodeBase64Url(data);
-      if (mimeType.includes("text/plain") && !bodyText) bodyText = decoded;
-      if (mimeType.includes("text/html") && !bodyHtml) bodyHtml = decoded;
-    }
-    // Collect image parts that carry a Content-ID so the body's cid: refs can be resolved below.
-    const partHeaders = Array.isArray(part?.headers) ? part.headers : [];
-    const rawContentId = extractHeader(partHeaders, "Content-ID") || "";
-    const attachmentId = typeof part?.body?.attachmentId === "string" ? part.body.attachmentId : "";
-    if (mimeType.startsWith("image/") && rawContentId && attachmentId) {
-      inlineParts.push({
-        // Content-ID is wrapped in angle brackets on the wire; cid: refs use the bare value.
-        contentId: rawContentId.trim().replace(/^<|>$/g, ""),
-        mimeType,
-        attachmentId,
-        size: Number(part?.body?.size || 0),
-      });
-    }
-    if (Array.isArray(part?.parts)) {
-      part.parts.forEach((child: any) => walk(child));
-    }
-  };
-
-  walk(payload);
-  if (!bodyText && !bodyHtml && typeof payload?.body?.data === "string") {
-    bodyText = decodeBase64Url(payload.body.data);
-  }
-  return { bodyText, bodyHtml, inlineParts };
-}
-
-function parseThreadMessage(message: any) {
-  const headers = Array.isArray(message?.payload?.headers) ? message.payload.headers : [];
-  const bodies = extractBodies(message?.payload || {});
-  const date = extractHeader(headers, "Date") || "";
-  const timestamp = Number(message?.internalDate || 0) || Date.parse(date) || 0;
-  return {
-    id: String(message?.id || ""),
-    threadId: String(message?.threadId || ""),
-    subject: extractHeader(headers, "Subject") || "(No Subject)",
-    fromRaw: extractHeader(headers, "From") || "",
-    toRaw: extractHeader(headers, "To") || "",
-    replyTo: extractHeader(headers, "Reply-To") || extractHeader(headers, "From") || "",
-    date,
-    timestamp,
-    snippet: String(message?.snippet || ""),
-    bodyText: bodies.bodyText || String(message?.snippet || ""),
-    bodyHtml: bodies.bodyHtml || "",
-    messageIdHeader: extractHeader(headers, "Message-ID") || "",
-    references: extractHeader(headers, "References") || "",
-    inReplyTo: extractHeader(headers, "In-Reply-To") || "",
-    inlineParts: bodies.inlineParts,
-  };
-}
 
 /**
  * Replace `cid:` image references with data URIs by pulling the inline attachments from Gmail.
@@ -128,24 +57,6 @@ async function inlineCidImages(
     }
   }
   return html;
-}
-
-async function fetchWithAuthRetry(
-  url: string,
-  getToken: (forceRefresh?: boolean) => Promise<string | null>
-): Promise<Response | null> {
-  const firstToken = await getToken(false);
-  if (!firstToken) return null;
-  let response = await fetch(url, {
-    headers: { Authorization: `Bearer ${firstToken}` },
-  });
-  if (response.status !== 401) return response;
-  const refreshedToken = await getToken(true);
-  if (!refreshedToken) return response;
-  response = await fetch(url, {
-    headers: { Authorization: `Bearer ${refreshedToken}` },
-  });
-  return response;
 }
 
 export default withAuth(async (req, res, session) => {
@@ -203,6 +114,25 @@ export default withAuth(async (req, res, session) => {
     ),
   };
   const threadMessages = [resolvedCurrent];
+
+  const icsText = await resolveIcsText(currentMessage.id, currentMessage.icsPart, getToken);
+  const parsedInvite = icsText ? parseIcsCalendar(icsText) : null;
+  let meetingInvite: (ReturnType<typeof parseIcsCalendar> & { myResponse: string | null }) | null = null;
+  if (parsedInvite) {
+    const existingResponse = await prisma.emailMeetingResponse.findUnique({
+      where: {
+        user_id_account_email_ics_uid: {
+          user_id: effectiveUserId,
+          account_email: accountEmail,
+          ics_uid: parsedInvite.uid,
+        },
+      },
+    });
+    // A response made against an older SEQUENCE no longer applies — the organizer rescheduled
+    // since, so the card re-offers Yes/No/Maybe rather than showing a stale "You responded".
+    const responseIsCurrent = existingResponse && existingResponse.sequence >= parsedInvite.sequence;
+    meetingInvite = { ...parsedInvite, myResponse: responseIsCurrent ? existingResponse.response : null };
+  }
 
   let senderPhotoUrl = "";
   const senderEmail = parseAddressFromHeader(currentMessage.fromRaw);
@@ -295,6 +225,7 @@ export default withAuth(async (req, res, session) => {
     // browser for one hash. The client walks these on image error, then falls back to initials.
     senderAvatarSources: senderEmail ? senderAvatarSources(senderEmail, senderPhotoUrl, senderBimiLogoUrl) : [],
     threadMessages,
+    meetingInvite,
     // Authoritative tracker scan (DOM-free) so the "tracker blocked" badge is consistent with the
     // client's own detection and available without client-side rendering.
     // Pass the sender's domain: without it every remote image scored a "third-party" penalty, so

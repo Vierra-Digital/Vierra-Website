@@ -81,6 +81,45 @@ export async function putFileAsset(
   return key;
 }
 
+/**
+ * Mint a one-shot URL the browser can PUT a file straight to.
+ *
+ * The alternative — base64 the file into a JSON request and let an API route forward it — costs a
+ * ~33% size increase on the wire and, more importantly, has to fit inside the serverless request
+ * body limit, which is far below the 50mb the blog upload route advertised. Uploading direct to
+ * storage takes the function out of the data path entirely, so the only ceiling is the bucket's.
+ *
+ * The URL carries its own short-lived authorization, so it is safe to hand to the client, but it
+ * is still a write capability: only mint one for a caller the route has already authorized.
+ */
+export async function createSignedUploadUrl(
+  bucket: string,
+  key: string
+): Promise<{ signedUrl: string; storageKey: string }> {
+  const { data, error } = await getStorage().storage.from(bucket).createSignedUploadUrl(key);
+  if (error || !data) throw error || new Error(`Could not sign an upload for ${bucket}/${key}`);
+  return { signedUrl: data.signedUrl, storageKey: key };
+}
+
+/**
+ * Confirm an object is really present before a row is written to point at it. The browser reports
+ * its own upload result, and a row promising bytes that were never stored is worse than a failed
+ * upload: it renders as a permanently broken image with nothing to retry.
+ */
+export async function objectExists(bucket: string, key: string): Promise<boolean> {
+  const slash = key.lastIndexOf("/");
+  const dir = slash === -1 ? "" : key.slice(0, slash);
+  const name = slash === -1 ? key : key.slice(slash + 1);
+  const { data, error } = await getStorage().storage.from(bucket).list(dir, { search: name, limit: 1 });
+  if (error) return false;
+  return (data ?? []).some((o) => o.name === name);
+}
+
+/** True when object storage is available; callers fall back to the inline path when it is not. */
+export function storageConfigured(): boolean {
+  return isStorageConfigured();
+}
+
 /** Resolve a file's bytes from storage by key; null when there's no key. */
 export async function getFileBuffer(
   bucket: string,

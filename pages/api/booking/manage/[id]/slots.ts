@@ -28,14 +28,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     where: { booking_link_id: link.id, id: { not: booking.id }, status: { in: ["confirmed", "slot_claimed"] }, end_at: { gt: now } },
     select: { start_at: true, end_at: true },
   });
-  let busy: BusyInterval[];
+  let calendarBusy: BusyInterval[];
   if (link.company_id) {
-    busy = await getTeamBusyIntersection(link.company_id, now.toISOString(), rangeEnd.toISOString());
+    calendarBusy = await getTeamBusyIntersection(link.company_id, now.toISOString(), rangeEnd.toISOString());
   } else {
     const token = await getValidGmailAccessToken(link.user_id, link.account_email);
-    busy = token.ok ? await getBusy(token.accessToken, now.toISOString(), rangeEnd.toISOString()) : [];
+    const result = token.ok ? await getBusy(token.accessToken, now.toISOString(), rangeEnd.toISOString()) : null;
+    // null means we couldn't check the calendar, not that it's empty — treating it as `[]` would
+    // offer reschedule times over meetings we simply failed to see (see slots.ts's fail-closed fix).
+    if (result === null) {
+      res.status(502).json({ message: "Could not check host availability right now — please try again shortly." });
+      return;
+    }
+    calendarBusy = result;
   }
-  busy = [...busy, ...localBookings.map((b) => ({ start: b.start_at.toISOString(), end: b.end_at.toISOString() }))];
+  const busy = [...calendarBusy, ...localBookings.map((b) => ({ start: b.start_at.toISOString(), end: b.end_at.toISOString() }))];
 
   const availability = (link.availability as unknown as Availability) || DEFAULT_AVAILABILITY;
   const slots = computeSlots({

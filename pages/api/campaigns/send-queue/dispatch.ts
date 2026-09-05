@@ -6,8 +6,8 @@ import { safeCompare } from "@/lib/crypto";
 /**
  * Cron dispatch endpoint for the campaign send queue. NOT session-authenticated —
  * it runs on behalf of every company, so it's protected by the shared CRON_SECRET
- * (same mechanism as gmail/scheduled/dispatch). Invoked by the Netlify Scheduled
- * Function (netlify/functions/dispatch-campaign-queue).
+ * (same mechanism as gmail/scheduled/dispatch). Invoked by the `dispatch-campaign-queue`
+ * pg_cron job (prisma/manual/20260901_migrate_cron_to_pg_cron.sql).
  *
  * Iterates the distinct companies that have at least one ACTIVE campaign and runs
  * runCampaignSendQueueTick for each (which itself respects per-campaign daily limits

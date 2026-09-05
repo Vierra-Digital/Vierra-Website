@@ -1,16 +1,21 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 /**
  * Cheap "has anything changed?" fingerprint per keep-alive panel section, so the client can
  * decide whether a section it already has mounted (see pages/panel.tsx's visitedSections) needs
  * a real refetch or can keep showing what it has. Each fingerprint is a row count plus the latest
- * timestamp available on that table — count catches deletes, the timestamp catches adds/edits —
- * scoped to the caller's company where the table is company-scoped (blog posts aren't).
+ * timestamp available on that table — count catches deletes, the timestamp catches adds/edits.
+ * "team" is Vierra's own roster (session.companyId, its fixed company — see
+ * docs/ROLE_MODEL_REDESIGN.md's "v2" section); files/outreach/projects belong to whichever client
+ * is currently selected, so those need the explicit target instead. Blog posts aren't scoped at
+ * all.
  */
 export default withAuth(
   async (req, res, session) => {
     const companyId = session.companyId;
+    const targetCompanyId = resolveTargetCompanyId(session, req);
 
     const [
       membershipCount,
@@ -34,16 +39,26 @@ export default withAuth(
       prisma.companyMembership.aggregate({ where: { company_id: companyId }, _max: { joined_at: true } }),
       prisma.invitation.count({ where: { company_id: companyId } }),
       prisma.invitation.aggregate({ where: { company_id: companyId }, _max: { created_at: true } }),
-      prisma.storedFile.count({ where: { company_id: companyId } }),
-      prisma.storedFile.aggregate({ where: { company_id: companyId }, _max: { created_at: true } }),
-      prisma.marketingTracker.count({ where: { company_id: companyId } }),
-      prisma.marketingTracker.aggregate({ where: { company_id: companyId }, _max: { updated_at: true } }),
-      prisma.clientOutreachTracker.count({ where: { company_id: companyId } }),
-      prisma.clientOutreachTracker.aggregate({ where: { company_id: companyId }, _max: { updated_at: true } }),
-      prisma.projectBoard.count({ where: { company_id: companyId } }),
-      prisma.projectBoard.aggregate({ where: { company_id: companyId }, _max: { created_at: true } }),
-      prisma.projectTask.count({ where: { company_id: companyId } }),
-      prisma.projectTask.aggregate({ where: { company_id: companyId }, _max: { updated_at: true } }),
+      targetCompanyId ? prisma.storedFile.count({ where: { company_id: targetCompanyId } }) : 0,
+      targetCompanyId
+        ? prisma.storedFile.aggregate({ where: { company_id: targetCompanyId }, _max: { created_at: true } })
+        : { _max: { created_at: null } },
+      targetCompanyId ? prisma.marketingTracker.count({ where: { company_id: targetCompanyId } }) : 0,
+      targetCompanyId
+        ? prisma.marketingTracker.aggregate({ where: { company_id: targetCompanyId }, _max: { updated_at: true } })
+        : { _max: { updated_at: null } },
+      targetCompanyId ? prisma.clientOutreachTracker.count({ where: { company_id: targetCompanyId } }) : 0,
+      targetCompanyId
+        ? prisma.clientOutreachTracker.aggregate({ where: { company_id: targetCompanyId }, _max: { updated_at: true } })
+        : { _max: { updated_at: null } },
+      targetCompanyId ? prisma.projectBoard.count({ where: { company_id: targetCompanyId } }) : 0,
+      targetCompanyId
+        ? prisma.projectBoard.aggregate({ where: { company_id: targetCompanyId }, _max: { created_at: true } })
+        : { _max: { created_at: null } },
+      targetCompanyId ? prisma.projectTask.count({ where: { company_id: targetCompanyId } }) : 0,
+      targetCompanyId
+        ? prisma.projectTask.aggregate({ where: { company_id: targetCompanyId }, _max: { updated_at: true } })
+        : { _max: { updated_at: null } },
       prisma.blogPost.count(),
       prisma.blogPost.aggregate({ _max: { updated_date: true, created_at: true } }),
     ]);

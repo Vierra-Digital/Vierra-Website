@@ -13,7 +13,7 @@ function getIds(req: NextApiRequest) {
   };
 }
 
-export default withAuth(async (req, res, session) => {
+export default withAuth(async (req, res) => {
   const { campaignId, stepId } = getIds(req);
   if (!campaignId || !stepId) {
     res.status(400).json({ message: "Campaign id and step id are required." });
@@ -21,7 +21,7 @@ export default withAuth(async (req, res, session) => {
   }
 
   const campaign = await prisma.campaign.findFirst({
-    where: { id: campaignId, company_id: session.companyId },
+    where: { id: campaignId },
     select: { id: true, status: true },
   });
   if (!campaign) {

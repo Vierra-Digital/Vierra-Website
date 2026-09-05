@@ -79,6 +79,23 @@ export type MessageDetail = {
   senderAvatarSources?: Array<{ url: string; kind: "photo" | "logo" }>;
   threadMessages?: ThreadMessage[];
   trackers?: { count: number; vendors: string[] };
+  meetingInvite?: MeetingInvite | null;
+};
+
+export type MeetingInvite = {
+  uid: string;
+  method: string;
+  sequence: number;
+  summary: string;
+  description: string;
+  location: string;
+  startIso: string;
+  endIso: string;
+  isAllDay: boolean;
+  organizerEmail: string;
+  attendeeEmails: string[];
+  hasRrule: boolean;
+  myResponse: "accepted" | "declined" | "tentative" | null;
 };
 
 export type ThreadMessage = {

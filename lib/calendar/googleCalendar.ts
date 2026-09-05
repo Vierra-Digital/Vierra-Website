@@ -7,21 +7,65 @@ const CAL = "https://www.googleapis.com/calendar/v3";
 
 export type BusyInterval = { start: string; end: string };
 
-/** Query the host's primary calendar for busy intervals in a window. */
-export async function getBusy(accessToken: string, timeMin: string, timeMax: string): Promise<BusyInterval[]> {
+/**
+ * Query the host's primary calendar for busy intervals in a window. Returns `null` (not `[]`)
+ * on any failure — a non-OK response, a network error, or a malformed body — so a caller can
+ * tell "the host has no meetings" apart from "we couldn't ask Google." Collapsing those into the
+ * same `[]` used to make a failed lookup show the host as completely free, letting a visitor
+ * book straight over a real meeting.
+ */
+export async function getBusy(accessToken: string, timeMin: string, timeMax: string): Promise<BusyInterval[] | null> {
   try {
     const res = await fetch(`${CAL}/freeBusy`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ timeMin, timeMax, items: [{ id: "primary" }] }),
     });
-    if (!res.ok) return [];
-    const data = (await res.json().catch(() => ({}))) as { calendars?: { primary?: { busy?: BusyInterval[] } } };
+    if (!res.ok) {
+      // Was previously swallowed into a bare `[]`, which is indistinguishable from "genuinely no
+      // meetings" — logged now so a real cause (expired scope, rate limit, transient 5xx) shows
+      // up instead of just a fail-closed 502 with nothing to diagnose it from.
+      console.error(`[getBusy] freeBusy ${res.status}: ${(await res.text().catch(() => "")).slice(0, 500)}`);
+      return null;
+    }
+    const data = (await res.json().catch(() => null)) as { calendars?: { primary?: { busy?: BusyInterval[] } } } | null;
     const busy = data?.calendars?.primary?.busy;
-    return Array.isArray(busy) ? busy : [];
-  } catch {
-    return [];
+    if (!Array.isArray(busy)) console.error(`[getBusy] unexpected freeBusy response shape: ${JSON.stringify(data).slice(0, 500)}`);
+    return Array.isArray(busy) ? busy : null;
+  } catch (err) {
+    console.error(`[getBusy] freeBusy request failed: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
   }
+}
+
+// Google's freeBusy endpoint 400s ("timeRangeTooLong") once timeMin..timeMax spans roughly 3
+// months — confirmed empirically (90 days: ok, 120 days: rejected). A booking link with a wide
+// window (e.g. the audit-call link's 365-day "unbounded" horizon) needs its range split into
+// chunks under that cap; 80 days leaves margin under the ~92-day boundary for month-length drift.
+const MAX_FREEBUSY_RANGE_DAYS = 80;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Like `getBusy`, but transparently splits a `timeMin..timeMax` range wider than Google's
+ * freeBusy cap into multiple chunked requests (run in parallel) and merges the results. Use this
+ * instead of `getBusy` directly whenever the range isn't already known to be short — a plain
+ * `getBusy` call over 120+ days doesn't return partial data, it fails the whole request.
+ */
+export async function getBusyOverRange(accessToken: string, timeMin: string, timeMax: string): Promise<BusyInterval[] | null> {
+  const startMs = new Date(timeMin).getTime();
+  const endMs = new Date(timeMax).getTime();
+  const spanDays = (endMs - startMs) / MS_PER_DAY;
+  if (spanDays <= MAX_FREEBUSY_RANGE_DAYS) return getBusy(accessToken, timeMin, timeMax);
+
+  const chunkMs = MAX_FREEBUSY_RANGE_DAYS * MS_PER_DAY;
+  const requests: Promise<BusyInterval[] | null>[] = [];
+  for (let chunkStart = startMs; chunkStart < endMs; chunkStart += chunkMs) {
+    const chunkEnd = Math.min(chunkStart + chunkMs, endMs);
+    requests.push(getBusy(accessToken, new Date(chunkStart).toISOString(), new Date(chunkEnd).toISOString()));
+  }
+  const results = await Promise.all(requests);
+  if (results.some((r) => r === null)) return null;
+  return results.flat() as BusyInterval[];
 }
 
 export type CreatedCalendarEvent = {

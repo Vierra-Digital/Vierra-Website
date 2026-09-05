@@ -6,7 +6,7 @@ import ProfileImage from "@/components/ProfileImage"
 import { profileImageSrc } from "@/lib/profileImage"
 import { getInitialUserProfile } from "@/lib/profileImage.server"
 import Link from "next/link"
-import { FiLogOut, FiFolder } from "react-icons/fi"
+import { FiLogOut, FiFolder, FiUsers } from "react-icons/fi"
 import { AiOutlineAppstore } from "react-icons/ai"
 import { HiOutlineDocumentText } from "react-icons/hi"
 import { CiSearch } from "react-icons/ci"
@@ -28,6 +28,9 @@ const LinkedInContextSection = dynamic(
   () => import("@/components/PanelPages/LinkedInContextSection"),
   { ssr: false }
 )
+const ClientTeamSection = dynamic(() => import("@/components/PanelPages/ClientTeamSection"), {
+  ssr: false,
+})
 
 type ClientPageProps = {
   initialUserName: string | null
@@ -126,6 +129,12 @@ const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) =
               <FiFolder />
               <span className={`text-xs font-normal ${inter.className}`}>
                 Files
+              </span>
+            </div>
+            <div id="panel-nav-item" onClick={() => { setCurrentSection(3); setShowSettings(false); setIsSidebarOpen(false) }} className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === 3 ? "bg-white text-black" : "hover:bg-white hover:text-black"}`}>
+              <FiUsers />
+              <span className={`text-xs font-normal ${inter.className}`}>
+                Team
               </span>
             </div>
           </div>
@@ -240,6 +249,7 @@ const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) =
                 )}
                 {currentSection === 1 && <FilesSection readOnly showOwnerInReadOnly />}
                 {currentSection === 2 && <LinkedInContextSection title="Context" />}
+                {currentSection === 3 && <ClientTeamSection />}
               </>
             )}
           </div>
@@ -254,7 +264,7 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
   if (!session) {
     return { redirect: { destination: "/login", permanent: false } }
   }
-  if ((session.user as any).role !== "user") {
+  if (session.kind !== "client") {
     return { redirect: { destination: "/panel", permanent: false } }
   }
 

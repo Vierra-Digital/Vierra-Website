@@ -20,6 +20,7 @@ import {
 } from "react-icons/fi";
 import ProfileImage from "../ProfileImage";
 import Modal from "@/components/ui/Modal";
+import { panelFetch } from "@/lib/panelFetch";
 
 
 type ProjectTaskStatus = "not_started" | "ongoing" | "under_review" | "completed";
@@ -141,7 +142,7 @@ export default function ProjectManagement() {
 
   const fetchBoards = useCallback(async () => {
     try {
-      const r = await fetch("/api/project/boards");
+      const r = await panelFetch("/api/project/boards");
       if (r.ok) {
         const boardList: BoardInfo[] = await r.json();
         setBoards(boardList);
@@ -160,7 +161,7 @@ export default function ProjectManagement() {
     if (!newBoardName.trim() || creatingBoard) return;
     setCreatingBoard(true);
     try {
-      const r = await fetch("/api/project/boards", {
+      const r = await panelFetch("/api/project/boards", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newBoardName.trim() }),
@@ -185,7 +186,7 @@ export default function ProjectManagement() {
     if (!selectedBoard) return;
     setLoading(true);
     try {
-      const r = await fetch(`/api/project/tasks?boardId=${selectedBoard.id}`);
+      const r = await panelFetch(`/api/project/tasks?boardId=${selectedBoard.id}`);
       if (r.ok) {
         const data = await r.json();
         setTasks(data);
@@ -319,7 +320,7 @@ export default function ProjectManagement() {
         .map((s) => s.trim())
         .filter(Boolean)
         .map((text) => ({ text, completed: false }));
-      const r = await fetch("/api/project/tasks", {
+      const r = await panelFetch("/api/project/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react"
 import { RiArrowDropDownLine } from "react-icons/ri"
 import { FiTrendingUp, FiTrendingDown, FiMinus, FiCalendar, FiClock } from "react-icons/fi"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { panelFetch } from "@/lib/panelFetch"
 
 type GrowthDirection = "up" | "flat" | "down"
 type DashboardStatKey =
@@ -166,7 +167,7 @@ const DashboardSection = () => {
     useEffect(() => {
         const fetchDashboardStats = async () => {
             try {
-                const response = await fetch("/api/dashboard/stats")
+                const response = await panelFetch("/api/dashboard/stats")
                 if (response.ok) {
                     const data = await response.json()
                     if (Array.isArray(data?.stats)) {

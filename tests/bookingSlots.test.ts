@@ -41,6 +41,39 @@ describe("computeSlots", () => {
     expect(slots).toEqual(["2026-01-05T09:00:00.000Z", "2026-01-05T11:00:00.000Z"]);
   });
 
+  it("spaces offered slots by duration+buffer even with nothing booked yet", () => {
+    // 15-min meetings with a 10-min buffer should offer :00, :25, :50 — not back-to-back :00,
+    // :15, :30 — matching Google Calendar's own appointment-schedule buffer behavior.
+    const slots = computeSlots({
+      ...base,
+      durationMinutes: 15,
+      bufferMinutes: 10,
+      ...monday,
+      availability: avail([1], 9 * 60, 10 * 60),
+    });
+    expect(slots).toEqual(["2026-01-05T09:00:00.000Z", "2026-01-05T09:25:00.000Z"]);
+  });
+
+  it("uses a per-weekday override in place of the default window", () => {
+    // Mon-Tue available by default (9-10), but Tuesday overridden to a later, shorter window.
+    const availability: Availability = {
+      days: [1, 2],
+      startMinutes: 9 * 60,
+      endMinutes: 10 * 60,
+      perDay: { 2: { startMinutes: 13 * 60, endMinutes: 14 * 60 } },
+    };
+    const slots = computeSlots({
+      ...base,
+      availability,
+      rangeStart: new Date(Date.UTC(2026, 0, 5)),
+      rangeEnd: new Date(Date.UTC(2026, 0, 7)),
+    });
+    expect(slots).toEqual([
+      "2026-01-05T09:00:00.000Z", // Monday: default window
+      "2026-01-06T13:00:00.000Z", // Tuesday: overridden window, not the 9-10 default
+    ]);
+  });
+
   it("expands busy blocking by the buffer", () => {
     const slots = computeSlots({
       ...base,

@@ -12,7 +12,7 @@ function dateKey(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
-export default withAuth(async (req, res, session) => {
+export default withAuth(async (req, res) => {
   const campaignId = getCampaignId(req);
   if (!campaignId) {
     res.status(400).json({ message: "Campaign id is required." });
@@ -20,7 +20,7 @@ export default withAuth(async (req, res, session) => {
   }
 
   const campaign = await prisma.campaign.findFirst({
-    where: { id: campaignId, company_id: session.companyId },
+    where: { id: campaignId },
     select: { id: true },
   });
   if (!campaign) {

@@ -1,10 +1,11 @@
 import type { SupabaseClient, User as SupabaseUser } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { getVierraCompanyId } from "@/lib/auth/vierraCompany";
 
 export type ResolvedIdentity =
   | {
       kind: "member";
-      user: { id: string; email: string; role: string; name: string | null; isPlatformAdmin: boolean };
+      user: { id: string; email: string; role: string; name: string | null };
       companyId: string;
     }
   | { kind: "client"; user: { id: string; email: string; role?: undefined; name: string | null }; clientId: string; companyId: string }
@@ -18,26 +19,28 @@ export type ResolvedIdentity =
  * the caller's own per-request client (so `auth.uid()` resolves correctly and
  * RLS applies); the rare writes below (client backfill, invitation
  * auto-accept) need the service-role admin client, since a brand-new,
- * not-yet-affiliated user has no RLS path to create their own membership row.
+ * not-yet-affiliated user has no RLS path to create their own
+ * membership/representative row.
+ *
+ * Role model v2 (docs/ROLE_MODEL_REDESIGN.md): `users.is_platform_admin` is discontinued —
+ * "admin" vs. "staff" is `company_memberships.role` directly again, set only via direct
+ * database access for whoever should be admin (no in-app setter anywhere writes "admin").
  */
 export async function resolveUser(supabase: SupabaseClient, authUser: SupabaseUser): Promise<ResolvedIdentity> {
   const email = authUser.email ?? "";
 
   const [{ data: nameRow }, { data: companyId }, { data: role }, { data: clientId }] = await Promise.all([
-    supabase.from("users").select("name, is_platform_admin").eq("id", authUser.id).maybeSingle(),
+    supabase.from("users").select("name").eq("id", authUser.id).maybeSingle(),
     supabase.rpc("user_company_id"),
     supabase.rpc("user_company_role"),
     supabase.rpc("user_client_id"),
   ]);
-  const name = (nameRow as { name: string | null; is_platform_admin: boolean | null } | null)?.name ?? null;
-  const isPlatformAdmin = Boolean(
-    (nameRow as { name: string | null; is_platform_admin: boolean | null } | null)?.is_platform_admin
-  );
+  const name = (nameRow as { name: string | null } | null)?.name ?? null;
 
   if (companyId) {
     return {
       kind: "member",
-      user: { id: authUser.id, email, role: role as string, name, isPlatformAdmin },
+      user: { id: authUser.id, email, role: (role as string) || "staff", name },
       companyId: companyId as string,
     };
   }
@@ -79,10 +82,14 @@ export async function resolveUser(supabase: SupabaseClient, authUser: SupabaseUs
     };
   }
 
-  // Auto-accept a pending company invitation matching this email, if any.
+  // Auto-accept a pending invitation matching this email, if any. Role model v2
+  // (docs/ROLE_MODEL_REDESIGN.md): whether accepting creates a company_memberships row (Vierra
+  // staff) or a clients row (a client business's representative) is decided entirely by whether
+  // the invite targets Vierra's own fixed company id — no discriminator column needed, and no
+  // invite ever grants "admin" (no in-app path writes that role anywhere).
   const { data: invitation } = await admin
     .from("invitations")
-    .select("id, company_id, role")
+    .select("id, company_id")
     .eq("email", normalizedEmail)
     .is("accepted_at", null)
     .gt("expires_at", new Date().toISOString())
@@ -90,17 +97,47 @@ export async function resolveUser(supabase: SupabaseClient, authUser: SupabaseUs
     .limit(1)
     .maybeSingle();
   if (invitation) {
-    const inv = invitation as { id: string; company_id: string; role: string };
-    const { error: membershipError } = await admin
-      .from("company_memberships")
-      .insert({ company_id: inv.company_id, user_id: authUser.id, role: inv.role, status: "active" });
-    if (!membershipError) {
-      await admin.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", inv.id);
-      return {
-        kind: "member",
-        user: { id: authUser.id, email, role: inv.role, name, isPlatformAdmin: false },
-        companyId: inv.company_id,
-      };
+    const inv = invitation as { id: string; company_id: string };
+    const vierraCompanyId = await getVierraCompanyId();
+
+    if (inv.company_id === vierraCompanyId) {
+      const { error: membershipError } = await admin
+        .from("company_memberships")
+        .insert({ company_id: inv.company_id, user_id: authUser.id, role: "staff", status: "active" });
+      if (!membershipError) {
+        await admin.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", inv.id);
+        return {
+          kind: "member",
+          user: { id: authUser.id, email, role: "staff", name },
+          companyId: inv.company_id,
+        };
+      }
+    } else {
+      const { data: company } = await admin
+        .from("companies")
+        .select("name")
+        .eq("id", inv.company_id)
+        .maybeSingle();
+      const { data: newClient, error: clientError } = await admin
+        .from("clients")
+        .insert({
+          company_id: inv.company_id,
+          user_id: authUser.id,
+          name: name || email,
+          email,
+          business_name: (company as { name: string } | null)?.name || "",
+        })
+        .select("id")
+        .single();
+      if (!clientError && newClient) {
+        await admin.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", inv.id);
+        return {
+          kind: "client",
+          user: { id: authUser.id, email, name },
+          clientId: (newClient as { id: string }).id,
+          companyId: inv.company_id,
+        };
+      }
     }
   }
 

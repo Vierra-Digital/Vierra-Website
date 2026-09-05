@@ -193,6 +193,44 @@ export async function sendAuditConfirmationEmail(data: Pick<EmailData, "fullName
   await deliver(mailOptions);
 }
 
+/**
+ * Internal notification when a lead leaves a freeform availability note instead of finding an
+ * open slot on the audit-call calendar (AuditBookingStep's no-slots fallback). `note` is
+ * arbitrary user text going straight into an HTML email body — escaped via escapeHtml (same
+ * helper the booking-confirmation emails use) so it can't break out of the markup or inject a
+ * link/script into what sales reads. No database write happens anywhere in this path, so SQL
+ * injection isn't a vector here; the HTML-injection one above is the applicable risk instead.
+ */
+export async function sendAuditAvailabilityNoteEmail(data: { fullName: string; email: string; note: string; context?: string }): Promise<void> {
+  const mailOptions = {
+    from: fromAddress,
+    to: recipients.join(","),
+    subject: "Vierra | Audit Call — Availability Note",
+    html: renderEmailShell(`
+              <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;text-align:left;">Availability Note</h2>
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 24px;text-align:left;">
+                A lead didn't find an open slot on the audit-call calendar and left their availability instead:
+              </p>
+              <table style="width:100%;border-collapse:collapse;margin:0 0 24px;">
+                <tr>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;color:#2e0a4f;font-weight:700;font-size:15px;width:42%;">Full Name</td>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;color:#444;font-size:15px;">${escapeHtml(data.fullName)}</td>
+                </tr>
+                <tr>
+                  <td style="padding:11px 0;${data.context ? "border-bottom:1px solid #eee;" : ""}color:#2e0a4f;font-weight:700;font-size:15px;">Email</td>
+                  <td style="padding:11px 0;${data.context ? "border-bottom:1px solid #eee;" : ""}font-size:15px;"><a href="mailto:${escapeHtml(data.email)}" style="color:#7A13D0;text-decoration:none;">${escapeHtml(data.email)}</a></td>
+                </tr>
+                ${data.context ? `<tr>
+                  <td style="padding:11px 0;color:#2e0a4f;font-weight:700;font-size:15px;">Context</td>
+                  <td style="padding:11px 0;color:#444;font-size:15px;">${escapeHtml(data.context)}</td>
+                </tr>` : ""}
+              </table>
+              <p style="color:#2e0a4f;font-weight:700;font-size:15px;margin:0 0 8px;">Their availability</p>
+              <p style="color:#444;font-size:15px;line-height:1.6;margin:0 0 8px;white-space:pre-wrap;">${escapeHtml(data.note)}</p>`),
+  };
+  await deliver(mailOptions);
+}
+
 export async function sendSignedDocumentEmail(documentName: string, attachment: Buffer): Promise<void> {
   const pdfFilename = ensurePdfExtension(documentName);
   const mailOptions = {

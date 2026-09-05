@@ -8,16 +8,17 @@ function getCampaignId(req: NextApiRequest) {
 }
 
 /** Failed sends for a campaign — surfaces the silent SMTP failures the send queue gives up on. */
-export default withAuth(async (req, res, session) => {
+export default withAuth(async (req, res) => {
   const campaignId = getCampaignId(req);
   if (!campaignId) {
     res.status(400).json({ message: "Campaign id is required." });
     return;
   }
 
-  // Company-scope: a campaign id from another company must 404, not leak its failures.
+  // Any Vierra staff member may view any client's campaign failures (see
+  // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — this just confirms the id is real.
   const campaign = await prisma.campaign.findFirst({
-    where: { id: campaignId, company_id: session.companyId },
+    where: { id: campaignId },
     select: { id: true },
   });
   if (!campaign) {

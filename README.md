@@ -563,14 +563,27 @@ server bundle, inflating every deploy.
 
 ### Scheduled functions (cron)
 
-Self-registering Netlify Scheduled Functions in `netlify/functions/` (each POSTs its paired API route and is guarded by `CRON_SECRET`):
+Was 9 Netlify Scheduled Functions in `netlify/functions/`, one per cadence — moved to Supabase
+`pg_cron` + `pg_net` (see `prisma/manual/20260901_migrate_cron_to_pg_cron.sql`) after they hit
+Netlify's scheduled-function invocation limit. Each cron job POSTs its paired API route, guarded
+by `CRON_SECRET` (pulled from Supabase Vault at call time, never committed):
 
-| Function | Cadence | Triggers |
+| Job (`cron.job.jobname`) | Cadence | Triggers |
 |----------|---------|----------|
 | `poll-inbound` | every 5 min | inbound processing — filters, vacation reply, auto-draft, read receipts, snooze resurfacing, reply/signal Discord alerts |
 | `dispatch-scheduled-email` | every 1 min | sends due scheduled mail |
 | `dispatch-campaign-queue` | every 5 min | advances active campaign sequences |
 | `gmail-watch-renew` | daily | re-registers Gmail push (no-op unless `GMAIL_PUBSUB_TOPIC` is set) |
+| `sync-upcoming-meetings` | every 5 min | caches the dashboard's upcoming-meetings list |
+| `sync-meeting-attendance` | hourly | reconciles meeting attendance |
+| `send-meeting-reminders` | hourly | sends ~24h-out meeting reminder emails |
+| `purge-meeting-pii` | daily 03:00 UTC | 1-year meeting-PII retention sweep |
+| `auto-assign-meetings` | every 5 min | round-robin fallback for unclaimed team booking slots |
+
+Inspect/rotate: `select * from cron.job order by jobname;` and
+`select * from cron.job_run_details order by start_time desc limit 20;` in the Supabase SQL
+editor. Rotating `CRON_SECRET` requires updating both the app env var and the Vault secret
+(`select vault.update_secret(id, '<new value>') from vault.secrets where name = 'cron_secret';`).
 
 A quick health check (idempotent): `curl -s -X POST -H "x-cron-secret: <CRON_SECRET>" https://vierradev.com/api/gmail/inbound/dispatch` → expects `{"ok":true,...}`.
 
@@ -595,7 +608,8 @@ A quick health check (idempotent): `curl -s -X POST -H "x-cron-secret: <CRON_SEC
   `requireSessionOrRespond401` / `requireRolesOrRespond403` pair in `lib/api/guards.ts`. Those guards
   throw a `__handled__` sentinel that `handleApiError` swallows, which is why callers legitimately
   do not `return` after them.
-- Scheduled functions are gated on `CRON_SECRET` compared with `safeCompare` (timing-safe).
+- Cron dispatch routes are gated on `CRON_SECRET` compared with `safeCompare` (timing-safe); the
+  scheduler side (Supabase `pg_cron`) fetches that secret from Vault rather than embedding it.
 - The browser extension authenticates with `EXTENSION_TRACK_TOKEN`; it cannot use the session cookie
   cross-origin.
 - Admin endpoints scope every lookup by `company_id` to prevent cross-tenant reads. See

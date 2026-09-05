@@ -171,7 +171,15 @@ export async function maybeRecordBounce(msg: InboundMessage, ctx: InboundContext
 }
 
 /** Retrieve lightweight context (prior threads with this sender, contact info) to ground the draft. */
-async function buildRagContext(userId: string, senderEmail: string): Promise<string> {
+async function buildRagContext(userId: string, accountEmail: string, senderEmail: string): Promise<string> {
+  // Contacts are client-scoped now (see docs/ROLE_MODEL_REDESIGN.md's "v2" section) — the mailbox
+  // this reply is drafted from already pins down which client, same pattern as elsewhere in this
+  // file (see resolveAccountId's other call sites above).
+  const accountId = await resolveAccountId(userId, accountEmail);
+  const account = accountId
+    ? await prisma.emailProviderAccount.findUnique({ where: { id: accountId }, select: { company_id: true } })
+    : null;
+
   const [priorOutbound, contact] = await Promise.all([
     prisma.emailOutboundMessage.findMany({
       where: { user_id: userId, email_outbound_recipients: { some: { email: senderEmail } } },
@@ -179,10 +187,12 @@ async function buildRagContext(userId: string, senderEmail: string): Promise<str
       take: 3,
       select: { subject: true, body_text: true },
     }),
-    prisma.contact.findFirst({
-      where: { user_id: userId, email: senderEmail },
-      select: { first_name: true, last_name: true, business: true },
-    }),
+    account?.company_id
+      ? prisma.contact.findFirst({
+          where: { company_id: account.company_id, email: senderEmail },
+          select: { first_name: true, last_name: true, business: true },
+        })
+      : null,
   ]);
 
   const parts: string[] = [];
@@ -211,7 +221,7 @@ export async function maybeAutoDraft(msg: InboundMessage, ctx: InboundContext): 
   if (pref?.autonomy !== "autodraft") return;
 
   const tone = pref.tone || "professional and friendly";
-  const context = await buildRagContext(msg.userId, sender);
+  const context = await buildRagContext(msg.userId, msg.accountEmail, sender);
 
   const system =
     `You are Artemis, an assistant that drafts email replies on behalf of the account owner. ` +

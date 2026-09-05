@@ -6,6 +6,7 @@ import type { Campaign } from "../CampaignsSection";
 import ContactsTab from "./ContactsTab";
 import AnalyticsTab from "./AnalyticsTab";
 import { STATUS_STYLE } from "../CampaignsSection";
+import { panelFetch } from "@/lib/panelFetch";
 
 const TABS = ["Overview", "Contacts", "Analytics"] as const;
 type Tab = (typeof TABS)[number];
@@ -140,7 +141,7 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
     setBusy(true);
     setSyncMessage("");
     try {
-      const res = await fetch("/api/campaigns/send-queue/tick", { method: "POST" });
+      const res = await panelFetch("/api/campaigns/send-queue/tick", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to run send queue");
       setSyncMessage(`Sent ${data.sent}, failed ${data.failed}, skipped ${data.skipped} (of ${data.processed} due).`);

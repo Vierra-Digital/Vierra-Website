@@ -9,11 +9,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const session = await requireRole(req, res);
   if (!session) return;
-  const { companyId } = session;
 
   try {
+    // Any Vierra staff member may see any client's onboarding sessions (see
+    // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — not scoped to one company.
     const sessions = await prisma.onboardingSession.findMany({
-      where: { company_id: companyId },
       include: {
         clients: true,
         onboarding_platform_tokens: { select: { platform: true } },

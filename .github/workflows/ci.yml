@@ -29,9 +29,9 @@ jobs:
         # on v4 every run logged "Node.js 20 is deprecated ... forced to run on Node.js 24".
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          # Node 20 left maintenance in April 2026, so CI was gating on an end-of-life runtime
-          # while development happens on 24. Keep these on the same major.
-          node-version: "24"
+          # .nvmrc is the single source of truth: Netlify reads it too, so CI, the deploy and
+          # local dev cannot drift apart the way they had (CI 20, Netlify 22.23.2, local 24).
+          node-version-file: .nvmrc
           cache: "npm"
 
       - name: Install dependencies

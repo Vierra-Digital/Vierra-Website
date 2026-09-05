@@ -1,0 +1,36 @@
+-- Phase 2 of the Netlify -> Supabase Edge Functions dispatch migration for the email-sending
+-- system (see supabase/functions/dispatch-scheduled-email/ for the Deno side of this, and
+-- 20260902_edge_fn_rpc_helpers.sql for cron_dispatch_edge itself, which this reuses unchanged).
+--
+-- Unlike the booking jobs (20260902/3/4), this one needs NO new SQL function: the port replaces
+-- every prisma.* call in lib/gmail/scheduledSend.ts + lib/gmail/sendCore.ts with plain
+-- supabase-js .from()/.select()/.insert()/.update()/.delete() calls against the same tables
+-- (email_scheduled_sends, email_provider_accounts, email_account_settings,
+-- email_outbound_messages, email_outbound_recipients, email_tracking_links,
+-- email_compose_drafts, platform_tokens) -- none of it was transactional across the Gmail/SMTP
+-- send call to begin with (it can't be; the provider call sits between the create and the
+-- update/delete), so there's nothing here that needs a security-definer RPC the way the booking
+-- jobs' atomic multi-row writes did.
+--
+-- supabase/functions/_shared/smtp.ts (nodemailer, used for non-Gmail SMTP-provider mailboxes) was
+-- confirmed working under Deno's npm compat on 2026-09-04 via a throwaway spike function --
+-- deployed, curl-tested against a real Ethereal test account (got back {"ok":true,...} with a
+-- live preview URL), then deleted per its own comment. No further action needed here.
+--
+-- Cutover (run only after supabase/functions/dispatch-scheduled-email is deployed and manually
+-- verified with curl -- see the plan's Phase 2/verification gates):
+--
+--   select cron.unschedule('dispatch-scheduled-email');
+--   select cron.schedule('dispatch-scheduled-email', '* * * * *',
+--     $$select extensions.cron_dispatch_edge('dispatch-scheduled-email')$$);
+--
+-- Verify: select id, status_code, created from net._http_response order by created desc limit 10;
+-- Tail results:  select * from cron.job_run_details order by start_time desc limit 20;
+-- Roll back to the Netlify path:
+--   select cron.unschedule('dispatch-scheduled-email');
+--   select cron.schedule('dispatch-scheduled-email', '* * * * *',
+--     $$select extensions.cron_dispatch('/api/gmail/scheduled/dispatch')$$);
+--
+-- Once cutover has been green for a sustained period, delete
+-- netlify/functions/dispatch-scheduled-email.ts and pages/api/gmail/scheduled/dispatch.ts in a
+-- follow-up commit -- not part of this migration, kept as the rollback path until then.

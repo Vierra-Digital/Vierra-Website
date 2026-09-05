@@ -43,6 +43,7 @@ import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import PromptModal, { type PromptField } from "@/components/ui/PromptModal";
 import { MODULES, orderModules, PAGE_SIZE } from "@/components/email/constants";
 import type { ContactVisibility } from "@/components/email/types";
+import { panelFetch } from "@/lib/panelFetch";
 
 type PromptConfig = {
   title: string;
@@ -724,7 +725,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
   const createProviderAccount = async () => {
     try {
-      const response = await fetch("/api/email/accounts", {
+      const response = await panelFetch("/api/email/accounts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -973,7 +974,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
   const loadCompanySettings = useCallback(async () => {
     try {
-      const res = await fetch("/api/company/settings");
+      const res = await panelFetch("/api/company/settings");
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setCompanyMailingAddress(data?.mailingAddress || "");
@@ -989,7 +990,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     setCompanySettingsSaving(true);
     setCompanySettingsStatus("");
     try {
-      const res = await fetch("/api/company/settings", {
+      const res = await panelFetch("/api/company/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

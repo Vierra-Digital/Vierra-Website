@@ -1,14 +1,21 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 /**
  * Outreach reporting summary for the Analytics panel: campaign volume, lead-status
- * breakdown, reply rate, and meetings booked. Campaigns are company-scoped; bookings
- * are user-scoped. Degrades to zeros if the campaign/booking tables aren't present yet.
+ * breakdown, reply rate, and meetings booked. Campaigns are client-scoped (see
+ * docs/ROLE_MODEL_REDESIGN.md's "v2" section — an explicit target is required, session.companyId
+ * is Vierra's own fixed company now); bookings are user-scoped. Degrades to zeros if the
+ * campaign/booking tables aren't present yet.
  */
 export default withAuth(
   async (req, res, session) => {
-    const companyId = session.companyId;
+    const companyId = resolveTargetCompanyId(session, req);
+    if (!companyId) {
+      res.status(400).json({ message: "companyId is required" });
+      return;
+    }
     const userId = session.user.id;
 
     try {

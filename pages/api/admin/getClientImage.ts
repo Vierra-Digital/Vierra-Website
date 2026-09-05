@@ -4,16 +4,17 @@ import { sendImageAsset } from "@/lib/api/image";
 import { STORAGE_BUCKETS } from "@/lib/storage";
 
 export default withAuth(
-  async (req, res, session) => {
+  async (req, res) => {
     const { clientId } = req.query;
 
     if (!clientId) {
       return res.status(400).json({ message: "Client ID is required" });
     }
 
-    // Scope to the admin's own company so another company's client avatar can't be read by id.
+    // Any Vierra staff member may view any client's representative avatar (see
+    // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — looked up by id alone.
     const client = await prisma.client.findFirst({
-      where: { id: String(clientId), company_id: session.companyId },
+      where: { id: String(clientId) },
       select: { image_storage_key: true, image_mime_type: true },
     });
 

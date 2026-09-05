@@ -4,6 +4,7 @@ import { withAuth } from "@/lib/api/withAuth";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { asStr, asPort } from "@/lib/api/parsing";
 import { isBlockedSmtpHost } from "@/lib/email/smtp";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 // The panel + settings page consume camelCase; map snake→camel here (and never leak the
 // encrypted password — only whether one is set).
@@ -51,10 +52,15 @@ export default withAuth(async (req, res, session) => {
       res.status(400).json({ message: "That SMTP host isn't allowed." });
       return;
     }
+    const companyId = resolveTargetCompanyId(session, req);
+    if (!companyId) {
+      res.status(400).json({ message: "companyId is required" });
+      return;
+    }
 
     const created = await prisma.emailProviderAccount.create({
       data: {
-        company_id: session.companyId,
+        company_id: companyId,
         user_id: userId,
         account_email: accountEmail,
         provider_label: asStr(req.body?.providerLabel) || null,

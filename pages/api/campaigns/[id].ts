@@ -28,15 +28,17 @@ const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   cancelled: [],
 };
 
-export default withAuth(async (req, res, session) => {
+export default withAuth(async (req, res) => {
   const id = getId(req);
   if (!id) {
     res.status(400).json({ message: "Campaign id is required." });
     return;
   }
 
+  // Any Vierra staff member may act on any client's campaign (see
+  // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — looked up by id alone, not company_id.
   const existing = await prisma.campaign.findFirst({
-    where: { id, company_id: session.companyId },
+    where: { id },
     include: {
       email_provider_accounts: { select: { user_id: true, account_email: true, smartlead_email_account_id: true } },
       _count: { select: { campaign_steps: true, campaign_contacts: true } },

@@ -4,6 +4,7 @@ import { useSession } from "@/lib/session-client"
 import { FiChevronLeft, FiChevronRight, FiCalendar, FiTrendingUp, FiDollarSign, FiUsers, FiTarget } from "react-icons/fi"
 import { m as motion } from "framer-motion"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import { panelFetch } from "@/lib/panelFetch"
 
 const statFields = [
     { key: "attempts", label: "Attempts", icon: FiTarget },
@@ -349,7 +350,7 @@ const OutreachSection = () => {
     const fetchClientData = useCallback(async () => {
         setIsLoading(true)
         try {
-            const response = await fetch(`/api/marketing/client-tracker?year=${selectedYear}&month=${selectedMonth}`)
+            const response = await panelFetch(`/api/marketing/client-tracker?year=${selectedYear}&month=${selectedMonth}`)
             if (!response.ok) throw new Error("Failed to fetch client stats")
             const data = await response.json()
             setClients(Array.isArray(data.clients) ? data.clients : [])
@@ -369,7 +370,7 @@ const OutreachSection = () => {
         if (!session?.user || !isEditable || !selectedClientId) return
         setIsUpdating(true)
         try {
-            const response = await fetch("/api/marketing/client-tracker", {
+            const response = await panelFetch("/api/marketing/client-tracker", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
