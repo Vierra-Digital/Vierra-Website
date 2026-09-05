@@ -39,7 +39,7 @@ const StaffActionsMenu: React.FC<{
 }> = ({ staffName, onEdit, onDelete, isSelf }) => {
     return (
         <RowActionMenu label={`Manage ${staffName}`}>
-            <RowActionMenuItem onClick={onEdit} icon={<FiEdit3 className="w-4 h-4" />} tone="accent">
+            <RowActionMenuItem onClick={onEdit} icon={<FiEdit3 className="w-4 h-4" />}>
                 Edit Staff
             </RowActionMenuItem>
             {!isSelf && (

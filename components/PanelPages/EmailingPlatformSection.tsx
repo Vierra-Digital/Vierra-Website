@@ -5179,7 +5179,7 @@ ${sourceText}`;
                                               <td className="px-4 py-3 text-right">
                                                 <div className="inline-flex justify-end">
                                                   <RowActionMenu label={`Manage ${displayName}`} menuWidthClassName="w-44">
-                                                    <RowActionMenuItem onClick={() => editContact(contact)} icon={<FiEdit3 className="w-4 h-4" />} tone="accent">
+                                                    <RowActionMenuItem onClick={() => editContact(contact)} icon={<FiEdit3 className="w-4 h-4" />}>
                                                       Edit Contact
                                                     </RowActionMenuItem>
                                                     <RowActionMenuItem onClick={() => deleteContact(contact)} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">

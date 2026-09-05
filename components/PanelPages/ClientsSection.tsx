@@ -60,7 +60,7 @@ const ClientActionsMenu: React.FC<{
 }> = ({ clientName, isActive, onView, onDelete, onToggleStatus }) => {
     return (
         <RowActionMenu label={`Manage ${clientName}`}>
-          <RowActionMenuItem onClick={onView} icon={<FiEye className="w-4 h-4" />} tone="accent">
+          <RowActionMenuItem onClick={onView} icon={<FiEye className="w-4 h-4" />}>
             View
           </RowActionMenuItem>
           <RowActionMenuItem

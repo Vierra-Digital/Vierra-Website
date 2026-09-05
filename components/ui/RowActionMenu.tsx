@@ -11,7 +11,12 @@ type RowActionMenuItemProps = {
   onClick: () => void;
   icon?: React.ReactNode;
   children: React.ReactNode;
-  tone?: "default" | "accent" | "danger";
+  /**
+   * Only two: ordinary and destructive. There used to be an "accent" tone as well, which put a
+   * purple item among the grey ones for no reason a reader could work out — three colours in a
+   * seven-item menu, only one of which meant anything.
+   */
+  tone?: "default" | "danger";
   disabled?: boolean;
 };
 
@@ -23,11 +28,7 @@ export const RowActionMenuItem: React.FC<RowActionMenuItemProps> = ({
   disabled = false,
 }) => {
   const toneClass =
-    tone === "danger"
-      ? "text-[#B42318] hover:bg-[#FDECEC]"
-      : tone === "accent"
-        ? "text-[#5F17A5] hover:bg-[#F5EEFE]"
-        : "text-[#374151] hover:bg-[#F5F3F9]";
+    tone === "danger" ? "text-[#B42318] hover:bg-[#FDECEC]" : "text-[#374151] hover:bg-[#F5F3F9]";
 
   return (
     <button
@@ -36,7 +37,15 @@ export const RowActionMenuItem: React.FC<RowActionMenuItemProps> = ({
       disabled={disabled}
       className={`flex h-8 w-full items-center gap-2.5 whitespace-nowrap rounded-md px-2.5 text-left text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${toneClass}`}
     >
-      {icon ? <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center [&>*]:h-3.5 [&>*]:w-3.5">{icon}</span> : null}
+      {icon ? (
+        <span
+          className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center [&>*]:h-3.5 [&>*]:w-3.5 ${
+            tone === "danger" ? "" : "text-[#9CA3AF]"
+          }`}
+        >
+          {icon}
+        </span>
+      ) : null}
       <span className="truncate">{children}</span>
     </button>
   );
@@ -130,7 +139,7 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({ label, children, menuWidt
         aria-haspopup="menu"
         aria-expanded={isOpen}
         className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
-          isOpen ? "bg-[#F1EDF9] text-[#5F17A5]" : "text-[#9CA3AF] hover:bg-[#F5F3F9] hover:text-[#374151]"
+          isOpen ? "bg-[#EFECF4] text-[#374151]" : "text-[#9CA3AF] hover:bg-[#F5F3F9] hover:text-[#374151]"
         }`}
       >
         <MoreHorizontal className="h-4 w-4" />
