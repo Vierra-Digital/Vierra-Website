@@ -11,6 +11,18 @@ const DISABLED_MARKER = "__disabled__"
 const ENABLED_MARKER = "__enabled__"
 
 /**
+ * Google's own generated calendars, which are never a source of meetings.
+ *
+ * Holiday calendars come back with ids like "en.usa#holiday@group.v.calendar.google.com" — one
+ * per connected account, all called "Holidays in United States", none of them anything a person
+ * booked. They are dropped entirely rather than merely defaulted off, so they neither clutter the
+ * settings list nor reach the dashboard through an old stored preference.
+ */
+export function isGeneratedGoogleCalendar(calendarId: string) {
+  return /#(holiday|holidays)@group\.v\.calendar\.google\.com$/i.test(calendarId.trim())
+}
+
+/**
  * Whether a calendar is on when the user has never said either way.
  *
  * Google hands every account a pile of calendars it generated or the user once subscribed to —
