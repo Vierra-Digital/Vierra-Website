@@ -7,6 +7,7 @@ import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import Modal from "@/components/ui/Modal";
+import { computePresenceStatus } from "@/lib/presence";
 
 /** Strict email-shape check shared by the team invite/edit modals below. */
 const isValidEmail = (value: string) => /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(value);
@@ -72,18 +73,7 @@ const StatusBadge: React.FC<{ lastActiveAt: string | null; isPending?: boolean }
         )
     }
 
-    const getActualStatus = () => {
-        if (!lastActiveAt) return "offline"
-
-        const lastActive = new Date(lastActiveAt)
-        const now = new Date()
-        const diffMinutes = (now.getTime() - lastActive.getTime()) / (1000 * 60)
-        if (diffMinutes > 30) return "offline"
-        if (diffMinutes > 10) return "away"
-        return "online"
-    }
-
-    const actualStatus = getActualStatus()
+    const actualStatus = computePresenceStatus(lastActiveAt)
 
     const getStatusColor = () => {
         if (actualStatus === "online") return "bg-green-100 text-green-800"

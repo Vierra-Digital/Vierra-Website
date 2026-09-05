@@ -58,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           strikes: m.strikes,
           time_zone: u.user_preferences?.time_zone ?? null,
           status: m.status,
-          lastActiveAt: null,
+          lastActiveAt: m.last_active_at ? m.last_active_at.toISOString() : null,
           clientName: u.clients_clients_user_idTousers?.name ?? null,
           hasPassword: false,
           isSelf: u.id === session.user.id,
@@ -197,7 +197,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
       const membership = await prisma.companyMembership.findFirst({
         where: { company_id: targetCompanyId, user_id: String(id) },
-        select: { role: true, position: true, mentor_id: true, strikes: true, status: true },
+        select: { role: true, position: true, mentor_id: true, strikes: true, status: true, last_active_at: true },
       });
       const pref = await prisma.userPreference.findUnique({
         where: { user_id: String(id) },
@@ -213,7 +213,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         strikes: membership?.strikes ?? 0,
         time_zone: pref?.time_zone ?? null,
         status: membership?.status ?? null,
-        lastActiveAt: null,
+        lastActiveAt: membership?.last_active_at ? membership.last_active_at.toISOString() : null,
       });
     } catch (e) {
       console.error("admin/users PUT", e);

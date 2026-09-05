@@ -4,6 +4,7 @@ import { withAuth } from "@/lib/api/withAuth";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
 import { serializeContact } from "@/lib/api/contacts";
 import { asStr } from "@/lib/api/parsing";
+import { normalizePhone } from "@/lib/contacts/phone";
 
 function getId(req: NextApiRequest) {
   const raw = req.query.id;
@@ -43,13 +44,22 @@ export default withAuth(async (req, res, session) => {
   }
 
   if (req.method === "PUT" || req.method === "PATCH") {
+    let phone = existing.phone;
+    if (req.body?.phone !== undefined) {
+      const rawPhone = asStr(req.body?.phone);
+      phone = rawPhone ? normalizePhone(rawPhone) : null;
+      if (rawPhone && !phone) {
+        res.status(400).json({ message: "Phone must contain exactly 10 digits." });
+        return;
+      }
+    }
     const updated = await prisma.contact.update({
       where: { id },
       data: {
         first_name: req.body?.firstName !== undefined ? asStr(req.body?.firstName) || null : existing.first_name,
         last_name: req.body?.lastName !== undefined ? asStr(req.body?.lastName) || null : existing.last_name,
         email: req.body?.email !== undefined ? asStr(req.body?.email).toLowerCase() || existing.email : existing.email,
-        phone: req.body?.phone !== undefined ? asStr(req.body?.phone) || null : existing.phone,
+        phone,
         business: req.body?.business !== undefined ? asStr(req.body?.business) || null : existing.business,
         website: req.body?.website !== undefined ? asStr(req.body?.website) || null : existing.website,
         address: req.body?.address !== undefined ? asStr(req.body?.address) || null : existing.address,

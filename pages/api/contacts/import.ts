@@ -6,6 +6,7 @@ import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { mapInBatches } from "@/lib/batch";
 import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
+import { normalizePhone } from "@/lib/contacts/phone";
 
 type ImportedRow = {
   lineNumber: number;
@@ -45,12 +46,6 @@ const WEBSITE_REGEX = /^(https?:\/\/)?([a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:\/[^\s
 
 function hasLiteralNull(value: string) {
   return value.trim().toLowerCase() === "null";
-}
-
-function normalizePhone(value: string) {
-  const digits = value.replace(/\D/g, "");
-  if (digits.length !== 10) return null;
-  return `(${digits.slice(0, 3)})-${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
 }
 
 export default withAuth(async (req, res, session) => {

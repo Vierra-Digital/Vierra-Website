@@ -1,15 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
+import { computePresenceStatus } from "@/lib/presence";
 
 /**
  * Five most recently active teammates for the dashboard's staff panel.
  *
- * Ordered by last_active_at rather than by status, so the list reflects who has actually been
- * around. An "online" row whose heartbeat stopped hours ago is reported as stale rather than
- * shown as present — the tab can close without ever sending an offline beat.
+ * Ordered by last_active_at rather than by the stored status column, so the list reflects who
+ * has actually been around. Status itself is recomputed from last_active_at with the same
+ * thresholds as Staff Orbital's StatusBadge (see lib/presence.ts) so the two views never disagree.
  */
-const STALE_AFTER_MS = 5 * 60 * 1000;
-
 export default withAuth(
   async (req, res, session) => {
     const rows = await prisma.companyMembership.findMany({
@@ -18,7 +17,6 @@ export default withAuth(
         user_id: true,
         role: true,
         position: true,
-        status: true,
         last_active_at: true,
         users_company_memberships_user_idTousers: { select: { name: true, email: true } },
       },
@@ -26,22 +24,18 @@ export default withAuth(
       take: 5,
     });
 
-    const now = Date.now();
     res.status(200).json({
       staff: rows.map((row) => {
-        const lastActive = row.last_active_at ? row.last_active_at.toISOString() : null;
-        const ageMs = row.last_active_at ? now - row.last_active_at.getTime() : null;
-        const stale = ageMs === null || ageMs > STALE_AFTER_MS;
+        const status = computePresenceStatus(row.last_active_at);
         return {
           userId: row.user_id,
           name: row.users_company_memberships_user_idTousers?.name || null,
           email: row.users_company_memberships_user_idTousers?.email || null,
           role: row.role,
           position: row.position,
-          // A stale heartbeat is reported as offline regardless of the stored status.
-          status: stale && row.status !== "offline" ? "offline" : row.status,
-          lastActiveAt: lastActive,
-          isLive: !stale && row.status === "online",
+          status,
+          lastActiveAt: row.last_active_at ? row.last_active_at.toISOString() : null,
+          isLive: status === "online",
         };
       }),
     });
