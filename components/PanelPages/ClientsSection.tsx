@@ -1,11 +1,27 @@
 import React, { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import ProfileImage from "../ProfileImage"
-import { FiPlus, FiFilter, FiTrash2, FiCheckCircle, FiXCircle, FiEye } from 'react-icons/fi'
-import PanelSearchInput from "@/components/ui/PanelSearchInput"
+import { FiPlus, FiFilter, FiTrash2, FiCheckCircle, FiXCircle, FiEye, FiChevronDown } from 'react-icons/fi'
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
-import PanelSectionHeader from "@/components/ui/PanelSectionHeader"
-import PaginationControls from "@/components/ui/PaginationControls"
+import {
+    PanelBadge,
+    PanelButton,
+    PanelCard,
+    PanelEmptyCell,
+    PanelEmptyState,
+    PanelHeader,
+    PanelPage,
+    PanelPagination,
+    PanelPopover,
+    PanelSearch,
+    PanelSelect,
+    PanelTable,
+    PanelTbody,
+    PanelTd,
+    PanelTh,
+    PanelThead,
+    PanelTr,
+} from "@/components/panel/PanelTable"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 
@@ -28,25 +44,9 @@ type ClientRow = {
 }
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
-    let bgColor = "bg-red-100";
-    let textColor = "text-red-700";
-    let label = "Inactive";
-    
-    if (status === "completed") {
-        bgColor = "bg-green-100";
-        textColor = "text-green-700";
-        label = "Active";
-    } else if (status === "pending" || status === "in_progress") {
-        bgColor = "bg-yellow-100";
-        textColor = "text-yellow-700";
-        label = "Pending";
-    }
-    
-    return (
-        <span className={`px-3 py-1 rounded-full text-xs ${bgColor} ${textColor}`}>
-            {label}
-        </span>
-    )
+    if (status === "completed") return <PanelBadge tone="positive">Active</PanelBadge>
+    if (status === "pending" || status === "in_progress") return <PanelBadge tone="warning">Pending</PanelBadge>
+    return <PanelBadge tone="danger">Inactive</PanelBadge>
 }
 
 const ClientActionsMenu: React.FC<{
@@ -242,246 +242,179 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
 
     return (
         <>
-        <div className="flex-1 flex justify-center px-6 pt-2">
-            <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
-                <PanelSectionHeader
-                    title="Clients"
-                    actions={
-                      <>
-                        <PanelSearchInput
-                          id="clients-search"
-                          value={searchQuery}
-                          onChange={setSearchQuery}
-                          placeholder="Search Clients"
-                          label="Search Clients"
-                        />
-                        <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsFilterOpen(false) }} tabIndex={-1}>
+        <PanelPage>
+            <PanelHeader title="Clients">
+                <PanelSearch
+                    id="clients-search"
+                    label="Search Clients"
+                    placeholder="Search clients"
+                    value={searchQuery}
+                    onChange={setSearchQuery}
+                />
+                <div
+                    className="relative"
+                    onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsFilterOpen(false) }}
+                    tabIndex={-1}
+                >
+                    <PanelButton onClick={() => setIsFilterOpen((v) => !v)} icon={<FiFilter className="h-4 w-4" />}>
+                        Filter
+                        <FiChevronDown className={`h-3.5 w-3.5 transition-transform ${isFilterOpen ? "rotate-180" : ""}`} />
+                    </PanelButton>
+                    {isFilterOpen && (
+                        <PanelPopover>
+                            <h3 className="mb-3 text-[13px] font-semibold text-[#111827]">Sort &amp; Filter</h3>
+                            <div className="mb-4">
+                                <span className="mb-1.5 block text-[11px] font-medium text-[#6B7280]">Name</span>
+                                <div className="flex gap-2">
+                                    {([["asc", "A–Z"], ["desc", "Z–A"]] as const).map(([dir, label]) => (
+                                        <button
+                                            key={dir}
+                                            type="button"
+                                            onClick={() => { setNameSort(dir); setRetainerSort("none") }}
+                                            className={`h-8 flex-1 rounded-lg text-[12px] font-medium transition-colors ${
+                                                nameSort === dir ? "bg-[#701CC0] text-white" : "bg-[#F3F1F8] text-[#5B5468] hover:bg-[#EAE6F3]"
+                                            }`}
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="mb-4">
+                                <span className="mb-1.5 block text-[11px] font-medium text-[#6B7280]">Monthly Retainer</span>
+                                <div className="flex gap-2">
+                                    {([["asc", "Low → High"], ["desc", "High → Low"]] as const).map(([dir, label]) => (
+                                        <button
+                                            key={dir}
+                                            type="button"
+                                            onClick={() => { setRetainerSort(dir); setNameSort("none") }}
+                                            className={`h-8 flex-1 rounded-lg text-[12px] font-medium transition-colors ${
+                                                retainerSort === dir ? "bg-[#701CC0] text-white" : "bg-[#F3F1F8] text-[#5B5468] hover:bg-[#EAE6F3]"
+                                            }`}
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <PanelSelect
+                                label="Status"
+                                value={statusFilter}
+                                onChange={(value) => setStatusFilter(value as typeof statusFilter)}
+                                options={[
+                                    { value: "all", label: "All Status" },
+                                    { value: "active", label: "Active" },
+                                    { value: "inactive", label: "Inactive" },
+                                    { value: "pending", label: "Pending" },
+                                ]}
+                            />
                             <button
                                 type="button"
-                                onClick={() => setIsFilterOpen((v) => !v)}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
+                                onClick={() => {
+                                    setNameSort("none")
+                                    setRetainerSort("none")
+                                    setStatusFilter("all")
+                                    setIsFilterOpen(false)
+                                }}
+                                className="h-8 w-full rounded-lg border-t border-[#EFECF4] text-[12px] font-medium text-[#6B7280] transition-colors hover:bg-[#FAF9FD] hover:text-[#374151]"
                             >
-                                <FiFilter className="w-4 h-4" />
-                                <span className="text-sm font-medium">Filter</span>
-                                <svg 
-                                    className={`w-4 h-4 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`}
-                                    fill="none" 
-                                    stroke="currentColor" 
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
+                                Clear All Filters
                             </button>
-                            {isFilterOpen && (
-                                <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#E5E7EB] py-4 z-50">
-                                    <div className="px-5">
-                                        <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
-                                        
-                                        
-                                        <div className="mb-5">
-                                            <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By</label>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => { setNameSort('asc'); setRetainerSort('none'); }}
-                                                    className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                        nameSort === 'asc' 
-                                                            ? 'bg-[#701CC0] text-white shadow-sm' 
-                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                    }`}
-                                                >
-                                                    Name A-Z
-                                                </button>
-                                                <button
-                                                    onClick={() => { setNameSort('desc'); setRetainerSort('none'); }}
-                                                    className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                        nameSort === 'desc' 
-                                                            ? 'bg-[#701CC0] text-white shadow-sm' 
-                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                    }`}
-                                                >
-                                                    Name Z-A
-                                                </button>
-                                            </div>
-                                        </div>
+                        </PanelPopover>
+                    )}
+                </div>
+                <PanelButton variant="primary" onClick={onAddClient} icon={<FiPlus className="h-4 w-4" />}>
+                    Add Client
+                </PanelButton>
+            </PanelHeader>
 
-                                        
-                                        <div className="mb-5">
-                                            <label className="block text-xs font-medium text-[#6B7280] mb-2">Monthly Retainer</label>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => { setRetainerSort('asc'); setNameSort('none'); }}
-                                                    className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                        retainerSort === 'asc' 
-                                                            ? 'bg-[#701CC0] text-white shadow-sm' 
-                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                    }`}
-                                                >
-                                                    Low → High
-                                                </button>
-                                                <button
-                                                    onClick={() => { setRetainerSort('desc'); setNameSort('none'); }}
-                                                    className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                        retainerSort === 'desc' 
-                                                            ? 'bg-[#701CC0] text-white shadow-sm' 
-                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                    }`}
-                                                >
-                                                    High → Low
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        
-                                        <div className="mb-4">
-                                            <label className="block text-xs font-medium text-[#6B7280] mb-2">Status</label>
-                                            <div className="relative">
-                                                <select
-                                                    value={statusFilter}
-                                                    onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive' | 'pending')}
-                                                    className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
-                                                >
-                                                    <option value="all">All Status</option>
-                                                    <option value="active">Active</option>
-                                                    <option value="inactive">Inactive</option>
-                                                    <option value="pending">Pending</option>
-                                                </select>
-                                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                    <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                    </svg>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        
-                                        <div className="pt-3 border-t border-[#E5E7EB]">
-                                            <button
-                                                onClick={() => {
-                                                    setNameSort('none')
-                                                    setRetainerSort('none')
-                                                    setStatusFilter('all')
-                                                    setIsFilterOpen(false)
-                                                }}
-                                                className="w-full text-xs py-2 px-3 rounded-lg font-medium text-[#6B7280] bg-gray-50 hover:bg-gray-100 hover:text-[#374151] transition-colors duration-200"
-                                            >
-                                                Clear All Filters
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        <button
-                            onClick={onAddClient}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium"
+            {loading ? (
+                <div className="flex items-center justify-center py-12">
+                    <LoadingSpinner label="Loading Client Data..." />
+                </div>
+            ) : (
+                <PanelCard>
+                    {filteredRows.length === 0 ? (
+                        <PanelEmptyState
+                            message={searchQuery ? "No clients match your search." : "You have no clients added."}
+                            image={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" />}
                         >
-                            <FiPlus className="w-4 h-4" />
-                            Add Client
-                        </button>
-                      </>
-                    }
-                />
-                {loading ? (
-                    <div className="flex items-center justify-center py-12">
-                        <LoadingSpinner label="Loading Client Data..." />
-                    </div>
-                ) : (
-                    <>
-                        {!loading && filteredRows.length === 0 && (
-                            <div className="text-center py-12">
-                                <div className="w-full h-full flex flex-col items-center justify-center text-center">
-                                    <Image src="/assets/no-client.png" alt="No clients" width={224} height={224} className="w-56 h-auto mb-3" />
-                                    <p className="text-sm text-gray-500 mb-3">You have no clients added.</p>
-                                    <button
-                                        onClick={onAddClient}
-                                        className="inline-flex items-center px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
-                                    >
-                                        <FiPlus className="w-4 h-4 mr-2" />
-                                        Add Client
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                        {!loading && filteredRows.length > 0 && (
-                            <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full">
-                                        <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                                            <tr>
-                                                {columns.map((c) => (
-                                                    <th key={c.key} className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                                                        {c.header}
-                                                    </th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody className="bg-white divide-y divide-[#E5E7EB]">
-                                            {filteredRows.slice(page * pageSize, (page + 1) * pageSize).map((r) => (
-                                                <tr key={r.id} className="hover:bg-purple-50">
-                                                    <td className="px-4 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <ProfileImage
-                                                                src={r.image ? `/api/admin/getClientImage?clientId=${r.id}&t=${imageStamp}` : null}
-                                                                name={r.name}
-                                                                size={32}
-                                                                alt={`${r.name}'s profile`}
-                                                            />
-                                                            <div className="flex flex-col">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
-                                                                    className="text-sm font-medium text-[#111827] hover:text-[#701CC0] hover:underline text-left"
-                                                                >
-                                                                    {r.name || "—"}
-                                                                </button>
-                                                                <div className="text-sm text-[#6B7280]">{r.email || ""}</div>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{r.businessName || "—"}</td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{r.industry || r.targetAudience || "—"}</td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{typeof r.monthlyRetainer === 'number' ? `$${r.monthlyRetainer.toLocaleString()}` : "—"}</td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">
-                                                        {typeof r.clientGoal === "number"
-                                                            ? `${r.clientGoal.toLocaleString()} ${r.clientGoal === 1 ? "Lead" : "leads"}`
-                                                            : "N/A"}
-                                                    </td>
-                                                    <td className="px-4 py-4 text-sm"><StatusBadge status={r.status} /></td>
-                                                    <td className="px-4 py-4 text-sm text-[#6B7280]">
-                                                        <ClientActionsMenu
-                                                            clientId={r.id}
-                                                            clientName={r.name}
-                                                            isActive={r.isActive}
-                                                            hasImage={r.image}
-                                                            onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
-                                                            onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
-                                                            onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
-                                                        />
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        )}
-                    </>
-                )}
+                            {!searchQuery && (
+                                <PanelButton variant="primary" onClick={onAddClient} icon={<FiPlus className="h-4 w-4" />}>
+                                    Add Client
+                                </PanelButton>
+                            )}
+                        </PanelEmptyState>
+                    ) : (
+                        <>
+                            <PanelTable>
+                                <PanelThead>
+                                    {columns.map((c) => (
+                                        <PanelTh key={c.key}>{c.header}</PanelTh>
+                                    ))}
+                                </PanelThead>
+                                <PanelTbody>
+                                    {filteredRows.slice(page * pageSize, (page + 1) * pageSize).map((r) => (
+                                        <PanelTr key={r.id}>
+                                            <PanelTd>
+                                                <div className="flex items-center gap-3">
+                                                    <ProfileImage
+                                                        src={r.image ? `/api/admin/getClientImage?clientId=${r.id}&t=${imageStamp}` : null}
+                                                        name={r.name}
+                                                        size={32}
+                                                        alt={`${r.name}'s profile`}
+                                                    />
+                                                    <div className="min-w-0">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
+                                                            className="block max-w-full truncate text-left font-medium text-[#111827] transition-colors hover:text-[#701CC0]"
+                                                        >
+                                                            {r.name || "—"}
+                                                        </button>
+                                                        <div className="truncate text-[12px] text-[#6B7280]">{r.email || ""}</div>
+                                                    </div>
+                                                </div>
+                                            </PanelTd>
+                                            <PanelTd>{r.businessName || <PanelEmptyCell />}</PanelTd>
+                                            <PanelTd>{r.industry || r.targetAudience || <PanelEmptyCell />}</PanelTd>
+                                            <PanelTd className="tabular-nums">
+                                                {typeof r.monthlyRetainer === "number" ? `$${r.monthlyRetainer.toLocaleString()}` : <PanelEmptyCell />}
+                                            </PanelTd>
+                                            <PanelTd className="tabular-nums">
+                                                {typeof r.clientGoal === "number"
+                                                    ? `${r.clientGoal.toLocaleString()} ${r.clientGoal === 1 ? "Lead" : "Leads"}`
+                                                    : <PanelEmptyCell />}
+                                            </PanelTd>
+                                            <PanelTd><StatusBadge status={r.status} /></PanelTd>
+                                            <PanelTd className="relative">
+                                                <ClientActionsMenu
+                                                    clientId={r.id}
+                                                    clientName={r.name}
+                                                    isActive={r.isActive}
+                                                    hasImage={r.image}
+                                                    onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
+                                                    onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
+                                                    onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
+                                                />
+                                            </PanelTd>
+                                        </PanelTr>
+                                    ))}
+                                </PanelTbody>
+                            </PanelTable>
+                            <PanelPagination
+                                page={page}
+                                pageSize={pageSize}
+                                total={filteredRows.length}
+                                onPageChange={setCurrentPage}
+                            />
+                        </>
+                    )}
+                </PanelCard>
+            )}
 
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
-                {!loading && filteredRows.length > 0 && (
-                    <PaginationControls
-                      currentPage={page}
-                      totalPages={totalPages}
-                      onPrevious={() => setCurrentPage(Math.max(0, page - 1))}
-                      onNext={() =>
-                        setCurrentPage(Math.min(totalPages - 1, page + 1))
-                      }
-                    />
-                )}
-            </div>
-        </div>
+        </PanelPage>
 
         <ConfirmActionModal
           isOpen={deleteModalOpen}

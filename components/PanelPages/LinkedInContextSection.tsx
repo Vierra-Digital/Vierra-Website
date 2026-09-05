@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { inter } from "@/lib/fonts";
-import PanelSectionHeader from "@/components/ui/PanelSectionHeader";
+import { PanelHeader } from "@/components/panel/PanelTable";
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
@@ -135,7 +135,7 @@ const LinkedInContextSection: React.FC<Props> = ({
       <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
         <div className="flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
           <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
-            {!embedded && <PanelSectionHeader title={title} />}
+            {!embedded && <PanelHeader title={title} />}
             <div className="py-12 flex items-center justify-center">
               <LoadingSpinner label="Loading Context Data..." />
             </div>
@@ -149,7 +149,7 @@ const LinkedInContextSection: React.FC<Props> = ({
     <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
       <div className="flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
         <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full pb-16 lg:pb-24">
-          {!embedded && <PanelSectionHeader title={title} />}
+          {!embedded && <PanelHeader title={title} />}
 
           {error ? (
             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 text-red-700 px-4 py-3 text-sm">

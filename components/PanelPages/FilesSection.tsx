@@ -1,9 +1,20 @@
 import React, { useState, useMemo, useEffect, useRef } from "react"
 import { inter } from "@/lib/fonts";
 import { FiFolder, FiTrash2, FiDownload, FiLock } from "react-icons/fi"
-import PanelSearchInput from "@/components/ui/PanelSearchInput"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
-import PanelSectionHeader from "@/components/ui/PanelSectionHeader"
+import {
+  PanelCard,
+  PanelEmptyCell,
+  PanelHeader,
+  PanelPage,
+  PanelSearch,
+  PanelTable,
+  PanelTbody,
+  PanelTd,
+  PanelTh,
+  PanelThead,
+  PanelTr,
+} from "@/components/panel/PanelTable"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import { useFetch } from "@/hooks/useFetch"
 
@@ -99,29 +110,25 @@ const FilesSection: React.FC<{
   const showOwnerColumn = !readOnly || showOwnerInReadOnly
 
   return (
-    <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
-      <div className="flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
-        <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
-          <PanelSectionHeader
-            title="Files"
-            actions={
-              <PanelSearchInput
-                id="files-search"
-                value={search}
-                onChange={setSearch}
-                placeholder="Search by File Name"
-                label="Search files"
-              />
-            }
-          />
+    <div className={inter.className}>
+      <PanelPage>
+          <PanelHeader title="Files">
+            <PanelSearch
+              id="files-search"
+              label="Search files"
+              placeholder="Search by file name"
+              value={search}
+              onChange={setSearch}
+            />
+          </PanelHeader>
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <LoadingSpinner label="Loading File Data..." />
             </div>
           ) : filteredFiles.length === 0 ? (
-            <div className="bg-white rounded-xl shadow-sm border border-[#E5E7EB] p-10">
-              <div className="flex flex-col items-center justify-center text-center">
+            <PanelCard>
+              <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
                 <div className="relative mb-4 flex h-14 w-14 items-center justify-center">
                   <div className="files-empty-ping absolute inset-0 rounded-full bg-[#E9D5FF]" />
                   <div className="files-empty-icon relative flex h-14 w-14 items-center justify-center rounded-full bg-[#F3E8FF]">
@@ -130,39 +137,24 @@ const FilesSection: React.FC<{
                 </div>
                 <h3 className="text-lg font-semibold text-[#111827]">No Files Found</h3>
                 <p className="text-sm text-[#6B7280] mt-2 max-w-md">
-                  Files you upload will appear here.
+                  {search ? "No files match your search." : "Files you upload will appear here."}
                 </p>
               </div>
-            </div>
+            </PanelCard>
           ) : (
-            <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                        Name
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                        Date
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                        File Type
-                      </th>
-                      {showOwnerColumn && (
-                        <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                          Owner
-                        </th>
-                      )}
-                      <th className="px-4 py-3 text-right text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                        {canDelete ? "Manage" : "Actions"}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-[#E5E7EB]">
+            <PanelCard>
+              <PanelTable>
+                  <PanelThead>
+                    <PanelTh>Name</PanelTh>
+                    <PanelTh>Date</PanelTh>
+                    <PanelTh>File Type</PanelTh>
+                    {showOwnerColumn && <PanelTh>Owner</PanelTh>}
+                    <PanelTh className="!text-right">{canDelete ? "Manage" : "Actions"}</PanelTh>
+                  </PanelThead>
+                  <PanelTbody>
                     {filteredFiles.map((file) => (
-                      <tr key={file.id} className="hover:bg-purple-50">
-                        <td className="px-4 py-4">
+                      <PanelTr key={file.id}>
+                        <PanelTd>
                           <button
                             type="button"
                             onClick={() =>
@@ -173,23 +165,15 @@ const FilesSection: React.FC<{
                               )
                             }
                             disabled={!file.signingTokenId}
-                            className="text-sm font-medium text-[#111827] hover:text-[#701CC0] hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline disabled:hover:text-[#111827] text-left"
+                            className="max-w-full truncate text-left font-medium text-[#111827] transition-colors hover:text-[#701CC0] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-[#111827]"
                           >
                             {getNameWithoutExtension(file.name)}
                           </button>
-                        </td>
-                        <td className="px-4 py-4 text-sm text-[#374151]">
-                          {file.date}
-                        </td>
-                        <td className="px-4 py-4 text-sm text-[#374151]">
-                          {file.fileType}
-                        </td>
-                        {showOwnerColumn && (
-                          <td className="px-4 py-4 text-sm text-[#374151]">
-                            {file.owner ?? "—"}
-                          </td>
-                        )}
-                        <td className="px-4 py-4 text-right">
+                        </PanelTd>
+                        <PanelTd>{file.date}</PanelTd>
+                        <PanelTd>{file.fileType}</PanelTd>
+                        {showOwnerColumn && <PanelTd>{file.owner ?? <PanelEmptyCell />}</PanelTd>}
+                        <PanelTd className="text-right">
                           <div className="flex items-center justify-end gap-2">
                             <button
                               type="button"
@@ -220,13 +204,12 @@ const FilesSection: React.FC<{
                               </span>
                             )}
                           </div>
-                        </td>
-                      </tr>
+                        </PanelTd>
+                      </PanelTr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                  </PanelTbody>
+              </PanelTable>
+            </PanelCard>
           )}
 
           {canDelete && (
@@ -247,8 +230,7 @@ const FilesSection: React.FC<{
               onCancel={() => setFileToDelete(null)}
             />
           )}
-        </div>
-      </div>
+      </PanelPage>
       <style jsx>{`
         .files-empty-ping {
           animation: filesEmptyPulse 1.8s ease-out infinite;
