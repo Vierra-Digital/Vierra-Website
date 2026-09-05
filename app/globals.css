@@ -430,9 +430,16 @@ input[type="search"]::-ms-clear:hover {
    marketing site. Brand purples (#701CC0/#8F42FF) and status colors are left alone
    so accents keep their meaning.
 
-   Deliberate exception: `.email-body-card` (and everything inside it) stays light —
-   that subtree renders the sender's own HTML, which is authored for white
-   backgrounds and would be unreadable inverted.
+   Deliberate exceptions — each opts a whole subtree out of every rule below via the same
+   `:not(.the-class):not(.the-class *)` guard, rather than dodging individual hex literals:
+     - `.email-body-card` — renders the sender's own HTML, authored for white backgrounds and
+       unreadable inverted.
+     - `.email-analytics-view` (components/email/EmailAnalyticsView.tsx) — a self-contained light
+       "report" surface (charts, gradients and a heatmap all calibrated for a white background);
+       it isn't sender HTML, but the same "leave this subtree alone" need applies. Without it,
+       classes the remap list happens to cover (its text-[#1E1B2E] headings) flip to light-on-dark
+       colors while classes outside the list (its bg-[#FBFAFD] panels, its own bg-white root) stay
+       literally white — light text on a white page next to correctly-dark islands, all in one view.
    ─────────────────────────────────────────────────────────────────────────────── */
 
 /* The mail palette lives at :root, not on .email-shell.
@@ -482,62 +489,68 @@ input[type="search"]::-ms-clear:hover {
 }
 
 /* ── Surfaces ─────────────────────────────────────────────────────────────── */
-.email-shell :not(.email-body-card):not(.email-body-card *) > .bg-white,
-.email-shell .bg-white:not(.email-body-card):not(.email-body-card *) {
+/* The `>` selector below checks the PARENT's classes, not the .bg-white target's own — so an
+   element that carries .bg-white and .email-analytics-view on the SAME node (as
+   EmailAnalyticsView's own root does) slips through: its parent is plain, has neither excluded
+   class, so the rule matches and repaints it dark despite the target itself opting out. Excluding
+   `.email-analytics-view` on the target too (`.bg-white:not(.email-analytics-view)`) is what
+   actually stops that — the parent-side exclusion alone was never enough for this shape. */
+.email-shell :not(.email-body-card):not(.email-analytics-view):not(.email-body-card *):not(.email-analytics-view *) > .bg-white:not(.email-analytics-view),
+.email-shell .bg-white:not(.email-body-card):not(.email-analytics-view):not(.email-body-card *):not(.email-analytics-view *) {
   background-color: var(--mail-surface);
 }
-.email-shell .bg-\[\#FAFAFB\]:not(.email-body-card *),
-.email-shell .bg-\[\#F9FAFB\]:not(.email-body-card *),
-.email-shell .bg-\[\#f1f3f4\]:not(.email-body-card *),
-.email-shell .bg-\[\#e8eaed\]:not(.email-body-card *) {
+.email-shell .bg-\[\#FAFAFB\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .bg-\[\#F9FAFB\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .bg-\[\#f1f3f4\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .bg-\[\#e8eaed\]:not(.email-body-card *):not(.email-analytics-view *) {
   background-color: var(--mail-surface-2);
 }
-.email-shell .bg-\[\#F3F4F6\]:not(.email-body-card *),
-.email-shell .bg-\[\#F6F5F8\]:not(.email-body-card *) {
+.email-shell .bg-\[\#F3F4F6\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .bg-\[\#F6F5F8\]:not(.email-body-card *):not(.email-analytics-view *) {
   background-color: var(--mail-surface-3);
 }
-.email-shell .bg-\[\#F5EFFF\]:not(.email-body-card *),
-.email-shell .bg-\[\#F4F1FA\]:not(.email-body-card *) {
+.email-shell .bg-\[\#F5EFFF\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .bg-\[\#F4F1FA\]:not(.email-body-card *):not(.email-analytics-view *) {
   background-color: var(--mail-brand-tint);
 }
 
 /* ── Text ─────────────────────────────────────────────────────────────────── */
-.email-shell .text-\[\#1E1B2E\]:not(.email-body-card *),
-.email-shell .text-\[\#111827\]:not(.email-body-card *),
-.email-shell .text-\[\#241245\]:not(.email-body-card *),
-.email-shell .text-\[\#2A2540\]:not(.email-body-card *) {
+.email-shell .text-\[\#1E1B2E\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .text-\[\#111827\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .text-\[\#241245\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .text-\[\#2A2540\]:not(.email-body-card *):not(.email-analytics-view *) {
   color: var(--mail-text);
 }
-.email-shell .text-\[\#374151\]:not(.email-body-card *),
-.email-shell .text-\[\#6B7280\]:not(.email-body-card *),
-.email-shell .text-\[\#5f6368\]:not(.email-body-card *),
-.email-shell .text-\[\#9CA3AF\]:not(.email-body-card *),
-.email-shell .text-\[\#847FA0\]:not(.email-body-card *),
-.email-shell .text-\[\#5B5670\]:not(.email-body-card *),
-.email-shell .text-\[\#4A465C\]:not(.email-body-card *),
-.email-shell .text-\[\#B9B3CC\]:not(.email-body-card *),
-.email-shell .text-\[\#9A94AD\]:not(.email-body-card *) {
+.email-shell .text-\[\#374151\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .text-\[\#6B7280\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .text-\[\#5f6368\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .text-\[\#9CA3AF\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .text-\[\#847FA0\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .text-\[\#5B5670\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .text-\[\#4A465C\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .text-\[\#B9B3CC\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .text-\[\#9A94AD\]:not(.email-body-card *):not(.email-analytics-view *) {
   color: var(--mail-text-muted);
 }
 /* Brand purple text needs lifting to stay legible on a dark ground. */
-.email-shell .text-\[\#701CC0\]:not(.email-body-card *),
-.email-shell .text-\[\#5B21B6\]:not(.email-body-card *) {
+.email-shell .text-\[\#701CC0\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .text-\[\#5B21B6\]:not(.email-body-card *):not(.email-analytics-view *) {
   color: #B98CFF;
 }
 
 /* ── Borders & dividers ───────────────────────────────────────────────────── */
-.email-shell .border-\[\#E5E7EB\]:not(.email-body-card *),
-.email-shell .border-\[\#EAE5F4\]:not(.email-body-card *),
-.email-shell .border-\[\#D1D5DB\]:not(.email-body-card *),
-.email-shell .border-\[\#E8EBF4\]:not(.email-body-card *),
-.email-shell .border-\[\#E8EAEF\]:not(.email-body-card *),
-.email-shell .border-\[\#EFEFEF\]:not(.email-body-card *),
-.email-shell .border-\[\#e8eaed\]:not(.email-body-card *),
-.email-shell .border-\[\#EBEAF0\]:not(.email-body-card *),
-.email-shell .border-\[\#EDEAF3\]:not(.email-body-card *),
-.email-shell .border-\[\#EEECF3\]:not(.email-body-card *),
-.email-shell .border-\[\#F1EDF8\]:not(.email-body-card *),
-.email-shell .border-\[\#F2EFF8\]:not(.email-body-card *) {
+.email-shell .border-\[\#E5E7EB\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .border-\[\#EAE5F4\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .border-\[\#D1D5DB\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .border-\[\#E8EBF4\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .border-\[\#E8EAEF\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .border-\[\#EFEFEF\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .border-\[\#e8eaed\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .border-\[\#EBEAF0\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .border-\[\#EDEAF3\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .border-\[\#EEECF3\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .border-\[\#F1EDF8\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .border-\[\#F2EFF8\]:not(.email-body-card *):not(.email-analytics-view *) {
   border-color: var(--mail-border);
 }
 /* Tailwind's numbered grey palette.
@@ -546,42 +559,42 @@ input[type="search"]::-ms-clear:hover {
    text-gray-500/700/800), so none of them were remapped and that whole surface — list, detail,
    contacts, analytics — rendered light on the dark panel. Mapped onto the same translucent steps
    the rest of the shell uses, so a grey fill reads as a raised step rather than a bright patch. */
-.email-shell .bg-gray-50:not(.email-body-card *),
-.email-shell .bg-gray-100:not(.email-body-card *) { background-color: rgba(255, 255, 255, 0.055); }
-.email-shell .bg-gray-200:not(.email-body-card *),
-.email-shell .hover\:bg-gray-200:hover:not(.email-body-card *) { background-color: rgba(255, 255, 255, 0.11); }
-.email-shell .hover\:bg-gray-50:hover:not(.email-body-card *),
-.email-shell .hover\:bg-gray-100:hover:not(.email-body-card *) { background-color: rgba(255, 255, 255, 0.08); }
+.email-shell .bg-gray-50:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .bg-gray-100:not(.email-body-card *):not(.email-analytics-view *) { background-color: rgba(255, 255, 255, 0.055); }
+.email-shell .bg-gray-200:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .hover\:bg-gray-200:hover:not(.email-body-card *):not(.email-analytics-view *) { background-color: rgba(255, 255, 255, 0.11); }
+.email-shell .hover\:bg-gray-50:hover:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .hover\:bg-gray-100:hover:not(.email-body-card *):not(.email-analytics-view *) { background-color: rgba(255, 255, 255, 0.08); }
 /* Tailwind's grey ramp carries emphasis, so it cannot all collapse to one colour: 800/900 are
    heading and emphasis text, 500-700 are secondary. Mapping the whole range to the muted token
    (as the first pass here did) would have quietly de-emphasised every heading that uses it. */
-.email-shell .text-gray-800:not(.email-body-card *),
-.email-shell .text-gray-900:not(.email-body-card *) { color: var(--mail-text); }
-.email-shell .text-gray-500:not(.email-body-card *),
-.email-shell .text-gray-600:not(.email-body-card *),
-.email-shell .text-gray-700:not(.email-body-card *) { color: var(--mail-text-muted); }
-.email-shell .border-gray-100:not(.email-body-card *),
-.email-shell .border-gray-200:not(.email-body-card *),
-.email-shell .border-gray-300:not(.email-body-card *) { border-color: var(--mail-border); }
+.email-shell .text-gray-800:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .text-gray-900:not(.email-body-card *):not(.email-analytics-view *) { color: var(--mail-text); }
+.email-shell .text-gray-500:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .text-gray-600:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .text-gray-700:not(.email-body-card *):not(.email-analytics-view *) { color: var(--mail-text-muted); }
+.email-shell .border-gray-100:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .border-gray-200:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .border-gray-300:not(.email-body-card *):not(.email-analytics-view *) { border-color: var(--mail-border); }
 
 /* Stray one-off hexes from the campaigns views: a near-black body colour, two light purple washes
    and three hairlines that each appear once. */
-.email-shell .text-\[\#111014\]:not(.email-body-card *) { color: var(--mail-text); }
-.email-shell .bg-\[\#F8F4FF\]:not(.email-body-card *),
-.email-shell .bg-\[\#F5EEFC\]:not(.email-body-card *) { background-color: var(--mail-brand-tint); }
-.email-shell .bg-\[\#E5E7EB\]:not(.email-body-card *) { background-color: rgba(255, 255, 255, 0.07); }
-.email-shell .border-\[\#ECEAF1\]:not(.email-body-card *) { border-color: var(--mail-border); }
-.email-shell .divide-\[\#F1EFF6\]:not(.email-body-card *) > * + *,
-.email-shell .divide-\[\#E5E7EB\]:not(.email-body-card *) > * + * { border-color: var(--mail-border); }
+.email-shell .text-\[\#111014\]:not(.email-body-card *):not(.email-analytics-view *) { color: var(--mail-text); }
+.email-shell .bg-\[\#F8F4FF\]:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell .bg-\[\#F5EEFC\]:not(.email-body-card *):not(.email-analytics-view *) { background-color: var(--mail-brand-tint); }
+.email-shell .bg-\[\#E5E7EB\]:not(.email-body-card *):not(.email-analytics-view *) { background-color: rgba(255, 255, 255, 0.07); }
+.email-shell .border-\[\#ECEAF1\]:not(.email-body-card *):not(.email-analytics-view *) { border-color: var(--mail-border); }
+.email-shell .divide-\[\#F1EFF6\]:not(.email-body-card *):not(.email-analytics-view *) > * + *,
+.email-shell .divide-\[\#E5E7EB\]:not(.email-body-card *):not(.email-analytics-view *) > * + * { border-color: var(--mail-border); }
 
-.email-shell .divide-gray-100:not(.email-body-card *) > * + * {
+.email-shell .divide-gray-100:not(.email-body-card *):not(.email-analytics-view *) > * + * {
   border-color: var(--mail-border);
 }
 
 /* Inputs: match the surface instead of punching white holes in the chrome. */
-.email-shell input:not(.email-body-card *),
-.email-shell textarea:not(.email-body-card *),
-.email-shell select:not(.email-body-card *) {
+.email-shell input:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell textarea:not(.email-body-card *):not(.email-analytics-view *),
+.email-shell select:not(.email-body-card *):not(.email-analytics-view *) {
   background-color: var(--mail-surface-2);
   color: var(--mail-text);
 }
@@ -646,11 +659,11 @@ input[type="search"]::-ms-clear:hover {
 }
 
 /* Empty states: no stark white card outline against the dark canvas. */
-.email-shell .email-content .border-dashed {
+.email-shell .email-content .border-dashed:not(.email-analytics-view *) {
   border-color: rgba(255, 255, 255, 0.09);
 }
-.email-shell .email-content .bg-white.border,
-.email-shell .email-content .border-\[\#E5E7EB\] {
+.email-shell .email-content .bg-white.border:not(.email-analytics-view *),
+.email-shell .email-content .border-\[\#E5E7EB\]:not(.email-analytics-view *) {
   border-color: rgba(255, 255, 255, 0.07);
 }
 
@@ -805,10 +818,10 @@ input[type="search"]::-ms-clear:hover {
 
 /* 1. Neutralise every white-alpha utility inside the panel. The sender's own message
       card (`.email-body-card`) is the single deliberate exception — it stays paper-white. */
-.email-shell :is(.border-white\/70, .border-white\/30, .border-white\/50, .border-white\/15):not(.email-body-card) {
+.email-shell :is(.border-white\/70, .border-white\/30, .border-white\/50, .border-white\/15):not(.email-body-card):not(.email-analytics-view) {
   border-color: rgba(255, 255, 255, 0.07);
 }
-.email-shell :is(.bg-white\/90, .bg-white\/70, .bg-white\/50, .bg-white\/15):not(.email-body-card):not(.email-body-card *) {
+.email-shell :is(.bg-white\/90, .bg-white\/70, .bg-white\/50, .bg-white\/15):not(.email-body-card):not(.email-analytics-view):not(.email-body-card *):not(.email-analytics-view *) {
   background-color: rgba(255, 255, 255, 0.035);
 }
 
@@ -841,10 +854,10 @@ input[type="search"]::-ms-clear:hover {
 }
 
 /* 3. Reader: dark chrome, hairline rules, no bright slabs. */
-.email-shell .email-content .bg-\[\#F9FAFB\],
-.email-shell .email-content .bg-\[\#F3F4F6\] { background-color: rgba(255, 255, 255, 0.035); }
-.email-shell .email-content .border-b,
-.email-shell .email-content .border-t { border-color: rgba(255, 255, 255, 0.06); }
+.email-shell .email-content .bg-\[\#F9FAFB\]:not(.email-analytics-view *),
+.email-shell .email-content .bg-\[\#F3F4F6\]:not(.email-analytics-view *) { background-color: rgba(255, 255, 255, 0.035); }
+.email-shell .email-content .border-b:not(.email-analytics-view *),
+.email-shell .email-content .border-t:not(.email-analytics-view *) { border-color: rgba(255, 255, 255, 0.06); }
 
 /* The message sheet. It has to stay light — email HTML is authored for a light background and
    would be unreadable inverted — but stark white against this canvas read as a page from another

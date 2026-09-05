@@ -1676,6 +1676,34 @@ model EmailProviderAccount {
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model EmailMeetingResponse {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id         String   @db.Uuid
+  account_email   String
+  ics_uid         String
+  // The invite's own ICS SEQUENCE at the time of this response — a stale response (lower than
+  // the invite's current SEQUENCE) means the organizer rescheduled and this response no longer
+  // applies; see pages/api/gmail/message-detail.ts's meetingInvite.myResponse handling.
+  sequence        Int      @default(0)
+  response        String
+  organizer_email String?
+  summary         String?
+  start_at        DateTime? @db.Timestamptz(6)
+  end_at          DateTime? @db.Timestamptz(6)
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @default(now()) @db.Timestamptz(6)
+  users           User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("email_meeting_responses")
+  // `map` names the DB constraint only — the client's compound-where key is `name` (or, absent
+  // one, the fields joined by "_"). Pinned explicitly so the two call sites that key off it
+  // (message-detail.ts, meeting-rsvp.ts) can't silently drift from whatever the default would be.
+  @@unique([user_id, account_email, ics_uid], name: "user_id_account_email_ics_uid", map: "uq_email_meeting_responses_user_account_uid")
+  @@index([user_id, account_email], map: "idx_email_meeting_responses_user_account")
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model EmailSignature {
   id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id                 String                   @db.Uuid
@@ -2124,6 +2152,7 @@ model User {
   dashboard_upcoming_meetings                                   DashboardUpcomingMeeting[]
   dashboard_meetings_sync_status                                DashboardMeetingsSyncStatus?
   email_blocked_senders                                         EmailBlockedSender[]
+  email_meeting_responses                                       EmailMeetingResponse[]
   lead_status_events                                            LeadStatusEvent[]
   email_compose_drafts                                          EmailComposeDraft[]
   email_outbound_messages                                       EmailOutboundMessage[]

@@ -49,6 +49,27 @@ function hasAttachment(payload: unknown): boolean {
   return found;
 }
 
+/**
+ * True when the payload tree carries a calendar invite part. Presence-only, same MIME rule as
+ * lib/gmail/messageParsing.ts's icsPart detection (which the reader uses to actually parse and
+ * render the invite) — this just needs to know whether to light up the row icon, not the content.
+ */
+function hasMeetingInvite(payload: unknown): boolean {
+  let found = false;
+  const walk = (part: any) => {
+    if (!part || found) return;
+    const mimeType = String(part?.mimeType || "").toLowerCase();
+    const filename = String(part?.filename || "").toLowerCase();
+    if (mimeType.includes("text/calendar") || mimeType.includes("application/ics") || filename.endsWith(".ics")) {
+      found = true;
+      return;
+    }
+    if (Array.isArray(part?.parts)) part.parts.forEach(walk);
+  };
+  walk(payload);
+  return found;
+}
+
 /** Pull the text/html part out of a Gmail payload tree. */
 function extractHtml(payload: unknown): string {
   let html = "";
@@ -117,6 +138,7 @@ export default withAuth(
             count: verdict.count,
             vendors: verdict.vendors,
             hasAttachment: hasAttachment(payload?.payload),
+            hasMeetingInvite: hasMeetingInvite(payload?.payload),
           },
         ] as const;
       } catch {
@@ -125,7 +147,10 @@ export default withAuth(
       }
     }, CONCURRENCY);
 
-    const trackers: Record<string, { tracked: boolean; count: number; vendors: string[]; hasAttachment: boolean }> = {};
+    const trackers: Record<
+      string,
+      { tracked: boolean; count: number; vendors: string[]; hasAttachment: boolean; hasMeetingInvite: boolean }
+    > = {};
     for (const [id, verdict] of entries) {
       if (verdict) trackers[id] = verdict;
     }

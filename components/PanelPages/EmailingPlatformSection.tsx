@@ -65,6 +65,7 @@ import { getJson } from "@/lib/email/panelApi";
 import { panelFetch } from "@/lib/panelFetch";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
 import MoveToMenu from "@/components/email/MoveToMenu";
+import MeetingInviteCard from "@/components/email/MeetingInviteCard";
 import { buildReplyReferences } from "@/lib/email/threading";
 import {
   BRAND_LOGO,
@@ -338,7 +339,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   /** messageId → tracker verdict. Filled in just after the list paints (see the scan effect). */
   /** Index into the sender's ordered avatar candidates; advanced on each image error. */
   const [messageTrackers, setMessageTrackers] = useState<
-    Record<string, { tracked: boolean; count: number; vendors: string[]; hasAttachment?: boolean }>
+    Record<string, { tracked: boolean; count: number; vendors: string[]; hasAttachment?: boolean; hasMeetingInvite?: boolean }>
   >({});
   const [gmailAccounts, setGmailAccounts] = useState<GmailAccountConnection[]>([]);
   const [gmailLoading, setGmailLoading] = useState(false);
@@ -2447,6 +2448,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
               vendors: Array.isArray(payload.trackers.vendors) ? payload.trackers.vendors : [],
             }
           : undefined,
+      meetingInvite: payload?.meetingInvite ?? null,
     } as MessageDetail;
   }, []);
 
@@ -5520,6 +5522,11 @@ ${sourceText}`;
 
                                   {/* Attachment marker + time */}
                                   <span className="flex shrink-0 items-center justify-end gap-1.5">
+                                    {incomingTracker?.hasMeetingInvite ? (
+                                      <span className="email-tip flex items-center text-[#8F88A8]" data-tip="Meeting invite" aria-label="Meeting invite">
+                                        <FiCalendar className="h-3.5 w-3.5" aria-hidden />
+                                      </span>
+                                    ) : null}
                                     {incomingTracker?.hasAttachment ? (
                                       <span className="email-tip flex items-center text-[#8F88A8]" data-tip="Has attachment" aria-label="Has attachment">
                                         <FiPaperclip className="h-3.5 w-3.5" aria-hidden />
@@ -5780,7 +5787,16 @@ ${sourceText}`;
                             <div className="text-xs text-[#6B7280] space-y-1">
                               <p>From: {formatIdentity(selectedMessageDetail?.fromRaw || selectedMessage.fromRaw || selectedMessage.from || "-")}</p>
                               <p>To: {formatIdentity(selectedMessageDetail?.toRaw || selectedMessage.toRaw || selectedMessage.to || "-")}</p>
-                              <p>{formatDetailedDate(selectedMessageDetail?.timestamp || selectedMessage.timestamp, selectedMessageDetail?.date || selectedMessage.date)}</p>
+                              <p className="flex items-center gap-1">
+                                {selectedMessageDetail?.meetingInvite ? (
+                                  <FiCalendar
+                                    className="h-3 w-3 text-[#701CC0]"
+                                    aria-label="This email carries a meeting invite"
+                                    title="This email carries a meeting invite"
+                                  />
+                                ) : null}
+                                {formatDetailedDate(selectedMessageDetail?.timestamp || selectedMessage.timestamp, selectedMessageDetail?.date || selectedMessage.date)}
+                              </p>
                               {(() => {
                                 const { count: trackers, vendors } =
                                   selectedMessageDetail?.trackers ?? detectTrackers(selectedMessageDetail?.bodyHtml || "");
@@ -5812,6 +5828,18 @@ ${sourceText}`;
                               <p className="text-sm text-red-600">{detailError}</p>
                             ) : (
                               <div className="space-y-4">
+                                {selectedMessageDetail?.meetingInvite ? (
+                                  <MeetingInviteCard
+                                    invite={selectedMessageDetail.meetingInvite}
+                                    accountEmail={selectedMessage.accountEmail}
+                                    messageId={selectedMessage.id}
+                                    onResponded={(response) =>
+                                      setSelectedMessageDetail((prev) =>
+                                        prev?.meetingInvite ? { ...prev, meetingInvite: { ...prev.meetingInvite, myResponse: response } } : prev
+                                      )
+                                    }
+                                  />
+                                ) : null}
                                 {/* `email-body-card` keeps the sender's own HTML on a light surface —
                                     that markup is authored for white backgrounds, so the panel's
                                     dark theme deliberately stops at this boundary. */}
