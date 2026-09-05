@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FiRotateCcw, FiX } from "react-icons/fi";
+import { FiX } from "react-icons/fi";
 import { inter } from "@/lib/fonts";
 
 /**
@@ -20,7 +20,6 @@ type FieldKey =
 type FieldDef = {
   key: FieldKey;
   label: string;
-  hint: string;
   prefix?: string;
   suffix?: string;
   max?: number;
@@ -35,22 +34,22 @@ const GROUPS: Array<{ title: string; fields: FieldDef[] }> = [
   {
     title: "Per purchase",
     fields: [
-      { key: "averagePurchaseValue", label: "Average Purchase Value", hint: "Typical order size", prefix: "$" },
-      { key: "costOfGoods", label: "Cost of Goods Sold", hint: "Share of that spent to deliver", suffix: "%", max: 100 },
+      { key: "averagePurchaseValue", label: "Average Purchase Value", prefix: "$" },
+      { key: "costOfGoods", label: "Cost of Goods Sold", suffix: "%", max: 100 },
     ],
   },
   {
     title: "Over the relationship",
     fields: [
-      { key: "returnsPerYear", label: "Purchases per Year", hint: "How often they come back" },
-      { key: "customerTerm", label: "Customer Term", hint: "Years they stay" },
+      { key: "returnsPerYear", label: "Purchases per Year" },
+      { key: "customerTerm", label: "Customer Term" },
     ],
   },
   {
     title: "Multipliers",
     fields: [
-      { key: "numReferrals", label: "Referrals per Customer", hint: "Others they bring in" },
-      { key: "numClients", label: "Clients Brought In", hint: "Used for retainer pricing" },
+      { key: "numReferrals", label: "Referrals per Customer" },
+      { key: "numClients", label: "Clients Brought In" },
     ],
   },
 ];
@@ -99,8 +98,6 @@ const LTVCalculatorModal: React.FC<Props> = ({ open, onClose }) => {
 
   if (!open) return null;
 
-  const touched = Object.values(values).some((v) => v > 0);
-
   return (
     <div
       className={`fixed inset-0 z-[120] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 ${inter.className}`}
@@ -114,33 +111,23 @@ const LTVCalculatorModal: React.FC<Props> = ({ open, onClose }) => {
         aria-modal="true"
         aria-label="LTV calculator"
       >
-        <header className="flex items-start justify-between gap-4 border-b border-[#ECEAF1] px-6 py-4">
-          <div>
+        {/* One centred row: the close control lines up with the block as a whole rather than
+            hanging off the first line of it. */}
+        <header className="flex items-center justify-between gap-4 border-b border-[#ECEAF1] px-6 py-4">
+          <div className="min-w-0">
             <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827]">LTV Calculator</h2>
             <p className="mt-0.5 text-[12.5px] text-[#6B7280]">
               Estimate what a customer is worth over their lifetime, and what to charge to win one.
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setValues(EMPTY)}
-              disabled={!touched}
-              title="Reset values"
-              aria-label="Reset values"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#6B7280] transition-colors hover:bg-black/5 hover:text-[#111827] disabled:pointer-events-none disabled:opacity-30"
-            >
-              <FiRotateCcw className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#6B7280] transition-colors hover:bg-black/5 hover:text-[#111827]"
-            >
-              <FiX className="h-4 w-4" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#6B7280] transition-colors hover:bg-black/5 hover:text-[#111827]"
+          >
+            <FiX className="h-4 w-4" />
+          </button>
         </header>
 
         {/* items-stretch, so the results panel ends level with the inputs instead of running past
@@ -181,7 +168,6 @@ const LTVCalculatorModal: React.FC<Props> = ({ open, onClose }) => {
                           </span>
                         ) : null}
                       </span>
-                      <span className="mt-1 block text-[11px] leading-snug text-[#9CA3AF]">{field.hint}</span>
                     </label>
                   ))}
                 </div>
@@ -216,11 +202,6 @@ const LTVCalculatorModal: React.FC<Props> = ({ open, onClose }) => {
                 {money(grossMargin)}
               </div>
             </div>
-
-            <p className="mt-auto pt-5 text-[11px] leading-relaxed text-white/60">
-              Gross per purchase × purchases per year × term × (referrals + 1). Nothing here is
-              saved.
-            </p>
           </aside>
         </div>
       </div>
