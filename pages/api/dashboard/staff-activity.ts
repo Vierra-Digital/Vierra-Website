@@ -34,16 +34,21 @@ export default withAuth(
         const lastActive = row.last_active_at ? row.last_active_at.toISOString() : null;
         const ageMs = row.last_active_at ? now - row.last_active_at.getTime() : null;
         const stale = ageMs === null || ageMs > STALE_AFTER_MS;
+        // The stored `status` word is not reliable on its own: sign-out and session-expiry paths
+        // write "offline" without clearing last_active_at, so someone who is heartbeating right
+        // now can still be sitting on a stale "offline" and get reported as away. The timestamp
+        // is the signal that cannot lie — a beat inside the window means present. Only "away" and
+        // "busy" are honoured from the stored value, because nothing infers those from timing.
+        const declaredAway = row.status === "away" || row.status === "busy";
         return {
           userId: row.user_id,
           name: row.users_company_memberships_user_idTousers?.name || null,
           email: row.users_company_memberships_user_idTousers?.email || null,
           role: row.role,
           position: row.position,
-          // A stale heartbeat is reported as offline regardless of the stored status.
-          status: stale && row.status !== "offline" ? "offline" : row.status,
+          status: stale ? "offline" : declaredAway ? row.status : "online",
           lastActiveAt: lastActive,
-          isLive: !stale && row.status === "online",
+          isLive: !stale && !declaredAway,
         };
       }),
     });

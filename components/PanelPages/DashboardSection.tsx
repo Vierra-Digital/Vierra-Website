@@ -502,6 +502,10 @@ const DashboardSection = () => {
                     {/* Chart and Recent Posts share a row: the chart alone left its right side empty
                         on wide screens. */}
                     <div className="mb-4 grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                    {/* Left column: the chart with the LTV launcher directly beneath it. They were
+                        in separate rows, and because row one was as tall as the right-hand stack,
+                        that left ~280px of dead space under the chart before the tile began. */}
+                    <div className="flex flex-col gap-4">
                     <div className="bg-[#F1EFF6] rounded-xl p-4">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Website Visits</h3>
@@ -520,7 +524,7 @@ const DashboardSection = () => {
                                 <RiArrowDropDownLine className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
                             </div>
                         </div>
-                        <div className="h-64 rounded-lg p-3">
+                        <div className="h-[242px] rounded-lg p-3">
                             {websiteVisitsLoading ? (
                                 /* Bars rather than a spinner or a line of text: the chart's own
                                    shape, so switching months doesn't collapse the panel's height
@@ -577,6 +581,29 @@ const DashboardSection = () => {
                             )}
                         </div>
                     </div>
+                                                    {/* LTV lives here rather than in the rail: it is a scratchpad you open,
+                                try numbers in, and close — not a destination worth a permanent tab. */}
+                            <button
+                                type="button"
+                                onClick={() => setLtvOpen(true)}
+                                className="group flex w-full flex-col justify-between rounded-xl bg-gradient-to-br from-[#701CC0] to-[#8F42FF] p-4 text-left text-white transition-[filter] duration-200 hover:brightness-[1.06]"
+                            >
+                                <div>
+                                    <h3 className="text-lg font-semibold text-white">LTV Calculator</h3>
+                                    <p className="mt-1 text-[12.5px] leading-relaxed text-white/75">
+                                        Model lifetime value and retainer pricing.
+                                    </p>
+                                </div>
+                                <span className="mt-4 inline-flex items-center gap-1.5 self-start rounded-full bg-white/15 px-3 py-1.5 text-[12px] font-medium text-white transition-colors group-hover:bg-white/25">
+                                    Open Calculator
+                                    <FiArrowRight
+                                        className="h-3.5 w-3.5 motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out motion-safe:group-hover:translate-x-1"
+                                        aria-hidden
+                                    />
+                                </span>
+                            </button>
+
+                    </div>
 <div className="flex flex-col gap-4">
                             <div className="bg-[#F1EFF6] rounded-xl p-4 flex flex-col">
                             <h3 className="text-lg font-semibold text-[#111827] mb-3">Recent Blog Posts</h3>
@@ -591,7 +618,7 @@ const DashboardSection = () => {
                             ) : (
                                 <ul className="flex-1 divide-y divide-[#F1EFF5] flex flex-col justify-between">
                                     {recentPosts.map((post) => (
-                                        <li key={post.id} className="flex items-center gap-2.5 py-2">
+                                        <li key={post.id} className="flex items-start gap-2.5 py-2">
                                             <div className="min-w-0 flex-1">
                                                 <p className="truncate text-[13px] font-medium text-[#111827]">{post.title}</p>
                                                 <p className="text-[11px] text-[#9CA3AF]">
@@ -602,7 +629,7 @@ const DashboardSection = () => {
                                                     })}
                                                 </p>
                                             </div>
-                                            <span className="shrink-0 rounded-full bg-[#F3EDFB] px-2 py-0.5 text-[11px] font-medium text-[#701CC0]">
+                                            <span className="mt-0.5 shrink-0 rounded-full bg-[#F3EDFB] px-2 py-0.5 text-[11px] font-medium text-[#701CC0]">
                                                 {post.views.toLocaleString()} {post.views === 1 ? "View" : "Views"}
                                             </span>
                                         </li>
@@ -657,31 +684,6 @@ const DashboardSection = () => {
                         </div>
                     </div>
 
-                    {/* The LTV launcher keeps this row to itself now. */}
-                    <div className="mb-4 w-full max-w-[224px]">
-                                                {/* LTV lives here rather than in the rail: it is a scratchpad you open,
-                            try numbers in, and close — not a destination worth a permanent tab. */}
-                        <button
-                            type="button"
-                            onClick={() => setLtvOpen(true)}
-                            className="group flex w-full flex-col justify-between rounded-xl bg-gradient-to-br from-[#701CC0] to-[#8F42FF] p-4 text-left text-white transition-[filter] duration-200 hover:brightness-[1.06]"
-                        >
-                            <div>
-                                <h3 className="text-lg font-semibold text-white">LTV Calculator</h3>
-                                <p className="mt-1 text-[12.5px] leading-relaxed text-white/75">
-                                    Model lifetime value and retainer pricing.
-                                </p>
-                            </div>
-                            <span className="mt-4 inline-flex items-center gap-1.5 self-start rounded-full bg-white/15 px-3 py-1.5 text-[12px] font-medium text-white transition-colors group-hover:bg-white/25">
-                                Open Calculator
-                                <FiArrowRight
-                                    className="h-3.5 w-3.5 motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out motion-safe:group-hover:translate-x-1"
-                                    aria-hidden
-                                />
-                            </span>
-                        </button>
-
-                    </div>
 
                 </div>
 
