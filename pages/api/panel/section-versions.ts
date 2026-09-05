@@ -6,7 +6,7 @@ import { withAuth } from "@/lib/api/withAuth";
  * decide whether a section it already has mounted (see pages/panel.tsx's visitedSections) needs
  * a real refetch or can keep showing what it has. Each fingerprint is a row count plus the latest
  * timestamp available on that table — count catches deletes, the timestamp catches adds/edits —
- * scoped to the caller's company where the table is company-scoped (blog posts aren't).
+ * scoped to the caller's company.
  */
 export default withAuth(
   async (req, res, session) => {
@@ -27,8 +27,6 @@ export default withAuth(
       boardLatest,
       taskCount,
       taskLatest,
-      blogCount,
-      blogLatest,
     ] = await Promise.all([
       prisma.companyMembership.count({ where: { company_id: companyId } }),
       prisma.companyMembership.aggregate({ where: { company_id: companyId }, _max: { joined_at: true } }),
@@ -44,8 +42,6 @@ export default withAuth(
       prisma.projectBoard.aggregate({ where: { company_id: companyId }, _max: { created_at: true } }),
       prisma.projectTask.count({ where: { company_id: companyId } }),
       prisma.projectTask.aggregate({ where: { company_id: companyId }, _max: { updated_at: true } }),
-      prisma.blogPost.count(),
-      prisma.blogPost.aggregate({ _max: { updated_date: true, created_at: true } }),
     ]);
 
     const stamp = (...parts: Array<number | string | Date | null | undefined>) =>
@@ -61,7 +57,6 @@ export default withAuth(
         clientOutreachLatest._max.updated_at
       ),
       projects: stamp(boardCount, boardLatest._max.created_at, taskCount, taskLatest._max.updated_at),
-      blog: stamp(blogCount, blogLatest._max.updated_date, blogLatest._max.created_at),
     });
   },
   { methods: ["GET"] }

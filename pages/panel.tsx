@@ -54,10 +54,6 @@ const ProjectManagement = dynamic(
   () => import("../components/PanelPages/ProjectManagement"),
   { ssr: false }
 )
-const BlogEditorSection = dynamic(
-  () => import("@/components/PanelPages/BlogEditorSection"),
-  { ssr: false }
-)
 const AdminEditorSection = dynamic(
   () => import("@/components/PanelPages/AdminEditorSection"),
   { ssr: false }
@@ -93,7 +89,6 @@ const SECTION_VERSION_DOMAIN: Record<number, string> = {
   2: "team",
   5: "outreach",
   6: "projects",
-  7: "blog",
   8: "team",
   10: "files",
 }
@@ -363,16 +358,6 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                 )}
                 <div
                   id="panel-nav-item"
-                  onClick={() => { setCurrentSection(7); setShowSettings(false); setIsSidebarOpen(false)}}
-                  className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 7 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
-                >
-                  <FiFileText className="w-4 h-4 shrink-0" />
-                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
-                    Blog Editor
-                  </span>
-                </div>
-                <div
-                  id="panel-nav-item"
                   onClick={() => { setCurrentSection(10); setShowSettings(false); setIsSidebarOpen(false)}}
                   className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 10 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
                 >
@@ -521,15 +506,6 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                       {visitedSections.has(6) && (
                         <div key={`section-6-${sectionEpoch[6] || 0}`} style={{ display: currentSection === 6 ? undefined : "none" }}>
                           <ProjectManagement />
-                        </div>
-                      )}
-                      {visitedSections.has(7) && (
-                        <div
-                          key={`section-7-${sectionEpoch[7] || 0}`}
-                          className="w-full pb-24"
-                          style={{ display: currentSection === 7 ? undefined : "none" }}
-                        >
-                          <BlogEditorSection />
                         </div>
                       )}
                       {visitedSections.has(8) && !isStaff && (
