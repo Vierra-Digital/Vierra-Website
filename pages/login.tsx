@@ -150,12 +150,13 @@ const LoginPage = () => {
     setIsSubmitting(true);
 
     try {
-      const supabase = getSupabaseBrowserClient();
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-        redirectTo: `${window.location.origin}/auth/callback?next=/set-password`,
+      const response = await fetch("/api/auth/forgotPassword", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
 
-      if (!resetError) {
+      if (response.ok) {
         setResetLinkSent(true);
       } else {
         setError("We couldn't send a reset link. Check your email and try again.");

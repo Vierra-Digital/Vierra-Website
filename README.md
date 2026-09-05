@@ -172,8 +172,8 @@ Copy **`.env.example`** → **`.env`**. Never commit `.env`.
 
 | Variable | Description |
 |----------|-------------|
-| `EMAIL_USER` / `EMAIL_PASS` | SMTP credentials (password reset, session links) |
-| `FROM_EMAIL` / `FROM_NAME` | Default sender |
+| `SYSTEM_EMAIL_ACCOUNT` | Connected Google Workspace mailbox system/transactional email (password resets, onboarding links, signed documents, ...) sends from |
+| `FROM_EMAIL` / `FROM_NAME` | Default sender; `FROM_EMAIL` is `SYSTEM_EMAIL_ACCOUNT`'s fallback |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Billing & webhooks |
 | `GA4_PROPERTY_ID` + `GA4_OAUTH_REFRESH_TOKEN` | Dashboard Website Visits chart (`npm run connect-ga4`) |
 | `APP_URL` / `NEXT_PUBLIC_SITE_URL` | Base-URL fallbacks for cron and tracking-link builders |

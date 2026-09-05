@@ -27,6 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       clientEmail: s.clients.email,
       businessName: s.clients.business_name,
       createdAt: s.created_at.getTime(),
+      expiresAt: s.expires_at?.getTime() || null,
       submittedAt: s.submitted_at?.getTime() || null,
       lastUpdatedAt: s.last_updated_at?.getTime() || null,
       status: s.status || "pending",

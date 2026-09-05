@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { inter } from "@/lib/fonts";
 import { useSession } from "@/lib/session-client";
 import {
@@ -20,6 +20,8 @@ import {
 } from "react-icons/fi";
 import ProfileImage from "../ProfileImage";
 import Modal from "@/components/ui/Modal";
+import { useDraftGuard } from "@/hooks/useDraftGuard";
+import { useRouter } from "next/router";
 import { panelFetch } from "@/lib/panelFetch";
 
 
@@ -138,6 +140,14 @@ export default function ProjectManagement() {
     deadline: "",
   });
 
+  const router = useRouter();
+  const [actionError, setActionError] = useState("");
+  const [taskSearch, setTaskSearch] = useState("");
+  const [taskFilter, setTaskFilter] = useState("all");
+  const [assigneeFilter, setAssigneeFilter] = useState("");
+  const [taskBusy, setTaskBusy] = useState(false);
+  const busyRef = useRef(false);
+  const canLeave = useDraftGuard(showAddModal && Boolean(addForm.name || addForm.description || addForm.checklistText || addForm.deadline || addForm.assignedTo.length), "New task", "6", taskBusy);
   const isAdmin = (session?.user as { role?: string })?.role === "admin";
 
   const fetchBoards = useCallback(async () => {
@@ -147,12 +157,12 @@ export default function ProjectManagement() {
         const boardList: BoardInfo[] = await r.json();
         setBoards(boardList);
         setSelectedBoard((prev) => {
-          if (!prev || !boardList.some((b) => b.id === prev.id)) return boardList[0] || null;
+          if (!prev || !boardList.some((b) => b.id === prev.id)) return boardList.find(b => b.id === new URLSearchParams(window.location.search).get("board")) || boardList[0] || null;
           return prev;
         });
       }
     } catch {
-      setBoards([]);
+      setActionError("Could not load boards. Try again.");
     }
   }, []);
 
@@ -173,10 +183,10 @@ export default function ProjectManagement() {
         setNewBoardName("");
       } else {
         const err = await r.json();
-        alert(err.message || "Failed to create board");
+        setActionError(err.message || "Failed to create board");
       }
     } catch {
-      alert("Failed to create board");
+      setActionError("Failed to create board");
     } finally {
       setCreatingBoard(false);
     }
@@ -191,10 +201,10 @@ export default function ProjectManagement() {
         const data = await r.json();
         setTasks(data);
       } else {
-        setTasks([]);
+        setActionError("Could not load tasks. Refresh this board to retry.");
       }
     } catch {
-      setTasks([]);
+      setActionError("Could not load tasks. Refresh this board to retry.");
     } finally {
       setLoading(false);
     }
@@ -233,7 +243,11 @@ export default function ProjectManagement() {
 
   const tasksByStatus = STATUS_COLUMNS.reduce(
     (acc, status) => {
-      const filtered = tasks.filter((t) => t.status === status);
+      const filtered = tasks.filter((t) => t.status === status &&
+        (!taskSearch || (t.name + " " + t.description).toLowerCase().includes(taskSearch.toLowerCase())) &&
+        (taskFilter !== "mine" || t.assignedTo?.includes(session?.user?.id || "")) &&
+        (taskFilter !== "review" || t.status === "under_review") &&
+        (!assigneeFilter || t.assignedTo?.includes(assigneeFilter)));
       acc[status] = [...filtered].sort((a, b) => {
         const aDate = a.deadline ? new Date(a.deadline).getTime() : Infinity;
         const bDate = b.deadline ? new Date(b.deadline).getTime() : Infinity;
@@ -253,27 +267,31 @@ export default function ProjectManagement() {
 
     if (newStatus === "under_review" || newStatus === "completed") {
       if (!checklistComplete) {
-        alert("Complete all checklist items to move the task to under review.");
+        setActionError("Complete all checklist items to move the task to under review.");
         return;
       }
     }
 
     if (newStatus === "completed") {
       if (task.status !== "under_review") {
-        alert("Task must be Under Review before it can be marked as Completed.");
+        setActionError("Task must be Under Review before it can be marked as Completed.");
         return;
       }
       if (!isAdmin) {
-        alert("Only admins can mark tasks as Completed.");
+        setActionError("Only admins can mark tasks as Completed.");
         return;
       }
     }
 
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setTaskBusy(true);
+    setActionError("");
     try {
       const r = await fetch(`/api/project/tasks/${taskId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: newStatus, expectedUpdatedAt: task.updatedAt }),
       });
       if (r.ok) {
         const updated = await r.json();
@@ -281,11 +299,11 @@ export default function ProjectManagement() {
         if (selectedTask?.id === taskId) setSelectedTask(updated);
       } else {
         const err = await r.json();
-        alert(err.message || "Failed to update status");
+        setActionError(err.message || "Failed to update status");
       }
     } catch {
-      alert("Failed to update status");
-    }
+      setActionError("Failed to update status");
+    } finally { busyRef.current = false; setTaskBusy(false); }
   };
 
   const handleChecklistToggle = async (taskId: string, index: number) => {
@@ -295,11 +313,15 @@ export default function ProjectManagement() {
     if (task.status === "completed" && item?.completed) return;
     const updated = [...task.checklist];
     updated[index] = { ...updated[index], completed: !updated[index].completed };
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setTaskBusy(true);
+    setActionError("");
     try {
       const r = await fetch(`/api/project/tasks/${taskId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ checklist: updated }),
+        body: JSON.stringify({ checklist: updated, expectedUpdatedAt: task.updatedAt }),
       });
       if (r.ok) {
         const data = await r.json();
@@ -307,13 +329,17 @@ export default function ProjectManagement() {
         if (selectedTask?.id === taskId) setSelectedTask(data);
       }
     } catch {
-      alert("Failed to update checklist");
-    }
+      setActionError("Failed to update checklist");
+    } finally { busyRef.current = false; setTaskBusy(false); }
   };
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedBoard || !addForm.name.trim() || !addForm.description.trim()) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setTaskBusy(true);
+    setActionError("");
     try {
       const checklist = addForm.checklistText
         .split("\n")
@@ -340,11 +366,11 @@ export default function ProjectManagement() {
         setAddStep(1);
       } else {
         const err = await r.json();
-        alert(err.message || "Failed to create task");
+        setActionError(err.message || "Failed to create task");
       }
     } catch {
-      alert("Failed to create task");
-    }
+      setActionError("Failed to create task");
+    } finally { busyRef.current = false; setTaskBusy(false); }
   };
 
   const handleUpdateTask = async (updates: Partial<ProjectTask>) => {
@@ -357,25 +383,29 @@ export default function ProjectManagement() {
 
       if (updates.status === "under_review" || updates.status === "completed") {
         if (!checklistComplete) {
-          alert("Complete all checklist items to move the task to under review.");
+          setActionError("Complete all checklist items to move the task to under review.");
           return;
         }
       }
 
       if (updates.status === "completed") {
         if (selectedTask.status !== "under_review") {
-          alert("Task must be Under Review before it can be marked as Completed.");
+          setActionError("Task must be Under Review before it can be marked as Completed.");
           return;
         }
         if (!isAdmin) {
-          alert("Only admins can mark tasks as Completed.");
+          setActionError("Only admins can mark tasks as Completed.");
           return;
         }
       }
     }
 
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setTaskBusy(true);
+    setActionError("");
     try {
-      const body: Record<string, unknown> = {};
+      const body: Record<string, unknown> = { expectedUpdatedAt: selectedTask.updatedAt };
       if (updates.name !== undefined) body.name = updates.name;
       if (updates.description !== undefined) body.description = updates.description;
       if (updates.checklist !== undefined) body.checklist = updates.checklist;
@@ -391,16 +421,21 @@ export default function ProjectManagement() {
         const task = await r.json();
         setTasks((prev) => prev.map((t) => (t.id === selectedTask.id ? task : t)));
         setSelectedTask(task);
+        setShowEditModal(false);
       } else {
         const err = await r.json();
-        alert(err.message || "Failed to update task");
+        setActionError(err.message || "Failed to update task");
       }
     } catch {
-      alert("Failed to update task");
-    }
+      setActionError("Failed to update task");
+    } finally { busyRef.current = false; setTaskBusy(false); }
   };
 
   const handleDeleteTask = async (taskId: string) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setTaskBusy(true);
+    setActionError("");
     try {
       const r = await fetch(`/api/project/tasks/${taskId}`, { method: "DELETE" });
       if (r.ok) {
@@ -409,11 +444,11 @@ export default function ProjectManagement() {
         setTaskToDelete(null);
       } else {
         const err = await r.json();
-        alert(err.message || "Failed to delete task");
+        setActionError(err.message || "Failed to delete task");
       }
     } catch {
-      alert("Failed to delete task");
-    }
+      setActionError("Failed to delete task");
+    } finally { busyRef.current = false; setTaskBusy(false); }
   };
 
   if (boards.length === 0) {
@@ -424,7 +459,7 @@ export default function ProjectManagement() {
             <div className="w-16 h-16 rounded-2xl bg-[#F8F0FF] flex items-center justify-center mx-auto mb-4">
               <FiLayers className="w-8 h-8 text-[#701CC0]" />
             </div>
-            <h3 className="text-lg font-semibold text-[#111827] mb-2">No Boards Yet</h3>
+            <h3 className="text-lg font-semibold text-[#111827] mb-2">{actionError ? "Could not load boards" : "No Boards Yet"}</h3>{actionError && <p role="alert">{actionError} <button type="button" onClick={() => void fetchBoards()} className="underline">Retry</button></p>}
             {isAdmin ? (
               <>
                 <p className="text-sm text-[#6B7280] mb-4">Create your first project board to get started.</p>
@@ -463,12 +498,23 @@ export default function ProjectManagement() {
           <div className="w-full flex justify-between items-center mb-2">
             <div>
               <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Project Tasks</h1>
+              {actionError && <p role="alert" className="text-sm text-red-700">{actionError} <button type="button" onClick={() => void fetchTasks()} className="underline">Refresh board</button></p>}
+              <p role="status" className="text-sm text-gray-600">{taskBusy ? "Saving…" : ""}</p>
+              <div className="mb-3 flex flex-wrap gap-2">
+                <input aria-label="Search tasks" placeholder="Search tasks" value={taskSearch} onChange={e => setTaskSearch(e.target.value)} className="rounded border px-3 py-2 text-sm" />
+                <select aria-label="Task view" value={taskFilter} onChange={e => setTaskFilter(e.target.value)} className="rounded border px-3 py-2 text-sm"><option value="all">All tasks</option><option value="mine">My tasks</option><option value="review">Needs review</option></select>
+                <select aria-label="Assignee" value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)} className="rounded border px-3 py-2 text-sm"><option value="">All assignees</option>{boardMembers.map(member => <option key={member.id} value={member.id}>{member.name || member.email}</option>)}</select>
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               {boards.map((board) => (
                 <button
                   key={board.id}
-                  onClick={() => setSelectedBoard(board)}
+                  onClick={() => { void (async () => {
+                    if (!(await canLeave())) return;
+                    setTasks([]); setSelectedBoard(board);
+                    void router.replace({ pathname: router.pathname, query: { ...router.query, board: board.id } }, undefined, { shallow: true, scroll: false }).catch(() => {});
+                  })(); }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                     selectedBoard?.id === board.id
                       ? "bg-[#701CC0] text-white shadow-sm"
@@ -670,6 +716,8 @@ export default function ProjectManagement() {
       
       {selectedTask && (
         <TaskDetailModal
+          feedback={actionError}
+          busy={taskBusy}
           task={selectedTask}
           isAdmin={isAdmin}
           boardMembers={boardMembers}
@@ -684,13 +732,12 @@ export default function ProjectManagement() {
       
       {showEditModal && selectedTask && isAdmin && (
         <EditTaskModal
+          feedback={actionError}
+          busy={taskBusy}
           task={selectedTask}
           boardMembers={boardMembers}
           onClose={() => setShowEditModal(false)}
-          onSave={(updates) => {
-            handleUpdateTask(updates);
-            setShowEditModal(false);
-          }}
+          onSave={handleUpdateTask}
         />
       )}
 
@@ -706,17 +753,20 @@ export default function ProjectManagement() {
       
       {showAddModal && selectedBoard && (
         <AddTaskModal
+          feedback={actionError}
+          busy={taskBusy}
           form={addForm}
           setForm={setAddForm}
           step={addStep}
           setStep={setAddStep}
           boardMembers={boardMembers}
           onSubmit={handleAddTask}
-          onClose={() => {
+          onClose={() => { void (async () => {
+            if (!(await canLeave())) return;
             setShowAddModal(false);
             setAddForm({ name: "", description: "", checklistText: "", assignedTo: [], deadline: "" });
             setAddStep(1);
-          }}
+          })(); }}
         />
       )}
     </div>
@@ -770,6 +820,8 @@ function ConfirmDeleteTaskModal({
 }
 
 function AddTaskModal({
+  feedback,
+  busy,
   form,
   setForm,
   step,
@@ -778,6 +830,8 @@ function AddTaskModal({
   onSubmit,
   onClose,
 }: {
+  feedback: string;
+  busy: boolean;
   form: { name: string; description: string; checklistText: string; assignedTo: string[]; deadline: string };
   setForm: React.Dispatch<React.SetStateAction<{ name: string; description: string; checklistText: string; assignedTo: string[]; deadline: string }>>;
   step: number;
@@ -801,12 +855,13 @@ function AddTaskModal({
 
   return (
     <Modal
-      onClose={onClose}
+      onClose={() => { if (!busy) onClose(); }}
       zIndexClass="z-50"
       backdropClassName="bg-black/40 backdrop-blur-sm"
       cardClassName="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-[#E5E7EB]"
-      closeOnBackdrop={true}
+      closeOnBackdrop={!busy}
     >
+      <div role="status" className="px-6 pt-3 text-sm text-red-700">{busy ? "Saving…" : feedback}</div>
         <div className="flex items-center gap-3 px-6 py-5 border-b border-[#E5E7EB]">
           <div className="w-10 h-10 rounded-xl bg-[#701CC0]/10 flex items-center justify-center">
             <FiPlus className="w-5 h-5 text-[#701CC0]" />
@@ -988,6 +1043,8 @@ function AddTaskModal({
 }
 
 function TaskDetailModal({
+  feedback,
+  busy,
   task,
   isAdmin,
   boardMembers,
@@ -997,6 +1054,8 @@ function TaskDetailModal({
   onDelete,
   onEdit,
 }: {
+  feedback: string;
+  busy: boolean;
   task: ProjectTask;
   isAdmin: boolean;
   boardMembers: BoardMember[];
@@ -1021,12 +1080,13 @@ function TaskDetailModal({
 
   return (
     <Modal
-      onClose={onClose}
+      onClose={() => { if (!busy) onClose(); }}
       zIndexClass="z-50"
       backdropClassName="bg-black/40 backdrop-blur-sm"
       cardClassName="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-[#E5E7EB] max-h-[90vh] overflow-hidden flex flex-col"
-      closeOnBackdrop={true}
+      closeOnBackdrop={!busy}
     >
+      <div role="status" className="px-6 pt-3 text-sm text-red-700">{busy ? "Saving…" : feedback}</div>
 
         <div className="flex-shrink-0 flex items-center gap-3 px-6 py-5 border-b border-[#E5E7EB]">
           <div className="min-w-0 flex-1">
@@ -1245,11 +1305,15 @@ function TaskDetailModal({
 }
 
 function EditTaskModal({
+  feedback,
+  busy,
   task,
   boardMembers,
   onClose,
   onSave,
 }: {
+  feedback: string;
+  busy: boolean;
   task: ProjectTask;
   boardMembers: BoardMember[];
   onClose: () => void;
@@ -1267,6 +1331,12 @@ function EditTaskModal({
     task.deadline ? new Date(task.deadline).toISOString().slice(0, 10) : ""
   );
 
+  const [initial] = useState(() => JSON.stringify({ name, description, checklistText, status, assignedTo, deadline }));
+  const canClose = useDraftGuard(JSON.stringify({ name, description, checklistText, status, assignedTo, deadline }) !== initial, "Edit task", "6", busy);
+  const closeEditor = () => {
+    if (busy) return;
+    void (async () => { if (await canClose()) onClose(); })();
+  };
   const steps = [
     { number: 1, title: "Basic Info" },
     { number: 2, title: "Team & Timeline" },
@@ -1301,19 +1371,20 @@ function EditTaskModal({
 
   return (
     <Modal
-      onClose={onClose}
+      onClose={closeEditor}
       zIndexClass="z-[60]"
       backdropClassName="bg-black/40 backdrop-blur-sm"
       cardClassName="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-[#E5E7EB]"
-      closeOnBackdrop={true}
+      closeOnBackdrop={!busy}
     >
+      <div role="status" className="px-6 pt-3 text-sm text-red-700">{busy ? "Saving…" : feedback}</div>
         <div className="flex items-center gap-3 px-6 py-5 border-b border-[#E5E7EB]">
           <div className="w-10 h-10 rounded-xl bg-[#701CC0]/10 flex items-center justify-center">
             <FiEdit3 className="w-5 h-5 text-[#701CC0]" />
           </div>
           <h2 className="text-lg font-semibold text-[#111827] flex-1">Edit Task</h2>
           <button
-            onClick={onClose}
+            onClick={closeEditor}
             className="p-2 rounded-lg text-[#6B7280] hover:bg-red-50 hover:text-red-600 transition-colors"
           >
             <FiX className="w-5 h-5" />
@@ -1454,7 +1525,7 @@ function EditTaskModal({
         <div className="flex justify-between items-center px-6 pb-6 pt-4 mt-4 border-t border-[#E5E7EB]">
           <button
             type="button"
-            onClick={onClose}
+            onClick={closeEditor}
             className="px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 text-sm font-medium transition-colors"
           >
             Cancel

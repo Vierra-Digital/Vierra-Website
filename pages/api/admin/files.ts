@@ -39,6 +39,7 @@ export default withSession(async (req, res, session) => {
         name: true,
         file_type: true,
         signing_token_id: true,
+        storage_key: true,
         is_deletion_protected: true,
         created_at: true,
         user_id: true,
@@ -59,6 +60,10 @@ export default withSession(async (req, res, session) => {
         date: `${mm}/${dd}/${yyyy}`,
         fileType: f.file_type,
         signingTokenId: f.signing_token_id,
+        // Signing-flow files download by tokenId; uploaded files have no token but do have
+        // storage_key — either is enough content to serve, so callers know to try the id-based
+        // download path instead of showing "unavailable" for a file that really is there.
+        hasContent: Boolean(f.signing_token_id || f.storage_key),
         isDeletionProtected: f.is_deletion_protected,
         owner: f.users?.name ?? f.clients?.name ?? "Unknown",
       }

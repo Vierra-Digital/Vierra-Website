@@ -60,5 +60,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   await persistOnboardingPlatformToken(state, { platform: "googleads", accessToken: access_token, refreshToken: refresh_token, expiresAt });
   setOnboardingSessionCookie(res, state);
 
-  res.redirect(`/onboarding/${state}?linked=googleads`);
+  // This is always opened as a popup (window.open, never same-tab) — land on a small page that
+  // posts back to the opener and closes itself, rather than redirecting into the onboarding
+  // wizard itself, which would mount a second full copy of it inside the popup.
+  res.redirect("/googleads/connected");
 }

@@ -166,7 +166,7 @@ function encodeSubjectHeader(subject: string): string {
     : clean;
 }
 
-function buildRawMime(opts: {
+export function buildRawMime(opts: {
   to: string;
   cc: string;
   bcc: string;
@@ -296,7 +296,7 @@ async function sendViaSmtp(
 }
 
 /** Send via the Gmail REST API, retrying once on a 401 with a force-refreshed token. Extracted verbatim. */
-async function sendViaGmail(
+export async function sendViaGmail(
   userId: string,
   accountEmail: string,
   sendPayload: Record<string, string>,

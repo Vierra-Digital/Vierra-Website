@@ -46,6 +46,13 @@ export default function OnboardingStartPage({ initialStep }: { initialStep: Step
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const stepIndex = STEPS.indexOf(step);
+  // How far the wizard has actually gotten — gates which step-indicator dots are clickable.
+  // Only "name" and "photo" are ever back-navigable: they're idempotent to revisit (a profile
+  // update, an optional photo), but the leading setup step ("password" or "company", whichever
+  // STEPS starts with) performs a one-time action — re-submitting "company" would create a
+  // second company — so it's intentionally forward-only and excluded from both the dots and any
+  // Back button.
+  const [maxStepIndex, setMaxStepIndex] = useState(stepIndex);
 
   // Invite links deliver Supabase tokens in the URL hash (implicit flow), which
   // never reaches getServerSideProps. Exchange them client-side before the
@@ -88,6 +95,7 @@ export default function OnboardingStartPage({ initialStep }: { initialStep: Step
   const goTo = (s: Step) => {
     setError("");
     setStep(s);
+    setMaxStepIndex((prev) => Math.max(prev, STEPS.indexOf(s)));
   };
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -239,16 +247,27 @@ export default function OnboardingStartPage({ initialStep }: { initialStep: Step
         <div className="w-full max-w-md">
           {/* Step indicator */}
           <div className="flex items-center justify-center gap-2 mb-6">
-            {STEPS.map((s, i) => (
-              <div
-                key={s}
-                className="h-1.5 rounded-full transition-all duration-500"
-                style={{
-                  width: i === stepIndex ? "2rem" : "0.5rem",
-                  background: i <= stepIndex ? "#8f42ff" : "rgba(255,255,255,0.15)",
-                }}
-              />
-            ))}
+            {STEPS.map((s, i) => {
+              // Index 0 (the leading "password"/"company" setup step) is never back-navigable —
+              // see the maxStepIndex comment above.
+              const clickable = i > 0 && i <= maxStepIndex && i !== stepIndex;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  disabled={!clickable}
+                  onClick={() => goTo(s)}
+                  aria-label={clickable ? `Go back to ${s} step` : undefined}
+                  aria-current={i === stepIndex ? "step" : undefined}
+                  className="h-1.5 rounded-full transition-all duration-500 disabled:cursor-default"
+                  style={{
+                    width: i === stepIndex ? "2rem" : "0.5rem",
+                    background: i <= stepIndex ? "#8f42ff" : "rgba(255,255,255,0.15)",
+                    cursor: clickable ? "pointer" : "default",
+                  }}
+                />
+              );
+            })}
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/5 p-9 backdrop-blur-2xl">
@@ -458,14 +477,24 @@ export default function OnboardingStartPage({ initialStep }: { initialStep: Step
                     >
                       {isSubmitting ? <><Loader2 size={18} className="animate-spin" /> Uploading…</> : "Save & go to panel"}
                     </button>
-                    <button
-                      type="button"
-                      disabled={isSubmitting}
-                      onClick={() => handlePhotoFinish(true)}
-                      className="w-full py-2 text-center text-sm text-white/40 hover:text-white/70 transition-colors disabled:pointer-events-none"
-                    >
-                      Skip for now
-                    </button>
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={() => goTo("name")}
+                        className="py-2 text-sm text-white/40 hover:text-white/70 transition-colors disabled:pointer-events-none"
+                      >
+                        ← Back
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={() => handlePhotoFinish(true)}
+                        className="py-2 text-sm text-white/40 hover:text-white/70 transition-colors disabled:pointer-events-none"
+                      >
+                        Skip for now
+                      </button>
+                    </div>
                   </div>
                 </div>
               </>
