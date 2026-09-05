@@ -7,10 +7,13 @@
 //   lead_form_open   — the lead modal opened
 //   lead_form_step   — advanced to a step (params: step)
 //   generate_lead    — the lead form was submitted  ← mark as a GA4 Key Event
+//   audit_booking_shown     — the audit-call modal reached its (required) booking step
+//   audit_booking_confirmed — a time was booked in the audit-call modal  ← mark as a GA4 Key Event
+//   audit_availability_note_sent — no open slots; lead left a note instead (AuditBookingStep)
 //   outbound_click   — an external link was clicked (params: url, label)
 //
-// After deploy: in GA4 → Admin → Events, toggle `generate_lead` as a Key Event
-// so it counts as a conversion. (Dashboard step; cannot be done in code.)
+// After deploy: in GA4 → Admin → Events, toggle `generate_lead` and `audit_booking_confirmed`
+// as Key Events so they count as conversions. (Dashboard step; cannot be done in code.)
 
 type TrackParams = Record<string, string | number | boolean | undefined>;
 
