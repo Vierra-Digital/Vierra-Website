@@ -501,7 +501,7 @@ const DashboardSection = () => {
                     
                     {/* Chart and Recent Posts share a row: the chart alone left its right side empty
                         on wide screens. */}
-                    <div className="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                    <div className="mb-4 grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                     <div className="bg-[#F1EFF6] rounded-xl p-4">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Website Visits</h3>
@@ -613,7 +613,10 @@ const DashboardSection = () => {
         <div className="bg-[#F1EFF6] rounded-xl p-4">
                                     <h3 className="text-lg font-semibold text-[#111827] mb-3">Staff Activity</h3>
                                     {/* Sits under Recent Blog Posts and inherits its 320px track, so
-                                        no width of its own. Height follows the list. */}
+                                        no width of its own. Height is reserved for five rows — the
+                                        number the endpoint serves — so the card does not resize as
+                                        people come and go. The chart beside it is items-start and
+                                        keeps its own height regardless. */}
                                     {staffLoading ? (
                                         <div className="space-y-2">
                                             {[...Array(3)].map((_, i) => (
@@ -623,7 +626,7 @@ const DashboardSection = () => {
                                     ) : staffActivity.length === 0 ? (
                                         <p className="text-xs text-[#6B7280]">No teammates yet.</p>
                                     ) : (
-                                        <ul className="divide-y divide-[#F1EFF5]">
+                                        <ul className="min-h-[190px] divide-y divide-[#F1EFF5]">
                                             {staffActivity.map((row) => (
                                                 <li key={row.userId} className="flex items-center gap-2.5 py-2">
                                                     <span
