@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { inter } from "@/lib/fonts";
+import { panelFetch } from "@/lib/panelFetch";
 
 const PLATFORMS = [
   { value: "linkedin", label: "LinkedIn" },
@@ -44,7 +45,7 @@ export default function ArtemisGenerateWidget({ onGenerated, defaultPlatform, sa
     setDrafts(null);
     setCopied(false);
     try {
-      const res = await fetch("/api/ai/generate", {
+      const res = await panelFetch("/api/ai/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ topic, platform, brain, saveToReview }),

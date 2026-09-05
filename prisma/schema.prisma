@@ -766,6 +766,7 @@ model Company {
   signed_documents        SignedDocument[]
   stored_files            StoredFile[]
   campaigns Campaign[]
+  contacts                Contact[]
 
   @@map("companies")
   @@schema("public")
@@ -852,7 +853,13 @@ model ContactTag {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model Contact {
   id                      String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id                 String                    @db.Uuid
+  // Visibility/ownership boundary (see docs/ROLE_MODEL_REDESIGN.md's "v2" section) — every
+  // representative and every Vierra staff member working that client sees the same contacts.
+  company_id              String                    @db.Uuid
+  // Attribution only ("who originally added this") — not the access boundary, and nullable so a
+  // departing staff member's account can be deleted without losing a client's contact list
+  // (onDelete: SetNull, not Cascade).
+  user_id                 String?                   @db.Uuid
   account_id              String?                   @db.Uuid
   source                  String                    @default("manual")
   first_name              String?
@@ -868,12 +875,14 @@ model Contact {
   updated_at              DateTime                  @default(now()) @db.Timestamptz(6)
   contact_tag_assignments ContactTagAssignment[]
   email_provider_accounts EmailProviderAccount?  @relation(fields: [account_id], references: [id], onUpdate: NoAction)
-  users                   User              @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  companies               Company           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                   User?             @relation(fields: [user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
   campaign_contacts CampaignContact[]
 
   @@map("contacts")
   @@index([user_id], map: "idx_contacts_user_id")
-  @@unique([user_id, account_id, email], map: "uq_contacts_user_account_email")
+  @@index([company_id], map: "idx_contacts_company_id")
+  @@unique([company_id, account_id, email], map: "uq_contacts_company_account_email")
   @@schema("public")
 }
 
@@ -2093,9 +2102,10 @@ model User {
   id                                                            String                              @id @db.Uuid
   email                                                         String                              @unique
   name                                                          String?
-  // Grants cross-company visibility in admin/users GET (see pages/api/admin/users.ts) — set
-  // directly via SQL for Vierra's own internal accounts, never exposed in any self-service UI, so
-  // a company's own admin can't escalate into other companies' data.
+  // Discontinued (role model v2, docs/ROLE_MODEL_REDESIGN.md, 2026-09-06) — no longer read or
+  // written anywhere in the app. "admin" vs. "staff" is company_memberships.role directly now,
+  // set only via direct database access. Column kept (not dropped) since this is a data
+  // migration, not a schema change — see prisma/manual/20260906_role_model_v2_vierra_staff.sql.
   is_platform_admin                                             Boolean                             @default(false)
   created_at                                                    DateTime                            @default(now()) @db.Timestamptz(6)
   updated_at                                                    DateTime                            @default(now()) @db.Timestamptz(6)

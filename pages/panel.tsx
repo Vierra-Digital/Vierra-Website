@@ -26,6 +26,8 @@ import {
 } from "react-icons/fi"
 import { RiArrowDropDownLine } from "react-icons/ri";
 import { useSession } from "@/lib/session-client"
+import { useActiveClient } from "@/lib/activeClient"
+import { panelFetch } from "@/lib/panelFetch"
 import { useActivityHeartbeat } from "@/hooks/useActivityHeartbeat"
 const SignPdfSection = dynamic(
   () => import("@/components/PanelPages/SignPdfSection"),
@@ -135,6 +137,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   const isAdmin = resolvedUserRole === "admin"
   const isStaff = resolvedUserRole === "staff"
   const canAccessEmailPanel = isAdmin || isStaff
+  const { setActiveClient } = useActiveClient()
 
   // Moved above the effect that calls it. As a hoisted function declaration its position never
   // affected behaviour, but referencing it from further up the file read as a use-before-
@@ -188,7 +191,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
 
   const checkSectionVersions = useCallback(async () => {
     try {
-      const res = await fetch("/api/panel/section-versions", { cache: "no-store" })
+      const res = await panelFetch("/api/panel/section-versions", { cache: "no-store" })
       if (!res.ok) return
       const data: Record<string, string> = await res.json()
       const changedDomains = new Set<string>()
@@ -324,14 +327,12 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                     Dashboard
                   </span>
                 </div>
-                {!isStaff && (
-                  <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 1 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
-                    <FiUsers className="w-4 h-4 shrink-0" />
-                    <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
-                      Clients
-                    </span>
-                  </div>
-                )}
+                <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 1 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                  <FiUsers className="w-4 h-4 shrink-0" />
+                  <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
+                    Clients
+                  </span>
+                </div>
                 <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 2 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiUserCheck className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
@@ -531,12 +532,14 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                           <DashboardSection />
                         </div>
                       )}
-                      {visitedSections.has(1) && !isStaff && (
+                      {visitedSections.has(1) && (
                         <div style={{ display: currentSection === 1 ? undefined : "none" }}>
                           <ClientsSection
+                            isAdmin={isAdmin}
                             onAddClient={() => setIsAddClientOpen(true)}
                             refreshTrigger={clientRefreshTrigger}
                             onViewClient={enterClientViewMode}
+                            onSetActiveClient={(client) => setActiveClient({ id: client.companyId, name: client.businessName })}
                           />
                         </div>
                       )}

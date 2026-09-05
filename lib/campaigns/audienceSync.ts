@@ -78,11 +78,13 @@ async function pushPendingLeadsToSmartlead(campaignId: string): Promise<void> {
 }
 
 /**
- * Enrolls newly-matching contacts into a campaign. Campaigns are company-shared but
- * `contacts` is owned per-user, so this walks company_memberships to find every
- * teammate's contacts rather than just the caller's own — this is the one place
- * campaigns read across reps. Never removes a previously-enrolled row; re-running
- * only adds new matches (idempotent via the campaign_id/contact_id unique constraint).
+ * Enrolls newly-matching contacts into a campaign. Contacts are client-scoped (see
+ * docs/ROLE_MODEL_REDESIGN.md's "v2" section) — matched directly by the campaign's own
+ * company_id now, not by walking company_memberships to find "every teammate's contacts" (that
+ * indirection is gone under v2: a client company has no company_memberships rows at all anymore,
+ * only representatives, which would have silently zeroed this out). Never removes a
+ * previously-enrolled row; re-running only adds new matches (idempotent via the
+ * campaign_id/contact_id unique constraint).
  */
 export async function syncCampaignAudience(campaignId: string): Promise<{ enrolledCount: number }> {
   const campaign = await prisma.campaign.findUnique({
@@ -97,17 +99,10 @@ export async function syncCampaignAudience(campaignId: string): Promise<{ enroll
     select: { delay_days: true },
   });
 
-  const members = await prisma.companyMembership.findMany({
-    where: { company_id: campaign.company_id },
-    select: { user_id: true },
-  });
-  const memberUserIds = members.map((m) => m.user_id);
-  if (memberUserIds.length === 0) return { enrolledCount: 0 };
-
   const filter = (campaign.audience_filter as AudienceFilter | null) ?? {};
   const tagIds = Array.isArray(filter.tagIds) ? filter.tagIds.filter((v): v is string => typeof v === "string") : [];
 
-  const where: any = { user_id: { in: memberUserIds } };
+  const where: any = { company_id: campaign.company_id };
   if (tagIds.length > 0) {
     where.contact_tag_assignments = { some: { tag_id: { in: tagIds } } };
   }

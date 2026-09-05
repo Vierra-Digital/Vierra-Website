@@ -28,7 +28,7 @@ export default withAuth(async (req, res, session) => {
   }
 
   const campaign = await prisma.campaign.findFirst({
-    where: { id: campaignId, company_id: session.companyId },
+    where: { id: campaignId },
     select: { id: true },
   });
   if (!campaign) {
@@ -87,8 +87,10 @@ export default withAuth(async (req, res, session) => {
 
     if (req.body?.assignedTo !== undefined) {
       const nextAssignee = asStr(req.body.assignedTo) || null;
-      // Only allow assigning to a member of this company (null unassigns) — otherwise a lead
-      // could be assigned to an arbitrary/outside user id.
+      // Only allow assigning to a real Vierra staff member (null unassigns) — otherwise a lead
+      // could be assigned to an arbitrary/outside user id. session.companyId is Vierra's own
+      // fixed company for every staff session (see docs/ROLE_MODEL_REDESIGN.md's "v2" section),
+      // so this check is unrelated to which client this campaign belongs to.
       if (nextAssignee) {
         const member = await prisma.companyMembership.findFirst({
           where: { company_id: session.companyId, user_id: nextAssignee },

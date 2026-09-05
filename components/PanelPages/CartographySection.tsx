@@ -5,6 +5,7 @@ import type { CartographySearchResult } from "@/pages/api/cartography/search";
 import type { CartographyLocation } from "@/pages/api/cartography/locations";
 import ReviewQueue from "@/components/PanelPages/CartographySection/ReviewQueue";
 import { companyUrl } from "@/lib/cartography/companyUrl";
+import { panelFetch } from "@/lib/panelFetch";
 
 type CartographyScreen = "discover" | "review";
 type CartographyMode = "search" | "agentic";
@@ -113,7 +114,7 @@ const CartographySection: React.FC = () => {
     setAgentCandidates(null);
     setAgentTasks([]);
     try {
-      const res = await fetch("/api/cartography/agent", {
+      const res = await panelFetch("/api/cartography/agent", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ description }),

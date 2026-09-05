@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr } from "@/lib/api/parsing";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 /**
  * Unified activity timeline for a contact (by email): outbound emails (+ opens/clicks),
@@ -17,7 +18,11 @@ export default withAuth(
       return;
     }
     const userId = session.user.id;
-    const companyId = session.companyId;
+    const companyId = resolveTargetCompanyId(session, req);
+    if (!companyId) {
+      res.status(400).json({ message: "companyId is required" });
+      return;
+    }
 
     // Each source is independent and self-degrades to [] on error (e.g. a missing table),
     // so they run concurrently — request latency is the slowest source, not the sum of all three.

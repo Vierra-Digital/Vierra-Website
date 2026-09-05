@@ -55,8 +55,6 @@ type ListedUser = {
     image: boolean
     role: string
     clientName: string | null
-    companyName: string | null
-    isPlatformAdmin?: boolean
     isSelf?: boolean
 }
 
@@ -71,7 +69,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     const [userToDelete, setUserToDelete] = useState<{ id: string; name: string | null; email: string | null } | null>(null)
     const [searchQuery, setSearchQuery] = useState<string>("")
     const [currentPage, setCurrentPage] = useState<number>(0)
-    const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'staff' | 'user'>('all')
+    const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'staff'>('all')
     const [sortBy, setSortBy] = useState<'id' | 'name' | 'email' | 'role'>('role')
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
     const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
@@ -121,27 +119,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
         }
     }
 
-    const updateRole = async (userId: string, role: string) => {
-        setError("")
-        try {
-            const r = await fetch("/api/admin/users", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id: userId, role }),
-            })
-            // The response was previously never checked, so the row was rewritten locally even when
-            // the server refused the change — the table then showed a role the database did not
-            // have, and it survived until the next reload.
-            if (!r.ok) {
-                const body = await r.json().catch(() => ({}))
-                setError(body?.message || `Could not change the role (HTTP ${r.status}).`)
-                return
-            }
-            setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)))
-        } catch {
-            setError("Could not change the role — the request failed.")
-        }
-    }
 
 
 
@@ -171,7 +148,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     const filteredUsers = useMemo(() => {
         let filtered = users
         if (roleFilter !== 'all') {
-            filtered = filtered.filter(u => u.role === roleFilter || (roleFilter === 'user' && u.role === 'client'))
+            filtered = filtered.filter(u => u.role === roleFilter)
         }
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase()
@@ -179,7 +156,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                 (u.name?.toLowerCase().includes(q)) ||
                 (u.email?.toLowerCase().includes(q)) ||
                 (u.clientName?.toLowerCase().includes(q)) ||
-                (u.companyName?.toLowerCase().includes(q)) ||
                 (u.role?.toLowerCase().includes(q))
             )
         }
@@ -202,9 +178,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
 
     const paginatedUsers = filteredUsers.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
     const totalPages = Math.ceil(filteredUsers.length / pageSize)
-    // Only platform admins get companyName back from the API — show the column just for them,
-    // so everyone else's table (scoped to their own company) looks the same as before.
-    const showCompanyColumn = users.some((u) => u.companyName)
 
                             return (
         <>
@@ -281,7 +254,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                             <select
                                                 value={roleFilter}
                                                 onChange={(e) => {
-                                                    setRoleFilter(e.target.value as 'all' | 'admin' | 'staff' | 'user')
+                                                    setRoleFilter(e.target.value as 'all' | 'admin' | 'staff')
                                                     setCurrentPage(0)
                                                 }}
                                                 className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
@@ -289,7 +262,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                                 <option value="all">All Roles</option>
                                                 <option value="admin">Admin</option>
                                                 <option value="staff">Staff</option>
-                                                <option value="user">Client</option>
                                             </select>
                                             <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                                                 <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -413,9 +385,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                         <tr>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Name</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Email</th>
-                                            {showCompanyColumn && (
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Company</th>
-                                            )}
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Password Reset</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Role</th>
                                             <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Manage</th>
@@ -427,9 +396,6 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                                 <tr key={u.id} className="hover:bg-purple-50">
                                                     <td className="px-4 py-4 text-sm font-medium text-[#111827]">{u.name ?? "-"}</td>
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{u.email ?? "-"}</td>
-                                                    {showCompanyColumn && (
-                                                        <td className="px-4 py-4 text-sm text-[#111827]">{u.companyName ?? "-"}</td>
-                                                    )}
                                                     <td className="px-4 py-4">
                                         <div className="flex items-center gap-3">
                                             <button
@@ -443,21 +409,20 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                         </div>
                                     </td>
                                                     <td className="px-4 py-4">
-                                                        <select
-                                                            value={u.role === "user" || u.role === "client" ? "user" : (u.role || "admin")}
-                                                            onChange={(e) => updateRole(u.id, e.target.value)}
-                                                            disabled={u.isPlatformAdmin}
-                                                            title={u.isPlatformAdmin ? "Superadmin role can't be changed here" : undefined}
-                                                            className="text-sm border border-[#E5E7EB] rounded-md pl-2 pr-[5px] mr-10 py-0.5 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        {/* role is not editable here — "admin" is set only via direct database
+                                                            access (see docs/ROLE_MODEL_REDESIGN.md), and every other Vierra
+                                                            teammate is always "staff". */}
+                                                        <span
+                                                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                                                u.role === "admin" ? "bg-purple-100 text-purple-700" : "bg-gray-100 text-gray-700"
+                                                            }`}
                                                         >
-                                                            <option value="admin">Admin</option>
-                                                            <option value="staff">Staff</option>
-                                                            <option value="user">Client</option>
-                                        </select>
+                                                            {u.role === "admin" ? "Admin" : "Staff"}
+                                                        </span>
                                     </td>
                                                     <td className="px-4 py-4">
                                         <div className="flex items-center gap-2">
-                                                            {!u.isSelf && !u.isPlatformAdmin && (
+                                                            {!u.isSelf && u.role !== "admin" && (
                                                                 <button
                                                                     onClick={() => deleteUser(u.id)}
                                                                     disabled={u.email?.toLowerCase() === "business@alexshick.com"}
@@ -534,7 +499,6 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
     const [name, setName] = useState<string>("")
     const [email, setEmail] = useState<string>("")
     const [password, setPassword] = useState<string>("")
-    const [role, setRole] = useState<string>("staff")
     const [submitting, setSubmitting] = useState<boolean>(false)
     const [error, setError] = useState<string>("")
     const [showSuccess, setShowSuccess] = useState<boolean>(false)
@@ -577,7 +541,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
             const r = await fetch("/api/admin/users", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, email, password, role }),
+                body: JSON.stringify({ name, email, password }),
             })
             if (!r.ok) throw new Error((await r.json())?.message || "Failed to create user")
             setShowSuccess(true)
@@ -594,7 +558,6 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
         if (field === "name") setName(value)
         else if (field === "email") setEmail(value)
         else if (field === "password") setPassword(value)
-        else if (field === "role") setRole(value)
     }
 
     if (showSuccess) {
@@ -684,23 +647,8 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                     </div>
 
                     <div>
-                        <label htmlFor="create-user-role" className="block text-sm font-medium text-[#374151] mb-1">
-                            Role <span className="text-red-500">*</span>
-                        </label>
-                        <div className="relative">
-                            <select 
-                                id="create-user-role"
-                                value={role} 
-                                onChange={(e) => handleFieldChange("role", e.target.value)} 
-                                className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 pr-10 text-sm bg-white text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0] appearance-none"
-                            >
-                                <option value="admin">Admin</option>
-                                <option value="staff">Staff</option>
-                            </select>
-                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                <ChevronDown className="w-4 h-4 text-[#6B7280]" />
-                            </div>
-                        </div>
+                        {/* Every new user created here is staff — "admin" is set only via direct
+                            database access (see docs/ROLE_MODEL_REDESIGN.md), never through this form. */}
                         <p className="mt-1 text-xs text-[#6B7280]">
                             Need a client account? Use <span className="font-medium">Clients &rarr; Add Client</span> instead — clients set their own password via an onboarding link.
                         </p>

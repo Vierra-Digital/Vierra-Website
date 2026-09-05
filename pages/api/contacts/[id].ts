@@ -18,8 +18,10 @@ export default withAuth(async (req, res, session) => {
     return;
   }
 
+  // Contacts are client-scoped now (see docs/ROLE_MODEL_REDESIGN.md's "v2" section) — looked up
+  // by id alone, not user_id, since any Vierra staff member may act on any client's contact.
   const existing = await prisma.contact.findFirst({
-    where: { id, user_id: userId },
+    where: { id },
     include: {
       email_provider_accounts: { select: { account_email: true } },
       contact_tag_assignments: { include: { contact_tags: true } },
@@ -54,14 +56,14 @@ export default withAuth(async (req, res, session) => {
       },
       include: { email_provider_accounts: { select: { account_email: true } } },
     });
-    await syncContactsSpreadsheetForUser({ userId, companyId: session.companyId });
+    await syncContactsSpreadsheetForUser({ userId, companyId: existing.company_id });
     res.status(200).json({ contact: serializeContact(updated) });
     return;
   }
 
   if (req.method === "DELETE") {
     await prisma.contact.delete({ where: { id } });
-    await syncContactsSpreadsheetForUser({ userId, companyId: session.companyId });
+    await syncContactsSpreadsheetForUser({ userId, companyId: existing.company_id });
     res.status(200).json({ ok: true });
     return;
   }

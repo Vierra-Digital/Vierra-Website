@@ -13,13 +13,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     requireMethodOrRespond405(req, res, ["GET"]);
     const session = await requireSessionOrRespond401(req, res);
     const role = getSessionRole(session);
-    requireRolesOrRespond403(res, role, ["admin"]);
-    const companyId = (session as any).companyId as string;
+    requireRolesOrRespond403(res, role, ["admin", "staff"]);
 
+    // Every Vierra staff member browses every client here now (see
+    // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — this doubles as the client switcher's data
+    // source, not scoped to one company.
     const clients = await prisma.client.findMany({
-      where: { company_id: companyId },
       select: {
         id: true,
+        company_id: true,
         name: true,
         email: true,
         business_name: true,
@@ -61,6 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       return {
         id: c.id,
+        companyId: c.company_id,
         name: c.name,
         email: c.email,
         businessName: c.business_name,

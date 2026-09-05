@@ -8,8 +8,10 @@ export default withAuth(async (req, res, session) => {
   const id = req.query.id as string;
   if (!id) return res.status(400).json({ message: "Task id required" });
 
+  // Any Vierra staff member may act on any client's task (see
+  // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — looked up by id alone.
   const existing = await prisma.projectTask.findFirst({
-    where: { id, company_id: session.companyId },
+    where: { id },
     include: { task_assignments: { select: { user_id: true } } },
   });
   if (!existing) return res.status(404).json({ message: "Task not found" });

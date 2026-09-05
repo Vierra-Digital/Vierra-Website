@@ -43,11 +43,20 @@ export default withSession(async (req, res, session) => {
       return res.status(500).json({ message: "Failed to create company" });
     }
 
-    const { error: membershipError } = await admin
-      .from("company_memberships")
-      .insert({ company_id: company.id, user_id: session.user.id, role: "admin", status: "active" });
-    if (membershipError) {
-      return res.status(500).json({ message: "Failed to create membership" });
+    // Role model v2 (docs/ROLE_MODEL_REDESIGN.md): a self-onboarded business is a client, not a
+    // tenant with its own staff — the onboarding user becomes its first representative (a
+    // clients row), not a company_memberships row. `name` is a placeholder (the wizard's very
+    // next step, "name", overwrites it via POST /api/profile/update, which now updates the
+    // matching clients row for a kind: "client" session too).
+    const { error: clientError } = await admin.from("clients").insert({
+      company_id: company.id,
+      user_id: session.user.id,
+      name: session.user.email,
+      email: session.user.email,
+      business_name: companyName.trim(),
+    });
+    if (clientError) {
+      return res.status(500).json({ message: "Failed to create representative" });
     }
 
     return res.status(201).json({ companyId: company.id });

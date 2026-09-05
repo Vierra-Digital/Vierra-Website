@@ -180,10 +180,21 @@ export default function OnboardingStartPage({ initialStep }: { initialStep: Step
     reader.readAsDataURL(blob);
   };
 
+  // Role model v2: this wizard now finishes for two different destinations — Vierra staff land
+  // in /panel, a self-onboarded (or invited) client representative lands in /client. Which one
+  // depends on how resolveUser resolved the session (kind), not which step the wizard started
+  // from — an invite link starting at "password" can end up either kind, so this checks the
+  // actual current session rather than assuming.
+  const finishOnboarding = async () => {
+    const res = await fetch("/api/auth/me");
+    const data = await res.json().catch(() => ({}));
+    router.replace(data?.kind === "client" ? "/client" : "/panel");
+  };
+
   const handlePhotoFinish = async (skip = false) => {
     if (isSubmitting) return;
     if (skip || !imageData) {
-      router.replace("/panel");
+      await finishOnboarding();
       return;
     }
     setIsSubmitting(true);
@@ -196,7 +207,7 @@ export default function OnboardingStartPage({ initialStep }: { initialStep: Step
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Failed to upload photo.");
-      router.replace("/panel");
+      await finishOnboarding();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to upload photo.");
     } finally {
@@ -499,7 +510,14 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     return { props: { initialStep: "name" } };
   }
   if (session.kind === "client") {
-    return { redirect: { destination: "/client", permanent: false } };
+    // Role model v2: a brand-new self-onboarded (or invited) representative reaches this branch
+    // too now, not just legacy lead-portal clients — mirrors the "member" branch above so a
+    // mid-wizard reload resumes at "name"/"photo" instead of bouncing straight to /client before
+    // either is set.
+    if (session.user.name) {
+      return { redirect: { destination: "/client", permanent: false } };
+    }
+    return { props: { initialStep: "name" } };
   }
   return { props: { initialStep: "company" } };
 };

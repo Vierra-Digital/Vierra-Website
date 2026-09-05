@@ -2,6 +2,7 @@ import { withAuth } from "@/lib/api/withAuth";
 import { prisma } from "@/lib/prisma";
 import { asStr, asQueryStr } from "@/lib/api/parsing";
 import { EMAIL_REGEX } from "@/lib/utils";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 const EDITABLE_STATUSES = ["candidate", "reviewed", "rejected", "duplicate"];
 
@@ -14,8 +15,9 @@ const EDITABLE_STATUSES = ["candidate", "reviewed", "rejected", "duplicate"];
 export default withAuth(
   async (req, res, session) => {
     const id = asQueryStr(req.query.id);
+    const companyId = resolveTargetCompanyId(session, req);
     const existing = await prisma.cartographyContact.findUnique({ where: { id } });
-    if (!existing || existing.company_id !== session.companyId) {
+    if (!existing || !companyId || existing.company_id !== companyId) {
       res.status(404).json({ message: "Not found." });
       return;
     }

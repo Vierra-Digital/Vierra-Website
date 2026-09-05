@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import ProfileImage from "../ProfileImage"
-import { FiPlus, FiFilter, FiTrash2, FiCheckCircle, FiXCircle, FiEye } from 'react-icons/fi'
+import { FiPlus, FiFilter, FiTrash2, FiCheckCircle, FiXCircle, FiEye, FiBriefcase } from 'react-icons/fi'
 import PanelSearchInput from "@/components/ui/PanelSearchInput"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import PanelSectionHeader from "@/components/ui/PanelSectionHeader"
@@ -11,6 +11,7 @@ import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 
 type ClientRow = {
     id: string
+    companyId: string
     name: string
     email: string
     businessName: string
@@ -54,35 +55,46 @@ const ClientActionsMenu: React.FC<{
     clientName: string
     isActive: boolean
     hasImage: boolean
+    isAdmin: boolean
     onView: () => void
+    onSetActive: () => void
     onDelete: () => void
     onToggleStatus: (isActive: boolean) => void
-}> = ({ clientName, isActive, onView, onDelete, onToggleStatus }) => {
+}> = ({ clientName, isActive, isAdmin, onView, onSetActive, onDelete, onToggleStatus }) => {
     return (
         <RowActionMenu label={`Manage ${clientName}`}>
-          <RowActionMenuItem onClick={onView} icon={<FiEye className="w-4 h-4" />} tone="accent">
+          <RowActionMenuItem onClick={onSetActive} icon={<FiBriefcase className="w-4 h-4" />} tone="accent">
+            Work On This Client
+          </RowActionMenuItem>
+          <RowActionMenuItem onClick={onView} icon={<FiEye className="w-4 h-4" />}>
             View
           </RowActionMenuItem>
-          <RowActionMenuItem
-            onClick={() => onToggleStatus(!isActive)}
-            icon={isActive ? <FiXCircle className="w-4 h-4" /> : <FiCheckCircle className="w-4 h-4" />}
-          >
-            {isActive ? "Mark As Inactive" : "Mark As Active"}
-          </RowActionMenuItem>
-          <RowActionMenuItem onClick={onDelete} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
-            Remove Client
-          </RowActionMenuItem>
+          {isAdmin && (
+            <RowActionMenuItem
+                onClick={() => onToggleStatus(!isActive)}
+                icon={isActive ? <FiXCircle className="w-4 h-4" /> : <FiCheckCircle className="w-4 h-4" />}
+            >
+                {isActive ? "Mark As Inactive" : "Mark As Active"}
+            </RowActionMenuItem>
+          )}
+          {isAdmin && (
+            <RowActionMenuItem onClick={onDelete} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
+                Remove Client
+            </RowActionMenuItem>
+          )}
         </RowActionMenu>
     )
 }
 
-interface ClientsSectionProps { 
+interface ClientsSectionProps {
+    isAdmin?: boolean
     onAddClient?: () => void
     refreshTrigger?: number
     onViewClient?: (client: Pick<ClientRow, "id" | "name" | "email">) => void
+    onSetActiveClient?: (client: Pick<ClientRow, "companyId" | "businessName">) => void
 }
 
-const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTrigger, onViewClient }) => {
+const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddClient, refreshTrigger, onViewClient, onSetActiveClient }) => {
     const [rows, setRows] = useState<ClientRow[]>([])
     /**
      * Cache-buster for client avatars, stamped once per load of the list.
@@ -454,7 +466,9 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                                             clientName={r.name}
                                                             isActive={r.isActive}
                                                             hasImage={r.image}
+                                                            isAdmin={isAdmin}
                                                             onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
+                                                            onSetActive={() => onSetActiveClient?.({ companyId: r.companyId, businessName: r.businessName })}
                                                             onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
                                                             onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
                                                         />

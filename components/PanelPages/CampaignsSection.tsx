@@ -5,6 +5,7 @@ import Modal from "@/components/ui/Modal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import CampaignDetail from "./CampaignsSection/CampaignDetail";
+import { panelFetch } from "@/lib/panelFetch";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -124,7 +125,7 @@ const CampaignsSection: React.FC = () => {
     try {
       // no-store: this reloads right after create/delete/status-change writes, and the
       // server's Cache-Control on this endpoint would otherwise serve the pre-write list.
-      const res = await fetch("/api/campaigns", { cache: "no-store" });
+      const res = await panelFetch("/api/campaigns", { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to load campaigns");
       const data = await res.json();
       setCampaigns(data.campaigns || []);
@@ -458,7 +459,7 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
         if (useAccountId) body.accountId = useAccountId;
         else body.accountEmail = senderEmail.trim();
 
-        const res = await fetch("/api/campaigns", {
+        const res = await panelFetch("/api/campaigns", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),

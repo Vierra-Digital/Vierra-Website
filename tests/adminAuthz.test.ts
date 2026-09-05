@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Guards the cross-tenant IDOR class: admin endpoints must scope resource lookups to the caller's
-// own company. deleteClient is the representative case (findFirst scoped by company_id -> delete).
+// Role model v2 (docs/ROLE_MODEL_REDESIGN.md): every Vierra staff/admin member may act on any
+// client company's data — there's no more "caller's own company" to scope a lookup to (every
+// staff session's own companyId is Vierra's fixed row, not any client's). deleteClient is the
+// representative case: it looks up a client by id alone now, not company-scoped.
 const { clientFindFirst, clientDelete, requireRoleMock } = vi.hoisted(() => ({
   clientFindFirst: vi.fn(),
   clientDelete: vi.fn(),
@@ -40,21 +42,21 @@ beforeEach(() => {
   requireRoleMock.mockReset().mockResolvedValue(session);
 });
 
-describe("admin/deleteClient — cross-tenant authz", () => {
-  it("scopes the lookup to the caller's company and 404s another company's client without deleting", async () => {
-    clientFindFirst.mockResolvedValue(null); // a client id from company B doesn't match the scope
-    const req = { method: "DELETE", query: { clientId: "client-in-company-B" }, headers: {} } as never;
+describe("admin/deleteClient — cross-client authz (role model v2)", () => {
+  it("404s a nonexistent client id without deleting", async () => {
+    clientFindFirst.mockResolvedValue(null);
+    const req = { method: "DELETE", query: { clientId: "no-such-client" }, headers: {} } as never;
     const res = mockRes();
     await handler(req, res as never);
     expect(clientFindFirst).toHaveBeenCalledWith({
-      where: { id: "client-in-company-B", company_id: "companyA" },
+      where: { id: "no-such-client" },
     });
     expect(res.statusCode).toBe(404);
     expect(clientDelete).not.toHaveBeenCalled();
   });
 
-  it("deletes when the client belongs to the caller's company", async () => {
-    clientFindFirst.mockResolvedValue({ id: "client-A", company_id: "companyA" });
+  it("deletes a client belonging to a different company than the caller's own — any Vierra admin may act on any client", async () => {
+    clientFindFirst.mockResolvedValue({ id: "client-A", company_id: "some-other-client-company" });
     const req = { method: "DELETE", query: { clientId: "client-A" }, headers: {} } as never;
     const res = mockRes();
     await handler(req, res as never);

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 
 export default withAuth(
-  async (req, res, session) => {
+  async (req, res) => {
     const { token } = req.query;
 
     if (!token || typeof token !== "string") {
@@ -10,10 +10,10 @@ export default withAuth(
     }
 
     try {
-      // Scope to the admin's own company — a session id from another company must 404, not delete
-      // that company's session + client.
+      // Any Vierra admin may act on any client's onboarding session (see
+      // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — looked up by id alone.
       const onboardingSession = await prisma.onboardingSession.findFirst({
-        where: { id: token, company_id: session.companyId },
+        where: { id: token },
         select: { id: true, client_id: true }
       });
 

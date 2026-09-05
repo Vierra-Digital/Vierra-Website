@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 
 export default withAuth(
-  async (req, res, session) => {
+  async (req, res) => {
     const { clientId, isActive } = req.body;
 
     if (!clientId || typeof clientId !== "string") {
@@ -14,9 +14,10 @@ export default withAuth(
     }
 
     try {
-      // Scope to the admin's own company so another company's client can't be toggled.
+      // Any Vierra admin may act on any client's representative record (see
+      // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — looked up by id alone.
       const client = await prisma.client.findFirst({
-        where: { id: clientId, company_id: session.companyId }
+        where: { id: clientId }
       });
 
       if (!client) {

@@ -1,6 +1,7 @@
 import { withAuth } from "@/lib/api/withAuth";
 import { asQueryStr } from "@/lib/api/parsing";
 import { prisma } from "@/lib/prisma";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 const STATUSES = ["pending", "approved", "rejected", "edited"] as const;
 const PAGE_SIZE = 50;
@@ -8,12 +9,17 @@ const PAGE_SIZE = 50;
 /** The review queue: everything Artemis has drafted for this company, newest first. */
 export default withAuth(
   async (req, res, session) => {
+    const companyId = resolveTargetCompanyId(session, req);
+    if (!companyId) {
+      res.status(400).json({ message: "companyId is required" });
+      return;
+    }
     const status = asQueryStr(req.query.status).trim().toLowerCase();
     const kind = asQueryStr(req.query.kind).trim().toLowerCase();
 
     const items = await prisma.artemisReviewItem.findMany({
       where: {
-        company_id: session.companyId,
+        company_id: companyId,
         ...((STATUSES as readonly string[]).includes(status) ? { status } : {}),
         ...(kind ? { kind } : {}),
       },
@@ -36,7 +42,7 @@ export default withAuth(
 
     const counts = await prisma.artemisReviewItem.groupBy({
       by: ["status"],
-      where: { company_id: session.companyId },
+      where: { company_id: companyId },
       _count: { _all: true },
     });
 

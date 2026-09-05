@@ -62,6 +62,7 @@ import { scoreTrackerImage } from "@/lib/email/trackerDetection";
 import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
 import { printComposeContent } from "@/components/email/printCompose";
 import { getJson } from "@/lib/email/panelApi";
+import { panelFetch } from "@/lib/panelFetch";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
 import MoveToMenu from "@/components/email/MoveToMenu";
 import { buildReplyReferences } from "@/lib/email/threading";
@@ -1000,7 +1001,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       if (contactSourceFilter) query.set("source", contactSourceFilter);
       // no-store: this reloads right after create/edit/delete/tag writes, and the
       // server's Cache-Control on this endpoint would otherwise serve the pre-write list.
-      const response = await fetch(`/api/contacts?${query.toString()}`, { cache: "no-store" });
+      const response = await panelFetch(`/api/contacts?${query.toString()}`, { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload?.message || "Failed to load contacts.");
@@ -1056,7 +1057,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setAddContactError("");
     setContactsError("");
     try {
-      const response = await fetch("/api/contacts", {
+      const response = await panelFetch("/api/contacts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1215,7 +1216,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     if (contactSearch.trim()) query.set("search", contactSearch.trim());
     if (contactTagFilter) query.set("tagIds", contactTagFilter);
     if (contactSourceFilter) query.set("source", contactSourceFilter);
-    const response = await fetch(`/api/contacts/export?${query.toString()}`);
+    const response = await panelFetch(`/api/contacts/export?${query.toString()}`);
     if (!response.ok) {
       setContactsError("Failed to export contacts.");
       return;
@@ -1254,7 +1255,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setContactsError("");
     setContactsImportSuccessOpen(false);
     try {
-      const response = await fetch("/api/contacts/import", {
+      const response = await panelFetch("/api/contacts/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1334,7 +1335,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
           tags: target.tags,
         },
       ]);
-      const response = await fetch("/api/contacts/import", {
+      const response = await panelFetch("/api/contacts/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accountEmail: null, csvText }),

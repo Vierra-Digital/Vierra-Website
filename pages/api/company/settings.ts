@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr } from "@/lib/api/parsing";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 /**
  * Company-wide CAN-SPAM settings: a physical mailing address (required in every commercial
@@ -10,9 +11,15 @@ import { asStr } from "@/lib/api/parsing";
  * campaign. Company-wide (not per-user): every member of the company shares one address.
  */
 export default withAuth(async (req, res, session) => {
+  const companyId = resolveTargetCompanyId(session, req);
+  if (!companyId) {
+    res.status(400).json({ message: "companyId is required" });
+    return;
+  }
+
   if (req.method === "GET") {
     const company = await prisma.company.findUnique({
-      where: { id: session.companyId },
+      where: { id: companyId },
       select: { mailing_address: true, privacy_policy_url: true },
     });
     res.status(200).json({
@@ -26,7 +33,7 @@ export default withAuth(async (req, res, session) => {
     const mailingAddress = asStr(req.body?.mailingAddress).trim();
     const privacyPolicyUrl = asStr(req.body?.privacyPolicyUrl).trim();
     const updated = await prisma.company.update({
-      where: { id: session.companyId },
+      where: { id: companyId },
       data: {
         mailing_address: mailingAddress || null,
         privacy_policy_url: privacyPolicyUrl || null,

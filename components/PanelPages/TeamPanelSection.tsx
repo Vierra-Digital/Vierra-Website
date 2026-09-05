@@ -737,11 +737,12 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 }
 const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void }> = ({ onClose, onCreated }) => {
     const [email, setEmail] = useState("")
-    const [role, setRole] = useState<"admin" | "staff">("staff")
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState("")
     const [showSuccess, setShowSuccess] = useState(false)
 
+    // role model v2: every invite here is a Vierra staff hire — there is no admin-via-invite path
+    // ("admin" is set only via direct database access, see docs/ROLE_MODEL_REDESIGN.md).
     const submit = async () => {
         setSubmitting(true)
         setError("")
@@ -749,7 +750,7 @@ const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void
             const response = await fetch("/api/admin/invitations", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, role }),
+                body: JSON.stringify({ email }),
             })
             if (!response.ok) {
                 const errorData = await response.json()
@@ -835,17 +836,6 @@ const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void
                             placeholder="teammate@company.com"
                             required
                         />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-2">Role</label>
-                        <select
-                            value={role}
-                            onChange={(e) => setRole(e.target.value as "admin" | "staff")}
-                            className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent bg-white"
-                        >
-                            <option value="staff">Staff</option>
-                            <option value="admin">Admin</option>
-                        </select>
                     </div>
                 </div>
 

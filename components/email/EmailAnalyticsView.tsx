@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { FiClock, FiEye, FiMousePointer, FiSend, FiShield } from "react-icons/fi";
+import { panelFetch } from "@/lib/panelFetch";
 
 type StatMessage = {
   messageId: string | null;
@@ -221,7 +222,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
     // nullable, so filtering by it silently drops every message that isn't attributed to an
     // account row — which reads as "analytics is broken". Report on all of the user's sent mail.
     const qs = params.toString();
-    fetch(`/api/gmail/tracking/stats${qs ? `?${qs}` : ""}`, { cache: "no-store" })
+    panelFetch(`/api/gmail/tracking/stats${qs ? `?${qs}` : ""}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((payload) => {
         if (cancelled) return;
@@ -309,7 +310,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/reporting/summary", { cache: "no-store" })
+    panelFetch("/api/reporting/summary", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!cancelled && d) setReport(d);

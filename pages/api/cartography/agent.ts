@@ -3,6 +3,7 @@ import { asStr } from "@/lib/api/parsing";
 import { screenCartographyQuery } from "@/lib/cartography/screenQuery";
 import { runCartographyAgent } from "@/lib/cartography/agentOrchestrator";
 import { persistCartographyRun, persistScreeningRejection } from "@/lib/cartography/persistRun";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 export type { CartographyAgentCandidate, SubAgentTaskResult, DiscoveryMethod } from "@/lib/cartography/agentOrchestrator";
 
@@ -19,7 +20,11 @@ export type { CartographyAgentCandidate, SubAgentTaskResult, DiscoveryMethod } f
 export default withAuth(
   async (req, res, session) => {
     const description = asStr(req.body?.description);
-    const companyId = session.companyId;
+    const companyId = resolveTargetCompanyId(session, req);
+    if (!companyId) {
+      res.status(400).json({ message: "companyId is required" });
+      return;
+    }
     const createdBy = session.user.id;
 
     const screening = screenCartographyQuery(description);
