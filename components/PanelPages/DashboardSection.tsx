@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react"
+import Link from "next/link"
 import { RiArrowDropDownLine } from "react-icons/ri"
 import { FiArrowRight } from "react-icons/fi"
 import LTVCalculatorModal from "@/components/panel/LTVCalculatorModal"
@@ -618,7 +619,16 @@ const DashboardSection = () => {
                             ) : (
                                 <ul className="flex-1 divide-y divide-[#F1EFF5] flex flex-col justify-between">
                                     {recentPosts.map((post) => (
-                                        <li key={post.id} className="flex items-start gap-2.5 py-2">
+                                        <li key={post.id}>
+                                            {/* New tab, not this one: the panel would otherwise
+                                                unmount and every dashboard fetch would re-run on
+                                                the way back. */}
+                                            <Link
+                                                href={`/blog/${post.slug}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-start gap-2.5 py-2"
+                                            >
                                             <div className="min-w-0 flex-1">
                                                 <p className="truncate text-[13px] font-medium text-[#111827]">{post.title}</p>
                                                 <p className="text-[11px] text-[#9CA3AF]">
@@ -632,6 +642,7 @@ const DashboardSection = () => {
                                             <span className="shrink-0 rounded-full bg-[#F3EDFB] px-2 py-0.5 text-[11px] font-medium text-[#701CC0]">
                                                 {post.views.toLocaleString()} {post.views === 1 ? "View" : "Views"}
                                             </span>
+                                            </Link>
                                         </li>
                                     ))}
                                 </ul>
