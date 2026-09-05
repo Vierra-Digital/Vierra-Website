@@ -639,6 +639,20 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 const FIELD =
     "h-9 w-full rounded-[10px] bg-[#F4F2F8] px-3 text-[13px] text-[#111827] ring-1 ring-inset ring-transparent transition-shadow focus:bg-white focus:outline-none focus:ring-[#701CC0]/35"
 
+/** Select in the panel's field styling, with our chevron rather than the platform's. */
+const FieldSelect: React.FC<{
+    value: string
+    onChange: (value: string) => void
+    children: React.ReactNode
+}> = ({ value, onChange, children }) => (
+    <span className="relative block">
+        <select value={value} onChange={(e) => onChange(e.target.value)} className={`${FIELD} appearance-none pr-9`}>
+            {children}
+        </select>
+        <FiChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" aria-hidden />
+    </span>
+)
+
 const POSITION_OPTIONS = ["Founder", "Leadership", "Business Advisor", "Developer", "Designer", "Outreach"]
 
 /**
@@ -758,42 +772,38 @@ const InviteTeammateModal: React.FC<{
                     </div>
                     <div>
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Role</label>
-                        <select
-                            value={role}
-                            onChange={(e) => setRole(e.target.value as "admin" | "staff")}
-                            className={FIELD}
-                        >
+                        <FieldSelect value={role} onChange={(value) => setRole(value as "admin" | "staff")}>
                             <option value="staff">Staff</option>
                             <option value="admin">Admin</option>
-                        </select>
+                        </FieldSelect>
                     </div>
                     <div>
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Position</label>
-                        <select value={position} onChange={(e) => setPosition(e.target.value)} className={FIELD}>
+                        <FieldSelect value={position} onChange={setPosition}>
                             <option value="">Not set</option>
                             {POSITION_OPTIONS.map((option) => (
                                 <option key={option} value={option}>{option}</option>
                             ))}
-                        </select>
+                        </FieldSelect>
                     </div>
                     <div>
                         {/* A picker, not the free-text box the edit dialog still uses: the column is a
                             uuid foreign key to a user, so a typed name could never have been stored. */}
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Mentor</label>
-                        <select value={mentorId} onChange={(e) => setMentorId(e.target.value)} className={FIELD}>
+                        <FieldSelect value={mentorId} onChange={setMentorId}>
                             <option value="">None</option>
                             {mentorOptions.map((option) => (
                                 <option key={option.id} value={option.id}>{option.name || option.email}</option>
                             ))}
-                        </select>
+                        </FieldSelect>
                     </div>
                     <div>
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Strikes</label>
-                        <select value={String(strikes)} onChange={(e) => setStrikes(Number(e.target.value))} className={FIELD}>
+                        <FieldSelect value={String(strikes)} onChange={(value) => setStrikes(Number(value))}>
                             {[0, 1, 2, 3].map((n) => (
                                 <option key={n} value={n}>{n}/3</option>
                             ))}
-                        </select>
+                        </FieldSelect>
                     </div>
                     <div className="sm:col-span-2">
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Time Zone</label>

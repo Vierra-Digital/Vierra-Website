@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { ChevronLeft, ChevronRight, Search } from "lucide-react"
+import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react"
 
 /**
  * The shared furniture for a panel list page — page header, toolbar controls, table card,
@@ -34,7 +34,7 @@ export const PanelPage: React.FC<{ children: React.ReactNode }> = ({ children })
  * with nothing to align to.
  */
 export const PanelHeader: React.FC<{ title: string; children?: React.ReactNode }> = ({ title, children }) => (
-  <div className="mt-8 mb-5 flex flex-wrap items-center justify-between gap-3">
+  <div className="mt-8 mb-7 flex flex-wrap items-center justify-between gap-3">
     <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em] text-[#111827]">{title}</h1>
     {children ? <div className="flex flex-wrap items-center gap-2">{children}</div> : null}
   </div>
@@ -115,6 +115,17 @@ export const PanelPopover: React.FC<{ children: React.ReactNode; className?: str
   </div>
 )
 
+/** Field styling shared by the panel's selects and text inputs, so they line up as a set. */
+export const PANEL_FIELD =
+  "h-9 w-full rounded-[10px] bg-[#F4F2F8] px-3 text-[13px] text-[#111827] ring-1 ring-inset ring-transparent transition-shadow focus:bg-white focus:outline-none focus:ring-[#701CC0]/35"
+
+/**
+ * A select with our own chevron.
+ *
+ * Left native, each select drew the platform's arrow at whatever inset the platform chose, so a
+ * stack of them had arrows at different distances from the edge. `appearance-none` plus one
+ * absolutely positioned icon puts every arrow in the same place.
+ */
 export const PanelSelect: React.FC<{
   label: string
   value: string
@@ -123,17 +134,23 @@ export const PanelSelect: React.FC<{
 }> = ({ label, value, onChange, options }) => (
   <label className="mb-4 block last:mb-0">
     <span className="mb-1.5 block text-[11px] font-medium text-[#6B7280]">{label}</span>
-    <select
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      className="h-9 w-full rounded-[10px] bg-[#F4F2F8] px-3 text-[13px] text-[#111827] ring-1 ring-inset ring-transparent transition-shadow focus:bg-white focus:outline-none focus:ring-[#701CC0]/35"
-    >
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+    <span className="relative block">
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={`${PANEL_FIELD} appearance-none pr-9`}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]"
+        aria-hidden
+      />
+    </span>
   </label>
 )
 
@@ -364,9 +381,7 @@ export function PanelDataTable<T>({
           ))}
         </PanelTbody>
       </PanelTable>
-      {rows.length > pageSize && (
-        <PanelPagination page={safePage} pageSize={pageSize} total={rows.length} onPageChange={onPageChange} />
-      )}
+      <PanelPagination page={safePage} pageSize={pageSize} total={rows.length} onPageChange={onPageChange} />
     </PanelCard>
   )
 }

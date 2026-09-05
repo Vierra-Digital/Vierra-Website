@@ -3,7 +3,7 @@ import { signOut } from "@/lib/session-client";
 import ProfileImage from "./ProfileImage";
 import ImageCropModal from "./ImageCropModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
-import { FiLogOut, FiEdit3, FiUpload, FiRotateCcw, FiLock, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2, FiCalendar } from "react-icons/fi";
+import { FiChevronDown, FiLogOut, FiEdit3, FiUpload, FiRotateCcw, FiLock, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2, FiCalendar } from "react-icons/fi";
 import { FaFacebookF, FaLinkedinIn, FaGoogle } from "react-icons/fa";
 import { X } from "lucide-react";
 
@@ -865,8 +865,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
           <div className="space-y-4">
             <div>
               <label className={`mb-1.5 block text-[11px] font-medium ${textSecondary}`}>Theme</label>
-              <select
-                className={`h-9 w-full appearance-none rounded-[10px] border px-3 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 ${inputBg} ${textPrimary}`}
+              <span className="relative block"><select
+                className={`h-9 w-full appearance-none rounded-[10px] border px-3 pr-9 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 ${inputBg} ${textPrimary}`}
                 value={settings.theme}
                 onChange={(e) => handleSettingsUpdate({ theme: e.target.value })}
                 disabled={isUpdating || isLoadingSettings}
@@ -874,12 +874,13 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 <option value="light">Light</option>
                 <option value="dark">Dark</option>
                 <option value="auto">System</option>
-              </select>
+              </select><FiChevronDown className={`pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 ${textSecondary}`} aria-hidden />
+            </span>
             </div>
             <div>
               <label className={`mb-1.5 block text-[11px] font-medium ${textSecondary}`}>Language</label>
-              <select
-                className={`h-9 w-full appearance-none rounded-[10px] border px-3 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 ${inputBg} ${textPrimary}`}
+              <span className="relative block"><select
+                className={`h-9 w-full appearance-none rounded-[10px] border px-3 pr-9 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 ${inputBg} ${textPrimary}`}
                 value={settings.language}
                 onChange={(e) => handleSettingsUpdate({ language: e.target.value })}
                 disabled={isUpdating || isLoadingSettings}
@@ -894,7 +895,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 <option value="zh">Chinese</option>
                 <option value="ja">Japanese</option>
                 <option value="ko">Korean</option>
-              </select>
+              </select><FiChevronDown className={`pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 ${textSecondary}`} aria-hidden />
+            </span>
             </div>
           </div>
         </div>
