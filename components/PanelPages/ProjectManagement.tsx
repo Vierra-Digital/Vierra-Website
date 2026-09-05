@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { inter } from "@/lib/fonts";
+import { PanelCard, PanelHeader, PanelPage } from "@/components/panel/PanelTable";
 import { useSession } from "@/lib/session-client";
 import {
   FiPlus,
@@ -417,9 +418,11 @@ export default function ProjectManagement() {
 
   if (boards.length === 0) {
     return (
-      <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
-        <div className="flex-1 flex justify-center items-center px-6">
-          <div className="text-center max-w-md">
+      <div className={inter.className}>
+        <PanelPage>
+          <PanelHeader title="Project Tasks" />
+          <PanelCard>
+          <div className="mx-auto max-w-md px-6 py-14 text-center">
             <div className="w-16 h-16 rounded-2xl bg-[#F8F0FF] flex items-center justify-center mx-auto mb-4">
               <FiLayers className="w-8 h-8 text-[#701CC0]" />
             </div>
@@ -450,28 +453,25 @@ export default function ProjectManagement() {
               </p>
             )}
           </div>
-        </div>
+          </PanelCard>
+        </PanelPage>
       </div>
     );
   }
 
   return (
-    <div className={`w-full h-full bg-[#FAFAFA] text-[#111014] flex flex-col ${inter.className}`}>
-      <div className="flex-1 flex justify-center px-6 pt-2">
-        <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
-          <div className="w-full flex justify-between items-center mb-2">
-            <div>
-              <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Project Tasks</h1>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+    <div className={inter.className}>
+      <PanelPage>
+          <PanelHeader title="Project Tasks">
+            <>
               {boards.map((board) => (
                 <button
                   key={board.id}
                   onClick={() => setSelectedBoard(board)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+                  className={`inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg px-3.5 text-[13px] font-medium transition-colors ${
                     selectedBoard?.id === board.id
                       ? "bg-[#701CC0] text-white shadow-sm"
-                      : "bg-white text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0]"
+                      : "border border-[#E4E0EC] bg-white text-[#374151] hover:border-[#D6CFE4] hover:bg-[#FAF9FD]"
                   }`}
                 >
                   {boardIcon(board.name)}
@@ -489,13 +489,13 @@ export default function ProjectManagement() {
                     value={newBoardName}
                     onChange={(e) => setNewBoardName(e.target.value)}
                     placeholder="New board"
-                    className="w-28 border border-[#E5E7EB] rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                    className="h-9 w-28 rounded-lg border border-[#E4E0EC] px-2.5 text-[13px] focus:border-[#701CC0] focus:outline-none focus:ring-2 focus:ring-[#701CC0]/20"
                   />
                   <button
                     type="submit"
                     disabled={creatingBoard || !newBoardName.trim()}
                     aria-label="Create board"
-                    className="p-2 rounded-lg bg-gray-100 text-[#374151] hover:bg-gray-200 disabled:opacity-50"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E4E0EC] bg-white text-[#374151] transition-colors hover:bg-[#FAF9FD] disabled:opacity-50"
                   >
                     <FiPlus className="w-4 h-4" />
                   </button>
@@ -504,17 +504,17 @@ export default function ProjectManagement() {
               {isAdmin && (
                 <button
                   onClick={() => setShowAddModal(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium transition-colors shadow-sm"
+                  className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#701CC0] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#5f17a5]"
                 >
                   <FiPlus className="w-4 h-4" />
                   New Task
                 </button>
               )}
-            </div>
-          </div>
+            </>
+          </PanelHeader>
 
           
-          <div className="flex-1 overflow-auto pb-6 min-h-0">
+          <div className="flex-1 min-h-0">
             <div className="w-full">
               {loading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -537,7 +537,7 @@ export default function ProjectManagement() {
                   return (
                     <div
                       key={status}
-                      className={`rounded-xl border ${style.border} ${style.bg} shadow-sm min-h-[280px] flex flex-col overflow-hidden`}
+                      className={`rounded-2xl border ${style.border} ${style.bg} min-h-[280px] flex flex-col overflow-hidden`}
                     >
                       <div className={`flex items-center gap-2 px-4 py-3 border-b ${style.border} ${style.headerBg}`}>
                         <div className={`w-1 h-4 rounded-full ${style.accent}`} />
@@ -570,7 +570,7 @@ export default function ProjectManagement() {
                           return (
                             <div
                               key={task.id}
-                              className={`group relative bg-white rounded-xl overflow-hidden transition-all duration-200 cursor-pointer border border-[#E5E7EB] hover:border-[#701CC0] hover:shadow-md ${
+                              className={`group relative cursor-pointer overflow-hidden rounded-xl border border-[#E4E0EC] bg-white transition-colors hover:border-[#C7B8E0] ${
                                 isPastDeadline ? "border-l-4 border-l-red-500 bg-red-50/30" : ""
                               }`}
                               onClick={() => setSelectedTask(task)}
@@ -663,8 +663,7 @@ export default function ProjectManagement() {
               )}
             </div>
           </div>
-        </div>
-      </div>
+      </PanelPage>
 
       
       {selectedTask && (

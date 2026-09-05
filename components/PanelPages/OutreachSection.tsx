@@ -4,6 +4,7 @@ import { useSession } from "@/lib/session-client"
 import { FiChevronLeft, FiChevronRight, FiCalendar, FiTrendingUp, FiDollarSign, FiUsers, FiTarget } from "react-icons/fi"
 import { m as motion } from "framer-motion"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import { PanelHeader, PanelPage } from "@/components/panel/PanelTable"
 
 const statFields = [
     { key: "attempts", label: "Attempts", icon: FiTarget },
@@ -480,7 +481,7 @@ const OutreachSection = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
-                className="bg-white rounded-xl shadow-sm border border-[#E8EBF4] overflow-hidden hover:shadow-md hover:border-[#D9CCF8] transition-all"
+                className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white transition-colors hover:border-[#D6CFE4]"
             >
                 <div className="px-4 py-3 border-b border-[#EEF1F7] bg-[#FBFCFF]">
                     <h3 className="font-semibold text-[#111827] flex items-center gap-2">
@@ -538,20 +539,13 @@ const OutreachSection = () => {
     }
 
     return (
-        <div className="w-full h-full bg-white text-[#111014] flex flex-col overflow-auto">
-            <div className="flex-1 flex justify-center px-6 pt-2">
-                <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
-                    
-                    <div className="w-full flex justify-between items-center mb-2">
-                        <div>
-                            <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Marketing Tracker</h1>
-                        </div>
-                        <div className="flex items-center gap-3">
+        <PanelPage>
+                    <PanelHeader title="Marketing Tracker">
 
-                            <div className="inline-flex items-center gap-1 rounded-lg border border-[#E5E7EB] bg-[#F3F1F8] p-1">
+                            <div className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#E4E0EC] bg-[#F3F1F8] p-1">
                                 <button
                                     onClick={() => setScope("company")}
-                                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                    className={`h-7 rounded-md px-3 text-[12px] font-medium transition-colors ${
                                         scope === "company"
                                             ? "bg-white text-[#5B21B6] shadow-sm"
                                             : "text-[#6B7280] hover:text-[#374151]"
@@ -561,7 +555,7 @@ const OutreachSection = () => {
                                 </button>
                                 <button
                                     onClick={() => setScope("client")}
-                                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                    className={`h-7 rounded-md px-3 text-[12px] font-medium transition-colors ${
                                         scope === "client"
                                             ? "bg-white text-[#5B21B6] shadow-sm"
                                             : "text-[#6B7280] hover:text-[#374151]"
@@ -571,7 +565,7 @@ const OutreachSection = () => {
                                 </button>
                                 <button
                                     onClick={() => setScope("overview")}
-                                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                    className={`h-7 rounded-md px-3 text-[12px] font-medium transition-colors ${
                                         scope === "overview"
                                             ? "bg-white text-[#5B21B6] shadow-sm"
                                             : "text-[#6B7280] hover:text-[#374151]"
@@ -582,10 +576,10 @@ const OutreachSection = () => {
                             </div>
 
                             {scope === "company" && (
-                            <div className="inline-flex items-center gap-1 rounded-lg border border-[#E5E7EB] bg-[#F3F1F8] p-1">
+                            <div className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#E4E0EC] bg-[#F3F1F8] p-1">
                                 <button
                                     onClick={() => setViewMode("monthly")}
-                                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                    className={`h-7 rounded-md px-3 text-[12px] font-medium transition-colors ${
                                         viewMode === "monthly"
                                             ? "bg-white text-[#5B21B6] shadow-sm"
                                             : "text-[#6B7280] hover:text-[#374151]"
@@ -595,7 +589,7 @@ const OutreachSection = () => {
                                 </button>
                                 <button
                                     onClick={() => setViewMode("yearly")}
-                                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                    className={`h-7 rounded-md px-3 text-[12px] font-medium transition-colors ${
                                         viewMode === "yearly"
                                             ? "bg-white text-[#5B21B6] shadow-sm"
                                             : "text-[#6B7280] hover:text-[#374151]"
@@ -609,7 +603,7 @@ const OutreachSection = () => {
                             {(scope !== "company" || viewMode === "monthly") ? (
                                 <>
                                     
-                                    <div className="flex items-center gap-2 bg-gradient-to-r from-[#5B1A96] to-[#701CC0] rounded-lg border border-[#4C1580] shadow-md">
+                                    <div className="inline-flex h-9 items-center rounded-lg bg-[#701CC0] text-white">
                                         <button
                                             onClick={() => navigateMonth("prev")}
                                             disabled={!canNavigatePrev}
@@ -632,7 +626,7 @@ const OutreachSection = () => {
                                     {null}
                                 </>
                             ) : (
-                                <div className="flex items-center gap-2 bg-gradient-to-r from-[#5B1A96] to-[#701CC0] rounded-lg border border-[#4C1580] shadow-md">
+                                <div className="inline-flex h-9 items-center rounded-lg bg-[#701CC0] text-white">
                                     <button
                                         onClick={() => setSelectedYear(selectedYear - 1)}
                                         disabled={selectedYear <= 2020}
@@ -652,8 +646,7 @@ const OutreachSection = () => {
                                     </button>
                                 </div>
                             )}
-                        </div>
-                    </div>
+                    </PanelHeader>
 
                     {isLoading ? (
                         <div className="flex items-center justify-center py-12">
@@ -686,25 +679,25 @@ const OutreachSection = () => {
                                 return (
                                     <>
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                                            <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] p-6">
+                                            <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
                                                 <p className="text-xs text-[#6B7280]">Total Attempts</p>
                                                 <p className="text-2xl font-bold text-[#111827]">{formatNumber(totals.sent)}</p>
                                             </div>
-                                            <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] p-6">
+                                            <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
                                                 <p className="text-xs text-[#6B7280]">Total Replies</p>
                                                 <p className="text-2xl font-bold text-[#111827]">{formatNumber(totals.replied)} <span className="text-sm text-[#701CC0]">({calculatePercentage(totals.replied, totals.sent)}%)</span></p>
                                             </div>
-                                            <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] p-6">
+                                            <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
                                                 <p className="text-xs text-[#6B7280]">Meetings Set</p>
                                                 <p className="text-2xl font-bold text-[#111827]">{formatNumber(totals.meetings)}</p>
                                             </div>
-                                            <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] p-6">
+                                            <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
                                                 <p className="text-xs text-[#6B7280]">Total Revenue</p>
                                                 <p className="text-2xl font-bold text-[#111827]">{formatCurrency(totals.revenue)}</p>
                                             </div>
                                         </div>
 
-                                        <div className="bg-white rounded-xl shadow-sm border border-[#E8EBF4] p-6 mb-6">
+                                        <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5 mb-6">
                                             <h3 className="text-lg font-semibold text-[#111827] mb-4">Conversion Funnel — All Clients</h3>
                                             <div className="space-y-3">
                                                 {funnel.map((stage, i) => (
@@ -724,7 +717,7 @@ const OutreachSection = () => {
                                             </div>
                                         </div>
 
-                                        <div className="bg-white rounded-xl shadow-sm border border-[#E8EBF4] overflow-hidden">
+                                        <div className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white">
                                             <div className="px-5 py-3 border-b border-[#EEF1F7] bg-[#FBFCFF]">
                                                 <h3 className="font-semibold text-[#111827]">Client Leaderboard</h3>
                                             </div>
@@ -793,7 +786,7 @@ const OutreachSection = () => {
                                         return (
                                             <>
                                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                                                    <div className="bg-white rounded-xl shadow-sm border border-[#E8EBF4] overflow-hidden">
+                                                    <div className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white">
                                                         <div className="px-4 py-3 border-b border-[#EEF1F7] bg-[#FBFCFF]">
                                                             <h3 className="font-semibold text-[#111827] flex items-center gap-2">
                                                                 <span className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-[#EEF2FF]">
@@ -819,7 +812,7 @@ const OutreachSection = () => {
                                                         </div>
                                                     </div>
 
-                                                    <div className="bg-white rounded-xl shadow-sm border border-[#E8EBF4] overflow-hidden lg:col-span-2">
+                                                    <div className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white lg:col-span-2">
                                                         <div className="px-4 py-3 border-b border-[#EEF1F7] bg-[#FBFCFF]">
                                                             <h3 className="font-semibold text-[#111827]">Funnel (Manual Entry)</h3>
                                                         </div>
@@ -856,7 +849,7 @@ const OutreachSection = () => {
                                                     initial={{ opacity: 0, y: 20 }}
                                                     animate={{ opacity: 1, y: 0 }}
                                                     transition={{ duration: 0.3, delay: 0.2 }}
-                                                    className="bg-gradient-to-br from-[#701CC0] to-[#5f17a5] rounded-xl shadow-lg p-8 text-white"
+                                                    className="rounded-2xl bg-gradient-to-br from-[#701CC0] to-[#8F42FF] p-6 text-white"
                                                 >
                                                     <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
                                                         <FiTrendingUp className="w-5 h-5" />
@@ -881,14 +874,14 @@ const OutreachSection = () => {
                         </div>
                     ) : viewMode === "yearly" ? (
                         <div className="pb-32">
-                            <div className="bg-gradient-to-br from-[#701CC0] to-[#5f17a5] rounded-xl shadow-lg p-8 mb-6 text-white">
+                            <div className="rounded-2xl bg-gradient-to-br from-[#701CC0] to-[#8F42FF] p-6 mb-6 text-white">
                                 <h2 className="text-2xl font-bold mb-2">{selectedYear} Year Summary</h2>
                                 <p className="text-white/80 text-sm">A complete overview to all marketing outreach methods and analytics.</p>
                             </div>
 
                             {yearlySummary ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                                    <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] p-6">
+                                    <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
                                         <div className="flex items-center gap-3 mb-2">
                                             <div className="p-2 bg-blue-100 rounded-lg">
                                                 <FiTarget className="w-5 h-5 text-blue-600" />
@@ -899,7 +892,7 @@ const OutreachSection = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] p-6">
+                                    <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
                                         <div className="flex items-center gap-3 mb-2">
                                             <div className="p-2 bg-green-100 rounded-lg">
                                                 <FiCalendar className="w-5 h-5 text-green-600" />
@@ -910,7 +903,7 @@ const OutreachSection = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] p-6">
+                                    <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
                                         <div className="flex items-center gap-3 mb-2">
                                             <div className="p-2 bg-purple-100 rounded-lg">
                                                 <FiUsers className="w-5 h-5 text-purple-600" />
@@ -921,7 +914,7 @@ const OutreachSection = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] p-6">
+                                    <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
                                         <div className="flex items-center gap-3 mb-2">
                                             <div className="p-2 bg-yellow-100 rounded-lg">
                                                 <FiDollarSign className="w-5 h-5 text-yellow-600" />
@@ -938,7 +931,7 @@ const OutreachSection = () => {
                             )}
 
                             {yearlySummary && (
-                                <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] p-6">
+                                <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
                                     <h3 className="text-lg font-semibold text-[#111827] mb-4">Conversion Rates</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div>
@@ -980,7 +973,7 @@ const OutreachSection = () => {
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.3, delay: 0.2 }}
-                                className="bg-gradient-to-br from-[#701CC0] to-[#5f17a5] rounded-xl shadow-lg p-8 text-white"
+                                className="rounded-2xl bg-gradient-to-br from-[#701CC0] to-[#8F42FF] p-6 text-white"
                             >
                                 <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
                                     <FiTrendingUp className="w-5 h-5" />
@@ -1017,9 +1010,7 @@ const OutreachSection = () => {
                             </motion.div>
                         </div>
                     )}
-                </div>
-            </div>
-        </div>
+        </PanelPage>
     )
 }
 
