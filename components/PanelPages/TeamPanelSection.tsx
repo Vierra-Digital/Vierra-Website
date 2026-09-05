@@ -132,6 +132,8 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const [selectedStaff, setSelectedStaff] = useState<TeamRow | null>(null)
     const [showDeleteModal, setShowDeleteModal] = useState(false)
     const [staffToDelete, setStaffToDelete] = useState<{ id: string; name: string } | null>(null)
+    const [deleteError, setDeleteError] = useState("")
+    const [deleting, setDeleting] = useState(false)
     const [showRescindModal, setShowRescindModal] = useState(false)
     const [inviteToRescind, setInviteToRescind] = useState<{ id: string; email: string } | null>(null)
     const [searchTerm, setSearchTerm] = useState("")
@@ -162,12 +164,15 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
     const handleDeleteStaff = (staffId: string, staffName: string) => {
         setStaffToDelete({ id: staffId, name: staffName })
+        setDeleteError("")
         setShowDeleteModal(true)
     }
 
     const confirmDeleteStaff = async () => {
         if (!staffToDelete) return
 
+        setDeleting(true)
+        setDeleteError("")
         try {
             const response = await fetch(`/api/admin/users`, {
                 method: "DELETE",
@@ -176,14 +181,22 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             })
 
             if (!response.ok) {
-                throw new Error("Failed to delete staff member")
+                // The endpoint says exactly why it refused — "Superadmin accounts can't be
+                // removed here.", "You cannot remove your own account", "User not found" — and
+                // that was being thrown away and replaced with a browser alert reading "Failed
+                // to delete staff member. Please try again.", so a deliberate refusal was
+                // indistinguishable from a crash and retrying could never help.
+                const body = await response.json().catch(() => ({}))
+                setDeleteError(body?.message || `Could not remove this member (HTTP ${response.status}).`)
+                return
             }
             setRows(prev => prev.filter(r => r.id !== staffToDelete.id))
             setShowDeleteModal(false)
             setStaffToDelete(null)
-        } catch (error) {
-            console.error("Error deleting staff:", error)
-            alert("Failed to delete staff member. Please try again.")
+        } catch {
+            setDeleteError("Could not remove this member — the request failed.")
+        } finally {
+            setDeleting(false)
         }
     }
 
@@ -626,12 +639,18 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                             Are you sure you want to remove{" "}
                             <span className="font-semibold text-[#111827]">{staffToDelete?.name || ""}</span>? This action
                             is permanent and cannot be undone. All associated data will be removed.
+                            {deleteError && (
+                                <span className="mt-3 block rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
+                                    {deleteError}
+                                </span>
+                            )}
                         </>
                     }
-                    confirmLabel="Remove Staff"
+                    confirmLabel={deleting ? "Removing…" : "Remove Staff"}
                     onCancel={() => {
                         setShowDeleteModal(false)
                         setStaffToDelete(null)
+                        setDeleteError("")
                     }}
                     onConfirm={confirmDeleteStaff}
                 />

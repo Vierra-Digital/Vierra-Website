@@ -309,6 +309,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
       await prisma.client.updateMany({ where: { user_id: userId }, data: { user_id: null } });
       await prisma.user.delete({ where: { id: userId } });
+      /**
+       * The Auth identity has to go with the profile row. Deleting only public.users left the
+       * account able to sign in against a user row that no longer exists, and kept the address
+       * taken — which is why re-creating a removed person came back "Email already exists".
+       *
+       * Not fatal if it fails: the profile row is already gone and the caller's request
+       * succeeded. Logged loudly, because what it leaves behind is exactly that orphan.
+       */
+      await deleteSupabaseAuthUser(String(userId)).catch((cleanupErr) =>
+        console.error("admin/users DELETE: profile removed but auth user remains", userId, cleanupErr)
+      );
       return res.status(200).json({ deleted: userId });
     } catch (e) {
       console.error("admin/users DELETE", e);
