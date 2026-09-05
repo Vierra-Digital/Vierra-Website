@@ -738,15 +738,15 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-4">
-              <div className="p-1.5 rounded-lg bg-[#701CC0]/10">
+              <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
                 <FiUser className="w-4 h-4 text-[#701CC0]" />
               </div>
-              <h3 className={`font-semibold ${textPrimary}`}>Profile</h3>
+              <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Profile</h3>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className={`block text-sm font-medium ${textSecondary} mb-1`}>Full Name</label>
+                <label className={`mb-1 block text-[11px] font-medium ${textSecondary}`}>Full Name</label>
                 {isEditingName ? (
                   <div className="flex flex-wrap gap-2">
                     <input
@@ -773,10 +773,10 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span className={textPrimary}>{displayName}</span>
+                    <span className={`text-[13px] ${textPrimary}`}>{displayName}</span>
                     <button
                       onClick={() => setIsEditingName(true)}
-                      className="text-[#701CC0] hover:text-[#5f17a5] text-sm font-medium transition-colors"
+                      className="text-[12.5px] font-medium text-[#701CC0] transition-colors hover:text-[#5f17a5]"
                     >
                       Edit
                     </button>
@@ -784,10 +784,10 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 )}
               </div>
               <div>
-                <label className={`block text-sm font-medium ${textSecondary} mb-1`}>Email</label>
+                <label className={`mb-1 block text-[11px] font-medium ${textSecondary}`}>Email</label>
                 <div className="flex items-center gap-2">
-                  <FiMail className={`w-4 h-4 ${textSecondary}`} />
-                  <span className={textSecondary}>{user.email || "No email"}</span>
+                  <FiMail className={`h-3.5 w-3.5 ${textSecondary}`} />
+                  <span className={`text-[13px] ${textSecondary}`}>{user.email || "No email"}</span>
                 </div>
               </div>
             </div>
@@ -812,17 +812,17 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         
         <div className={`rounded-2xl ${cardBg} border p-5`}>
           <div className="flex items-center gap-2 mb-5">
-            <div className="p-1.5 rounded-lg bg-[#701CC0]/10">
+            <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
               <FiShield className="w-4 h-4 text-[#701CC0]" />
             </div>
-            <h3 className={`font-semibold ${textPrimary}`}>Security</h3>
+            <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Security</h3>
           </div>
 
-          <div className="space-y-5">
+          <div className="space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className={`font-medium ${textPrimary}`}>Email Notifications</p>
-                <p className={`text-sm ${textSecondary}`}>Receive updates and alerts.</p>
+                <p className={`text-[13px] font-medium ${textPrimary}`}>Email Notifications</p>
+                <p className={`text-[12px] ${textSecondary}`}>Receive updates and alerts.</p>
               </div>
               <Toggle
                 checked={settings.emailNotifications}
@@ -832,8 +832,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             </div>
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className={`font-medium ${textPrimary}`}>Two-Factor Authentication</p>
-                <p className={`text-sm ${textSecondary}`}>Extra security layer.</p>
+                <p className={`text-[13px] font-medium ${textPrimary}`}>Two-Factor Authentication</p>
+                <p className={`text-[12px] ${textSecondary}`}>Extra security layer.</p>
               </div>
               <Toggle
                 checked={settings.twoFactorEnabled}
@@ -844,7 +844,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             <div className={`pt-4 border-t ${isDark ? "border-white/10" : "border-gray-100"}`}>
               <button
                 onClick={() => setShowPasswordModal(true)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-[#701CC0] text-white rounded-xl hover:bg-[#5f17a5] text-sm font-medium transition-colors"
+                className="inline-flex h-9 items-center gap-2 rounded-[10px] bg-[#701CC0] px-3.5 text-[12.5px] font-medium text-white transition-colors hover:bg-[#5f17a5]"
               >
                 <FiLock className="w-4 h-4" />
                 Change Password
@@ -856,17 +856,17 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         
         <div className={`rounded-2xl ${cardBg} border p-5`}>
           <div className="flex items-center gap-2 mb-5">
-            <div className="p-1.5 rounded-lg bg-[#701CC0]/10">
+            <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
               <FiSettings className="w-4 h-4 text-[#701CC0]" />
             </div>
-            <h3 className={`font-semibold ${textPrimary}`}>Preferences</h3>
+            <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Preferences</h3>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className={`block text-sm font-medium ${textSecondary} mb-2`}>Theme</label>
+              <label className={`mb-1.5 block text-[11px] font-medium ${textSecondary}`}>Theme</label>
               <select
-                className={`w-full rounded-xl px-4 py-2.5 border focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none ${inputBg} ${textPrimary}`}
+                className={`h-9 w-full appearance-none rounded-[10px] border px-3 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 ${inputBg} ${textPrimary}`}
                 value={settings.theme}
                 onChange={(e) => handleSettingsUpdate({ theme: e.target.value })}
                 disabled={isUpdating || isLoadingSettings}
@@ -877,9 +877,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               </select>
             </div>
             <div>
-              <label className={`block text-sm font-medium ${textSecondary} mb-2`}>Language</label>
+              <label className={`mb-1.5 block text-[11px] font-medium ${textSecondary}`}>Language</label>
               <select
-                className={`w-full rounded-xl px-4 py-2.5 border focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none ${inputBg} ${textPrimary}`}
+                className={`h-9 w-full appearance-none rounded-[10px] border px-3 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 ${inputBg} ${textPrimary}`}
                 value={settings.language}
                 onChange={(e) => handleSettingsUpdate({ language: e.target.value })}
                 disabled={isUpdating || isLoadingSettings}
@@ -905,7 +905,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
           <div className={`rounded-2xl ${cardBg} border p-5`}>
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-lg bg-[#701CC0]/10">
+                <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
                   <FiRefreshCw className="w-4 h-4 text-[#701CC0]" />
                 </div>
                 <h3 className={`font-semibold ${textPrimary}`}>Social Connections</h3>
@@ -1090,9 +1090,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
 
                     {calendarSettingsLoading && calendars.length === 0 ? (
                       <p className={`mt-1.5 text-[12px] ${textSecondary}`}>Loading calendars…</p>
-                    ) : calendars.length === 0 ? (
-                      <p className={`mt-1.5 text-[12px] ${textSecondary}`}>No readable calendars on this account.</p>
-                    ) : (
+                    ) : calendars.length === 0 ? null : (
                       <ul className="mt-2 space-y-1">
                         {calendars.map((calendar) => {
                           const toggleKey = `${account.email}::${calendar.id}`;
@@ -1133,7 +1131,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       <div className={`rounded-2xl ${cardBg} border p-5`}>
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Sign out</h3>
+            <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Sign Out</h3>
             <p className={`text-[13px] ${textSecondary} mt-0.5`}>Ends your session on this device.</p>
           </div>
           <button
