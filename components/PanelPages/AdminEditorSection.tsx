@@ -139,6 +139,8 @@ function UsersPanel() {
     const [resetSending, setResetSending] = useState<Record<string, boolean>>({})
     const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
     const [userToDelete, setUserToDelete] = useState<{ id: string; name: string | null; email: string | null } | null>(null)
+    const [deleteError, setDeleteError] = useState<string>("")
+    const [deletingUser, setDeletingUser] = useState<boolean>(false)
     const [searchQuery, setSearchQuery] = useState<string>("")
     const [currentPage, setCurrentPage] = useState<number>(0)
     const [roleFilter, setRoleFilter] = useState<"all" | "admin" | "staff" | "user">("all")
@@ -262,24 +264,31 @@ function UsersPanel() {
         const user = users.find((u) => u.id === userId)
         if (!user) return
         setUserToDelete({ id: userId, name: user.name, email: user.email })
+        setDeleteError("")
         setDeleteModalOpen(true)
     }
 
     const confirmDeleteUser = async () => {
         if (!userToDelete) return
+        setDeletingUser(true)
+        setDeleteError("")
         try {
             const r = await fetch(`/api/admin/users?id=${encodeURIComponent(userToDelete.id)}`, { method: "DELETE" })
             if (!r.ok) {
+                // Shown in the dialog rather than as a line at the foot of the page: the dialog
+                // used to close on failure, so the only sign that nothing had happened was the row
+                // still being there.
                 const body = await r.json().catch(() => ({}))
-                setError(body?.message || `Could not remove the user (HTTP ${r.status}).`)
+                setDeleteError(body?.message || `Could not remove the user (HTTP ${r.status}).`)
                 return
             }
             setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id))
-        } catch {
-            setError("Could not remove the user — the request failed.")
-        } finally {
             setDeleteModalOpen(false)
             setUserToDelete(null)
+        } catch {
+            setDeleteError("Could not remove the user — the request failed.")
+        } finally {
+            setDeletingUser(false)
         }
     }
 
@@ -647,7 +656,7 @@ function UsersPanel() {
                                                                 onClick={() => sendPasswordReset(u.id)}
                                                                 disabled={resetSending[u.id]}
                                                                 icon={<KeyRound className="w-4 h-4" />}
-                                                                tone="accent"
+                                                               
                                                             >
                                                                 {resetSending[u.id] ? "Sending…" : "Send reset email"}
                                                             </RowActionMenuItem>
@@ -745,13 +754,19 @@ function UsersPanel() {
                     <>
                         Are you sure you want to remove{" "}
                         <span className="font-semibold text-[#111827]">{userToDelete?.name || userToDelete?.email || ""}</span>? This action is permanent and cannot be undone. All associated data will be removed.
+                        {deleteError && (
+                            <span className="mt-3 block rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
+                                {deleteError}
+                            </span>
+                        )}
                     </>
                 }
-                confirmLabel="Remove User"
+                confirmLabel={deletingUser ? "Removing…" : "Remove User"}
                 onConfirm={confirmDeleteUser}
                 onCancel={() => {
                     setDeleteModalOpen(false)
                     setUserToDelete(null)
+                    setDeleteError("")
                 }}
             />
 

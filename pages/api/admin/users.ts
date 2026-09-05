@@ -294,17 +294,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ message: "You cannot remove your own account" });
     }
     try {
-      // Only delete users who belong to the admin's own company — never any user id system-wide.
-      // Platform admins are exempt from that scoping (see the PUT handler above for why).
-      const target = await prisma.companyMembership.findFirst({
-        where: isPlatformAdmin ? { user_id: String(userId) } : { company_id: companyId, user_id: String(userId) },
+      /**
+       * A user belongs to a company through one of two tables, and this only ever looked at one.
+       *
+       * Staff and admins have a company_memberships row; client accounts have a clients row and
+       * no membership at all. Scoping the lookup through memberships alone meant every client
+       * came back "User not found" — which is to say removal failed for exactly the accounts this
+       * page was extended to list.
+       *
+       * Both routes are checked now. Platform admins skip the company check entirely (see the PUT
+       * handler above for why) but still have to match a real user.
+       */
+      const target = await prisma.user.findUnique({
+        where: { id: String(userId) },
         select: {
-          user_id: true,
-          users_company_memberships_user_idTousers: { select: { is_platform_admin: true } },
+          id: true,
+          is_platform_admin: true,
+          company_memberships_company_memberships_user_idTousers: { select: { company_id: true } },
+          clients_clients_user_idTousers: { select: { company_id: true } },
         },
       });
       if (!target) return res.status(404).json({ message: "User not found" });
-      if (target.users_company_memberships_user_idTousers.is_platform_admin) {
+      if (!isPlatformAdmin) {
+        const belongsToCompany =
+          target.company_memberships_company_memberships_user_idTousers?.company_id === companyId ||
+          target.clients_clients_user_idTousers?.company_id === companyId;
+        // Same 404 as an unknown id: a caller outside the company learns nothing either way.
+        if (!belongsToCompany) return res.status(404).json({ message: "User not found" });
+      }
+      if (target.is_platform_admin) {
         return res.status(403).json({ message: "Superadmin accounts can't be removed here." });
       }
       await prisma.client.updateMany({ where: { user_id: userId }, data: { user_id: null } });
