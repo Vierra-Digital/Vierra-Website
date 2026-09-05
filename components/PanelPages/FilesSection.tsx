@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react"
+import React, { useState, useMemo, useRef } from "react"
 import { inter } from "@/lib/fonts";
 import { FiFolder, FiTrash2, FiDownload, FiLock } from "react-icons/fi"
 import PanelSearchInput from "@/components/ui/PanelSearchInput"
@@ -6,91 +6,83 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import PanelSectionHeader from "@/components/ui/PanelSectionHeader"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import { useFetch } from "@/hooks/useFetch"
+import { deletePanelFile, loadPanelFiles, type PanelFile } from "@/lib/panel/files"
 
 
 const getNameWithoutExtension = (name: string) =>
   name.replace(/\.[^/.]+$/, "") || name
 
-interface FileItem {
-  id: string
-  name: string
-  date: string
-  fileType: string
-  signingTokenId?: string
-  owner?: string
-  isDeletionProtected?: boolean
-}
-
-const FilesSection: React.FC<{
+type FilesSectionProps = {
   readOnly?: boolean
   fileFilter?: string
   allowDelete?: boolean
   showOwnerInReadOnly?: boolean
-}> = ({
+}
+
+// Scope the entire request and action state to this client. Late responses from the
+// previous client cannot populate the next client's list or deletion dialog.
+const FilesSection: React.FC<FilesSectionProps> = (props) => (
+  <FilesContent key={props.fileFilter || "me"} {...props} />
+)
+
+const FilesContent: React.FC<FilesSectionProps> = ({
   readOnly = false,
   fileFilter,
   allowDelete = false,
   showOwnerInReadOnly = false,
 }) => {
   const [search, setSearch] = useState("")
-  const [fileToDelete, setFileToDelete] = useState<FileItem | null>(null)
+  const [fileType, setFileType] = useState("")
+  const [owner, setOwner] = useState("")
+  const [sort, setSort] = useState("name")
+  const [fileToDelete, setFileToDelete] = useState<PanelFile | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const deletePending = useRef(false)
+  const [deleteError, setDeleteError] = useState("")
+  const [notice, setNotice] = useState("")
+  const refreshButtonRef = useRef<HTMLButtonElement>(null)
   const {
     data: filesData,
     setData: setFiles,
     loading,
+    error,
     run: fetchFiles,
-  } = useFetch<FileItem[]>(async () => {
-    try {
-      const url = fileFilter ? `/api/admin/files?filter=${encodeURIComponent(fileFilter)}` : "/api/admin/files"
-      const r = await fetch(url)
-      if (r.ok) {
-        const data = await r.json()
-        return (data || []) as FileItem[]
-      }
-      return []
-    } catch {
-      return []
-    }
-  }, { immediate: true })
-
-  const didMountRef = useRef(false)
-  useEffect(() => {
-    if (!didMountRef.current) {
-      didMountRef.current = true
-      return
-    }
-    fetchFiles()
-  }, [fileFilter, fetchFiles])
+  } = useFetch<PanelFile[]>(() => loadPanelFiles(fileFilter), { immediate: true })
 
   const files = useMemo(() => filesData ?? [], [filesData])
 
   const filteredFiles = useMemo(() => {
-    if (!search.trim()) return files
     const q = search.trim().toLowerCase()
-    return files.filter((f) => f.name.toLowerCase().includes(q))
-  }, [files, search])
+    return files.filter(f => f.name.toLowerCase().includes(q) && (!fileType || f.fileType === fileType) && (!owner || f.owner === owner)).sort((a, b) => sort === "type" ? a.fileType.localeCompare(b.fileType) || a.name.localeCompare(b.name) : a.name.localeCompare(b.name))
+  }, [files, search, fileType, owner, sort])
+  const hasFilters = Boolean(search.trim() || fileType || owner)
+  const clearFilters = () => { setSearch(""); setFileType(""); setOwner(""); setSort("name"); }
 
   const handleConfirmDelete = async () => {
-    if (!fileToDelete) return
+    if (!fileToDelete || deletePending.current || loading) return
+    deletePending.current = true
+    setDeleting(true)
+    setDeleteError("")
+    setNotice("")
     try {
-      const r = await fetch(`/api/admin/deleteFile?id=${encodeURIComponent(fileToDelete.id)}`, {
-        method: "DELETE",
-      })
-      if (r.ok) {
-        setFiles((prev) => (prev ?? []).filter((f) => f.id !== fileToDelete.id))
-      }
-    } catch {
-      console.error("Failed to delete")
-    } finally {
+      await deletePanelFile(fileToDelete.id)
+      setFiles((prev) => (prev ?? []).filter((f) => f.id !== fileToDelete.id))
+      setNotice(`Deleted ${fileToDelete.name}.`)
       setFileToDelete(null)
+      requestAnimationFrame(() => refreshButtonRef.current?.focus())
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Could not delete this file. Try again.")
+    } finally {
+      deletePending.current = false
+      setDeleting(false)
     }
   }
 
-  const handleDownload = (file: FileItem) => {
+  const handleDownload = (file: PanelFile) => {
     if (file.signingTokenId) {
       window.open(
         `/api/admin/file/${encodeURIComponent(file.name)}?tokenId=${encodeURIComponent(file.signingTokenId)}`,
-        "_blank"
+        "_blank", "noopener,noreferrer"
       )
     }
   }
@@ -115,11 +107,31 @@ const FilesSection: React.FC<{
             }
           />
 
-          {loading ? (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 text-sm text-[#6B7280]">
+            <p>{filesData !== null ? `${filteredFiles.length} of ${files.length} files` : "Files"}</p>
+            <button ref={refreshButtonRef} type="button" disabled={loading || deleting} onClick={() => { setNotice(""); void fetchFiles(); }} className="rounded-md border border-[#E5E7EB] px-3 py-2 text-[#374151] hover:bg-gray-50 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#701CC0]">
+              {loading ? "Refreshing…" : "Refresh files"}
+            </button>
+          </div>
+          <div className="mb-4 flex flex-wrap gap-3 text-sm">
+            <label>Type <select value={fileType} onChange={e => setFileType(e.target.value)} className="rounded border p-2"><option value="">All types</option>{Array.from(new Set(files.map(f => f.fileType))).sort().map(type => <option key={type}>{type}</option>)}</select></label>
+            {showOwnerColumn && <label>Owner <select value={owner} onChange={e => setOwner(e.target.value)} className="rounded border p-2"><option value="">All owners</option>{Array.from(new Set(files.map(f => f.owner).filter((value): value is string => Boolean(value)))).sort().map(value => <option key={value}>{value}</option>)}</select></label>}
+            <label>Sort <select value={sort} onChange={e => setSort(e.target.value)} className="rounded border p-2"><option value="name">Name A?Z</option><option value="type">File type</option></select></label>
+            {hasFilters && <button onClick={clearFilters} className="underline">Clear filters</button>}
+          </div>
+          {notice && <p role="status" className="mb-4 text-sm text-green-700">{notice}</p>}
+          {error && (
+            <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+              <p>{error}</p>
+              {filesData !== null && <p className="mt-1">Showing previously loaded files.</p>}
+              <button type="button" disabled={loading || deleting} onClick={() => void fetchFiles()} className="mt-2 rounded font-medium underline disabled:opacity-50">Retry loading files</button>
+            </div>
+          )}
+          {loading && filesData === null ? (
             <div className="flex items-center justify-center py-12">
               <LoadingSpinner label="Loading File Data..." />
             </div>
-          ) : filteredFiles.length === 0 ? (
+          ) : filesData === null ? null : filteredFiles.length === 0 ? (
             <div className="bg-white rounded-xl shadow-sm border border-[#E5E7EB] p-10">
               <div className="flex flex-col items-center justify-center text-center">
                 <div className="relative mb-4 flex h-14 w-14 items-center justify-center">
@@ -128,10 +140,11 @@ const FilesSection: React.FC<{
                     <FiFolder className="w-7 h-7 text-[#701CC0]" />
                   </div>
                 </div>
-                <h3 className="text-lg font-semibold text-[#111827]">No Files Found</h3>
+                <h3 className="text-lg font-semibold text-[#111827]">{hasFilters ? "No matching files" : "No files yet"}</h3>
                 <p className="text-sm text-[#6B7280] mt-2 max-w-md">
-                  Files you upload will appear here.
+                  {hasFilters ? "Try another file name or clear your filters." : "Documents saved to this workspace will appear here."}
                 </p>
+                {hasFilters && <button type="button" onClick={clearFilters} className="mt-3 rounded text-sm font-medium text-[#701CC0] underline">Clear filters</button>}
               </div>
             </div>
           ) : (
@@ -169,14 +182,17 @@ const FilesSection: React.FC<{
                               file.signingTokenId &&
                               window.open(
                                 `/files/preview?tokenId=${encodeURIComponent(file.signingTokenId)}&name=${encodeURIComponent(file.name)}`,
-                                "_blank"
+                                "_blank", "noopener,noreferrer"
                               )
                             }
                             disabled={!file.signingTokenId}
+                            aria-label={`Preview ${file.name} (opens in a new tab)`}
                             className="text-sm font-medium text-[#111827] hover:text-[#701CC0] hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:no-underline disabled:hover:text-[#111827] text-left"
                           >
                             {getNameWithoutExtension(file.name)}
                           </button>
+                          {!file.signingTokenId && <p className="mt-1 text-xs text-[#6B7280]">Preview and download unavailable</p>}
+                          {file.isDeletionProtected && <p className="mt-1 text-xs text-[#6B7280]">Protected file — cannot be deleted</p>}
                         </td>
                         <td className="px-4 py-4 text-sm text-[#374151]">
                           {file.date}
@@ -196,16 +212,17 @@ const FilesSection: React.FC<{
                               onClick={() => handleDownload(file)}
                               disabled={!file.signingTokenId}
                               className="p-1.5 rounded-md hover:bg-gray-100 text-[#374151] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              aria-label="Download"
+                              aria-label={`Download ${file.name}`}
                             >
                               <FiDownload className="w-4 h-4" />
                             </button>
                             {canDelete && !file.isDeletionProtected && (
                               <button
                                 type="button"
-                                onClick={() => setFileToDelete(file)}
+                                disabled={loading || deleting}
+                                onClick={() => { setDeleteError(""); setFileToDelete(file); }}
                                 className="p-1.5 rounded-md hover:bg-red-50 text-red-600 transition-colors"
-                                aria-label="Delete"
+                                aria-label={`Delete ${file.name}`}
                               >
                                 <FiTrash2 className="w-4 h-4" />
                               </button>
@@ -237,14 +254,17 @@ const FilesSection: React.FC<{
                 <>
                   Are you sure you want to delete{" "}
                   <span className="font-semibold text-[#111827]">
-                    {fileToDelete ? getNameWithoutExtension(fileToDelete.name) : ""}
+                    {fileToDelete?.name || ""}
                   </span>
                   ? This action is permanent and cannot be undone.
                 </>
               }
               confirmLabel="Delete File"
+              busy={deleting}
+              busyLabel="Deleting…"
+              error={deleteError}
               onConfirm={handleConfirmDelete}
-              onCancel={() => setFileToDelete(null)}
+              onCancel={() => { if (!deletePending.current) { setFileToDelete(null); setDeleteError(""); } }}
             />
           )}
         </div>

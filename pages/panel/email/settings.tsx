@@ -43,6 +43,8 @@ import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import PromptModal, { type PromptField } from "@/components/ui/PromptModal";
 import { MODULES, orderModules, PAGE_SIZE } from "@/components/email/constants";
 import type { ContactVisibility } from "@/components/email/types";
+import { useDraftGuard, usePageLeaveGuard } from "@/hooks/useDraftGuard";
+import { useActiveClient } from "@/lib/activeClient";
 import { panelFetch } from "@/lib/panelFetch";
 
 type PromptConfig = {
@@ -154,6 +156,7 @@ function SettingsSection({
               <Icon className="h-4 w-4 text-[#701CC0]" />
             </div>
             <h2 className="text-lg font-semibold text-[#1E1B2E]">{title}</h2>
+            {["Email tracking", "Reply notifications", "Read receipts", "Vacation responder"].includes(title) && <span className="rounded bg-purple-50 px-2 py-1 text-xs text-purple-800">All your inboxes</span>}
           </div>
           {description ? <p className="mt-2 text-sm leading-relaxed text-[#6B7280]">{description}</p> : null}
         </div>
@@ -389,7 +392,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
   useEffect(() => {
     // Loading the Postmaster Tools status on mount; the loader flips its own loading state after awaiting.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+     
     void loadPostmaster();
   }, [loadPostmaster]);
   const [accounts, setAccounts] = useState<GmailAccount[]>([]);
@@ -399,6 +402,19 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
+  const [saveFailed, setSaveFailed] = useState(false);
+  const [accountLoadError, setAccountLoadError] = useState("");
+  const [bookingMessages, setBookingMessages] = useState<Record<string, string>>({});
+  const [bookingSearch, setBookingSearch] = useState("");
+  const [bookingFilter, setBookingFilter] = useState("all");
+  const accountLoadSequence = useRef(0);
+  const settingsSavePending = useRef(false);
+  const providerPending = useRef(false);
+  const accountPrefPending = useRef(false);
+  const { activeClient } = useActiveClient();
+  const [companyBaseline, setCompanyBaseline] = useState("");
+  const companyTarget = useRef<string | null>(null);
+  usePageLeaveGuard();
   const [contactTags, setContactTags] = useState<ContactTag[]>([]);
   const [contactVisibility, setContactVisibility] = useState<ContactVisibility>({
     showPhone: true,
@@ -531,7 +547,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       const raw = window.localStorage.getItem("email-undo-delay");
       const parsed = raw != null ? Number(raw) : NaN;
       // The saved undo-send delay comes from localStorage, which does not exist during the server render.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+       
       if (Number.isFinite(parsed)) setUndoSendDelay(Math.max(0, Math.min(30, parsed)));
     } catch {
       /* ignore */
@@ -628,6 +644,10 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     );
   }, [activeAccountEmail, settings, contactVisibility, savedSettings, savedContactVisibility]);
 
+  const canChangeAccount = useDraftGuard(hasUnsavedSettingsChanges, "Email settings", "email-settings", saving);
+  useDraftGuard(Boolean(companyBaseline && JSON.stringify([companyMailingAddress, companyPrivacyPolicyUrl]) !== companyBaseline), "Company sending settings", "email-settings", companySettingsSaving);
+  useDraftGuard(Boolean(newProvider.smtpHost || newProvider.smtpUsername || newProvider.smtpPassword), "Domain mailbox setup", "email-settings");
+  useDraftGuard(Boolean(newBooking.title), "Booking link", "email-settings", savingBooking);
   const loadAccounts = useCallback(async (): Promise<string> => {
     const response = await fetch("/api/gmail/status");
     const payload = await response.json().catch(() => ({}));
@@ -644,7 +664,9 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   }, []);
 
   const loadAccountData = async (accountEmail: string) => {
-    if (!accountEmail) return;
+    if (!accountEmail) return false;
+    const sequence = ++accountLoadSequence.current;
+    setAccountLoadError("");
     try {
       const [settingsRes, signaturesRes, templatesRes, tagsRes, visibilityRes, providersRes, blockedRes, sendAsRes] = await Promise.all([
         fetch(`/api/gmail/settings?accountEmail=${encodeURIComponent(accountEmail)}`),
@@ -665,6 +687,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       const blockedPayload = await blockedRes.json().catch(() => ({}));
       const sendAsPayload = await sendAsRes.json().catch(() => ({}));
 
+      if (![settingsRes, signaturesRes, templatesRes, tagsRes, visibilityRes, providersRes, blockedRes, sendAsRes].every(r => r.ok)) throw new Error("Some inbox settings could not be loaded. Retry before editing.");
+      if (sequence !== accountLoadSequence.current) return false;
       const rawSettings = settingsPayload?.settings || {};
       const nextSettings: Settings = {
         trackingEnabled: Boolean(rawSettings.trackingEnabled),
@@ -694,8 +718,10 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       setProviderAccounts(Array.isArray(providersPayload?.accounts) ? providersPayload.accounts : []);
       setBlockedSenders(Array.isArray(blockedPayload?.blocked) ? blockedPayload.blocked : []);
       setSendAsAliases(Array.isArray(sendAsPayload?.aliases) ? sendAsPayload.aliases : []);
+      return true;
     } catch {
-      /* leave prior state on error */
+      setAccountLoadError("Could not load inbox settings. The previous inbox is still selected; retry to continue.");
+      return false;
     }
   };
 
@@ -704,11 +730,11 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const handleSelectAccount = async (email: string) => {
     const normalized = (email || "").toLowerCase();
     if (!normalized || normalized === activeAccountEmail) return;
-    setSelectedAccountEmail(normalized);
+    if (switchingAccount || !canChangeAccount()) return;
     setSwitchingAccount(true);
     setStatus("");
     try {
-      await loadAccountData(normalized);
+      if (await loadAccountData(normalized)) setSelectedAccountEmail(normalized);
     } finally {
       setSwitchingAccount(false);
     }
@@ -724,6 +750,9 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   };
 
   const createProviderAccount = async () => {
+    if (providerPending.current) return;
+    providerPending.current = true;
+    setStatus("Saving domain mailbox?");
     try {
       const response = await panelFetch("/api/email/accounts", {
         method: "POST",
@@ -765,7 +794,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       await loadAccountData(activeAccountEmail);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Failed to create provider account");
-    }
+    } finally { providerPending.current = false; }
   };
 
   const deleteProviderAccount = async (id: string) => {
@@ -933,16 +962,20 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const claimSlot = async (id: string) => {
     if (claimingId) return;
     setClaimingId(id);
+    setBookingMessages(prev => ({ ...prev, [id]: "Working?" }));
     try {
       const r = await fetch(`/api/booking/${id}/claim`, { method: "POST" });
       const d = await r.json().catch(() => ({}));
       if (r.ok) {
+        setBookingMessages(prev => ({ ...prev, [id]: "Saved" }));
         setOrgQueue((prev) => prev.filter((s) => s.id !== id));
         await loadBookings();
       } else if (typeof window !== "undefined") {
-        window.alert(d?.message || "Couldn't claim that slot.");
+        setBookingMessages(prev => ({ ...prev, [id]: d?.message || "Couldn't claim that slot." }));
         await loadOrgQueue();
       }
+    } catch (error) {
+      setBookingMessages(prev => ({ ...prev, [id]: error instanceof Error ? error.message : "Could not complete this action. Refresh and retry." }));
     } finally {
       setClaimingId(null);
     }
@@ -974,11 +1007,15 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
   const loadCompanySettings = useCallback(async () => {
     try {
+      const raw = localStorage.getItem("vierra_active_client");
+      const target = raw ? JSON.parse(raw)?.id : null;
+      companyTarget.current = target;
       const res = await panelFetch("/api/company/settings");
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setCompanyMailingAddress(data?.mailingAddress || "");
         setCompanyPrivacyPolicyUrl(data?.privacyPolicyUrl || "");
+        setCompanyBaseline(JSON.stringify([data?.mailingAddress || "", data?.privacyPolicyUrl || ""]));
       }
     } catch {
       /* ignore */
@@ -987,6 +1024,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
   const saveCompanySettings = async () => {
     if (companySettingsSaving) return;
+    if (!companyMailingAddress.trim()) { setCompanySettingsStatus("Enter the company mailing address before saving."); return; }
+    if (activeClient?.id !== companyTarget.current) { setCompanySettingsStatus("The active company changed. Return to the original company before saving these edits."); return; }
     setCompanySettingsSaving(true);
     setCompanySettingsStatus("");
     try {
@@ -994,11 +1033,13 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          companyId: companyTarget.current,
           mailingAddress: companyMailingAddress,
           privacyPolicyUrl: companyPrivacyPolicyUrl,
         }),
       });
       if (!res.ok) throw new Error("Failed to save.");
+      setCompanyBaseline(JSON.stringify([companyMailingAddress, companyPrivacyPolicyUrl]));
       setCompanySettingsStatus("Saved.");
     } catch {
       setCompanySettingsStatus("Failed to save — try again.");
@@ -1010,16 +1051,19 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const createGrant = async () => {
     if (grantBusy || !newGrant.granteeUserId || !newGrant.accountEmail) return;
     setGrantBusy(true);
+    setActionError("");
     try {
       const r = await fetch("/api/email/mailbox-grants", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newGrant),
       });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || "Could not grant mailbox access.");
       if (r.ok) {
         setNewGrant({ granteeUserId: "", accountEmail: "", canSend: true });
         await loadMailboxGrants();
       }
+    } catch (error) { setActionError(error instanceof Error ? error.message : "Could not grant access. Try again.");
     } finally {
       setGrantBusy(false);
     }
@@ -1029,6 +1073,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const importAttendanceCsv = async (bookingId: string, file: File) => {
     if (attendanceBusyId) return;
     setAttendanceBusyId(bookingId);
+    setBookingMessages(prev => ({ ...prev, [bookingId]: "Working?" }));
     try {
       const csv = await file.text();
       const r = await fetch(`/api/booking/${bookingId}/attendance-import`, {
@@ -1038,12 +1083,15 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       });
       const d = await r.json().catch(() => ({}));
       if (r.ok) {
+        setBookingMessages(prev => ({ ...prev, [bookingId]: "Saved" }));
         setBookings((prev) =>
           prev.map((b) => (b.id === bookingId ? { ...b, attendanceStatus: d.attendanceStatus, attendanceSource: "csv_import" } : b))
         );
       } else if (typeof window !== "undefined") {
-        window.alert(d?.message || "Couldn't import that file.");
+        setBookingMessages(prev => ({ ...prev, [bookingId]: d?.message || "Couldn't import that file." }));
       }
+    } catch (error) {
+      setBookingMessages(prev => ({ ...prev, [bookingId]: error instanceof Error ? error.message : "Could not complete this action. Refresh and retry." }));
     } finally {
       setAttendanceBusyId(null);
     }
@@ -1053,9 +1101,14 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     if (attendanceBusyId) return;
     if (typeof window !== "undefined" && !window.confirm("Cancel this meeting?")) return;
     setAttendanceBusyId(bookingId);
+    setBookingMessages(prev => ({ ...prev, [bookingId]: "Working?" }));
     try {
       const r = await fetch(`/api/booking/${bookingId}/cancel`, { method: "POST" });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || "Could not cancel this booking.");
+      setBookingMessages(prev => ({ ...prev, [bookingId]: "Meeting canceled" }));
       if (r.ok) setBookings((prev) => prev.map((b) => (b.id === bookingId ? { ...b, status: "cancelled" } : b)));
+    } catch (error) {
+      setBookingMessages(prev => ({ ...prev, [bookingId]: error instanceof Error ? error.message : "Could not complete this action. Refresh and retry." }));
     } finally {
       setAttendanceBusyId(null);
     }
@@ -1064,17 +1117,22 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const setBookingAttendance = async (bookingId: string, status: "held" | "not_held") => {
     if (attendanceBusyId) return;
     setAttendanceBusyId(bookingId);
+    setBookingMessages(prev => ({ ...prev, [bookingId]: "Working?" }));
     try {
       const r = await fetch(`/api/booking/${bookingId}/attendance`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || "Could not update attendance.");
       if (r.ok) {
+        setBookingMessages(prev => ({ ...prev, [bookingId]: "Saved" }));
         setBookings((prev) =>
           prev.map((b) => (b.id === bookingId ? { ...b, attendanceStatus: status, attendanceSource: "manual_override" } : b))
         );
       }
+    } catch (error) {
+      setBookingMessages(prev => ({ ...prev, [bookingId]: error instanceof Error ? error.message : "Could not complete this action. Refresh and retry." }));
     } finally {
       setAttendanceBusyId(null);
     }
@@ -1196,6 +1254,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
    * as ok:false with a reason rather than as a silent success.
    */
   const makePrimaryAccount = async (email: string) => {
+    if (accountPrefPending.current) return;
+    accountPrefPending.current = true;
     const key = email.toLowerCase();
     const previous = primaryAccount;
     setPrimaryAccount(key);
@@ -1214,10 +1274,12 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     } catch {
       setPrimaryAccount(previous);
       setPrimaryError("Could not set the main inbox.");
-    }
+    } finally { accountPrefPending.current = false; }
   };
 
   const toggleAccountEnabled = async (email: string, enabled: boolean) => {
+    if (accountPrefPending.current) return;
+    accountPrefPending.current = true;
     const key = email.toLowerCase();
     setActionError("");
     setAccountEnabled((prev) => ({ ...prev, [key]: enabled }));
@@ -1234,7 +1296,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       if (!response.ok) revert();
     } catch {
       revert();
-    }
+    } finally { accountPrefPending.current = false; }
   };
 
   const createFilter = async () => {
@@ -1291,7 +1353,9 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   };
 
   const saveSettings = async () => {
-    if (!activeAccountEmail || saving) return;
+    if (!activeAccountEmail || settingsSavePending.current || switchingAccount || accountLoadError) return;
+    settingsSavePending.current = true;
+    setSaveFailed(false);
     setSaving(true);
     setStatus("");
     try {
@@ -1318,13 +1382,17 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
           body: JSON.stringify(contactVisibility),
         }),
       ]);
-      if (!settingsRes.ok || !visibilityRes.ok) throw new Error("Failed to save settings");
+      if (settingsRes.ok) setSavedSettings({ ...settings });
+      if (visibilityRes.ok) setSavedContactVisibility({ ...contactVisibility });
+      if (!settingsRes.ok || !visibilityRes.ok) throw new Error(`Could not save ${!settingsRes.ok ? "email settings" : "contact field visibility"}. Successful changes were kept; retry the remaining changes.`);
       setSavedSettings({ ...settings });
       setSavedContactVisibility({ ...contactVisibility });
       setStatus("Settings saved.");
     } catch (error) {
+      setSaveFailed(true);
       setStatus(error instanceof Error ? error.message : "Failed to save settings");
     } finally {
+      settingsSavePending.current = false;
       setSaving(false);
     }
   };
@@ -1344,12 +1412,12 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     saveSettingsRef.current = saveSettings;
   });
   useEffect(() => {
-    if (!hasUnsavedSettingsChanges || saving || switchingAccount) return;
+    if (!hasUnsavedSettingsChanges || saveFailed || saving || switchingAccount || accountLoadError) return;
     const timer = setTimeout(() => {
       void saveSettingsRef.current();
     }, 900);
     return () => clearTimeout(timer);
-  }, [hasUnsavedSettingsChanges, saving, switchingAccount, settings, contactVisibility]);
+  }, [hasUnsavedSettingsChanges, saveFailed, saving, switchingAccount, accountLoadError, settings, contactVisibility]);
 
   const createSignature = () => {
     if (!activeAccountEmail) return;
@@ -1828,6 +1896,13 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                       No settings match “{settingsFilter.trim()}”.
                     </p>
                   ) : null}
+              <div role="status" className="sticky top-16 z-10 rounded-lg border border-purple-100 bg-white p-3 text-sm">
+                <p>Selected inbox: {activeAccountEmail || "None"} {switchingAccount ? "? Loading?" : ""}</p>
+                <p>{saving ? "Saving?" : hasUnsavedSettingsChanges ? "Unsaved changes" : status}</p>
+                {saveFailed && <button type="button" onClick={() => void saveSettings()} className="underline">Retry save</button>}
+                {accountLoadError && <p role="alert">{accountLoadError} <button type="button" onClick={() => void loadAccountData(activeAccountEmail)} className="underline">Retry inbox load</button></p>}
+                {actionError && <p role="alert">{actionError}</p>}
+              </div>
               <SettingsSection
                 title="Inbox layout"
                 description="Choose which items show in the email panel's left sidebar, and use the arrows to put them in the order you want. Inbox is always shown. Syncs across your devices."
@@ -2281,6 +2356,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Campaign sending (CAN-SPAM)"
+                right={<span className="text-sm">Company: {activeClient?.name || "Select a company in the admin panel"}</span>}
                 description="Every commercial campaign email must include a real physical mailing address by law. Until this is set, campaigns for this company cannot send at all — the send queue silently skips them."
                 icon={FiMapPin}
               >
@@ -2316,6 +2392,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Meeting booking"
+                right={<div className="flex flex-wrap gap-2"><input aria-label="Search bookings" value={bookingSearch} onChange={e => setBookingSearch(e.target.value)} placeholder="Search bookings" className={fieldClass} /><select aria-label="Booking status" value={bookingFilter} onChange={e => setBookingFilter(e.target.value)} className={fieldClass}><option value="all">All bookings</option><option value="confirmed">Confirmed</option><option value="cancelled">Canceled</option></select><button type="button" onClick={() => { void loadBookings(); void loadOrgQueue(); }} className={btnSecondary}>Refresh bookings</button></div>}
                 description="Scheduling links backed by your Google Calendar — share the link or drop it into emails."
                 icon={FiCalendar}
               >
@@ -2525,7 +2602,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                       <p className="mb-2 text-xs font-semibold text-[#4A465C]">Open team slots — claim one</p>
                       <ul className="space-y-2">
                         {orgQueue.map((s) => (
-                          <li key={s.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#ECEAF1] bg-white p-3">
+                          <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#ECEAF1] bg-white p-3">
+                            {bookingMessages[s.id] && <p role="status" className="w-full text-sm">{bookingMessages[s.id]}</p>}
                             <div className="min-w-0">
                               <p className="truncate text-sm font-medium text-[#1E1B2E]">
                                 {s.inviteeName} <span className="text-xs font-normal text-[#9A93AE]">· {s.title}</span>
@@ -2560,7 +2638,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                           const attendanceLabel =
                             b.attendanceStatus === "held" ? "Held" : b.attendanceStatus === "not_held" ? "Not held" : null;
                           return (
-                            <li key={b.id} className="flex items-center justify-between gap-3 rounded-xl border border-[#ECEAF1] bg-white p-3">
+                            <li key={b.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#ECEAF1] bg-white p-3">
+                              {bookingMessages[b.id] && <p role="status" className="w-full text-sm">{bookingMessages[b.id]}</p>}
                               <div className="min-w-0">
                                 <p className="truncate text-sm font-medium text-[#1E1B2E]">
                                   {b.inviteeName} <span className="text-xs font-normal text-[#9A93AE]">· {b.title}</span>
@@ -2665,6 +2744,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
               {isAdmin ? (
                 <SettingsSection
                   title="Shared inboxes"
+                  right={<span className="text-xs">Admin ? Changes grant or revoke access immediately</span>}
                   description="Grant a teammate access to another mailbox — read, and optionally send-as. Admin only."
                   icon={FiUsers}
                 >
@@ -3207,7 +3287,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Domain mail (SMTP / IMAP / POP)"
-                description="Send from domain mailboxes with custom SMTP credentials."
+                description="Send from domain mailboxes with custom SMTP credentials. A successful SMTP test confirms sending only; inbox retrieval requires a working IMAP connection."
                 icon={FiServer}
               >
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

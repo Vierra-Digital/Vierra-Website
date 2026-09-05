@@ -25,21 +25,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (req.method === "POST" || req.method === "PUT") {
     try {
-      const { id, title, description, content, date, tag, authorName } = req.body || {};
-      const input = { title, description, content, tag, authorName, date };
+      const { id, title, description, content, date, tag, authorName, expectedUpdatedDate } = req.body || {};
+      if (typeof title !== "string" || !title.trim() || typeof content !== "string" || !content.trim()) return res.status(400).json({ message: "Title and content are required." });
+      if (expectedUpdatedDate !== undefined && expectedUpdatedDate !== null && (typeof expectedUpdatedDate !== "string" || !Number.isFinite(Date.parse(expectedUpdatedDate)))) return res.status(400).json({ message: "Invalid post revision." });
+      const input = { title, description, content, tag, authorName, date, expectedUpdatedDate };
 
       if (req.method === "PUT" && id) {
         const { post, prevSlug } = await updatePost(String(id), input);
         await revalidateBlog(res, [post.slug, prevSlug]);
-        await notifyIndexNow(["/blog", `/blog/${post.slug}`]);
-        return res.status(200).json({ id: post.id });
+        await notifyIndexNow(["/blog", `/blog/${post.slug}`]).catch(() => console.warn("Blog saved; search notification failed"));
+        return res.status(200).json({ id: post.id, updated_date: post.updated_date });
       }
 
       const post = await createPost(input);
       await revalidateBlog(res, [post.slug]);
-      await notifyIndexNow(["/blog", `/blog/${post.slug}`]);
-      return res.status(200).json({ id: post.id, link: `/blog/${post.slug}` });
+      await notifyIndexNow(["/blog", `/blog/${post.slug}`]).catch(() => console.warn("Blog saved; search notification failed"));
+      return res.status(200).json({ id: post.id, updated_date: post.updated_date, link: `/blog/${post.slug}` });
     } catch (e) {
+      if (e && typeof e === "object" && "code" in e && e.code === "P2025") return res.status(409).json({ message: "This post changed since you opened it. Your edits are kept. Copy your changes, then reopen the latest post before publishing." });
       console.error("blog admin post", e);
       return res.status(500).json({ message: "Internal Server Error" });
     }

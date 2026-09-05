@@ -2,6 +2,7 @@ import type { NextApiRequest } from "next";
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr } from "@/lib/api/parsing";
+import { campaignPreflight } from "@/lib/campaigns/preflight";
 import { serializeCampaign } from "@/lib/api/campaigns";
 import {
   createCampaign,
@@ -50,7 +51,7 @@ export default withAuth(async (req, res) => {
   }
 
   if (req.method === "GET") {
-    res.status(200).json({ campaign: serializeCampaign(existing) });
+    res.status(200).json({ campaign: serializeCampaign(existing), preflight: await campaignPreflight(existing) });
     return;
   }
 
@@ -67,6 +68,14 @@ export default withAuth(async (req, res) => {
         const stepCount = await prisma.campaignStep.count({ where: { campaign_id: id } });
         if (stepCount === 0) {
           res.status(400).json({ message: "Add at least one sequence step before launching." });
+          return;
+        }
+      }
+
+      if (nextStatus === "active") {
+        const preflight = await campaignPreflight(existing);
+        if (preflight.blockers.length) {
+          res.status(400).json({ message: preflight.blockers.join(" "), preflight });
           return;
         }
       }

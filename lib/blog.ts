@@ -311,6 +311,7 @@ async function findOrCreateAuthor(name: string) {
 }
 
 export interface PostWriteInput {
+  expectedUpdatedDate?: string | null;
   title: string;
   description?: string | null;
   content: string;
@@ -338,7 +339,7 @@ export async function updatePost(id: string, input: PostWriteInput) {
   const author = await findOrCreateAuthor(input.authorName);
   const prev = await prisma.blogPost.findUnique({ where: { id }, select: { slug: true } });
   const post = await prisma.blogPost.update({
-    where: { id },
+    where: { id, ...(input.expectedUpdatedDate !== undefined ? { updated_date: input.expectedUpdatedDate === null ? null : new Date(input.expectedUpdatedDate) } : {}) },
     data: {
       title: input.title,
       description: input.description ?? null,

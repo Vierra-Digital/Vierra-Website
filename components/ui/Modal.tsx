@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 type ModalProps = {
@@ -42,6 +42,7 @@ export default function Modal({
   // `position: fixed` and `backdrop-filter` (the blur silently fails). Rendering
   // into body sidesteps all of that. Client-only (modals only open on interaction).
   const [mounted, setMounted] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   // The portal target only exists in the browser, so the first render has to produce nothing and the
   // mount has to be recorded afterwards. See the note above for why this portals at all.
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -50,11 +51,51 @@ export default function Modal({
   useEffect(() => {
     if (!isOpen || !closeOnEscape) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+      if (e.key === "Escape" && (!cardRef.current || dialogs.item(dialogs.length - 1) === cardRef.current)) {
+        e.preventDefault();
+        onClose();
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [isOpen, closeOnEscape, onClose]);
+
+  useEffect(() => {
+    if (!mounted || !isOpen || !cardRef.current) return;
+    const card = cardRef.current;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusable = () => Array.from(card.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
+    )).filter(element => element.tabIndex >= 0 && element.getClientRects().length > 0);
+    const isTopDialog = () => {
+      const dialogs = document.querySelectorAll('[role="dialog"][aria-modal="true"]');
+      return dialogs.item(dialogs.length - 1) === card;
+    };
+    if (isTopDialog()) (focusable()[0] ?? card).focus();
+
+    const onTab = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || !isTopDialog()) return;
+      const items = focusable();
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!first) {
+        event.preventDefault();
+        card.focus();
+      } else if (event.shiftKey && (document.activeElement === first || document.activeElement === card || !card.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !card.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onTab);
+    return () => {
+      document.removeEventListener("keydown", onTab);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [mounted, isOpen]);
 
   if (!isOpen || !mounted) return null;
 
@@ -68,7 +109,9 @@ export default function Modal({
         children
       ) : (
         <div
-          className={cardClassName}
+          ref={cardRef}
+          tabIndex={-1}
+          className={`${cardClassName} max-h-[calc(100dvh-2rem)] overflow-y-auto`}
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"

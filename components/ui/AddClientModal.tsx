@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { EMAIL_REGEX } from "@/lib/utils";
 import { inter } from "@/lib/fonts";
 import { FiUser, FiCheck } from 'react-icons/fi'
 import type { SessionItem } from "@/types/session";
+import { useDraftGuard } from "@/hooks/useDraftGuard";
 import Modal from "@/components/ui/Modal";
 
 
@@ -21,6 +22,10 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const pending = useRef(false);
+  const [emailStatus, setEmailStatus] = useState("");
+  const canClose = useDraftGuard(isOpen && step < 3 && Object.values(clientData).some(Boolean), "new client", "1", submitting);
+  const close = () => { if (!pending.current && canClose()) onClose(); };
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -55,6 +60,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   ];
 
   const handleSubmit = async () => {
+    if (pending.current) return;
     const basicInfoValid =
       !!clientData.clientName.trim() &&
       !!clientData.clientEmail.trim() &&
@@ -80,6 +86,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
       return;
     }
     setErr(null);
+    pending.current = true;
     setSubmitting(true);
     try {
       const payload = {
@@ -102,12 +109,14 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
       }
 
       const data = await response.json();
+      setEmailStatus("Sending onboarding email...");
       setSessionLink(data.link as string);
       onCreated?.(data.summary);
       nextStep();
     } catch (e: any) {
       setErr(e?.message ?? "Failed to generate session");
     } finally {
+      pending.current = false;
       setSubmitting(false);
     }
   };
@@ -123,7 +132,9 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
           clientName: clientData.clientName,
           businessName: clientData.businessName,
         }),
-      }).catch(() => {});
+      }).then(response => {
+        setEmailStatus(response.ok ? "Onboarding email sent." : "Client created, but the email could not be confirmed. Copy and share the link below.");
+      }).catch(() => setEmailStatus("Client created, but the email could not be confirmed. Copy and share the link below."));
     }
   }, [step, sessionLink, clientData.clientEmail, origin, clientData.clientName, clientData.businessName]);
 
@@ -157,7 +168,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
 
   return (
     <Modal
-      onClose={onClose}
+      onClose={close}
       zIndexClass="z-50"
       backdropClassName="bg-black/50 backdrop-blur-sm"
       cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4"
@@ -256,7 +267,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
 
             <div className="flex justify-between items-center mt-6">
               <button
-                onClick={onClose}
+                onClick={close}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
               >
                 Cancel
@@ -345,6 +356,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
 
             <div className="flex justify-between items-center mt-6">
               <button
+                disabled={submitting}
                 onClick={prevStep}
                 className="px-4 py-2 border border-[#E5E7EB] text-[#374151] rounded-lg hover:bg-gray-50 text-sm font-medium"
               >
@@ -379,12 +391,12 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
                 </span>
               </div>
               <h3 className="text-xl font-semibold text-[#111827] mb-2">Client Added Successfully!</h3>
-              <p className={`text-sm text-[#6B7280] mb-4 ${inter.className}`}>An onboarding link has been sent to the client.</p>
+              <p className={`text-sm text-[#6B7280] mb-4 ${inter.className}`}>{emailStatus}</p>
               <button
                 className={`mb-3 w-full rounded-lg px-4 py-2 text-sm ${copied ? 'bg-green-50 text-green-700 border border-green-200' : 'text-[#111827] border border-[#E5E7EB] hover:bg-gray-50'} ${inter.className}`}
-                onClick={() => {
+                onClick={async () => {
                   if (sessionLink) {
-                    navigator.clipboard.writeText(`${origin}${sessionLink}`)
+                    try { await navigator.clipboard.writeText(`${origin}${sessionLink}`); } catch { setErr("Could not copy the link. Please try again."); return; }
                     setCopied(true)
                     setTimeout(() => setCopied(false), 2000)
                   }

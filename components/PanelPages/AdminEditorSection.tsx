@@ -63,6 +63,10 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     const [loading, setLoading] = useState<boolean>(false)
     const [error, setError] = useState<string>("")
     const [showCreate, setShowCreate] = useState<boolean>(false)
+    const deletePending = useRef(false)
+    const resetPending = useRef(new Set<string>())
+    const [deleteBusy, setDeleteBusy] = useState(false)
+    const [deleteError, setDeleteError] = useState("")
     const [resetSent, setResetSent] = useState<Record<string, boolean>>({})
     const [resetSending, setResetSending] = useState<Record<string, boolean>>({})
     const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
@@ -97,6 +101,9 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     }, [])
 
     const sendPasswordReset = async (userId: string) => {
+        if (resetPending.current.has(userId)) return
+        resetPending.current.add(userId)
+        setResetSent(prev => ({ ...prev, [userId]: false }))
         setResetSending((prev) => ({ ...prev, [userId]: true }))
         try {
             const r = await fetch("/api/admin/userPassword", {
@@ -115,6 +122,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
         } catch {
             setError("Could not send the reset link — the request failed.")
         } finally {
+            resetPending.current.delete(userId)
             setResetSending((prev) => ({ ...prev, [userId]: false }))
         }
     }
@@ -135,14 +143,23 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     }
 
     const confirmDeleteUser = async () => {
-        if (!userToDelete) return
+        if (!userToDelete || deletePending.current) return
+        deletePending.current = true
+        setDeleteBusy(true)
+        setDeleteError("")
         
         try {
-            await fetch(`/api/admin/users?id=${userToDelete.id}`, { method: "DELETE" })
+            const response = await fetch(`/api/admin/users?id=${encodeURIComponent(userToDelete.id)}`, { method: "DELETE" })
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}))
+                throw new Error(body.message || "Could not delete this user.")
+            }
             setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id))
             setDeleteModalOpen(false)
             setUserToDelete(null)
-        } catch {}
+        } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : "Deletion could not be confirmed. Refresh before retrying.")
+        } finally { deletePending.current = false; setDeleteBusy(false) }
     }
 
     const filteredUsers = useMemo(() => {
@@ -484,6 +501,8 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                     </>
                 }
                 confirmLabel="Remove User"
+                busy={deleteBusy}
+                error={deleteError}
                 onConfirm={confirmDeleteUser}
                 onCancel={() => {
                     setDeleteModalOpen(false)
@@ -736,6 +755,7 @@ type SessionRow = {
     clientEmail: string
     businessName: string
     createdAt: number
+    expiresAt?: number | null
     submittedAt: number | null
     lastUpdatedAt: number | null
     status: SessionStatus
@@ -755,6 +775,8 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
     const [updatedCount, setUpdatedCount] = useState<number>(0)
     const [statusFilter, setStatusFilter] = useState<'all' | SessionStatus>('all')
     const [isStatusFilterOpen, setIsStatusFilterOpen] = useState<boolean>(false)
+    const sessionMutation = useRef(false)
+    const [sessionDeleteError, setSessionDeleteError] = useState("")
     const [deletingSession, setDeletingSession] = useState<string | null>(null)
     const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
     const [sessionToDelete, setSessionToDelete] = useState<{ token: string; clientName: string } | null>(null)
@@ -777,7 +799,8 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
             const r = await fetch("/api/session/listClientSessions")
             if (!r.ok) throw new Error(`Failed to fetch (${r.status})`)
             const data = await r.json()
-            setSessions(Array.isArray(data) ? data : [])
+            if (!Array.isArray(data)) throw new Error("Session list response was incomplete. Try again.")
+            setSessions(data)
         } catch (e: any) {
             setError(e?.message || "Failed to load sessions")
         } finally {
@@ -925,6 +948,8 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
     }
 
     const handleRenewSession = async (token: string) => {
+        if (sessionMutation.current) return
+        sessionMutation.current = true
         setRenewingSession(token)
         try {
             const r = await fetch("/api/admin/renewSession", {
@@ -943,12 +968,15 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
             setRenewSuccess(false)
             setRenewModalOpen(true)
         } finally {
+            sessionMutation.current = false
             setRenewingSession(null)
         }
     }
 
     const handleDeleteSession = async () => {
-        if (!sessionToDelete) return
+        if (!sessionToDelete || sessionMutation.current) return
+        sessionMutation.current = true
+        setSessionDeleteError("")
         
         setDeletingSession(sessionToDelete.token)
         try {
@@ -963,8 +991,9 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
             setSessionToDelete(null)
             await load()
         } catch (e: any) {
-            console.error("Failed to delete session:", e?.message || "Unknown Error")
+            setSessionDeleteError(e?.message || "Deletion could not be confirmed. Refresh before retrying.")
         } finally {
+            sessionMutation.current = false
             setDeletingSession(null)
         }
     }
@@ -993,7 +1022,8 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
         return filtered
     }, [sorted, searchQuery, statusFilter])
 
-    const paginatedSessions = filteredSessions.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+    const safePage = Math.min(currentPage, Math.max(0, Math.ceil(filteredSessions.length / pageSize) - 1))
+    const paginatedSessions = filteredSessions.slice(safePage * pageSize, (safePage + 1) * pageSize)
     const totalPages = Math.ceil(filteredSessions.length / pageSize)
 
     return (
@@ -1252,6 +1282,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{s.businessName}</td>
                                                     <td className="px-4 py-4">
                                                         {statusBadge(s.status)}
+                                                        <p className="mt-1 text-xs text-[#6B7280]">{s.expiresAt ? `Link expires ${new Date(s.expiresAt).toLocaleString()}` : "Expiry unavailable"} (local time)</p>
                                                     </td>
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{formatDate(s.createdAt)}</td>
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{formatDate(s.lastUpdatedAt)}</td>
@@ -1392,6 +1423,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
             <ConfirmDeleteSessionModal
                 isOpen={deleteModalOpen}
                 clientName={sessionToDelete?.clientName || ""}
+                error={sessionDeleteError}
                 onConfirm={handleDeleteSession}
                 onCancel={() => {
                     setDeleteModalOpen(false)
@@ -1427,7 +1459,8 @@ const ConfirmDeleteSessionModal: React.FC<{
     onConfirm: () => void
     onCancel: () => void
     isDeleting: boolean
-}> = ({ isOpen, clientName, onConfirm, onCancel, isDeleting }) => {
+    error?: string
+}> = ({ isOpen, clientName, onConfirm, onCancel, isDeleting, error }) => {
     if (!isOpen) return null
 
     return (
@@ -1436,7 +1469,7 @@ const ConfirmDeleteSessionModal: React.FC<{
             backdropClassName="bg-black/50 backdrop-blur-sm"
             cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
             label="Delete Session"
-            onClose={onCancel}
+            onClose={() => { if (!isDeleting) onCancel() }}
         >
                 <div className="flex items-center gap-3 mb-4">
                     <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
@@ -1448,6 +1481,7 @@ const ConfirmDeleteSessionModal: React.FC<{
                     Are you sure you want to delete the session for <span className="font-semibold text-[#111827]">{clientName}</span>? 
                     This action is permanent and cannot be undone. All associated data will be removed.
                 </p>
+                {error && <p role="alert" className="mb-3 text-sm text-red-600">{error}</p>}
                 <div className="flex gap-3 justify-end">
                     <button
                         onClick={onCancel}
