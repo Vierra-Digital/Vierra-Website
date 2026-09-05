@@ -1,14 +1,30 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import nodemailer from "nodemailer";
-import { resolveBaseUrl } from "@/lib/api/url";
+import { resolveBaseUrl, toSameSiteUrl } from "@/lib/api/url";
 import { isBrevoConfigured, sendBrevoEmail } from "@/lib/email/brevo";
+import { requireRole } from "@/lib/auth";
+import { isValidEmail } from "@/lib/utils";
+import { escapeHtml } from "@/lib/gmail/sendCore";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
 
+  // Only ever called from the panel's Add Client flow, but nothing enforced that: the recipient,
+  // the link and the client name all came straight from the request body, so anyone could have this
+  // send mail from the company's own address to an arbitrary recipient with an arbitrary link in
+  // the "Begin Onboarding" button — Vierra-branded phishing, on Vierra's sending reputation.
+  const session = await requireRole(req, res, ["admin", "staff"]);
+  if (!session) return;
+
   const { email, link, clientName } = req.body ?? {};
   if (!email || !link) {
     return res.status(400).json({ message: "Missing email or link." });
+  }
+  if (typeof email !== "string" || !isValidEmail(email)) {
+    return res.status(400).json({ message: "Invalid email address." });
+  }
+  if (typeof link !== "string") {
+    return res.status(400).json({ message: "Invalid onboarding link." });
   }
 
   const transporter = nodemailer.createTransport({
@@ -20,14 +36,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     pool: false,
   } as nodemailer.TransportOptions);
 
-  const fullLink = (() => {
-    try {
-      const base = resolveBaseUrl(req);
-      return new URL(link, base).toString();
-    } catch {
-      return link;
-    }
-  })();
+  // Rebuilt on our own base so the emailed button can only ever point at this site. Previously an
+  // absolute off-site URL passed straight through, and a malformed one fell back to the raw input.
+  const fullLink = toSameSiteUrl(link, resolveBaseUrl(req));
+  if (!fullLink) {
+    return res.status(400).json({ message: "Invalid onboarding link." });
+  }
   const fromEmail = process.env.FROM_EMAIL || "alex@vierradev.com";
   const fromName = process.env.FROM_NAME || "Vierra";
   const fromAddress = `"${fromName}" <${fromEmail}>`;
@@ -50,7 +64,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 <img src="https://vierradev.com/assets/Onboarding/dove.png" alt="Dove" style="width:85px;height:85px;border-radius:50%;border:4px solid #0E0A2D;background:#6D5DD3;padding:20px;">
               </div>
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">
-                Welcome To Vierra ${clientName || "there"}!
+                Welcome To Vierra ${clientName ? escapeHtml(String(clientName)) : "there"}!
               </h2>
               <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;max-width:480px;margin-left:auto;margin-right:auto;">
                 We're excited to kick off our partnership! Click below to get started with your onboarding and video modules.

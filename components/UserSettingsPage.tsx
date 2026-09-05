@@ -3,7 +3,7 @@ import { signOut } from "@/lib/session-client";
 import ProfileImage from "./ProfileImage";
 import ImageCropModal from "./ImageCropModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
-import { FiEdit3, FiUpload, FiRotateCcw, FiLock, FiLogOut, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2, FiCalendar } from "react-icons/fi";
+import { FiLogOut, FiEdit3, FiUpload, FiRotateCcw, FiLock, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2, FiCalendar } from "react-icons/fi";
 import { FaFacebookF, FaLinkedinIn, FaGoogle } from "react-icons/fa";
 import { X } from "lucide-react";
 
@@ -17,6 +17,7 @@ interface UserSettingsPageProps {
   onImageUpdate?: () => void | Promise<void>;
   onClose?: () => void;
   variant?: "panel" | "dark";
+  userRole?: string | null;
 }
 
 type GmailAccountConnection = {
@@ -59,7 +60,7 @@ function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (
   );
 }
 
-const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate, onImageUpdate, onClose, variant = "panel" }) => {
+const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate, onImageUpdate, onClose, variant = "panel", userRole: userRoleProp = null }) => {
   const [name, setName] = useState(user.name || "");
   const [isEditingName, setIsEditingName] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -82,7 +83,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   });
   const [passwordFieldErrors, setPasswordFieldErrors] = useState<Record<string, string>>({});
   const [isPasswordChangeSuccess, setIsPasswordChangeSuccess] = useState(false);
-  const [userRole, setUserRole] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(userRoleProp);
   const [socialConnections, setSocialConnections] = useState({
     facebook: false,
     linkedin: false,
@@ -101,9 +102,21 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const avatarMenuRef = useRef<HTMLDivElement>(null);
   const displayName = name && name.trim().length > 0 ? name : (user.email ? user.email.split("@")[0] : "User");
 
+  // Both of these sync a prop into state that has a second source, so neither can be derived.
+  //
+  // `name` is an editable field: a derived value would throw away whatever the user had typed on
+  // the next render. It still has to follow user.name, which changes when the profile is saved.
+  // `userRole` is also written by the polling effect further down, which picks up a role an admin
+  // changed elsewhere, so the prop is one of two inputs rather than the value itself.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setName(user.name || "");
   }, [user.name]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (userRoleProp) setUserRole(userRoleProp);
+  }, [userRoleProp]);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -126,13 +139,13 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     setSocialLoading(true);
     try {
       const [userRes, fbRes, liRes, gaRes] = await Promise.all([
-        fetch("/api/profile/getUser"),
+        userRoleProp ? null : fetch("/api/profile/getUser"),
         fetch("/api/facebook/status"),
         fetch("/api/linkedin/status"),
         fetch("/api/googleads/status"),
       ]);
 
-      if (userRes.ok) {
+      if (userRes?.ok) {
         const userData = await userRes.json();
         setUserRole(userData?.role || null);
       }
@@ -155,12 +168,15 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     }
   };
 
-  const loadGmailConnections = async () => {
-    setGmailLoading(true);
+  const loadGmailConnections = async (options?: { silent?: boolean }) => {
+    const silent = !!options?.silent;
+    if (!silent) setGmailLoading(true);
     try {
       const response = await fetch("/api/gmail/status");
       if (!response.ok) {
-        setGmailAccounts([]);
+        // A background poll hiccup shouldn't blank out an already-loaded list — only the
+        // user-initiated (non-silent) load treats a bad response as "no accounts".
+        if (!silent) setGmailAccounts([]);
         return;
       }
 
@@ -175,9 +191,9 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       );
     } catch (error) {
       console.error("Failed to load Gmail connections:", error);
-      setGmailAccounts([]);
+      if (!silent) setGmailAccounts([]);
     } finally {
-      setGmailLoading(false);
+      if (!silent) setGmailLoading(false);
     }
   };
 
@@ -252,9 +268,48 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   };
 
   useEffect(() => {
+    // See the note below: these are mount-only loaders that each set their own state after awaiting.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadSocialConnections();
     loadGmailConnections();
     loadDetectedCalendars();
+    // Mount-only on purpose. These loaders are plain functions, recreated on every render, so
+    // listing them as dependencies would refetch all three on each render rather than once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep the role-gated sections (Gmail, calendars, social) in sync with an admin
+  // changing this user's role elsewhere, without waiting on a full page reload.
+  useEffect(() => {
+    let cancelled = false;
+    const syncRole = async () => {
+      try {
+        const response = await fetch("/api/profile/getRole");
+        if (!response.ok || cancelled) return;
+        const data = await response.json();
+        const freshRole = typeof data?.role === "string" ? data.role : null;
+        setUserRole((prev) => (prev === freshRole ? prev : freshRole));
+      } catch (error) {
+        console.error("Failed to sync role:", error);
+      }
+    };
+
+    if (!userRoleProp) syncRole();
+    const intervalId = setInterval(syncRole, 20000);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [userRoleProp]);
+
+  // Periodically recheck Gmail connection status in the background (no dedicated push
+  // webhook from Google — /api/gmail/status already re-validates/refreshes each token, so
+  // polling it surfaces a revoked/expired grant without the user having to hit Refresh).
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      loadGmailConnections({ silent: true });
+    }, 60000);
+    return () => clearInterval(intervalId);
   }, []);
 
   useEffect(() => {
@@ -588,7 +643,10 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const gmailSettingsSource = userRole === "admin" || userRole === "staff" ? "panel-settings" : "settings";
 
   const cardsContent = (
-    <div className="space-y-6">
+    /* Two balanced columns on wide screens. A single stacked column meant scrolling past
+       everything to reach anything, and left most of a 1680px page empty. CSS columns keep the
+       cards in source order while filling both sides; break-inside stops a card splitting. */
+    <div className="space-y-4 xl:space-y-0 xl:[column-count:2] xl:[column-gap:1rem] [&>div]:break-inside-avoid xl:[&>div]:mb-4">
       
       <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
         <div className="flex flex-col sm:flex-row gap-6">
@@ -1074,18 +1132,20 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         </div>
       )}
 
-      <div className={`rounded-xl ${cardBg} border p-6 shadow-sm`}>
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h3 className={`font-semibold ${textPrimary}`}>Sign Out</h3>
-            <p className={`text-sm ${textSecondary} mt-0.5`}>Sign out of your account on this device.</p>
+      {/* Sign out lives here, not on the nav rail: the rail is for navigation, and a destructive
+          action sitting one row below it was easy to mis-click. */}
+      <div className={`rounded-xl ${cardBg} border p-5 shadow-sm`}>
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Sign out</h3>
+            <p className={`text-[13px] ${textSecondary} mt-0.5`}>Ends your session on this device.</p>
           </div>
           <button
             onClick={() => signOut({ callbackUrl: "/login" })}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 text-sm font-medium transition-colors shrink-0"
+            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-red-200 bg-white px-3.5 py-2 text-[13px] font-medium text-red-600 transition-colors hover:bg-red-50"
           >
             <FiLogOut className="w-4 h-4" />
-            Logout
+            Log out
           </button>
         </div>
       </div>
@@ -1096,13 +1156,11 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     <div className={`w-full h-full ${pageBg} text-[#111014] flex flex-col`}>
       
       {isPanel && (
-        <div className="flex-1 flex justify-center px-6 pt-2">
-          <div className="w-full max-w-6xl flex flex-col h-full">
-            <div className="w-full flex justify-between items-center mb-2">
-              <div>
-                <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Account Settings</h1>
-              </div>
-            </div>
+        <div className="flex-1 px-8 lg:px-14 pt-1 overflow-x-hidden">
+          <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
+            <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em] text-[#111827] mt-8 mb-6">
+              Account Settings
+            </h1>
             <div className="pb-16">
               {cardsContent}
             </div>

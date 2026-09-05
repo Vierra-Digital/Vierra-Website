@@ -1,22 +1,8 @@
 import nodemailer from "nodemailer";
 import { isBrevoConfigured, sendBrevoEmail } from "@/lib/email/brevo";
+import { escapeHtml } from "@/lib/utils";
 
-// Duplicated (not imported from lib/gmail/sendCore) on purpose — this file is the transactional-
-// email path for the public, unauthenticated lead-capture endpoints (pages/api/sendEmail.ts,
-// pages/api/audit/availabilityNote.ts). sendCore.ts pulls in Prisma, Gmail OAuth token refresh,
-// and SMTP-credential resolution for its own use, none of which this file needs — importing it
-// just for this helper would drag that whole stack into the public path. Same reasoning as
-// lib/campaigns/sendQueueTick.ts's local copy.
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-interface EmailData {
+export interface EmailData {
   fullName: string;
   email: string;
   phoneNumber: string;
@@ -131,7 +117,12 @@ function ctaButton(href: string, label: string): string {
 }
 
 export async function sendEmail(data: EmailData): Promise<void> {
-  const formattedPhoneNumber = data.phoneNumber.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3");
+  const formattedPhoneNumber = escapeHtml(data.phoneNumber.replace(/(\d{3})(\d{3})(\d{4})/, "$1-$2-$3"));
+  const fullName = escapeHtml(data.fullName);
+  const email = escapeHtml(data.email);
+  const website = escapeHtml(data.website);
+  const monthlyRevenue = escapeHtml(data.monthlyRevenue);
+  const desiredRevenue = escapeHtml(data.desiredRevenue);
 
   const mailOptions = {
     from: fromAddress,
@@ -143,11 +134,11 @@ export async function sendEmail(data: EmailData): Promise<void> {
               <table style="width:100%;border-collapse:collapse;margin:0 0 8px;">
                 <tr>
                   <td style="padding:11px 0;border-bottom:1px solid #eee;color:#2e0a4f;font-weight:700;font-size:15px;width:42%;">Full Name</td>
-                  <td style="padding:11px 0;border-bottom:1px solid #eee;color:#444;font-size:15px;">${data.fullName}</td>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;color:#444;font-size:15px;">${fullName}</td>
                 </tr>
                 <tr>
                   <td style="padding:11px 0;border-bottom:1px solid #eee;color:#2e0a4f;font-weight:700;font-size:15px;">Email</td>
-                  <td style="padding:11px 0;border-bottom:1px solid #eee;font-size:15px;"><a href="mailto:${data.email}" style="color:#7A13D0;text-decoration:none;">${data.email}</a></td>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;font-size:15px;"><a href="mailto:${email}" style="color:#7A13D0;text-decoration:none;">${email}</a></td>
                 </tr>
                 <tr>
                   <td style="padding:11px 0;border-bottom:1px solid #eee;color:#2e0a4f;font-weight:700;font-size:15px;">Phone Number</td>
@@ -155,15 +146,15 @@ export async function sendEmail(data: EmailData): Promise<void> {
                 </tr>
                 <tr>
                   <td style="padding:11px 0;border-bottom:1px solid #eee;color:#2e0a4f;font-weight:700;font-size:15px;">Website</td>
-                  <td style="padding:11px 0;border-bottom:1px solid #eee;font-size:15px;"><a href="${data.website}" target="_blank" style="color:#7A13D0;text-decoration:none;">${data.website}</a></td>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;font-size:15px;"><a href="${website}" target="_blank" style="color:#7A13D0;text-decoration:none;">${website}</a></td>
                 </tr>
                 <tr>
                   <td style="padding:11px 0;border-bottom:1px solid #eee;color:#2e0a4f;font-weight:700;font-size:15px;">Monthly Revenue</td>
-                  <td style="padding:11px 0;border-bottom:1px solid #eee;color:#444;font-size:15px;">${data.monthlyRevenue}</td>
+                  <td style="padding:11px 0;border-bottom:1px solid #eee;color:#444;font-size:15px;">${monthlyRevenue}</td>
                 </tr>
                 <tr>
                   <td style="padding:11px 0;color:#2e0a4f;font-weight:700;font-size:15px;">Desired Revenue</td>
-                  <td style="padding:11px 0;color:#444;font-size:15px;">${data.desiredRevenue}</td>
+                  <td style="padding:11px 0;color:#444;font-size:15px;">${desiredRevenue}</td>
                 </tr>
               </table>`),
   };
@@ -184,6 +175,7 @@ export async function sendEmail(data: EmailData): Promise<void> {
  */
 export async function sendAuditConfirmationEmail(data: Pick<EmailData, "fullName" | "email">): Promise<void> {
   const firstName = (data.fullName || "").trim().split(/\s+/)[0] || "there";
+  const safeFirstName = escapeHtml(firstName);
   const mailOptions = {
     from: fromAddress,
     to: data.email,
@@ -191,7 +183,7 @@ export async function sendAuditConfirmationEmail(data: Pick<EmailData, "fullName
     html: renderEmailShell(`
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;text-align:left;">Your Audit Request Has Been Claimed</h2>
               <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 20px;text-align:left;">
-                Hi ${firstName}, congratulations! You have claimed your free business audit. Our team will be in touch within 24 hours to schedule your call.
+                Hi ${safeFirstName}, congratulations! You have claimed your free business audit. Our team will be in touch within 24 hours to schedule your call.
               </p>
               <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;text-align:left;">
                 In the meantime, just reply to this email if there's anything you'd like us to know before we connect.

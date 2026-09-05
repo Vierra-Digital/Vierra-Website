@@ -3,11 +3,12 @@ import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import { getBlogCatalog } from "@/lib/blog"
 import { Header } from "@/components/Header";
-import { motion } from "framer-motion";
+import { m as motion } from "framer-motion";
 import { Search, ChevronRight } from "lucide-react";
 import Footer from "@/components/FooterSection/Footer";
 import { GetStaticProps } from "next";
 import Link from "next/link";
+import { jsonLd } from "@/lib/jsonLd";
 
 type BlogPostType = {
     id: string;
@@ -41,9 +42,18 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
             revalidate: 300,
         };
     } catch (error) {
-        // Never cache an empty/errored index — rethrow so Next keeps serving the
-        // last good static page and retries on the next revalidation.
-        console.error('blog index getStaticProps DB error (retryable, not cached):', error);
+        console.error('blog index getStaticProps DB error:', error);
+        // At build time a throw here aborts the entire deploy. The database is reachable from the
+        // build, but not guaranteed to be — a saturated connection pool is enough — and losing a
+        // deploy of the whole site because one page could not list posts is the wrong trade. The
+        // page already has a hasFetchError state that renders without posts and marks itself
+        // noindex, so serve that with a short revalidate: the first request after the build
+        // regenerates it with real content.
+        if (process.env.NEXT_PHASE === 'phase-production-build') {
+            return { props: { latestPosts: [], hasFetchError: true }, revalidate: 30 };
+        }
+        // At runtime, still rethrow: Next then keeps serving the last good static page and retries
+        // on the next revalidation, rather than caching an empty index.
         throw error;
     }
 };
@@ -87,10 +97,20 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
     const [visibleCount, setVisibleCount] = useState(latestPosts.length || 9);
     // Hydrate the search box from the URL (?search=) so the WebSite SearchAction
     // structured-data target (/blog?search={term}) actually applies the query.
+    // Hydrate the search box from the URL (?search=) so the WebSite SearchAction structured-data
+    // target (/blog?search={term}) actually applies the query.
+    //
+    // This has to stay an effect. The page is statically generated, so the server renders an empty
+    // box and the unfiltered list; seeding this during the first render instead would make the
+    // client's hydration output disagree with that HTML — searchQuery drives the input value, the
+    // filtered list and the empty-state heading. Setting it after hydration is the correct trade,
+    // so the lint rule is suppressed rather than satisfied.
     useEffect(() => {
         const q = new URLSearchParams(window.location.search).get("search");
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         if (q) setSearchQuery(q);
     }, []);
+
     const batchSize = 9;
     const sentinelRef = useRef<HTMLDivElement | null>(null);
     const filterInitialized = useRef(false);
@@ -138,6 +158,11 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
     useEffect(() => {
         const byTag = filterPostsByTag(tagSelectedName, latestPosts);
         const bySearch = filterPostsByQuery(searchQuery, byTag);
+        // Filtering is deferred rather than derived on purpose. The search term can arrive from ?search= in
+        // the URL, and this page is statically generated, so computing the filtered list during the first
+        // render would produce different markup than the server sent and break hydration. The full list is
+        // also what belongs in the SSR HTML for crawlers.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setFilteredLatestPosts(bySearch);
         // Keep the initial full render intact (all posts stay in the SSR HTML for
         // crawlers); only restart pagination when the user changes tag/search.
@@ -193,7 +218,7 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                 id="schema-org-breadcrumbs"
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
-                    __html: JSON.stringify({
+                    __html: jsonLd({
                         "@context": "https://schema.org",
                         "@type": "BreadcrumbList",
                         itemListElement: [
@@ -217,7 +242,7 @@ const BlogPage = ({ latestPosts, hasFetchError = false }: Props) => {
                 id="schema-org-blog"
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
-                    __html: JSON.stringify({
+                    __html: jsonLd({
                         "@context": "https://schema.org",
                         "@type": "Blog",
                         "@id": "https://vierradev.com/blog",

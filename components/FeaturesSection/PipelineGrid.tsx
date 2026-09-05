@@ -1,9 +1,11 @@
 "use client"
 
-import { motion, useReducedMotion } from "framer-motion"
+import { m as motion, useReducedMotion } from "framer-motion"
 import { inter } from "@/lib/fonts";
 import type { IconType } from "react-icons"
 import { FaLinkedin, FaInstagram, FaFacebook, FaWhatsapp, FaCalendarCheck, FaUsers, FaBullseye, FaPlug } from "react-icons/fa6"
+// react-icons is pinned to exactly 5.6.0 in package.json: 5.7.0 drops SiSalesforce and
+// SiSlack, which Simple Icons removed upstream. Bumping it breaks this import.
 import { SiGmail, SiGoogle, SiHubspot, SiSalesforce, SiZoho, SiClickup, SiSlack } from "react-icons/si"
 
 
@@ -86,7 +88,7 @@ function NodeBox({ n }: { n: Node }) {
           transition={{ duration: 0.95, delay: n.tier * STEP, ease: [0.22, 1, 0.36, 1] }}
         >
           {n.kind === "engine" ? (
-            <div className="pl-engine flex h-full w-full items-center justify-center rounded-2xl bg-gradient-to-br from-[#8F42FF] to-[#701CC0] shadow-[0_18px_50px_-18px_rgba(112,28,192,1)] transition-transform duration-300 group-hover:scale-[1.06]">
+            <div className="pl-engine flex h-full w-full items-center justify-center rounded-2xl bg-gradient-to-br from-[#8F42FF] to-[#701CC0] transition-transform duration-300 group-hover:scale-[1.06]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/assets/vierra-logo-panel.png" alt="Vierra" width={71} height={26} style={{ height: 26, width: "auto" }} />
             </div>
@@ -134,13 +136,27 @@ export default function PipelineGrid() {
       <div className="relative -mx-4 overflow-x-auto px-4 md:-mx-6 md:px-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <svg viewBox="150 56 1550 646" className="relative mx-auto w-full min-w-[960px]" preserveAspectRatio="xMidYMid meet">
         <style>{`
-          @keyframes pl-engine-pulse {
-            0%, 100% { box-shadow: 0 18px 50px -18px rgba(112,28,192,1), 0 0 0 rgba(143,66,255,0); }
-            50% { box-shadow: 0 18px 50px -18px rgba(112,28,192,1), 0 0 26px 2px rgba(143,66,255,0.65); }
+          /* Static base shadow (was a Tailwind shadow-[...] utility) plus a
+             glow layer on ::after whose OPACITY pulses — not its box-shadow.
+             Animating box-shadow directly forces main-thread paint every
+             frame forever (this loop never stops); opacity is GPU-composited. */
+          .pl-engine { position: relative; box-shadow: 0 18px 50px -18px rgba(112,28,192,1); }
+          .pl-engine::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border-radius: inherit;
+            box-shadow: 0 0 26px 2px rgba(143,66,255,0.65);
+            opacity: 0;
+            animation: pl-engine-pulse 2.6s ease-in-out infinite;
+            pointer-events: none;
           }
-          .pl-engine { animation: pl-engine-pulse 2.6s ease-in-out infinite; }
+          @keyframes pl-engine-pulse {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 1; }
+          }
           @media (prefers-reduced-motion: reduce) {
-            .pl-engine { animation: none; }
+            .pl-engine::after { animation: none; opacity: 0; }
           }
         `}</style>
 

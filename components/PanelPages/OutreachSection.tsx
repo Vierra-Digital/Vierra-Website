@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import Image from "next/image"
 import { useSession } from "@/lib/session-client"
 import { FiChevronLeft, FiChevronRight, FiCalendar, FiTrendingUp, FiDollarSign, FiUsers, FiTarget } from "react-icons/fi"
-import { motion } from "framer-motion"
+import { m as motion } from "framer-motion"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 
 const statFields = [
@@ -115,7 +115,17 @@ const OutreachSection = () => {
     // ---- Per-client analytics (System 2) --------------------------------
     const [scope, setScope] = useState<"company" | "client" | "overview">("company")
     const [clients, setClients] = useState<{ id: string; name: string }[]>([])
-    const [selectedClientId, setSelectedClientId] = useState<string>("")
+    /**
+     * The client the funnel view is showing.
+     *
+     * State holds only an explicit choice; the default — the first client — is derived. An effect
+     * used to write that default into state once the list loaded, which rendered the view once with
+     * no client selected before correcting itself. Deriving it also handles the case the effect
+     * covered awkwardly: if the selected client disappears from the list, this falls back
+     * immediately rather than after another render.
+     */
+    const [clientChoice, setClientChoice] = useState<string>("")
+    const selectedClientId = clients.some((c) => c.id === clientChoice) ? clientChoice : (clients[0]?.id ?? "")
     const [clientData, setClientData] = useState<ClientStat[]>([])
     const [clientEdits, setClientEdits] = useState<ClientManualFields>({ meetingsSet: 0, clientsClosed: 0, revenue: 0 })
     const [clientDirty, setClientDirty] = useState(false)
@@ -253,7 +263,11 @@ const OutreachSection = () => {
             }
             setStats(newStats);
             setHasUnsavedChanges(false)
-        } catch {
+        } catch (e) {
+            // Not surfaced in the UI: this section has no error surface, and adding one is a design
+            // change rather than a fix. Logging at least makes a failed load diagnosable instead of
+            // silently indistinguishable from a month that genuinely has no data.
+            console.error("outreach: load failed", e);
         } finally {
             setIsLoading(false);
         }
@@ -322,7 +336,11 @@ const OutreachSection = () => {
                 attemptsToMeetingsPct: calculatePercentage(yearly.totalMeetingsSet, yearly.totalAttempt),
                 meetingsToClientsPct: calculatePercentage(yearly.totalClientsLosed, yearly.totalMeetingsSet)
             })
-        } catch {
+        } catch (e) {
+            // Not surfaced in the UI: this section has no error surface, and adding one is a design
+            // change rather than a fix. Logging at least makes a failed load diagnosable instead of
+            // silently indistinguishable from a month that genuinely has no data.
+            console.error("outreach: load failed", e);
         } finally {
             setIsLoading(false);
         }
@@ -337,7 +355,11 @@ const OutreachSection = () => {
             setClients(Array.isArray(data.clients) ? data.clients : [])
             setClientData(Array.isArray(data.trackerData) ? data.trackerData : [])
             setClientDirty(false)
-        } catch {
+        } catch (e) {
+            // Not surfaced in the UI: this section has no error surface, and adding one is a design
+            // change rather than a fix. Logging at least makes a failed load diagnosable instead of
+            // silently indistinguishable from a month that genuinely has no data.
+            console.error("outreach: load failed", e);
         } finally {
             setIsLoading(false)
         }
@@ -370,6 +392,9 @@ const OutreachSection = () => {
     }, [session?.user, isEditable, selectedClientId, selectedYear, selectedMonth, clientEdits])
 
     useEffect(() => {
+        // Each fetcher flips its own loading flag synchronously before awaiting, which is what the
+        // rule sees. Refetching when the scope, period or view changes is what an effect is for.
+        /* eslint-disable react-hooks/set-state-in-effect */
         if (scope === "company") {
             if (viewMode === "monthly") {
                 fetchMonthlyData();
@@ -379,18 +404,18 @@ const OutreachSection = () => {
         } else {
             fetchClientData();
         }
+        /* eslint-enable react-hooks/set-state-in-effect */
     }, [scope, selectedYear, selectedMonth, viewMode, fetchMonthlyData, fetchYearlySummary, fetchClientData]);
 
-    // Default the client selector to the first client once the list loads.
-    useEffect(() => {
-        if (scope === "client" && clients.length && !clients.some((c) => c.id === selectedClientId)) {
-            setSelectedClientId(clients[0].id)
-        }
-    }, [scope, clients, selectedClientId])
-
     // Load the selected client's manual funnel fields into the editable state.
+    //
+    // These genuinely are state: the user types into them. Seeding an edit buffer from freshly
+    // loaded data cannot be derived, because a derived value would discard whatever had been typed
+    // on the next render. The idiomatic alternative is keying a sub-component on the selection so
+    // it remounts with new defaults, which would mean splitting this view apart.
     useEffect(() => {
         const row = clientData.find((c) => c.clientId === selectedClientId)
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setClientEdits({
             meetingsSet: row?.meetingsSet ?? 0,
             clientsClosed: row?.clientsClosed ?? 0,
@@ -515,7 +540,7 @@ const OutreachSection = () => {
     return (
         <div className="w-full h-full bg-white text-[#111014] flex flex-col overflow-auto">
             <div className="flex-1 flex justify-center px-6 pt-2">
-                <div className="w-full max-w-6xl flex flex-col h-full">
+                <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
                     
                     <div className="w-full flex justify-between items-center mb-2">
                         <div>
@@ -746,7 +771,7 @@ const OutreachSection = () => {
                                         <label className="text-sm font-medium text-[#6B7280]">Client</label>
                                         <select
                                             value={selectedClientId}
-                                            onChange={(e) => setSelectedClientId(e.target.value)}
+                                            onChange={(e) => setClientChoice(e.target.value)}
                                             className="text-sm font-semibold text-[#111827] rounded-md border border-[#D7DDED] px-3 py-2 bg-white focus:border-[#701CC0] focus:ring-1 focus:ring-[#701CC0] focus:outline-none"
                                         >
                                             {clients.map((c) => (

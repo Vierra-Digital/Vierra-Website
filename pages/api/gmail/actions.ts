@@ -3,6 +3,17 @@ import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { prisma } from "@/lib/prisma";
 import { asStr } from "@/lib/api/parsing";
+import { mapInBatches } from "@/lib/batch";
+import { invalidateGmailListCache } from "@/lib/gmail/messageListCache";
+import { invalidateGmailCountsCache } from "@/lib/gmail/countsCache";
+import {
+  fetchWithTimeout,
+  GMAIL_BATCH_CONCURRENCY,
+  GMAIL_RATE_LIMIT_RETRIES,
+  isRateLimited,
+  backoffDelayMs,
+  delay,
+} from "@/lib/gmail/rateLimitedFetch";
 
 type ActionType =
   | "trash"
@@ -37,19 +48,19 @@ function normalizeItems(input: unknown): ActionItem[] {
 async function callGmailAction(accessToken: string, action: ActionType, messageId: string) {
   const encodedId = encodeURIComponent(messageId);
   if (action === "deletePermanently") {
-    return fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}`, {
+    return fetchWithTimeout(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${accessToken}` },
     });
   }
   if (action === "trash" || action === "moveToTrash") {
-    return fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/trash`, {
+    return fetchWithTimeout(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/trash`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
     });
   }
   if (action === "untrash") {
-    return fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/untrash`, {
+    return fetchWithTimeout(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/untrash`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -57,7 +68,9 @@ async function callGmailAction(accessToken: string, action: ActionType, messageI
 
   const body: { addLabelIds: string[]; removeLabelIds: string[] } = { addLabelIds: [], removeLabelIds: [] };
   if (action === "archive") {
-    body.removeLabelIds = ["INBOX"];
+    // Also drop SPAM: archiving a message that lives in Spam only removed INBOX, which it
+    // never had, so the message stayed exactly where it was and the action looked broken.
+    body.removeLabelIds = ["INBOX", "SPAM"];
   } else if (action === "moveToInbox" || action === "unspam") {
     body.addLabelIds = ["INBOX"];
     body.removeLabelIds = ["SPAM"];
@@ -74,7 +87,7 @@ async function callGmailAction(accessToken: string, action: ActionType, messageI
     body.removeLabelIds = ["STARRED"];
   }
 
-  return fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/modify`, {
+  return fetchWithTimeout(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodedId}/modify`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -118,15 +131,25 @@ export default withAuth(async (req, res, session) => {
   // permission. Read-only grants (canSend false) resolve to null → their actions fail as "no
   // permission" rather than silently running against your own (missing) token.
   const ownerMap = new Map<string, string | null>();
-  for (const accountEmail of uniqueAccounts) {
-    const access = await resolveMailboxOwner(userId, accountEmail);
-    const ownerUserId = access && access.canSend ? access.ownerUserId : null;
-    ownerMap.set(accountEmail, ownerUserId);
-    const tokenResult = ownerUserId
-      ? await getValidGmailAccessToken(ownerUserId, accountEmail)
-      : { ok: false as const };
-    tokenMap.set(accountEmail, tokenResult.ok ? tokenResult.accessToken : null);
-  }
+  // A send-as alias has no OAuth token of its own — its mail lives in the account that owns it, so
+  // the token has to be fetched for that address, not for the alias. Kept per requested account so
+  // the retry path below can look it up again.
+  const tokenEmailMap = new Map<string, string>();
+  // Accounts are independent lookups — resolving them one at a time only matters for
+  // mixed-mailbox selections, but there's no reason to pay for it serially either way.
+  await Promise.all(
+    uniqueAccounts.map(async (accountEmail) => {
+      const access = await resolveMailboxOwner(userId, accountEmail);
+      const ownerUserId = access && access.canSend ? access.ownerUserId : null;
+      ownerMap.set(accountEmail, ownerUserId);
+      const tokenEmail = access?.tokenEmail || accountEmail;
+      tokenEmailMap.set(accountEmail, tokenEmail);
+      const tokenResult = ownerUserId
+        ? await getValidGmailAccessToken(ownerUserId, tokenEmail)
+        : { ok: false as const };
+      tokenMap.set(accountEmail, tokenResult.ok ? tokenResult.accessToken : null);
+    })
+  );
   // Resolve accountEmail -> account_id for outbound message cleanup. Scoped to the mailbox
   // OWNER's user_id (from ownerMap above), not the requester's — for a shared/delegated inbox
   // the EmailProviderAccount row (and the EmailOutboundMessage rows it's cleaned up against
@@ -151,8 +174,10 @@ export default withAuth(async (req, res, session) => {
     }
   }
 
-  const results = await Promise.all(
-    items.map(async (item) => {
+  // Bounded concurrency rather than all at once — see GMAIL_BATCH_CONCURRENCY.
+  const results = await mapInBatches(
+    items,
+    async (item) => {
       const token = tokenMap.get(item.accountEmail);
       if (!token) {
         const owner = ownerMap.get(item.accountEmail);
@@ -164,17 +189,34 @@ export default withAuth(async (req, res, session) => {
       }
       try {
         const owner = ownerMap.get(item.accountEmail) || userId;
-        let response = await callGmailAction(token, action, item.messageId);
-        if (response.status === 401) {
-          const refreshResult = await getValidGmailAccessToken(owner, item.accountEmail, { forceRefresh: true });
-          if (!refreshResult.ok) {
-            return { ...item, ok: false, error: refreshResult.message };
+        let activeToken = token;
+        for (let attempt = 0; ; attempt += 1) {
+          let response = await callGmailAction(activeToken, action, item.messageId);
+          if (response.status === 401) {
+            const refreshResult = await getValidGmailAccessToken(
+              owner,
+              tokenEmailMap.get(item.accountEmail) || item.accountEmail,
+              { forceRefresh: true }
+            );
+            if (!refreshResult.ok) {
+              return { ...item, ok: false, error: refreshResult.message };
+            }
+            activeToken = refreshResult.accessToken;
+            response = await callGmailAction(activeToken, action, item.messageId);
           }
-          response = await callGmailAction(refreshResult.accessToken, action, item.messageId);
-        }
-        if (!response.ok) {
+          if (response.ok) return { ...item, ok: true };
+
           const text = await response.text();
           const normalized = String(text || "");
+          // Rate limiting is transient and says nothing about this message, so retry it rather than
+          // reporting a failure the user can only fix by clicking the same button again.
+          if (isRateLimited(response.status, normalized) && attempt < GMAIL_RATE_LIMIT_RETRIES) {
+            await delay(backoffDelayMs(attempt));
+            continue;
+          }
+          if (isRateLimited(response.status, normalized)) {
+            return { ...item, ok: false, error: "Gmail is rate-limiting this account. Try these again in a moment." };
+          }
           if (response.status === 403 && /insufficientpermissions|insufficient permissions|forbidden/i.test(normalized)) {
             return {
               ...item,
@@ -184,12 +226,31 @@ export default withAuth(async (req, res, session) => {
           }
           return { ...item, ok: false, error: normalized || `Gmail action failed (${response.status})` };
         }
-        return { ...item, ok: true };
       } catch (error) {
+        // A timeout aborts only this item's call, so the rest of the batch still reports normally.
+        // Name it explicitly — "The operation was aborted" tells the user nothing actionable.
+        if ((error as Error)?.name === "AbortError") {
+          return { ...item, ok: false, error: "Gmail didn't respond in time. The message was not changed." };
+        }
         return { ...item, ok: false, error: error instanceof Error ? error.message : "Unknown error" };
       }
-    })
+    },
+    GMAIL_BATCH_CONCURRENCY
   );
+
+  // Any of these actions change what a mailbox view would return (read state, labels, presence),
+  // so the cached list window for the affected account is stale the moment this succeeds.
+  const succeededAccounts = new Set(results.filter((result) => result.ok).map((result) => result.accountEmail));
+  for (const accountEmail of succeededAccounts) {
+    const owner = ownerMap.get(accountEmail);
+    const tokenEmail = tokenEmailMap.get(accountEmail) || accountEmail;
+    if (owner) {
+      invalidateGmailListCache(owner, tokenEmail);
+      // These actions all change unread/starred/draft state, which is exactly what the
+      // counts cache holds — without this, badges could lag up to COUNTS_CACHE_TTL_MS.
+      invalidateGmailCountsCache(owner, tokenEmail);
+    }
+  }
 
   const failures = results.filter((result) => !result.ok);
   if (action === "deletePermanently" && results.length > 0) {

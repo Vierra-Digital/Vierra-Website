@@ -45,18 +45,30 @@ export async function claimBookingSlot(bookingId: string, hostUserId: string): P
   const summary = `${link.title} — ${booking.invitee_name}`;
   const description = booking.invitee_notes ? `Booked via Vierra.\n\nNotes: ${booking.invitee_notes}` : "Booked via Vierra.";
 
-  const provisioned = await provisionBookingMeeting({
-    hostUserId,
-    hostGmailAccountEmail,
-    provider: booking.provider,
-    summary,
-    description,
-    startIso: booking.start_at.toISOString(),
-    endIso: booking.end_at.toISOString(),
-    timezone: link.timezone || "UTC",
-    durationMinutes: link.duration_minutes,
-    attendeeEmails: [booking.invitee_email],
-  });
+  let provisioned: Awaited<ReturnType<typeof provisionBookingMeeting>>;
+  try {
+    provisioned = await provisionBookingMeeting({
+      hostUserId,
+      hostGmailAccountEmail,
+      provider: booking.provider,
+      summary,
+      description,
+      startIso: booking.start_at.toISOString(),
+      endIso: booking.end_at.toISOString(),
+      timezone: link.timezone || "UTC",
+      durationMinutes: link.duration_minutes,
+      attendeeEmails: [booking.invitee_email],
+    });
+  } catch (err) {
+    // Roll back to slot_claimed so the cron or a manual claim can retry — otherwise the row
+    // is stuck at 'claiming' forever, invisible to both the auto-assign query and the UI.
+    console.error("claimBookingSlot provisioning failed", bookingId, err);
+    await prisma.booking.update({
+      where: { id: bookingId },
+      data: { status: "slot_claimed", claimed_by_user_id: null, claimed_by_user_email: null },
+    });
+    return { ok: false, reason: "provisioning_failed" };
+  }
 
   await prisma.booking.update({
     where: { id: bookingId },

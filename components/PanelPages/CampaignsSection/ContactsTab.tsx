@@ -33,6 +33,7 @@ const ContactsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
   const [statusCounts, setStatusCounts] = useState<Record<string, number>>({});
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<CampaignContact | null>(null);
   const [timelineEmail, setTimelineEmail] = useState<string | null>(null);
@@ -42,7 +43,7 @@ const ContactsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
     try {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("leadStatus", statusFilter);
-      if (search) params.set("search", search);
+      if (debouncedSearch) params.set("search", debouncedSearch);
       const res = await fetch(`/api/campaigns/${campaignId}/contacts?${params.toString()}`);
       if (!res.ok) throw new Error("Failed to load contacts");
       const data = await res.json();
@@ -56,9 +57,19 @@ const ContactsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
   };
 
   useEffect(() => {
+    const handle = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(handle);
+  }, [search]);
+
+  useEffect(() => {
+    // load() flips its loading flag synchronously before awaiting, which is what the rule sees.
+    // Fetching when the parameters change is the textbook use for an effect; removing the
+    // synchronous flag would mean adopting Suspense-based fetching across the panel, which is an
+    // architectural decision and not a lint fix.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId, statusFilter, search]);
+  }, [campaignId, statusFilter, debouncedSearch]);
 
   const totalCount = Object.values(statusCounts).reduce((a, b) => a + b, 0);
 
@@ -131,7 +142,7 @@ const ContactsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
                   </td>
                   <td className="px-4 py-4 text-sm text-[#111827]">{c.contactBusiness || "—"}</td>
                   <td className="px-4 py-4 text-sm">
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-white/10 text-[#C9C4DC]">
                       {LEAD_STATUS_LABELS[c.leadStatus] || c.leadStatus}
                     </span>
                   </td>

@@ -9,6 +9,16 @@ const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
   "https://www.googleapis.com/auth/gmail.modify",
   "https://www.googleapis.com/auth/gmail.send",
+  // RESTRICTED scope. Required only for messages.delete (permanent delete) — gmail.modify
+  // can trash but never hard-delete, which is why "Delete permanently" in Trash/Spam failed
+  // with a reconnect prompt. Must also be added to the OAuth consent screen in Google Cloud,
+  // and every already-connected account has to reconnect before it takes effect.
+  "https://mail.google.com/",
+  // Postmaster Tools: spam-complaint rate + Gmail-observed SPF/DKIM/DMARC pass rates, which are
+  // the only real source for complaint data (a "Report spam" click is reported to Google, not us).
+  // Already-connected accounts must reconnect before it takes effect; the analytics panel degrades
+  // to an explanatory note until then.
+  "https://www.googleapis.com/auth/postmaster.readonly",
   "https://www.googleapis.com/auth/contacts.readonly",
   "https://www.googleapis.com/auth/calendar.readonly",
   // Create booking events on the host's calendar. Accounts connected before this scope

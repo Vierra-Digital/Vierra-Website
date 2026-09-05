@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import { m as motion } from 'framer-motion';
 import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -9,6 +9,7 @@ import { Header } from '@/components/Header';
 import Footer from '@/components/FooterSection/Footer';
 import { CareerApplicationModal } from '@/components/CareerApplicationModal';
 import { JOB_ROLES, getJobRole, type JobRole } from '@/lib/careers';
+import { jsonLd } from "@/lib/jsonLd";
 
 
 const APPLIED_STORAGE_KEY = 'vierra-applied-roles';
@@ -76,6 +77,9 @@ const RolePage: React.FC<{ role: JobRole; datePosted: string; validThrough: stri
 
   useEffect(() => {
     if (!role) return;
+    // Whether this visitor already applied is recorded in localStorage, which does not exist during the
+    // server render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAlreadyApplied(getAppliedRoles().includes(role.slug));
   }, [role]);
 
@@ -185,11 +189,11 @@ const RolePage: React.FC<{ role: JobRole; datePosted: string; validThrough: stri
       </Head>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jobPostingLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLd(jobPostingLd) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumbLd) }}
       />
 
       <div className={`relative min-h-screen bg-[#F3F3F3] text-[#2A2140] ${inter.className}`}>

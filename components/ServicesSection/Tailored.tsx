@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState, useEffect } from "react"
-import { motion, useScroll, useTransform, useMotionValueEvent } from "framer-motion"
+import { m as motion, useScroll, useTransform, useMotionValueEvent } from "framer-motion"
 import { Search, Check } from "lucide-react"
 import { bricolage, inter } from "@/lib/fonts";
 

@@ -1,33 +1,53 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr } from "@/lib/api/parsing";
+import { hasPrimaryColumn, isMissingPreferencesTable, readPreferencesWithPrimary } from "@/lib/email/accountPreferences";
 
 /**
- * Per-account enable/disable for the email panel. Accounts default to enabled; only
- * explicit overrides are stored. The panel loads all connected accounts that aren't
- * disabled here.
+ * Per-account state for the email panel: whether a mailbox is shown, and which one is the primary
+ * inbox. Accounts default to enabled; only explicit overrides are stored.
  *
- * Degrades gracefully if the table hasn't been created yet (Prisma P2021): reads
- * return "no overrides" (everything enabled) and writes no-op, so the inbox still
- * loads before `prisma/manual/20260716_email_account_preferences.sql` is applied.
+ * The primary inbox is the account's main mailbox — every other connected mailbox is a brand account
+ * added onto it. At most one per user, enforced by a partial unique index in
+ * prisma/manual/20260820_email_account_primary.sql.
+ *
+ * Degrades gracefully if the table hasn't been created yet (Prisma P2021): reads return "no
+ * overrides" (everything enabled, no primary) and writes no-op, so the inbox still loads before
+ * prisma/manual/20260716_email_account_preferences.sql is applied.
+ *
+ * is_primary is read and written with raw SQL rather than through the typed client. A server holding
+ * a Prisma client generated before the column existed rejects a typed query naming it outright,
+ * which would take the whole account list down with it — the same failure mode that once broke the
+ * nav layout. Raw SQL lets a missing column degrade to "no primary set" instead.
  */
-function isMissingTable(error: unknown): boolean {
-  return typeof error === "object" && error !== null && (error as { code?: string }).code === "P2021";
-}
-
 export default withAuth(
   async (req, res, session) => {
     const userId = session.user.id;
 
     if (req.method === "GET") {
+      const withPrimary = await readPreferencesWithPrimary(userId);
+      if (withPrimary) {
+        res.status(200).json({
+          preferences: withPrimary.map((r) => ({
+            accountEmail: r.account_email,
+            enabled: r.enabled,
+            isPrimary: r.is_primary,
+          })),
+        });
+        return;
+      }
+      // No is_primary column yet: still serve the enabled flags rather than nothing.
       try {
         const rows = await prisma.emailAccountPreference.findMany({
           where: { user_id: userId },
           select: { account_email: true, enabled: true },
         });
-        res.status(200).json({ preferences: rows.map((r) => ({ accountEmail: r.account_email, enabled: r.enabled })) });
+        res.status(200).json({
+          preferences: rows.map((r) => ({ accountEmail: r.account_email, enabled: r.enabled, isPrimary: false })),
+          degraded: true,
+        });
       } catch (error) {
-        if (isMissingTable(error)) {
+        if (isMissingPreferencesTable(error)) {
           res.status(200).json({ preferences: [] });
           return;
         }
@@ -36,13 +56,60 @@ export default withAuth(
       return;
     }
 
-    // POST — set enabled for one account.
+    // POST — set enabled and/or primary for one account.
     const accountEmail = asStr(req.body?.accountEmail).trim().toLowerCase();
     if (!accountEmail) {
       res.status(400).json({ message: "accountEmail is required." });
       return;
     }
+    const hasEnabled = req.body?.enabled !== undefined;
+    const hasPrimary = req.body?.isPrimary !== undefined;
     const enabled = req.body?.enabled !== false;
+    const isPrimary = req.body?.isPrimary === true;
+
+    if (hasPrimary && isPrimary && !(await hasPrimaryColumn())) {
+      res.status(200).json({
+        ok: false,
+        accountEmail,
+        degraded: true,
+        message: "Setting a primary inbox needs prisma/manual/20260820_email_account_primary.sql applied.",
+      });
+      return;
+    }
+
+    if (hasPrimary && isPrimary) {
+      // One statement per step, in a transaction: clearing the old primary and setting the new one
+      // must not leave a window with two primaries (or none, if the second write fails).
+      try {
+        await prisma.$transaction([
+          prisma.$executeRaw`
+            UPDATE email_account_preferences
+            SET is_primary = false, updated_at = now()
+            WHERE user_id = ${userId}::uuid AND is_primary
+          `,
+          prisma.$executeRaw`
+            INSERT INTO email_account_preferences (user_id, account_email, enabled, is_primary)
+            VALUES (${userId}::uuid, ${accountEmail}, ${hasEnabled ? enabled : true}, true)
+            ON CONFLICT (user_id, account_email)
+            DO UPDATE SET is_primary = true, updated_at = now()
+          `,
+        ]);
+        res.status(200).json({ ok: true, accountEmail, isPrimary: true });
+        return;
+      } catch (error) {
+        // Missing table or missing column — say so rather than reporting a save that didn't happen.
+        res.status(200).json({
+          ok: false,
+          accountEmail,
+          degraded: true,
+          message: isMissingPreferencesTable(error)
+            ? "Email panel preferences aren't migrated on this database yet."
+            : "Setting a primary inbox needs prisma/manual/20260820_email_account_primary.sql applied.",
+        });
+        return;
+      }
+    }
+
     try {
       await prisma.emailAccountPreference.upsert({
         where: { user_id_account_email: { user_id: userId, account_email: accountEmail } },
@@ -51,7 +118,7 @@ export default withAuth(
       });
       res.status(200).json({ ok: true, accountEmail, enabled });
     } catch (error) {
-      if (isMissingTable(error)) {
+      if (isMissingPreferencesTable(error)) {
         res.status(200).json({ ok: true, accountEmail, enabled, degraded: true });
         return;
       }

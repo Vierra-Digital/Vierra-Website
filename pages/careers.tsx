@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { m as motion } from 'framer-motion';
 import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import Link from 'next/link';
@@ -7,6 +7,7 @@ import { ArrowUpRight, MapPin } from 'lucide-react';
 import { Header } from '@/components/Header';
 import Footer from '@/components/FooterSection/Footer';
 import { JOB_ROLES } from '@/lib/careers';
+import { jsonLd } from "@/lib/jsonLd";
 
 
 const CareersPage: React.FC = () => {
@@ -38,7 +39,7 @@ const CareersPage: React.FC = () => {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
+          __html: jsonLd({
             '@context': 'https://schema.org',
             '@type': 'BreadcrumbList',
             itemListElement: [
@@ -51,7 +52,7 @@ const CareersPage: React.FC = () => {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
+          __html: jsonLd({
             '@context': 'https://schema.org',
             '@type': 'ItemList',
             name: 'Open Positions at Vierra Digital',

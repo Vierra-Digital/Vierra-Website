@@ -1,6 +1,7 @@
 import "./globals.css"
 import RootLayoutClient from "./layout.client"
 import Script from "next/script"
+import { jsonLd } from "@/lib/jsonLd";
 
 const SITE_URL = "https://vierradev.com"
 const META_IMAGE_URL = `${SITE_URL}/assets/meta-banner.png`
@@ -131,8 +132,6 @@ export default function RootLayout({
         <link rel="alternate" type="application/rss+xml" title="Vierra Blog RSS Feed" href="https://vierradev.com/blog/rss.xml" />
         
         
-        <link rel="preconnect" href="https://cdn.jsdelivr.net" />
-        <link rel="preconnect" href="https://vierra-server.vercel.app" />
         <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
         <link rel="dns-prefetch" href="https://www.youtube.com" />
         <link rel="dns-prefetch" href="https://www.youtube-nocookie.com" />
@@ -145,7 +144,7 @@ export default function RootLayout({
           id="schema-org-organization"
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
+            __html: jsonLd({
               "@context": "https://schema.org",
               "@type": "Organization",
               "@id": `${SITE_URL}/#organization`,
@@ -237,7 +236,7 @@ export default function RootLayout({
           id="schema-org-website"
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
+            __html: jsonLd({
               "@context": "https://schema.org",
               "@type": "WebSite",
               "@id": `${SITE_URL}/#website`,
@@ -260,7 +259,7 @@ export default function RootLayout({
           id="schema-org-localbusiness"
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify({
+            __html: jsonLd({
               "@context": "https://schema.org",
               "@type": ["ProfessionalService", "LocalBusiness"],
               "@id": `${SITE_URL}/#localbusiness`,

@@ -2,7 +2,7 @@
 import { TrendingUp } from "lucide-react"
 import { bricolage, inter } from "@/lib/fonts";
 import { useEffect, useState, useRef } from "react"
-import { motion, animate, useInView } from "framer-motion"
+import { m as motion, animate, useInView } from "framer-motion"
 
 
 const cardVar = {
@@ -32,6 +32,10 @@ function CountUp({ value, duration = 1.6 }: { value: string; duration?: number }
   const [display, setDisplay] = useState(value)
   useEffect(() => {
     if (!parsed) {
+      // When the value is not a parseable number there is no count-up to run, so the display falls back
+      // to the raw string. Written here rather than derived because every other path through this effect
+      // animates the value over time.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDisplay(value)
       return
     }

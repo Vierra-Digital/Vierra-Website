@@ -78,25 +78,74 @@ async function refreshAccessToken(refreshToken: string) {
   };
 }
 
+type PreloadedTokenRow = {
+  access_token: string | null;
+  refresh_token: string | null;
+  expires_at: Date | null;
+};
+
+/**
+ * A page load fires several endpoints in parallel (status, messages, counts, ...) that each call
+ * this for the same account. When the stored token happens to be within REFRESH_BUFFER_MS of
+ * expiry, every one of them independently POSTs a refresh_token exchange to Google and writes the
+ * result to the same row — wasteful, and occasionally one of the N racing exchanges fails (Google
+ * transient error, or the row write racing another). /api/gmail/status has no retry on that
+ * failure, so a single lost race reports the whole account as disconnected and the panel's mailbox
+ * view collapses to the "reconnect" gate even though the account is fine — the "emails disappear
+ * on refresh" bug. Sharing one in-flight refresh across concurrent callers for the same
+ * (userId, accountEmail) removes the race instead of papering over it with a retry.
+ */
+const inFlightRefreshes = new Map<string, Promise<GmailTokenResult>>();
+
 export async function getValidGmailAccessToken(
   userId: string,
   accountEmail: string,
-  options?: { forceRefresh?: boolean }
+  options?: { forceRefresh?: boolean; preloadedRow?: PreloadedTokenRow }
 ): Promise<GmailTokenResult> {
   const normalizedEmail = accountEmail.trim().toLowerCase();
-  const row = await prisma.platformToken.findUnique({
-    where: {
-      user_id_platform: {
-        user_id: userId,
-        platform: `gmail:${normalizedEmail}`,
+  const inFlightKey = `${userId}::${normalizedEmail}`;
+
+  // forceRefresh means "the caller already tried the shared/cached path and it turned out stale
+  // (a 401 despite our DB thinking the token was still valid) — bypass whatever's in flight
+  // rather than possibly handing back that same stale result to a caller that specifically asked
+  // not to get it." Only the common, non-forced path (the vast majority of concurrent callers on
+  // a page load) is deduped.
+  if (!options?.forceRefresh) {
+    const existing = inFlightRefreshes.get(inFlightKey);
+    if (existing) return existing;
+  }
+
+  const promise = getValidGmailAccessTokenUncached(userId, normalizedEmail, options);
+  inFlightRefreshes.set(inFlightKey, promise);
+  try {
+    return await promise;
+  } finally {
+    // Only clear if we're still the current entry — a caller that started after this one
+    // resolved (e.g. a forceRefresh call that replaced it) may have already replaced it.
+    if (inFlightRefreshes.get(inFlightKey) === promise) inFlightRefreshes.delete(inFlightKey);
+  }
+}
+
+async function getValidGmailAccessTokenUncached(
+  userId: string,
+  normalizedEmail: string,
+  options?: { forceRefresh?: boolean; preloadedRow?: PreloadedTokenRow }
+): Promise<GmailTokenResult> {
+  const row =
+    options?.preloadedRow ??
+    (await prisma.platformToken.findUnique({
+      where: {
+        user_id_platform: {
+          user_id: userId,
+          platform: `gmail:${normalizedEmail}`,
+        },
       },
-    },
-    select: {
-      access_token: true,
-      refresh_token: true,
-      expires_at: true,
-    },
-  });
+      select: {
+        access_token: true,
+        refresh_token: true,
+        expires_at: true,
+      },
+    }));
 
   if (!row?.access_token) {
     return { ok: false, reason: "account_not_found", message: "Gmail account token not found." };

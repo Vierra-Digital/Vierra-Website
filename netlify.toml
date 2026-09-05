@@ -1,13 +1,24 @@
 [build]
-  # The database schema is managed out-of-band (Supabase), not via Prisma
-  # Migrate — the prisma/migrations history is not in sync with the live DB, so
-  # `migrate deploy` fails (e.g. "relation users already exists"). The build only
-  # needs the generated client; schema changes are applied to the DB directly.
+  # The build generates the Prisma client but deliberately does not run migrations.
+  #
+  # The migration history has since been baselined, so `migrate deploy` no longer fails — it
+  # reports no pending migrations. It stays out of the build anyway: schema.prisma does not model
+  # everything the live database has (objects applied by hand, plus prisma/manual/*.sql), so schema
+  # changes are applied to the database directly and deliberately, never as a side effect of a
+  # deploy. The build only needs the generated client.
   command = "npx prisma generate && npm run build"
   publish = ".next"
+  # Skip the build entirely when a push cannot change the deployed site (tests, CI config, docs).
+  # Netlify bills per build minute in every context and runs a deploy preview on every push to
+  # every open PR, so those pushes were each costing a full build for no deployable difference.
+  # The script fails open: anything it does not recognise as non-deployable still builds.
+  ignore = "bash netlify-ignore.sh"
 
 [build.environment]
   NODE_OPTIONS = "--max-old-space-size=4096"
+  # Node itself is pinned by .nvmrc, which Netlify reads automatically — not repeated here, so
+  # there is one place to change it. Without it Netlify picked its own default (22.23.2) while
+  # CI and local dev were on a different major.
 
 [functions]
   included_files = ["data/presets/**"]

@@ -41,3 +41,15 @@ todo.txt
 .vscode/
 # Local secrets / service-account keys — never commit
 secrets/
+
+# Local .env backups — these hold live credentials.
+.env.bak*
+.env.*.bak
+
+# Prisma 7 generates the client here instead of node_modules.
+lib/generated/
+
+# Next writes AGENTS.md on every `next dev` (see
+# node_modules/next/dist/server/lib/generate-agent-files.js). It is not wanted in this repo, so it
+# is ignored rather than committed — otherwise every dev run leaves an uncommitted change.
+AGENTS.md

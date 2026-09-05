@@ -187,6 +187,8 @@ const ClientViewOutreachSection: React.FC<{ clientId?: string | null }> = ({ cli
 
   useEffect(() => {
     if (step === "context") {
+      // Fetches the client's context when that step comes into view, rather than up front.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchContext();
     }
   }, [step, fetchContext]);
@@ -329,7 +331,7 @@ const ClientViewOutreachSection: React.FC<{ clientId?: string | null }> = ({ cli
   return (
     <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
       <div className="flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
-        <div className="w-full max-w-6xl flex flex-col h-full pb-8">
+        <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full pb-8">
           <PanelSectionHeader
             title={
               step === "cards"

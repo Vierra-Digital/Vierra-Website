@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { EmailProviderAccount } from "@prisma/client";
+import type { EmailProviderAccount } from "@/lib/generated/prisma/client";
 import { sanitizeRichEmailHtml } from "@/lib/email/sanitize";
 import { prisma } from "@/lib/prisma";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
@@ -7,6 +7,9 @@ import { toBase64Url, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 import { createSmtpTransport, requireSmtpCredentials } from "@/lib/email/smtp";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { asStr } from "@/lib/api/parsing";
+import { escapeHtml } from "@/lib/utils";
+
+export { escapeHtml };
 
 /**
  * Reusable email send core — extracted from pages/api/gmail/send.ts so it can be
@@ -48,15 +51,6 @@ function splitRecipients(value: string) {
 function ensureReplyPrefix(subject: string) {
   if (/^re:/i.test(subject.trim())) return subject.trim();
   return `Re: ${subject.trim() || "(No Subject)"}`;
-}
-
-export function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function linkifyText(value: string) {
@@ -338,7 +332,33 @@ async function sendViaGmail(
  * Send one email for a user. `baseUrl` is the public origin used to build tracking
  * pixel/click URLs (the caller resolves it from the request or from env for the cron).
  */
-export async function sendEmailCore(userId: string, payload: SendEmailPayload, baseUrl: string): Promise<SendEmailResult> {
+/**
+ * Whose settings rows a send should consult, in order.
+ *
+ * Settings belong to a staff member, not to a mailbox. On a shared mailbox the sender is not the
+ * owner, so the person who pressed Send is asked first and the owner is the fallback for a staff
+ * member who has never configured anything. Reading only the owner meant a delegate's saved
+ * settings never applied to anything they sent, while the settings page showed them as saved.
+ */
+export function settingsLookupOrder(ownerUserId: string, actingUserId?: string): string[] {
+  if (!actingUserId || actingUserId === ownerUserId) return [ownerUserId];
+  return [actingUserId, ownerUserId];
+}
+
+/**
+ * Send one email.
+ *
+ * `userId` owns the mailbox: tokens, provider rows and outbound records are scoped to it.
+ * `actingUserId` is the staff member who pressed Send, which differs from the owner on a shared
+ * mailbox. Settings are read for the acting staff member first, because they are that person's
+ * preferences rather than the mailbox's.
+ */
+export async function sendEmailCore(
+  userId: string,
+  payload: SendEmailPayload,
+  baseUrl: string,
+  actingUserId?: string
+): Promise<SendEmailResult> {
   const accountEmail = normalizeEmail(asStr(payload.accountEmail));
   const fromAlias = normalizeEmail(asStr(payload.from));
   const toRecipients = splitRecipients(asStr(payload.to));
@@ -387,29 +407,35 @@ export async function sendEmailCore(userId: string, payload: SendEmailPayload, b
 
   const accountId = providerAccount?.id ?? (await resolveAccountId(userId, accountEmail));
 
-  // Tracking config is strictly per-account (no cross-account fallback — that could inject a
-  // pixel/link-rewrite the user never enabled on THIS mailbox). Default: tracking ON when the
-  // mailbox has no explicit settings row, since open/click tracking is a core outreach feature;
-  // an explicit row with tracking_enabled=false turns it off.
-  // Prefer this mailbox's own row; fall back to the user's synced tracking preference. The
-  // settings PUT syncs the tracking flags across ALL the user's rows (updateMany by user_id),
-  // so any row reflects the user's choice — this lets a user with multiple mailboxes turn
-  // tracking off for addresses that have no row of their own (not just the primary). With no
-  // rows at all, both lookups miss and tracking defaults ON below.
+  // Tracking config. Default: ON when there is no settings row at all, since open/click tracking
+  // is a core outreach feature; an explicit row with tracking_enabled=false turns it off.
+  //
+  // Settings belong to a staff member, not to the mailbox. On a shared mailbox the sender is not
+  // the owner, and reading only the owner's row meant a delegate's saved settings never applied to
+  // anything they sent — the settings page showed their choice while every send used the owner's.
+  // So: this staff member's row for this mailbox, then any row of theirs (the settings PUT syncs a
+  // staff member's choice across their own mailboxes), then the owner's equivalents as the fallback
+  // for a delegate who has never configured anything.
   const trackingSelect = {
     tracking_enabled: true,
     open_tracking_enabled: true,
     click_tracking_enabled: true,
   } as const;
-  const setting =
-    (await prisma.emailAccountSetting.findUnique({
-      where: { user_id_account_email: { user_id: userId, account_email: accountEmail } },
-      select: trackingSelect,
-    })) ??
-    (await prisma.emailAccountSetting.findFirst({
-      where: { user_id: userId },
-      select: trackingSelect,
-    }));
+  const settingsUserIds = settingsLookupOrder(userId, actingUserId);
+  let setting: { tracking_enabled: boolean; open_tracking_enabled: boolean; click_tracking_enabled: boolean } | null =
+    null;
+  for (const settingsUserId of settingsUserIds) {
+    setting =
+      (await prisma.emailAccountSetting.findUnique({
+        where: { user_id_account_email: { user_id: settingsUserId, account_email: accountEmail } },
+        select: trackingSelect,
+      })) ??
+      (await prisma.emailAccountSetting.findFirst({
+        where: { user_id: settingsUserId },
+        select: trackingSelect,
+      }));
+    if (setting) break;
+  }
 
   // Only embed tracking when baseUrl is a real absolute origin — otherwise the pixel/click URLs
   // would be relative and dead in a delivered email (and the row would falsely read as tracked).

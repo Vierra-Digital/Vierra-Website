@@ -50,6 +50,10 @@ type StatsResponse = {
   truncated: boolean;
 };
 
+type PostmasterEntry =
+  | { ok: true; stats: { domain: string; date: string; userReportedSpamRatio: number | null; domainReputation: string | null; spfSuccessRatio: number | null; dkimSuccessRatio: number | null; dmarcSuccessRatio: number | null } }
+  | { ok: false; domain: string; reason: string; message: string };
+
 type RecordStatus = "pass" | "warn" | "fail";
 type DomainAuth = {
   domain: string;
@@ -71,10 +75,23 @@ const humanDuration = (ms: number): string => {
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+/* Tone chips for deliverability results.
+   One palette, referenced by both call sites. The same four colours were previously written out
+   twice — here keyed pass/warn/fail and again inline keyed good/warn/bad/neutral — so the two could
+   drift apart, and both used light pairs the .email-shell overrides do not remap (that list covers
+   the panel's own hexes). On the dark panel they rendered as bright pills. Translucent tints with
+   light text of the same hue keep each result readable against the surface. */
+const TONE_STYLE = {
+  good: "bg-green-500/15 text-green-300",
+  warn: "bg-amber-500/15 text-amber-300",
+  bad: "bg-red-500/15 text-red-300",
+  neutral: "bg-white/10 text-[#C9C4DC]",
+} as const;
+
 const STATUS_STYLES: Record<RecordStatus, string> = {
-  pass: "bg-[#ECFDF5] text-[#047857]",
-  warn: "bg-[#FFFBEB] text-[#B45309]",
-  fail: "bg-[#FEF2F2] text-[#B91C1C]",
+  pass: TONE_STYLE.good,
+  warn: TONE_STYLE.warn,
+  fail: TONE_STYLE.bad,
 };
 
 const pct = (num: number, den: number) => (den > 0 ? Math.round((num / den) * 100) : 0);
@@ -184,10 +201,14 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
   };
   const [report, setReport] = useState<ReportingSummary | null>(null);
   const [domainAuth, setDomainAuth] = useState<DomainAuth[] | null>(null);
+  const [postmaster, setPostmaster] = useState<PostmasterEntry[] | null>(null);
   const accountsKey = accounts.join(",");
 
   useEffect(() => {
     let cancelled = false;
+    // Entering the loading state for a fetch that the effect itself performs. The flag has to be set
+    // when the request starts, which is here — it is not derivable from the props that triggered it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     setError("");
     const params = new URLSearchParams();
@@ -253,6 +274,22 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
       cancelled = true;
     };
   }, [accountsKey, rangeDays]);
+
+  // Postmaster reputation is Google-published and independent of the date range, so it loads once.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/email/postmaster", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && Array.isArray(d?.domains)) setPostmaster(d.domains);
+      })
+      .catch(() => {
+        /* reputation data is supplementary */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Domain authentication is DNS-derived and independent of the date range, so it loads once.
   useEffect(() => {
@@ -546,6 +583,49 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
       {/* ── Domain authentication ──────────────────────────────────────────────────── */}
       {domainAuth && domainAuth.length > 0 ? (
         <Section title="Domain authentication" note="SPF, DKIM and DMARC — checked live over DNS">
+          {/* Google's own view of the domain: spam-complaint rate and the auth pass rates Gmail
+              actually observed. Strictly better evidence than "the DNS record exists", so it sits
+              above the record check. Unavailable states explain what to fix rather than hiding. */}
+          {postmaster && postmaster.length > 0 ? (
+            <Panel title="Gmail reputation (Postmaster Tools)" className="mb-4">
+              <div className="space-y-3">
+                {postmaster.map((entry) => {
+                  if (!entry.ok) {
+                    return (
+                      <div key={entry.domain} className="text-[13px]">
+                        <span className="font-semibold text-[#1E1B2E]">{entry.domain}</span>
+                        <span className="ml-2 text-[#7B7691]">{entry.message}</span>
+                      </div>
+                    );
+                  }
+                  const spamPct = entry.stats.userReportedSpamRatio === null ? null : entry.stats.userReportedSpamRatio * 100;
+                  const tone =
+                    spamPct === null ? "neutral" : spamPct < 0.1 ? "good" : spamPct < 0.3 ? "warn" : "bad";
+                  const toneStyle = TONE_STYLE[tone];
+                  const ratio = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
+                  return (
+                    <div key={entry.stats.domain} className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[13px]">
+                      <span className="font-semibold text-[#1E1B2E]">{entry.stats.domain}</span>
+                      <span className={`rounded px-1.5 py-0.5 text-xs font-semibold ${toneStyle}`}>
+                        spam {spamPct === null ? "—" : `${spamPct.toFixed(3)}%`}
+                      </span>
+                      <span className="text-[#7B7691]">
+                        reputation <b className="text-[#1E1B2E]">{entry.stats.domainReputation ?? "—"}</b>
+                      </span>
+                      <span className="text-[#7B7691]">
+                        SPF {ratio(entry.stats.spfSuccessRatio)} · DKIM {ratio(entry.stats.dkimSuccessRatio)} · DMARC{" "}
+                        {ratio(entry.stats.dmarcSuccessRatio)}
+                      </span>
+                      <span className="text-xs text-[#9A94AF]">as of {entry.stats.date}</span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-xs text-[#7B7691]">
+                Google flags delivery problems above 0.10% spam complaints, and throttles at 0.30%.
+              </p>
+            </Panel>
+          ) : null}
           <div className="divide-y divide-[#F2EFF8]">
             {domainAuth.map((d) => (
               <div key={d.domain} className="py-3 first:pt-0 last:pb-0">

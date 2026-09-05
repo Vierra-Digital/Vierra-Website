@@ -270,46 +270,52 @@ const RichTextEditor: React.FC<{
       setActiveAlign("none")
     }
   }, [])
-  handleResizeStartRef.current = (e: MouseEvent, embed: HTMLElement) => {
-    e.preventDefault()
-    e.stopPropagation()
-    isResizingRef.current = true
-    const media = embed.querySelector('.rte-media') as HTMLImageElement
-    const currentWidth = media?.naturalWidth ? media.offsetWidth : (media?.offsetWidth || 300)
-    const handle = e.target as HTMLElement
-    const corner = handle.getAttribute('data-corner') || 'se'
-    const isLeftSide = corner === 'nw' || corner === 'sw'
-    const startData = { x: e.clientX, width: currentWidth, isLeftSide }
-    resizeStartRef.current = startData
+  // Assigned in an effect rather than during render. Writing a ref while rendering mutates
+  // state a discarded or double-invoked render should not have touched. This handler is only
+  // ever read from the mousedown listener registered below, which cannot fire before the
+  // effects for that render have run, so it is always the current version.
+  useEffect(() => {
+    handleResizeStartRef.current = (e: MouseEvent, embed: HTMLElement) => {
+      e.preventDefault()
+      e.stopPropagation()
+      isResizingRef.current = true
+      const media = embed.querySelector('.rte-media') as HTMLImageElement
+      const currentWidth = media?.naturalWidth ? media.offsetWidth : (media?.offsetWidth || 300)
+      const handle = e.target as HTMLElement
+      const corner = handle.getAttribute('data-corner') || 'se'
+      const isLeftSide = corner === 'nw' || corner === 'sw'
+      const startData = { x: e.clientX, width: currentWidth, isLeftSide }
+      resizeStartRef.current = startData
     
-    const handleResizeMove = (moveEvent: MouseEvent) => {
-      if (!isResizingRef.current || !resizeStartRef.current || !selectedEmbedRef.current) return
-      let delta = moveEvent.clientX - resizeStartRef.current.x
-      if (resizeStartRef.current.isLeftSide) {
-        delta = -delta
+      const handleResizeMove = (moveEvent: MouseEvent) => {
+        if (!isResizingRef.current || !resizeStartRef.current || !selectedEmbedRef.current) return
+        let delta = moveEvent.clientX - resizeStartRef.current.x
+        if (resizeStartRef.current.isLeftSide) {
+          delta = -delta
+        }
+        const newWidth = Math.max(50, Math.min(800, resizeStartRef.current.width + delta))
+        const mediaEl = selectedEmbedRef.current.querySelector('.rte-media') as HTMLElement
+        if (mediaEl) {
+          mediaEl.style.width = `${newWidth}px`
+          mediaEl.style.height = 'auto'
+        }
+        selectedEmbedRef.current.setAttribute('data-width', String(newWidth))
       }
-      const newWidth = Math.max(50, Math.min(800, resizeStartRef.current.width + delta))
-      const mediaEl = selectedEmbedRef.current.querySelector('.rte-media') as HTMLElement
-      if (mediaEl) {
-        mediaEl.style.width = `${newWidth}px`
-        mediaEl.style.height = 'auto'
+    
+      const handleResizeEnd = () => {
+        isResizingRef.current = false
+        resizeStartRef.current = null
+        document.removeEventListener('mousemove', handleResizeMove)
+        document.removeEventListener('mouseup', handleResizeEnd)
+        if (editableRef.current) {
+          editableRef.current.dispatchEvent(new Event('input', { bubbles: true }))
+        }
       }
-      selectedEmbedRef.current.setAttribute('data-width', String(newWidth))
+    
+      document.addEventListener('mousemove', handleResizeMove)
+      document.addEventListener('mouseup', handleResizeEnd)
     }
-    
-    const handleResizeEnd = () => {
-      isResizingRef.current = false
-      resizeStartRef.current = null
-      document.removeEventListener('mousemove', handleResizeMove)
-      document.removeEventListener('mouseup', handleResizeEnd)
-      if (editableRef.current) {
-        editableRef.current.dispatchEvent(new Event('input', { bubbles: true }))
-      }
-    }
-    
-    document.addEventListener('mousemove', handleResizeMove)
-    document.addEventListener('mouseup', handleResizeEnd)
-  }
+  })
   useEffect(() => {
     const el = editableRef.current
     if (!el) return
@@ -562,6 +568,11 @@ const RichTextEditor: React.FC<{
     if (value !== history[historyIndex]) {
       const newHistory = history.slice(0, historyIndex + 1)
       newHistory.push(value)
+      // Appending to the undo stack. This editor is controlled, so a new value can arrive from the parent
+      // as well as from typing here, and the stack has to record both — which is why it is not kept in the
+      // input handler alone. It settles after one pass: the pushed entry becomes history[historyIndex], so
+      // the condition above is false on the re-run.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHistory(newHistory)
       setHistoryIndex(newHistory.length - 1)
     }
@@ -575,25 +586,63 @@ const RichTextEditor: React.FC<{
       })
     }
   }, [value, history, historyIndex, toDisplay, setupEmbedHandlers])
+  // Base64-in-JSON put the whole image through the API route, inflated ~33%, and could not exceed
+  // the serverless request body limit however high bodyParser.sizeLimit was set. Ask for a signed
+  // URL and PUT the file straight to storage instead; the route then only records the key.
+  // Falls back to the inline path when storage is unconfigured (the route says so with 503
+  // + fallback:"inline") or when signing fails, so an upload never breaks outright.
+  const uploadBlogImageInline = async (file: File): Promise<string | null> => {
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve((reader.result as string).split(',')[1])
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+    const resp = await fetch('/api/blog/admin/uploadImage', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageData: base64, mimeType: file.type, filename: file.name }),
+    })
+    if (!resp.ok) {
+      console.error('Image upload failed:', resp.status)
+      return null
+    }
+    return (await resp.json()).url
+  }
+
   const uploadBlogImage = async (file: File): Promise<string | null> => {
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1])
-        reader.onerror = reject
-        reader.readAsDataURL(file)
+      const signResp = await fetch('/api/blog/admin/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mimeType: file.type, filename: file.name }),
       })
+      if (!signResp.ok) return uploadBlogImageInline(file)
+
+      const { signedUrl, storageKey } = await signResp.json()
+      if (!signedUrl || !storageKey) return uploadBlogImageInline(file)
+
+      // Straight to storage — this request never touches a function.
+      const put = await fetch(signedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      })
+      if (!put.ok) {
+        console.error('Direct image upload failed:', put.status)
+        return null
+      }
+
       const resp = await fetch('/api/blog/admin/uploadImage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageData: base64, mimeType: file.type, filename: file.name }),
+        body: JSON.stringify({ storageKey, mimeType: file.type, filename: file.name }),
       })
       if (!resp.ok) {
-        console.error('Image upload failed:', resp.status)
+        console.error('Recording the uploaded image failed:', resp.status)
         return null
       }
-      const data = await resp.json()
-      return data.url
+      return (await resp.json()).url
     } catch (err) {
       console.error('Image upload error:', err)
       return null

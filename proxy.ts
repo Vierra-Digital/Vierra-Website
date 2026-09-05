@@ -1,3 +1,12 @@
+/**
+ * Next 16 renamed the middleware convention to `proxy`; the behaviour is identical.
+ *
+ * An earlier attempt at this rename was reverted because the dev client stopped hydrating. That was
+ * on an earlier 16.x patch — `PROXY_FILENAME` is a first-class constant in 16.3.2, and hydration is
+ * verified working here (React fibers attached, router ready, panel routes redirecting normally).
+ * The `_clientMiddlewareManifest.js` MIME error that got blamed for it appears in dev either way,
+ * so it was never the cause.
+ */
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
@@ -33,16 +42,21 @@ function carryCookies(from: NextResponse, to: NextResponse): NextResponse {
   return to;
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Refresh the Supabase session cookie on every matched request — required by
   // @supabase/ssr so expiring tokens get renewed before any page/route reads them.
   let refreshed = NextResponse.next({ request: req });
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+
+  // Machine-facing routes carry no session and render no user content, so skip the auth round trip:
+  // one less network call per crawler/agent hit, and no exposure to a Supabase blip.
+  const skipAuthRefresh = pathname === "/llms.txt" || pathname.endsWith(".md");
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!skipAuthRefresh && supabaseUrl && supabaseAnonKey) {
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
       cookies: {
         getAll() {
           return req.cookies.getAll();
@@ -53,9 +67,17 @@ export async function middleware(req: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) => refreshed.cookies.set(name, value, options));
         },
       },
+    });
+    try {
+      await supabase.auth.getUser();
+    } catch {
+      // A refresh failure (Supabase unreachable or paused, transient 5xx, malformed cookie) must
+      // never break the request. This call was unguarded and runs on every non-API route —
+      // including /login — so an auth-service blip could surface as an error on the very page
+      // needed to sign back in. Falling through leaves existing cookies untouched and lets the
+      // page decide how to handle a missing session.
     }
-  );
-  await supabase.auth.getUser();
+  }
 
   // /llms.txt — index of Markdown mirrors for AI agents and tools.
   if (pathname === "/llms.txt") {
@@ -72,7 +94,7 @@ export async function middleware(req: NextRequest) {
     const route = pathname.slice(0, -".md".length).replace(/^\/+/, "");
 
     // Rewrite to the handler, passing the route via a request header.
-    // (Neither dynamic segments nor added query params survive a middleware
+    // (Neither dynamic segments nor added query params survive a proxy
     // rewrite onto an optional catch-all reliably, but request headers do.)
     const url = req.nextUrl.clone();
     url.pathname = "/api/md";

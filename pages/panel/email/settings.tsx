@@ -4,7 +4,15 @@ import Link from "next/link";
 import Image from "next/image";
 import type { GetServerSideProps } from "next";
 import { Geist } from "next/font/google";
-import { GLASS_SURFACE, TEXT_MUTED, TEXT_STRONG } from "@/components/email/emailTheme";
+import {
+  BUTTON_DANGER_OUTLINE,
+  BUTTON_PRIMARY,
+  BUTTON_SECONDARY,
+  FIELD_INPUT,
+  GLASS_SURFACE,
+  TEXT_MUTED,
+  TEXT_STRONG,
+} from "@/components/email/emailTheme";
 import type { IconType } from "react-icons";
 import {
   FiActivity,
@@ -18,9 +26,11 @@ import {
   FiFileText,
   FiFilter,
   FiMail,
+  FiLock,
   FiMapPin,
   FiServer,
   FiSearch,
+  FiShield,
   FiSlash,
   FiTag,
   FiUsers,
@@ -31,7 +41,7 @@ import { requireSession } from "@/lib/auth";
 import { renderTemplate } from "@/lib/email/templateRender";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import PromptModal, { type PromptField } from "@/components/ui/PromptModal";
-import { MODULES, orderModules } from "@/components/email/constants";
+import { MODULES, orderModules, PAGE_SIZE } from "@/components/email/constants";
 import type { ContactVisibility } from "@/components/email/types";
 
 type PromptConfig = {
@@ -148,19 +158,21 @@ function SettingsSection({
         </div>
         {right ? <div className="shrink-0">{right}</div> : null}
       </div>
-      {children}
+      {/* One vertical rhythm for every section. Sections used to each choose their own
+          (space-y-2 in some, 3, 4 or 5 in others), so the gap between controls changed from
+          section to section and the page read as unevenly spaced. A section that still sets its
+          own spacing on a single wrapper child is unaffected. */}
+      <div className="space-y-4">{children}</div>
     </section>
   );
 }
 
-const fieldClass =
-  "w-full rounded-xl border border-[#E5E7EB] bg-white px-4 py-2.5 text-sm text-[#1E1B2E] placeholder-[#9CA3AF] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]";
-const btnPrimary =
-  "inline-flex items-center justify-center rounded-xl bg-[#701CC0] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50";
-const btnSecondary =
-  "inline-flex items-center justify-center rounded-xl border border-[#E5E7EB] bg-white px-3 py-1.5 text-sm font-medium text-[#374151] transition-colors hover:bg-[#F9FAFB]";
-const btnDangerOutline =
-  "rounded-xl border border-red-200 px-2 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50";
+// Local aliases for the shared styling guide, so the many call sites below stay unchanged while
+// the definitions live in exactly one place (components/email/emailTheme).
+const fieldClass = FIELD_INPUT;
+const btnPrimary = BUTTON_PRIMARY;
+const btnSecondary = BUTTON_SECONDARY;
+const btnDangerOutline = BUTTON_DANGER_OUTLINE;
 
 type GmailAccount = {
   email: string;
@@ -250,12 +262,24 @@ type PageProps = {
  * target list for the filter box.
  */
 const SETTINGS_NAV: { group: string; items: string[] }[] = [
-  { group: "Mailbox", items: ["Inbox layout", "Undo send", "Meeting booking"] },
-  { group: "Accounts & delivery", items: ["Accounts", "Shared inboxes", "Deliverability", "Domain mail (SMTP / IMAP / POP)"] },
-  { group: "Tracking", items: ["Email tracking", "Read receipts", "Reply notifications"] },
+  { group: "Mailbox", items: ["Inbox layout", "Send mail as", "Undo send"] },
+  {
+    group: "Accounts & delivery",
+    items: [
+      "Inboxes",
+      "Confidential messages",
+      "Deliverability",
+      "Gmail reputation (Postmaster)",
+      "Campaign sending (CAN-SPAM)",
+      "Meeting booking",
+      "Shared inboxes",
+    ],
+  },
+  { group: "Tracking", items: ["Email tracking", "Reply notifications", "Read receipts"] },
   { group: "Automation", items: ["Vacation responder", "Artemis AI", "Filters & rules"] },
   { group: "Content", items: ["Signatures", "Templates"] },
   { group: "Contacts", items: ["Contact tags", "Contact field visibility", "Blocked senders"] },
+  { group: "Advanced", items: ["Domain mail (SMTP / IMAP / POP)"] },
 ];
 
 function SettingsNav({ filter }: { filter: string }) {
@@ -291,7 +315,7 @@ function SettingsNav({ filter }: { filter: string }) {
     <nav aria-label="Settings sections" className="space-y-5">
       {groups.map((group) => (
         <div key={group.group}>
-          <div className="mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#9A94AF]">
+          <div className="mb-1.5 px-2.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[#7E7897]">
             {group.group}
           </div>
           <ul className="space-y-0.5">
@@ -302,6 +326,7 @@ function SettingsNav({ filter }: { filter: string }) {
                 <li key={item}>
                   <a
                     href={`#${id}`}
+                    aria-current={isActive ? "true" : undefined}
                     onClick={(event) => {
                       // Smooth-scroll without pushing a history entry per click.
                       const target = document.getElementById(id);
@@ -310,10 +335,8 @@ function SettingsNav({ filter }: { filter: string }) {
                       target.scrollIntoView({ behavior: "smooth", block: "start" });
                       setActiveId(id);
                     }}
-                    className={`block truncate rounded-lg px-2 py-1.5 text-[13px] transition-colors ${
-                      isActive
-                        ? "bg-[#701CC0]/10 font-semibold text-[#701CC0]"
-                        : "text-[#5B5670] hover:bg-[#F4F2F8] hover:text-[#2A2540]"
+                    className={`block truncate rounded-lg px-2.5 py-[7px] text-[13px] transition-colors ${
+                      isActive ? "font-semibold" : "font-normal"
                     }`}
                   >
                     {item}
@@ -330,6 +353,44 @@ function SettingsNav({ filter }: { filter: string }) {
 
 const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [settingsFilter, setSettingsFilter] = useState("");
+  /** Postmaster reputation per sending domain. Entries self-describe when unavailable. */
+  type PostmasterRow = {
+    domain: string;
+    ok: boolean;
+    reason?: string;
+    message?: string;
+    stats?: { date: string; userReportedSpamRatio: number | null; domainReputation: string | null };
+  };
+  const [postmaster, setPostmaster] = useState<PostmasterRow[]>([]);
+  const [postmasterLoading, setPostmasterLoading] = useState(true);
+
+  const loadPostmaster = useCallback(async () => {
+    setPostmasterLoading(true);
+    try {
+      const res = await fetch("/api/email/postmaster", { cache: "no-store" });
+      const payload = await res.json().catch(() => ({}));
+      const rows = Array.isArray(payload?.domains) ? payload.domains : [];
+      setPostmaster(
+        rows.map((r: Record<string, unknown>) => ({
+          domain: String(r.domain ?? (r.stats as { domain?: string } | undefined)?.domain ?? ""),
+          ok: Boolean(r.ok),
+          reason: typeof r.reason === "string" ? r.reason : undefined,
+          message: typeof r.message === "string" ? r.message : undefined,
+          stats: r.stats as PostmasterRow["stats"],
+        }))
+      );
+    } catch {
+      setPostmaster([]);
+    } finally {
+      setPostmasterLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Loading the Postmaster Tools status on mount; the loader flips its own loading state after awaiting.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadPostmaster();
+  }, [loadPostmaster]);
   const [accounts, setAccounts] = useState<GmailAccount[]>([]);
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [signatures, setSignatures] = useState<SignatureRow[]>([]);
@@ -379,6 +440,27 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [savingFilter, setSavingFilter] = useState(false);
   /** Per-account enabled flags for the panel (email -> enabled). Default enabled. */
   const [accountEnabled, setAccountEnabled] = useState<Record<string, boolean>>({});
+  /**
+   * Confidential messages this user has sent.
+   *
+   * /api/gmail/confidential could already list and revoke these, but nothing called it: a
+   * confidential message could be sent and then never seen or recalled again.
+   */
+  const [confidentialMessages, setConfidentialMessages] = useState<
+    Array<{ id: string; subject: string | null; createdAt: string; expiresAt: string | null; revoked: boolean; views: number }>
+  >([]);
+  const [confidentialLoading, setConfidentialLoading] = useState(true);
+  const [confidentialError, setConfidentialError] = useState("");
+
+  /** The main inbox, lowercased. Every other connected mailbox is a brand account added onto it. */
+  const [primaryAccount, setPrimaryAccount] = useState("");
+  const [primaryError, setPrimaryError] = useState("");
+  /**
+   * Failures from the small inline actions on this page (revoking access, deleting or toggling a
+   * filter, hiding an inbox). These used to swallow the response entirely: the row vanished or the
+   * switch moved, and a save that never happened looked identical to one that did.
+   */
+  const [actionError, setActionError] = useState("");
   type DeliverabilityResult = {
     domain: string;
     googleManaged: boolean;
@@ -412,6 +494,16 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     accountEmail: string;
   };
   const [bookings, setBookings] = useState<BookingRow[]>([]);
+  /**
+   * The clock reading each booking's upcoming/past label is measured against, taken when the list
+   * is loaded.
+   *
+   * Calling Date.now() while rendering the list made the render impure: the same render produced
+   * different labels depending on when it ran, and because nothing re-renders as time passes, a
+   * meeting that had just started still read as upcoming until some unrelated state changed.
+   * Anchoring it to the fetch makes the labels consistent with the data they describe.
+   */
+  const [bookingsAsOf, setBookingsAsOf] = useState(() => Date.now());
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null);
   const [promptConfig, setPromptConfig] = useState<PromptConfig>(null);
   const [promptBusy, setPromptBusy] = useState(false);
@@ -424,6 +516,12 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   /** Custom sidebar order (module keys). Empty = built-in MODULES order. */
   const [navOrder, setNavOrder] = useState<string[]>([]);
   const [navSaving, setNavSaving] = useState(false);
+  /** Rows per mailbox page. Empty string = "use the default". */
+  const [navPageSize, setNavPageSize] = useState<string>("");
+  /** Verified send-as identities for the active account (Gmail "Send mail as"). */
+  const [sendAsAliases, setSendAsAliases] = useState<
+    Array<{ email: string; displayName: string; isPrimary: boolean }>
+  >([]);
   // Undo-send window (seconds). Stored in localStorage — the same key the composer reads before it
   // actually sends — so this is a per-device preference (no server round-trip).
   const [undoSendDelay, setUndoSendDelay] = useState(5);
@@ -431,6 +529,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     try {
       const raw = window.localStorage.getItem("email-undo-delay");
       const parsed = raw != null ? Number(raw) : NaN;
+      // The saved undo-send delay comes from localStorage, which does not exist during the server render.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (Number.isFinite(parsed)) setUndoSendDelay(Math.max(0, Math.min(30, parsed)));
     } catch {
       /* ignore */
@@ -510,11 +610,6 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const [switchingAccount, setSwitchingAccount] = useState(false);
   const activeAccountEmail = selectedAccountEmail || primaryAccountEmail;
 
-  const roleLabel = useMemo(() => {
-    const r = (userRole || "").trim();
-    if (!r) return "";
-    return r.charAt(0).toUpperCase() + r.slice(1).toLowerCase();
-  }, [userRole]);
 
   const backToEmailHref = useMemo(() => {
     const connected = connectedAccounts.map((account) => account.email).filter(Boolean);
@@ -550,7 +645,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const loadAccountData = async (accountEmail: string) => {
     if (!accountEmail) return;
     try {
-      const [settingsRes, signaturesRes, templatesRes, tagsRes, visibilityRes, providersRes, blockedRes] = await Promise.all([
+      const [settingsRes, signaturesRes, templatesRes, tagsRes, visibilityRes, providersRes, blockedRes, sendAsRes] = await Promise.all([
         fetch(`/api/gmail/settings?accountEmail=${encodeURIComponent(accountEmail)}`),
         fetch(`/api/gmail/signatures?accountEmail=${encodeURIComponent(accountEmail)}`),
         fetch(`/api/gmail/templates?accountEmail=${encodeURIComponent(accountEmail)}`),
@@ -558,6 +653,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         fetch(`/api/contacts/visibility?accountEmail=${encodeURIComponent(accountEmail)}`),
         fetch("/api/email/accounts"),
         fetch("/api/gmail/blocked-senders"),
+        fetch(`/api/gmail/send-as?accountEmail=${encodeURIComponent(accountEmail)}`),
       ]);
       const settingsPayload = await settingsRes.json().catch(() => ({}));
       const signaturesPayload = await signaturesRes.json().catch(() => ({}));
@@ -566,6 +662,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       const visibilityPayload = await visibilityRes.json().catch(() => ({}));
       const providersPayload = await providersRes.json().catch(() => ({}));
       const blockedPayload = await blockedRes.json().catch(() => ({}));
+      const sendAsPayload = await sendAsRes.json().catch(() => ({}));
 
       const rawSettings = settingsPayload?.settings || {};
       const nextSettings: Settings = {
@@ -595,6 +692,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       setSavedContactVisibility(nextVisibility);
       setProviderAccounts(Array.isArray(providersPayload?.accounts) ? providersPayload.accounts : []);
       setBlockedSenders(Array.isArray(blockedPayload?.blocked) ? blockedPayload.blocked : []);
+      setSendAsAliases(Array.isArray(sendAsPayload?.aliases) ? sendAsPayload.aliases : []);
     } catch {
       /* leave prior state on error */
     }
@@ -746,16 +844,51 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   }, []);
 
+  const loadConfidential = useCallback(async () => {
+    try {
+      const response = await fetch("/api/gmail/confidential");
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) setConfidentialMessages(Array.isArray(data?.items) ? data.items : []);
+    } catch {
+      /* leave the list empty; the section says so */
+    } finally {
+      setConfidentialLoading(false);
+    }
+  }, []);
+
+  /** Revoke one. Optimistic, reverted on failure so the badge cannot claim a revoke that failed. */
+  const revokeConfidential = async (id: string) => {
+    setConfidentialError("");
+    const previous = confidentialMessages;
+    setConfidentialMessages((prev) => prev.map((m) => (m.id === id ? { ...m, revoked: true } : m)));
+    try {
+      const response = await fetch(`/api/gmail/confidential?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!response.ok) {
+        setConfidentialMessages(previous);
+        const payload = await response.json().catch(() => ({}));
+        setConfidentialError(payload?.message || "Could not revoke that message.");
+      }
+    } catch {
+      setConfidentialMessages(previous);
+      setConfidentialError("Could not revoke that message.");
+    }
+  };
+
   const loadAccountPrefs = useCallback(async () => {
     try {
       const response = await fetch("/api/gmail/account-preferences");
       const data = await response.json().catch(() => ({}));
       if (!response.ok) return;
       const map: Record<string, boolean> = {};
+      let primary = "";
       for (const pref of Array.isArray(data?.preferences) ? data.preferences : []) {
-        if (typeof pref?.accountEmail === "string") map[pref.accountEmail.toLowerCase()] = pref.enabled !== false;
+        if (typeof pref?.accountEmail !== "string") continue;
+        const key = pref.accountEmail.toLowerCase();
+        map[key] = pref.enabled !== false;
+        if (pref?.isPrimary === true) primary = key;
       }
       setAccountEnabled(map);
+      setPrimaryAccount(primary);
     } catch {
       /* default to all enabled */
     }
@@ -775,7 +908,10 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     try {
       const r = await fetch("/api/booking/bookings");
       const d = await r.json().catch(() => ({}));
-      if (r.ok) setBookings(Array.isArray(d?.bookings) ? d.bookings : []);
+      if (r.ok) {
+        setBookings(Array.isArray(d?.bookings) ? d.bookings : []);
+        setBookingsAsOf(Date.now());
+      }
     } catch {
       /* ignore */
     }
@@ -943,13 +1079,30 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   };
 
+  /**
+   * Revoke a teammate's access to a mailbox.
+   *
+   * The row is removed only once the server confirms it. Removing it regardless — which is what
+   * this did — told an admin that access was revoked while the teammate still had it, which is the
+   * worst possible thing for this particular control to get wrong.
+   */
   const revokeGrant = async (id: string) => {
-    await fetch("/api/email/mailbox-grants", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    }).catch(() => null);
-    setMailboxGrants((prev) => prev.filter((g) => g.id !== id));
+    setActionError("");
+    try {
+      const response = await fetch("/api/email/mailbox-grants", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        setActionError(payload?.message || "Could not revoke that access. It is still in place.");
+        return;
+      }
+      setMailboxGrants((prev) => prev.filter((g) => g.id !== id));
+    } catch {
+      setActionError("Could not revoke that access. It is still in place.");
+    }
   };
 
   const createBookingLink = async (acknowledgeNoAttendanceAnalytics = false) => {
@@ -1034,14 +1187,53 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     });
   }, [connectedAccounts]);
 
+  /**
+   * Make one mailbox the main inbox.
+   *
+   * Optimistic, but reverted if the write fails: leaving the badge on a mailbox the server did not
+   * accept would misreport which inbox the panel actually opens on. A missing migration comes back
+   * as ok:false with a reason rather than as a silent success.
+   */
+  const makePrimaryAccount = async (email: string) => {
+    const key = email.toLowerCase();
+    const previous = primaryAccount;
+    setPrimaryAccount(key);
+    setPrimaryError("");
+    try {
+      const response = await fetch("/api/gmail/account-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountEmail: key, isPrimary: true }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload?.ok === false) {
+        setPrimaryAccount(previous);
+        setPrimaryError(payload?.message || "Could not set the main inbox.");
+      }
+    } catch {
+      setPrimaryAccount(previous);
+      setPrimaryError("Could not set the main inbox.");
+    }
+  };
+
   const toggleAccountEnabled = async (email: string, enabled: boolean) => {
     const key = email.toLowerCase();
+    setActionError("");
     setAccountEnabled((prev) => ({ ...prev, [key]: enabled }));
-    await fetch("/api/gmail/account-preferences", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accountEmail: key, enabled }),
-    }).catch(() => null);
+    const revert = () => {
+      setAccountEnabled((prev) => ({ ...prev, [key]: !enabled }));
+      setActionError(`Could not ${enabled ? "show" : "hide"} ${key} in the panel.`);
+    };
+    try {
+      const response = await fetch("/api/gmail/account-preferences", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountEmail: key, enabled }),
+      });
+      if (!response.ok) revert();
+    } catch {
+      revert();
+    }
   };
 
   const createFilter = async () => {
@@ -1063,18 +1255,38 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   };
 
+  /** Removed from the list only once deleted, or a filter that still runs would look gone. */
   const deleteFilter = async (id: string) => {
-    await fetch(`/api/gmail/filters/${id}`, { method: "DELETE" }).catch(() => null);
-    setFilters((prev) => prev.filter((f) => f.id !== id));
+    setActionError("");
+    try {
+      const response = await fetch(`/api/gmail/filters/${id}`, { method: "DELETE" });
+      if (!response.ok) {
+        setActionError("Could not delete that filter — it is still active.");
+        return;
+      }
+      setFilters((prev) => prev.filter((f) => f.id !== id));
+    } catch {
+      setActionError("Could not delete that filter — it is still active.");
+    }
   };
 
   const toggleFilter = async (id: string, enabled: boolean) => {
+    setActionError("");
     setFilters((prev) => prev.map((f) => (f.id === id ? { ...f, enabled } : f)));
-    await fetch(`/api/gmail/filters/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled }),
-    }).catch(() => null);
+    const revert = () => {
+      setFilters((prev) => prev.map((f) => (f.id === id ? { ...f, enabled: !enabled } : f)));
+      setActionError(`Could not turn that filter ${enabled ? "on" : "off"}.`);
+    };
+    try {
+      const response = await fetch(`/api/gmail/filters/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!response.ok) revert();
+    } catch {
+      revert();
+    }
   };
 
   const saveSettings = async () => {
@@ -1121,8 +1333,15 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   // a separate button is what made changing them look like it did nothing. Debounced, so
   // typing in the vacation fields doesn't fire a request per keystroke. The sticky bar still
   // reports status and still offers a manual Save.
+  //
+  // The ref is refreshed in an effect, not during render: writing a ref while rendering mutates
+  // state that a discarded or double-invoked render was supposed to leave untouched. The debounce
+  // below fires 900ms after a commit, long after this effect has run, so it always calls the
+  // current version.
   const saveSettingsRef = useRef(saveSettings);
-  saveSettingsRef.current = saveSettings;
+  useEffect(() => {
+    saveSettingsRef.current = saveSettings;
+  });
   useEffect(() => {
     if (!hasUnsavedSettingsChanges || saving || switchingAccount) return;
     const timer = setTimeout(() => {
@@ -1252,6 +1471,42 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
   const deleteTag = (tag: ContactTag) => setTagToDelete(tag);
 
+  /**
+   * Persist the rows-per-page preference. The server clamps to 10–100; mirror that here so the
+   * field can't show a value the panel won't actually use.
+   */
+  const saveNavPageSize = async (raw: string) => {
+    const trimmed = raw.trim();
+    const parsed = Number(trimmed);
+    const value = trimmed && Number.isFinite(parsed) && parsed > 0
+      ? Math.min(100, Math.max(10, Math.floor(parsed)))
+      : null;
+    setNavPageSize(value ? String(value) : "");
+    setNavSaving(true);
+    setStatus("");
+    try {
+      const response = await fetch("/api/gmail/nav-layout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageSize: value }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || payload?.ok === false) {
+        setStatus(
+          payload?.message
+            ? `Failed to save emails per page — ${payload.message}`
+            : "Failed to save emails per page."
+        );
+      }
+    } catch (error) {
+      setStatus(
+        `Failed to save emails per page — ${error instanceof Error ? error.message : "network error"}`
+      );
+    } finally {
+      setNavSaving(false);
+    }
+  };
+
   const loadNavLayout = useCallback(async () => {
     try {
       const r = await fetch("/api/gmail/nav-layout");
@@ -1259,6 +1514,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         const d = await r.json();
         if (Array.isArray(d?.hiddenModules)) setNavHidden(d.hiddenModules);
         if (Array.isArray(d?.moduleOrder)) setNavOrder(d.moduleOrder);
+        setNavPageSize(d?.pageSize ? String(d.pageSize) : "");
       }
     } catch {
       /* ignore */
@@ -1281,6 +1537,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         loadAiPrefs(),
         loadNavLayout(),
         loadMailboxGrants(),
+        loadConfidential(),
         loadCompanySettings(),
       ]);
       try {
@@ -1290,9 +1547,10 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         const primary = await loadAccounts().catch(() => "");
         if (cancelled) return;
         setSelectedAccountEmail(primary);
-        // Only the account-scoped settings gate the shell — they're what the first
-        // screenful actually renders.
-        if (primary) await loadAccountData(primary).catch(() => {});
+        // Nothing else gates the shell. loadAccountData is seven more requests (several of
+        // them Gmail round trips); awaiting it here is what kept the page on "Loading
+        // settings…" long after there was something to show. Sections populate as it lands.
+        if (primary) void loadAccountData(primary).catch(() => {});
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -1437,123 +1695,135 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       <Head>
         <title>Vierra | Email Settings</title>
       </Head>
-      <div className={`relative min-h-screen bg-[#F3F4F6] ${pageFont.className}`}>
-        <header className="flex h-16 shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-5">
-          <Link
-            href={backToEmailHref}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-[#374151] transition-colors hover:border-[#701CC0]/40 hover:text-[#701CC0]"
-          >
-            <FiArrowLeft className="h-4 w-4 shrink-0" />
-            Back to inbox
-          </Link>
-          <span className="hidden h-6 w-px bg-gray-200 sm:block" />
-          <Link href="/panel" className="hidden items-center sm:inline-flex" aria-label="Admin panel">
+      <div className={`email-shell flex h-screen flex-col overflow-hidden ${pageFont.className}`}>
+        <header className="email-toolbar flex h-14 shrink-0 items-center gap-4 px-5">
+          <Link href="/panel" className="inline-flex shrink-0 items-center" aria-label="Admin panel">
             <Image
               src="/assets/vierra-logo-black-3.png"
               alt="Vierra"
               width={110}
               height={32}
-              className="h-auto w-[110px]"
+              className="h-auto w-[96px] brightness-0 invert"
               priority
             />
           </Link>
+          <span className="h-6 w-px shrink-0 bg-white/10" />
+          <h1 className="shrink-0 text-[15px] font-semibold tracking-tight text-[#1E1B2E]">Email settings</h1>
+          {connectedAccounts.length > 1 ? (
+            <div className="ml-auto flex min-w-0 items-center gap-2">
+              {switchingAccount ? <span className="shrink-0 text-xs text-[#9CA3AF]">Loading…</span> : null}
+              {/* Only signatures, templates and contact-field visibility belong to one address.
+                  Everything else on this page is the panel account's and applies to every inbox, so
+                  the label says which it is switching rather than implying it scopes the page. */}
+              <label htmlFor="settings-account" className="shrink-0 text-xs text-[#847FA0]">
+                Signatures for
+              </label>
+              <select
+                id="settings-account"
+                value={activeAccountEmail}
+                onChange={(event) => handleSelectAccount(event.target.value)}
+                disabled={switchingAccount}
+                className="max-w-[220px] truncate rounded-lg px-2.5 py-1.5 text-[13px] font-medium disabled:opacity-60"
+              >
+                {connectedAccounts.map((account) => (
+                  <option key={account.email} value={account.email}>
+                    {account.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
         </header>
 
-        <main className="mx-auto max-w-4xl px-5 py-8 lg:px-8 lg:py-10">
-          <div className="mb-8">
-            <div className="mb-2 flex items-center gap-2">
-              <div className="rounded-lg bg-[#701CC0]/10 p-1.5">
-                <FiMail className="h-5 w-5 text-[#701CC0]" />
-              </div>
-              <h1 className="text-2xl font-semibold tracking-tight text-[#1E1B2E] lg:text-3xl">Email settings</h1>
-            </div>
-            <p className="text-sm leading-relaxed text-[#6B7280]">
-              {roleLabel ? (
-                <>
-                  <span className="font-medium text-[#374151]">{roleLabel} account.</span>{" "}
-                </>
-              ) : null}
-              Signatures, templates, the vacation responder, and contact field visibility apply to the inbox selected below.
-              Email tracking applies to all your connected inboxes.
-            </p>
-            {connectedAccounts.length === 0 ? (
-              <p className="mt-3 text-sm text-amber-800">
-                No connected Gmail accounts. Connect Gmail from the email panel to enable mailbox-specific options.
-              </p>
-            ) : null}
-            {connectedAccounts.length > 1 ? (
-              <div className="mt-4 flex flex-col gap-3 rounded-xl border border-[#ECEAF1] bg-white p-4 shadow-[0_2px_12px_-4px_rgba(46,16,80,0.14)] sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <label
-                    htmlFor="settings-account"
-                    className="block text-xs font-semibold uppercase tracking-wide text-[#847FA0]"
-                  >
-                    Editing settings for
-                  </label>
-                  <p className="mt-1 text-xs text-[#9A93AE]">
-                    Switch inbox to edit its signatures, templates, vacation responder, and contact visibility.
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {switchingAccount ? <span className="text-xs text-[#9CA3AF]">Loading…</span> : null}
-                  <select
-                    id="settings-account"
-                    value={activeAccountEmail}
-                    onChange={(event) => handleSelectAccount(event.target.value)}
-                    disabled={switchingAccount || loading}
-                    className="max-w-[240px] truncate rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-sm font-medium text-[#1E1B2E] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {connectedAccounts.map((account) => (
-                      <option key={account.email} value={account.email}>
-                        {account.email}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            ) : null}
-          </div>
-
+        <main className="flex min-h-0 flex-1 overflow-hidden">
           {loading ? (
-            <div className="rounded-xl border border-gray-100 bg-white p-8 text-center text-sm text-[#6B7280] shadow-sm">
-              Loading settings…
+            /* Skeleton of the real shell — nav rail on the left, stacked section cards on the
+               right — so the page holds its shape while data lands instead of collapsing to a
+               line of centred text and then jumping into a full layout. */
+            <div className="flex flex-1 overflow-hidden" role="status" aria-label="Loading settings">
+              <aside className="hidden w-[248px] shrink-0 flex-col gap-2 overflow-hidden border-r border-white/[0.07] px-3 pt-3 lg:flex">
+                <div className="settings-skeleton mb-2 h-9 rounded-lg" />
+                <div className="settings-skeleton h-9 rounded-lg" />
+                {[...Array(7)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="settings-skeleton h-7 rounded-md"
+                    style={{ width: `${88 - (i % 3) * 14}%`, animationDelay: `${i * 70}ms` }}
+                  />
+                ))}
+              </aside>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <div className="mx-auto max-w-3xl space-y-5 px-5 py-6 lg:px-8 lg:py-8">
+                  {[...Array(3)].map((_, card) => (
+                    <div key={card} className="rounded-xl border border-white/[0.07] p-5">
+                      <div className="flex items-center gap-3">
+                        <div className="settings-skeleton h-9 w-9 shrink-0 rounded-lg" />
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div className="settings-skeleton h-4 w-40 rounded" style={{ animationDelay: `${card * 90}ms` }} />
+                          <div className="settings-skeleton h-3 w-64 max-w-full rounded" style={{ animationDelay: `${card * 90 + 60}ms` }} />
+                        </div>
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        {[...Array(card === 0 ? 4 : 2)].map((__, row) => (
+                          <div key={row} className="flex items-center justify-between gap-4">
+                            <div
+                              className="settings-skeleton h-3.5 rounded"
+                              style={{ width: `${52 - row * 6}%`, animationDelay: `${row * 80}ms` }}
+                            />
+                            <div className="settings-skeleton h-5 w-10 shrink-0 rounded-full" style={{ animationDelay: `${row * 80}ms` }} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <span className="sr-only">Loading settings…</span>
             </div>
           ) : (
             <SettingsFilterContext.Provider value={settingsFilter}>
-              <div className="mb-5">
-                <div className="relative">
-                  <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
-                  <input
-                    value={settingsFilter}
-                    onChange={(event) => setSettingsFilter(event.target.value)}
-                    placeholder="Filter settings…"
-                    aria-label="Filter settings"
-                    className="w-full rounded-xl border border-[#E5E7EB] bg-white py-2.5 pl-9 pr-9 text-sm text-[#1E1B2E] placeholder-[#9CA3AF] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
-                  />
-                  {settingsFilter ? (
-                    <button
-                      type="button"
-                      onClick={() => setSettingsFilter("")}
-                      aria-label="Clear filter"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-[#9CA3AF] hover:bg-[#F3F4F6] hover:text-[#6B7280]"
-                    >
-                      <FiX className="h-4 w-4" />
-                    </button>
-                  ) : null}
+              <aside className="hidden w-[248px] shrink-0 flex-col overflow-hidden border-r border-white/[0.07] lg:flex">
+                <div className="shrink-0 px-3 pb-2 pt-3">
+                  <Link
+                    href={backToEmailHref}
+                    className="mb-3 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium text-[#C6C0DA] transition-colors hover:bg-white/5 hover:text-white"
+                  >
+                    <FiArrowLeft className="h-4 w-4 shrink-0" />
+                    Back to inbox
+                  </Link>
+                  <div className="relative">
+                    <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]" />
+                    <input
+                      value={settingsFilter}
+                      onChange={(event) => setSettingsFilter(event.target.value)}
+                      placeholder="Filter settings…"
+                      aria-label="Filter settings"
+                      className="w-full rounded-lg py-2 pl-9 pr-8 text-[13px]"
+                    />
+                    {settingsFilter ? (
+                      <button
+                        type="button"
+                        onClick={() => setSettingsFilter("")}
+                        aria-label="Clear filter"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-[#9CA3AF] hover:text-white"
+                      >
+                        <FiX className="h-3.5 w-3.5" />
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-
-              <div className="lg:grid lg:grid-cols-[212px_minmax(0,1fr)] lg:gap-8">
-                <aside className="mb-6 hidden lg:sticky lg:top-6 lg:mb-0 lg:block lg:self-start">
+                <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
                   <SettingsNav filter={settingsFilter} />
-                </aside>
+                </div>
+              </aside>
 
-                <div className="space-y-6">
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="mx-auto max-w-3xl space-y-5 px-5 py-6 lg:px-8 lg:py-8">
                   {settingsFilter.trim() &&
                   !SETTINGS_NAV.some((group) =>
                     group.items.some((item) => item.toLowerCase().includes(settingsFilter.trim().toLowerCase()))
                   ) ? (
-                    <p className="rounded-xl border border-[#E5E7EB] bg-white p-8 text-center text-sm text-[#6B7280]">
+                    <p className="rounded-xl border border-white/[0.07] bg-white p-8 text-center text-sm text-[#6B7280]">
                       No settings match “{settingsFilter.trim()}”.
                     </p>
                   ) : null}
@@ -1576,6 +1846,28 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   </div>
                 }
               >
+                <div className="mb-3 flex items-center justify-between gap-4 border-b border-gray-100 pb-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#1E1B2E]">Emails per page</p>
+                    <p className="mt-0.5 text-xs text-[#6B7280]">
+                      How many messages each mailbox page loads. Each row is a separate Gmail
+                      fetch, so a smaller number opens mailboxes faster. 10–100; blank uses the
+                      default of {PAGE_SIZE}.
+                    </p>
+                  </div>
+                  <input
+                    type="number"
+                    min={10}
+                    max={100}
+                    step={5}
+                    value={navPageSize}
+                    placeholder={String(PAGE_SIZE)}
+                    onChange={(event) => setNavPageSize(event.target.value)}
+                    onBlur={(event) => void saveNavPageSize(event.target.value)}
+                    className="w-24 shrink-0 rounded-lg border border-[#E5E7EB] px-3 py-1.5 text-sm text-[#1E1B2E] focus:border-[#701CC0] focus:outline-none focus:ring-1 focus:ring-[#701CC0]"
+                    aria-label="Emails per page"
+                  />
+                </div>
                 <ul className="divide-y divide-gray-100">
                   {orderedModules.map((m, index) => {
                     const visible = m.key === "inbox" || !navHidden.includes(m.key);
@@ -1648,6 +1940,47 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 </ul>
               </SettingsSection>
               <SettingsSection
+                title="Send mail as"
+                description="Addresses this account is allowed to send from. These come from Gmail's own “Send mail as” settings — add or remove them in Gmail and they update here."
+                icon={FiMail}
+              >
+                {sendAsAliases.length === 0 ? (
+                  <p className={TEXT_MUTED}>
+                    No send-as addresses found for {activeAccountEmail || "this account"}.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-gray-100">
+                    {sendAsAliases.map((alias) => (
+                      <li key={alias.email} className="flex items-center justify-between gap-4 py-2.5">
+                        <div className="min-w-0">
+                          <p className={`${TEXT_STRONG} truncate`}>
+                            {alias.displayName ? `${alias.displayName} <${alias.email}>` : alias.email}
+                          </p>
+                          <p className={TEXT_MUTED}>
+                            {alias.isPrimary
+                              ? "Primary address for this mailbox"
+                              : `Alias — sends through ${activeAccountEmail}`}
+                          </p>
+                        </div>
+                        <span
+                          className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
+                            alias.isPrimary ? "bg-[#F3EDFB] text-[#701CC0]" : "bg-[#ECFDF3] text-[#067647]"
+                          }`}
+                        >
+                          {alias.isPrimary ? "Primary" : "Verified"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <p className="mt-3 border-t border-gray-100 pt-3 text-xs leading-relaxed text-[#6B7280]">
+                  Incoming mail sent to any of these addresses is delivered to{" "}
+                  {activeAccountEmail || "this mailbox"} by Gmail, so it already appears in your
+                  Inbox — there is nothing separate to connect. To see only one address, search{" "}
+                  <code className="rounded bg-gray-100 px-1 py-0.5">to:address@example.com</code>.
+                </p>
+              </SettingsSection>
+              <SettingsSection
                 title="Undo send"
                 description="How long a sent email is held with an Undo option before it actually goes out (this device)."
                 icon={FiZap}
@@ -1671,8 +2004,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 </div>
               </SettingsSection>
               <SettingsSection
-                title="Accounts"
-                description="Choose which connected Google accounts appear in the email panel."
+                title="Inboxes"
+                description="One mailbox is your main inbox; the rest are brand accounts added onto it. The main inbox leads the panel and is the account new mail opens on. Everything else on this page applies to every inbox at once."
                 icon={FiMail}
               >
                 {connectedAccounts.length === 0 ? (
@@ -1680,24 +2013,136 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 ) : (
                   <ul className="space-y-2">
                     {connectedAccounts.map((account) => {
-                      const enabled = accountEnabled[account.email.toLowerCase()] !== false;
+                      const key = account.email.toLowerCase();
+                      const enabled = accountEnabled[key] !== false;
+                      const isPrimary = primaryAccount === key;
                       return (
                         <li
                           key={account.email}
-                          className="flex items-center justify-between gap-3 rounded-xl border border-[#ECEAF1] bg-white p-3"
+                          className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 ${
+                            isPrimary ? "border-[#701CC0]/30 bg-[#F8F4FF]" : "border-[#ECEAF1] bg-white"
+                          }`}
                         >
                           <div className="flex min-w-0 items-center gap-3">
-                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F5EFFF] text-sm font-semibold text-[#701CC0]">
+                            <span
+                              className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+                                isPrimary ? "bg-[#701CC0] text-white" : "bg-[#F5EFFF] text-[#701CC0]"
+                              }`}
+                            >
                               {account.email.charAt(0).toUpperCase()}
                             </span>
-                            <span className="truncate text-sm font-medium text-[#1E1B2E]">{account.email}</span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-[#1E1B2E]">{account.email}</p>
+                              <p className="mt-0.5 text-[11px] text-[#6B7280]">
+                                {isPrimary ? "Main inbox" : "Brand account"}
+                              </p>
+                            </div>
                           </div>
-                          <Toggle checked={enabled} onChange={(v) => toggleAccountEnabled(account.email, v)} />
+                          <div className="flex shrink-0 items-center gap-3">
+                            {isPrimary ? (
+                              <span className="rounded-full bg-[#701CC0]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#4C1191]">
+                                Main
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => makePrimaryAccount(account.email)}
+                                className="rounded-md border border-[#E5E7EB] px-2.5 py-1 text-[11px] font-medium text-[#4A465C] transition-colors hover:bg-[#F4F1FA]"
+                              >
+                                Make main
+                              </button>
+                            )}
+                            <Toggle checked={enabled} onChange={(v) => toggleAccountEnabled(account.email, v)} />
+                          </div>
                         </li>
                       );
                     })}
                   </ul>
                 )}
+                {primaryError || actionError ? (
+                  <p className="mt-3 text-xs text-red-600">{primaryError || actionError}</p>
+                ) : null}
+                {sendAsAliases.length > 0 ? (
+                  <div className="mt-4 rounded-xl border border-[#ECEAF1] bg-[#FAFAFB] p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                      Send-as aliases
+                    </p>
+                    <p className="mt-1 text-xs text-[#6B7280]">
+                      Addresses you can send from through the inboxes above. Mail addressed to them arrives in the
+                      inbox that owns the alias.
+                    </p>
+                    <ul className="mt-2 flex flex-wrap gap-2">
+                      {sendAsAliases.map((alias) => (
+                        <li
+                          key={alias.email}
+                          className="rounded-full border border-[#E5E7EB] bg-white px-2.5 py-1 text-[11px] text-[#4A465C]"
+                        >
+                          {alias.email}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </SettingsSection>
+
+              <SettingsSection
+                title="Confidential messages"
+                description="Messages you sent in confidential mode. Revoking one takes effect immediately — the recipient's link stops working, even if they opened it before."
+                icon={FiLock}
+              >
+                {confidentialLoading ? (
+                  <p className={TEXT_MUTED}>Loading…</p>
+                ) : confidentialMessages.length === 0 ? (
+                  <p className={TEXT_MUTED}>
+                    None sent yet. Confidential mode is in the composer — it replaces the body with a link to a
+                    page only the recipient can open.
+                  </p>
+                ) : (
+                  <ul className="space-y-2">
+                    {confidentialMessages.map((message) => {
+                      const expired = message.expiresAt !== null && new Date(message.expiresAt) < new Date();
+                      return (
+                        <li
+                          key={message.id}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#ECEAF1] bg-white p-3"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-[#1E1B2E]">
+                              {message.subject || "(No subject)"}
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-[#6B7280]">
+                              Sent {new Date(message.createdAt).toLocaleDateString()} ·{" "}
+                              {message.views} {message.views === 1 ? "view" : "views"}
+                              {message.expiresAt
+                                ? ` · ${expired ? "expired" : `expires ${new Date(message.expiresAt).toLocaleDateString()}`}`
+                                : " · no expiry"}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {message.revoked ? (
+                              <span className="rounded-full bg-red-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-red-700">
+                                Revoked
+                              </span>
+                            ) : expired ? (
+                              <span className="rounded-full bg-[#F3F4F6] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#6B7280]">
+                                Expired
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => revokeConfidential(message.id)}
+                                className={btnDangerOutline}
+                              >
+                                Revoke access
+                              </button>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {confidentialError ? <p className="mt-1 text-xs text-red-600">{confidentialError}</p> : null}
               </SettingsSection>
 
               <SettingsSection
@@ -1743,6 +2188,94 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     })}
                   </ul>
                 )}
+              </SettingsSection>
+
+              <SettingsSection
+                title="Gmail reputation (Postmaster)"
+                description="Spam-complaint rate and the SPF/DKIM/DMARC pass rates Gmail actually observed. A 'Report spam' click is reported to Google, not to us, so this is the only real source for complaint data."
+                icon={FiShield}
+              >
+                <div className="space-y-3">
+                  {postmasterLoading ? (
+                    <p className={TEXT_MUTED}>Checking Postmaster…</p>
+                  ) : postmaster.length === 0 ? (
+                    <p className={TEXT_MUTED}>
+                      No custom sending domains connected. Postmaster only covers domains you own — consumer
+                      domains (gmail.com, outlook.com…) can never be verified.
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {postmaster.map((entry) => (
+                        <li key={entry.domain} className="rounded-xl border border-[#ECEAF1] bg-white p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className={`truncate ${TEXT_STRONG}`}>{entry.domain}</span>
+                            {entry.ok ? (
+                              <span className="shrink-0 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-semibold text-green-700">
+                                Connected
+                              </span>
+                            ) : (
+                              <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                {entry.reason === "no_permission" ? "Needs reconnect" : "No data yet"}
+                              </span>
+                            )}
+                          </div>
+                          {entry.ok && entry.stats ? (
+                            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#6B7280]">
+                              <span>
+                                Spam:{" "}
+                                <b className="text-[#1E1B2E]">
+                                  {entry.stats.userReportedSpamRatio === null
+                                    ? "—"
+                                    : `${(entry.stats.userReportedSpamRatio * 100).toFixed(3)}%`}
+                                </b>
+                              </span>
+                              <span>
+                                Reputation: <b className="text-[#1E1B2E]">{entry.stats.domainReputation ?? "—"}</b>
+                              </span>
+                              <span>as of {entry.stats.date}</span>
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-xs text-[#9A93AE]">{entry.message}</p>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <div className="rounded-xl border border-[#ECEAF1] bg-[#FAFAFB] p-3">
+                    <p className="text-xs text-[#6B7280]">
+                      Reputation data needs two one-time steps: the connected Google account must grant Postmaster
+                      access (reconnect below — existing logins don&apos;t carry new permissions), and each sending
+                      domain must be verified at{" "}
+                      <a
+                        href="https://postmaster.google.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium text-[#701CC0] underline"
+                      >
+                        postmaster.google.com
+                      </a>
+                      . Google publishes with a 1–2 day lag and only above a daily volume threshold.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const target = activeAccountEmail
+                            ? `/api/gmail/initiate?from=email-settings&account=${encodeURIComponent(activeAccountEmail)}`
+                            : "/api/gmail/initiate?from=email-settings";
+                          window.open(target, "_self");
+                        }}
+                        className={btnPrimary}
+                      >
+                        Reconnect Google for Postmaster
+                      </button>
+                      <button type="button" onClick={loadPostmaster} disabled={postmasterLoading} className={btnSecondary}>
+                        {postmasterLoading ? "Checking…" : "Re-check now"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </SettingsSection>
 
               <SettingsSection
@@ -2022,7 +2555,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                       <ul className="space-y-2">
                         {bookings.slice(0, 20).map((b) => {
                           const start = new Date(b.startAt);
-                          const upcoming = start.getTime() >= Date.now();
+                          const upcoming = start.getTime() >= bookingsAsOf;
                           const attendanceLabel =
                             b.attendanceStatus === "held" ? "Held" : b.attendanceStatus === "not_held" ? "Not held" : null;
                           return (
@@ -2135,6 +2668,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   icon={FiUsers}
                 >
                   <div className="space-y-3">
+                    {actionError ? <p className="text-xs text-red-600">{actionError}</p> : null}
                     {mailboxGrants.length === 0 ? (
                       <p className={TEXT_MUTED}>No shared-inbox grants yet.</p>
                     ) : (
@@ -2222,7 +2756,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Email tracking"
-                description="Analytics for outbound mail. Applies to all your connected inboxes."
+                description="Open and click tracking on outbound mail. Applies to every inbox on this account."
                 icon={FiActivity}
               >
                 <div className="space-y-5">
@@ -2263,7 +2797,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Reply notifications"
-                description="Ping the team Discord when a real reply lands in this inbox. Set per inbox."
+                description="Ping the team Discord when a real reply lands. Applies to every inbox on this account."
                 icon={FiZap}
               >
                 <div className="flex items-center justify-between gap-4">
@@ -2282,7 +2816,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Read receipts"
-                description="Request a read receipt by default when composing from this inbox."
+                description="Request a read receipt by default when composing. Applies to every inbox on this account."
                 icon={FiMail}
               >
                 <div className="flex items-center justify-between gap-4">
@@ -2301,7 +2835,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
 
               <SettingsSection
                 title="Vacation responder"
-                description="Automatic reply while you are away, for the selected inbox."
+                description="Automatic reply while you are away. Applies to every inbox on this account — each reply goes out from whichever address received the message."
                 icon={FiCoffee}
               >
                 <div className="flex items-center justify-between gap-4 border-b border-gray-100 pb-5">
@@ -2378,6 +2912,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                 icon={FiFilter}
               >
                 <div className="space-y-3">
+                  {actionError ? <p className="text-xs text-red-600">{actionError}</p> : null}
                   {filters.length === 0 ? (
                     <p className={TEXT_MUTED}>No filters yet.</p>
                   ) : (

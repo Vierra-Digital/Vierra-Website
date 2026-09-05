@@ -1,9 +1,26 @@
 "use client"
 
 import { bricolage, figtree } from "@/lib/fonts";
-import { useRef, useState } from "react"
-import { motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion"
+import {useRef, useState} from "react"
+
+import { m as motion, AnimatePresence, useScroll, useMotionValueEvent } from "framer-motion"
 import { OnboardingStepAnim, TamMiningAnim } from "./OnboardingSteps"
+import { useMediaQuery } from "@/hooks/useMediaQuery"
+
+// Only one of the desktop (scroll-locked) / mobile (stacked cards) variants
+// below is ever visible — they were previously both always mounted with the
+// other one CSS-hidden via lg:hidden, which put ~380 dead elements in the DOM
+// for whichever breakpoint didn't apply (this section alone was ~26% of the
+// homepage's total DOM size). null = "not yet known" (SSR and the first
+// client render, before this effect runs) renders BOTH, matching prior
+// behavior exactly and avoiding any hydration mismatch; once the real
+// viewport is known, only the matching variant stays mounted.
+function useIsDesktop() {
+  // null on the server and during hydration — useSyncExternalStore uses the server snapshot for
+  // both, so "not yet known" still renders BOTH variants exactly as before, with no hydration
+  // mismatch and without the extra render an effect-plus-setState costs.
+  return useMediaQuery("(min-width: 1024px)", null)
+}
 
 
 // The onboarding journey, start to signed client. Each step's animation lives in
@@ -46,6 +63,7 @@ const steps = [
 const DOCK_END = 0.18
 
 const Timeline = () => {
+  const isDesktop = useIsDesktop()
   const sectionRef = useRef<HTMLDivElement>(null)
   const [active, setActive] = useState(0)
   const [showIntro, setShowIntro] = useState(true)
@@ -74,6 +92,7 @@ const Timeline = () => {
       {/* Desktop — scroll-locked stage. An intro header sits centered on screen,
           then docks to the top while its text morphs into the active step; the
           step's animation plays in the band beneath it. */}
+      {isDesktop !== false && (
       <div id="timeline-section" ref={sectionRef} className="relative hidden h-[560vh] lg:block">
         <div className="sticky top-0 h-screen w-full overflow-hidden bg-[#0A0414] text-white">
           {/* Soft purple glow behind the stage — one clean highlight, not a busy gradient. */}
@@ -183,9 +202,10 @@ const Timeline = () => {
           </AnimatePresence>
         </div>
       </div>
+      )}
 
       {/* Mobile — stacked cards, each with its own step animation. */}
-      <MobileTimeline />
+      {isDesktop !== true && <MobileTimeline />}
     </>
   )
 }

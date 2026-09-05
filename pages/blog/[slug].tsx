@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { bricolage, inter } from "@/lib/fonts";
 import Head from 'next/head';
 import { Header } from "@/components/Header";
-import { motion } from "framer-motion";
+import { m as motion } from "framer-motion";
 import Footer from "@/components/FooterSection/Footer";
 import SocialShareBar from "@/components/Blog/SocialShareBar";
 import AuthorBio from "@/components/Blog/AuthorBio";
@@ -11,6 +11,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getPostBySlug, getRelatedPosts, getAllSlugs } from '@/lib/blog';
 import { GetStaticPaths, GetStaticProps } from 'next';
+import { jsonLd } from "@/lib/jsonLd";
 
 type BlogPostProps = {
     title: string;
@@ -118,7 +119,7 @@ const BlogViewPage = ({
                 id="schema-org-breadcrumbs"
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
-                    __html: JSON.stringify({
+                    __html: jsonLd({
                         "@context": "https://schema.org",
                         "@type": "BreadcrumbList",
                         itemListElement: [
@@ -148,7 +149,7 @@ const BlogViewPage = ({
                 id="schema-org-article"
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
-                    __html: JSON.stringify({
+                    __html: jsonLd({
                         "@context": "https://schema.org",
                         "@type": "BlogPosting",
                         headline: title,
@@ -467,7 +468,11 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
     const post = await getPostBySlug(slug);
 
     if (!post) {
-        return { notFound: true };
+        // Revalidate the 404 so a slug that becomes valid after this first request
+        // (e.g. a post published, or read before the DB row was replicated) stops
+        // 404ing on its own within the window, instead of the negative result
+        // sticking until the next deploy.
+        return { notFound: true, revalidate: 600 };
     }
 
     const relatedPosts = await getRelatedPosts(

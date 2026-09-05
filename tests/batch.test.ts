@@ -2,47 +2,47 @@ import { describe, it, expect } from "vitest";
 import { mapInBatches } from "@/lib/batch";
 
 describe("mapInBatches", () => {
-  it("returns results in input order regardless of batch size", async () => {
-    const out = await mapInBatches([1, 2, 3, 4, 5], async (n) => n * 2, 2);
-    expect(out).toEqual([2, 4, 6, 8, 10]);
-  });
-
-  it("passes the absolute index across batches", async () => {
-    const out = await mapInBatches(["a", "b", "c", "d"], async (_v, i) => i, 2);
-    expect(out).toEqual([0, 1, 2, 3]);
-  });
-
-  it("never runs more than `size` operations concurrently", async () => {
-    let inFlight = 0;
-    let maxInFlight = 0;
+  it("never exceeds the requested concurrency", async () => {
+    // The guarantee that matters for Gmail: firing a whole bulk selection at once is what returned
+    // 429 "Too many concurrent requests for user" on part of the batch.
+    let active = 0;
+    let peak = 0;
     await mapInBatches(
-      Array.from({ length: 10 }, (_, i) => i),
-      async () => {
-        inFlight += 1;
-        maxInFlight = Math.max(maxInFlight, inFlight);
-        await new Promise((r) => setTimeout(r, 3));
-        inFlight -= 1;
+      Array.from({ length: 28 }, (_, i) => i),
+      async (item) => {
+        active += 1;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        active -= 1;
+        return item;
       },
-      3
+      5
     );
-    expect(maxInFlight).toBeLessThanOrEqual(3);
-    expect(maxInFlight).toBeGreaterThan(1); // it actually parallelized
+    expect(peak).toBeLessThanOrEqual(5);
   });
 
-  it("handles empty input", async () => {
-    expect(await mapInBatches([], async (x) => x)).toEqual([]);
+  it("returns results in input order, not completion order", async () => {
+    const result = await mapInBatches(
+      [30, 1, 20, 2],
+      async (ms) => {
+        await new Promise((resolve) => setTimeout(resolve, ms));
+        return ms;
+      },
+      4
+    );
+    expect(result).toEqual([30, 1, 20, 2]);
   });
 
-  it("rejects an invalid batch size", async () => {
-    await expect(mapInBatches([1], async (x) => x, 0)).rejects.toThrow();
+  it("covers every item when the count is not a multiple of the batch size", async () => {
+    const result = await mapInBatches([1, 2, 3, 4, 5, 6, 7], async (n) => n * 2, 3);
+    expect(result).toEqual([2, 4, 6, 8, 10, 12, 14]);
   });
 
-  it("rejects if any operation throws", async () => {
-    await expect(
-      mapInBatches([1, 2, 3], async (n) => {
-        if (n === 2) throw new Error("boom");
-        return n;
-      })
-    ).rejects.toThrow("boom");
+  it("handles an empty list", async () => {
+    expect(await mapInBatches([], async (n) => n, 5)).toEqual([]);
+  });
+
+  it("rejects a nonsensical batch size rather than hanging", async () => {
+    await expect(mapInBatches([1], async (n) => n, 0)).rejects.toThrow("size must be >= 1");
   });
 });

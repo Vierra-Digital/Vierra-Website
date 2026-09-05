@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { createSupabaseAuthUser } from "@/lib/supabase/admin";
+import { createSupabaseAuthUser, deleteSupabaseAuthUser, updateSupabaseAuthUserEmail } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -8,35 +8,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!session) return;
   const { companyId } = session;
   const userRole = session.user.role;
+  const isPlatformAdmin = session.user.isPlatformAdmin === true;
 
   if (req.method === "GET") {
     if (userRole !== "admin" && userRole !== "staff") {
       return res.status(403).json({ message: "Forbidden" });
     }
     try {
+      // Platform admins (see prisma/schema.prisma's User.is_platform_admin) see every company's
+      // people, not just their own — everyone else stays scoped to companyId as before.
       const memberships = await prisma.companyMembership.findMany({
-        where: { company_id: companyId },
+        where: isPlatformAdmin ? {} : { company_id: companyId },
         include: {
           users_company_memberships_user_idTousers: {
             select: {
               id: true,
               name: true,
               email: true,
-              user_preferences: { select: { time_zone: true, image_storage_key: true } },
+              is_platform_admin: true,
+              user_preferences: { select: { time_zone: true, image_storage_key: true, image_updated_at: true } },
               clients_clients_user_idTousers: { select: { name: true } },
             },
           },
+          ...(isPlatformAdmin ? { companies: { select: { id: true, name: true } } } : {}),
         },
         orderBy: { joined_at: "asc" },
       });
 
-      const shaped = memberships.map((m) => {
+      const shaped = memberships
+        // Superadmins are invisible to everyone except other superadmins — a regular company
+        // admin/staff member shouldn't even know the account exists, let alone see it in the list.
+        .filter((m) => isPlatformAdmin || !m.users_company_memberships_user_idTousers.is_platform_admin)
+        .map((m) => {
         const u = m.users_company_memberships_user_idTousers;
         return {
           id: u.id,
           name: u.name,
           email: u.email,
           image: Boolean(u.user_preferences?.image_storage_key),
+          imageVersion: u.user_preferences?.image_updated_at
+            ? u.user_preferences.image_updated_at.getTime()
+            : u.user_preferences?.image_storage_key
+              ? u.id
+              : 0,
           role: m.role,
           position: m.position ?? null,
           country: null,
@@ -47,7 +61,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           status: m.status,
           lastActiveAt: null,
           clientName: u.clients_clients_user_idTousers?.name ?? null,
+          companyName: isPlatformAdmin ? ((m as any).companies?.name ?? null) : null,
+          isPlatformAdmin: u.is_platform_admin,
           hasPassword: false,
+          isSelf: u.id === session.user.id,
         };
       });
       return res.status(200).json(shaped);
@@ -64,21 +81,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!email || !newRole) {
       return res.status(400).json({ message: "email and role are required" });
     }
-    const roleToStore = String(newRole).toLowerCase() === "client" ? "staff" : String(newRole);
+    const roleToStore = String(newRole).toLowerCase();
+    if (roleToStore !== "admin" && roleToStore !== "staff") {
+      // Client accounts aren't created here — they need a `clients` row (business name, etc.)
+      // and are provisioned via Clients -> Add Client's onboarding-link flow instead.
+      return res.status(400).json({ message: "Use Clients -> Add Client to create a client account." });
+    }
     const normalizedEmail = String(email).trim().toLowerCase();
+
+    let authUserId: string | undefined;
     try {
       const authUser = await createSupabaseAuthUser(normalizedEmail, password ? String(password) : undefined);
-      const user = await prisma.user.create({
-        data: { id: authUser.id, name: name || null, email: normalizedEmail },
-        select: { id: true, name: true, email: true },
-      });
-      await prisma.companyMembership.create({
-        data: { company_id: companyId, user_id: authUser.id, role: roleToStore },
-      });
+      authUserId = authUser.id;
+
+      // The `on_auth_user_created` DB trigger already inserts a bare public.users row (id + email)
+      // the instant createSupabaseAuthUser's insert into auth.users commits, so this always finds
+      // a row waiting for it — upsert (fill in the name) rather than create (which would always
+      // collide on the id and fail). The user row and its company membership must land together —
+      // if the membership insert fails after the user row succeeds, we'd otherwise strand a user
+      // with no company, invisible to this list (which is scoped by membership) and blocking
+      // retry on this email.
+      const [user] = await prisma.$transaction([
+        prisma.user.upsert({
+          where: { id: authUser.id },
+          create: { id: authUser.id, name: name || null, email: normalizedEmail },
+          update: { name: name || null, email: normalizedEmail },
+          select: { id: true, name: true, email: true },
+        }),
+        prisma.companyMembership.create({
+          data: { company_id: companyId, user_id: authUser.id, role: roleToStore },
+        }),
+      ]);
       return res.status(201).json({ ...user, role: roleToStore });
     } catch (e: any) {
       console.error("admin/users POST", e);
-      const msg = e?.code === "P2002" ? "Email already exists" : "Failed to create user";
+      if (authUserId) {
+        // Roll back the Auth identity too, so a failed create doesn't strand an unreachable
+        // account and permanently block re-creating this user with the same email.
+        await deleteSupabaseAuthUser(authUserId).catch((cleanupErr) =>
+          console.error("admin/users POST rollback failed", authUserId, cleanupErr)
+        );
+      }
+      const target = Array.isArray(e?.meta?.target) ? e.meta.target.join(",") : String(e?.meta?.target ?? "");
+      const msg = e?.code === "P2002" && target.includes("email") ? "Email already exists" : "Failed to create user";
       return res.status(400).json({ message: msg });
     }
   }
@@ -98,16 +143,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       // The membership update below is company-scoped, but the user.name/email update and prefs are
       // not — gate the whole PUT on the target being a member of the admin's own company so one
-      // company's admin can't edit another company's user record by id.
+      // company's admin can't edit another company's user record by id. Platform admins (see
+      // prisma/schema.prisma's User.is_platform_admin) act as an admin of every company, so they
+      // skip that scoping and edit by user_id alone — targetCompanyId then drives the
+      // membership-scoped queries below instead of the caller's own companyId.
       const target = await prisma.companyMembership.findFirst({
-        where: { company_id: companyId, user_id: String(id) },
-        select: { user_id: true },
+        where: isPlatformAdmin ? { user_id: String(id) } : { company_id: companyId, user_id: String(id) },
+        select: {
+          user_id: true,
+          company_id: true,
+          users_company_memberships_user_idTousers: { select: { is_platform_admin: true } },
+        },
       });
       if (!target) return res.status(404).json({ message: "User not found" });
+      const targetCompanyId = target.company_id;
+      // A superadmin's own company role can't be changed from here, by anyone (including another
+      // superadmin) — it's not what determines their access, so editing it would be misleading at
+      // best. Other fields (name, email, position, time zone...) are unaffected.
+      if (newRole !== undefined && target.users_company_memberships_user_idTousers.is_platform_admin) {
+        return res.status(403).json({ message: "Superadmin accounts can't have their role changed here." });
+      }
+
+      const normalizedEmail = email !== undefined ? String(email).trim().toLowerCase() : undefined;
+      // Sync Supabase Auth first — if it fails, bail out before touching Prisma so the two
+      // never disagree about which email is current (Supabase Auth is the login/reset source
+      // of truth; see updateSupabaseAuthUserEmail).
+      if (normalizedEmail !== undefined) {
+        await updateSupabaseAuthUserEmail(String(id), normalizedEmail);
+      }
 
       const userUpdateData: Record<string, unknown> = {};
       if (name !== undefined) userUpdateData.name = name;
-      if (email !== undefined) userUpdateData.email = email;
+      if (normalizedEmail !== undefined) userUpdateData.email = normalizedEmail;
       if (Object.keys(userUpdateData).length > 0) {
         await prisma.user.update({ where: { id: String(id) }, data: userUpdateData });
       }
@@ -119,7 +186,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (strikes !== undefined) memberUpdateData.strikes = strikes;
       if (Object.keys(memberUpdateData).length > 0) {
         await prisma.companyMembership.updateMany({
-          where: { company_id: companyId, user_id: String(id) },
+          where: { company_id: targetCompanyId, user_id: String(id) },
           data: memberUpdateData,
         });
       }
@@ -137,7 +204,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         select: { id: true, name: true, email: true },
       });
       const membership = await prisma.companyMembership.findFirst({
-        where: { company_id: companyId, user_id: String(id) },
+        where: { company_id: targetCompanyId, user_id: String(id) },
         select: { role: true, position: true, mentor_id: true, strikes: true, status: true },
       });
       const pref = await prisma.userPreference.findUnique({
@@ -166,13 +233,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const id = req.query.id || (req.body && req.body.id);
     const userId = Array.isArray(id) ? id[0] : id;
     if (!userId) return res.status(400).json({ message: "id is required" });
+    if (userId === session.user.id) {
+      return res.status(400).json({ message: "You cannot remove your own account" });
+    }
     try {
       // Only delete users who belong to the admin's own company — never any user id system-wide.
+      // Platform admins are exempt from that scoping (see the PUT handler above for why).
       const target = await prisma.companyMembership.findFirst({
-        where: { company_id: companyId, user_id: String(userId) },
-        select: { user_id: true },
+        where: isPlatformAdmin ? { user_id: String(userId) } : { company_id: companyId, user_id: String(userId) },
+        select: {
+          user_id: true,
+          users_company_memberships_user_idTousers: { select: { is_platform_admin: true } },
+        },
       });
       if (!target) return res.status(404).json({ message: "User not found" });
+      if (target.users_company_memberships_user_idTousers.is_platform_admin) {
+        return res.status(403).json({ message: "Superadmin accounts can't be removed here." });
+      }
       await prisma.client.updateMany({ where: { user_id: userId }, data: { user_id: null } });
       await prisma.user.delete({ where: { id: userId } });
       return res.status(200).json({ deleted: userId });

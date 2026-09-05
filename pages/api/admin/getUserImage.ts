@@ -32,7 +32,7 @@ export default withAuth(
       bucket: STORAGE_BUCKETS.avatars,
       storageKey: user.user_preferences?.image_storage_key ?? null,
       mimeType: user.user_preferences?.image_mime_type ?? null,
-      cacheControl: "no-cache, no-store, must-revalidate",
+      cacheControl: "private, max-age=3600, stale-while-revalidate=86400",
     });
     if (!sent) {
       return res.status(404).json({ message: "No image found" });

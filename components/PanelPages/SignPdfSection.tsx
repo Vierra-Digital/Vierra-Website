@@ -70,6 +70,31 @@ const SignPdfSection: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<"idle" | "loading" | "success" | "error">("idle")
   const [saveError, setSaveError] = useState<string | null>(null)
   const pageRef = useRef<HTMLDivElement>(null)
+  /**
+   * Size of the rendered page box, measured after layout.
+   *
+   * Field overlays are positioned from stored ratios times this size. Reading
+   * pageRef.current.clientWidth during render instead meant reading the size from the PREVIOUS
+   * commit — and since a window resize triggers no React render, the overlays stayed at their old
+   * offsets until something else happened to re-render. Only the display is affected: the ratios
+   * saved for a field come from a live getBoundingClientRect at click time.
+   */
+  const [pageBox, setPageBox] = useState<{ width: number; height: number } | null>(null)
+
+  useEffect(() => {
+    const el = pageRef.current
+    if (!el) {
+      setPageBox(null)
+      return
+    }
+    // Measuring after layout is what an effect is for: the size is only knowable once the page
+    // has been laid out.
+    const measure = () => setPageBox({ width: el.clientWidth, height: el.clientHeight })
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [currentPage, numPages])
   const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -373,7 +398,7 @@ const SignPdfSection: React.FC = () => {
   return (
     <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
       <div className="flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
-        <div className="w-full max-w-6xl flex flex-col h-full">
+        <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
           <div className="w-full flex justify-between items-center mb-2">
             <div>
               <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">
@@ -677,7 +702,7 @@ const SignPdfSection: React.FC = () => {
                               )
                             }
                           />
-                          {pageRef.current &&
+                          {pageBox &&
                             fields
                               .filter((f) => f.page === currentPage)
                               .map((f) => (
@@ -685,8 +710,8 @@ const SignPdfSection: React.FC = () => {
                                   key={f.id}
                                   style={{
                                     position: "absolute",
-                                    left: `${f.xRatio * pageRef.current!.clientWidth}px`,
-                                    top: `${f.yRatio * pageRef.current!.clientHeight}px`,
+                                    left: `${f.xRatio * pageBox.width}px`,
+                                    top: `${f.yRatio * pageBox.height}px`,
                                     width: `${f.width}px`,
                                     height: `${f.height}px`,
                                     border: "2px dashed #701CC0",

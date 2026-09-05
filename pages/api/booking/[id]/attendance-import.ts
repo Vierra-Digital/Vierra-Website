@@ -3,7 +3,7 @@ import { withAuth } from "@/lib/api/withAuth";
 import { asStr } from "@/lib/api/parsing";
 import { parseAttendanceCsv } from "@/lib/booking/csvAttendance";
 import { computeAttendance } from "@/lib/booking/attendance";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "@/lib/generated/prisma/client";
 
 /**
  * CSV attendance fallback for Zoom/Teams accounts whose plan/admin-consent doesn't allow the

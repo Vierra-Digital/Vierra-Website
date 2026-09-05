@@ -2,7 +2,7 @@
 import Image from "next/image"
 import { useState, useEffect } from "react"
 import { bricolage, inter } from "@/lib/fonts";
-import { motion, AnimatePresence } from "framer-motion"
+import { m as motion, AnimatePresence } from "framer-motion"
 
 
 type Testimonial = {

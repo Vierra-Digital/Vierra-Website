@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { prisma } from "@/lib/prisma";
-import type { CampaignContact, Prisma } from "@prisma/client";
+import type { CampaignContact, Prisma } from "@/lib/generated/prisma/client";
 import { createSmtpTransport, requireSmtpCredentials } from "@/lib/email/smtp";
 import { renderMergeTags } from "@/lib/campaigns/mergeTags";
 import { mergeClickTrackUrls, rewriteTrackedLinksInHtml } from "@/lib/gmail/sendCore";

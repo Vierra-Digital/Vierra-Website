@@ -84,6 +84,16 @@ interface ClientsSectionProps {
 
 const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTrigger, onViewClient }) => {
     const [rows, setRows] = useState<ClientRow[]>([])
+    /**
+     * Cache-buster for client avatars, stamped once per load of the list.
+     *
+     * This was Date.now() inline in the image src, evaluated during render — so every render
+     * produced a new URL and the browser re-downloaded every avatar on the page. Any state change
+     * did it: typing in the search box, paging, opening a dialog. Stamping it when the list is
+     * fetched still picks up a newly uploaded image, which is what the buster is for, without
+     * refetching on unrelated renders.
+     */
+    const [imageStamp, setImageStamp] = useState(() => Date.now())
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [currentPage, setCurrentPage] = useState(0)
@@ -103,6 +113,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
             if (!r.ok) throw new Error(`HTTP ${r.status}`)
             const data: ClientRow[] = await r.json()
             setRows(data)
+            setImageStamp(Date.now())
         } catch (e: any) {
             setError(e?.message ?? "Failed to load clients")
         } finally {
@@ -111,11 +122,15 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
     }
 
     useEffect(() => {
+        // Loading the client list on mount; the fetch flips its own loading state after awaiting.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchClients()
     }, [])
 
     useEffect(() => {
         if (refreshTrigger && refreshTrigger > 0) {
+            // Re-fetches when the parent bumps refreshTrigger after adding or editing a client.
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             fetchClients()
         }
     }, [refreshTrigger])
@@ -219,14 +234,16 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
         return sorted
     }, [rows, searchQuery, statusFilter, nameSort, retainerSort])
 
-    useEffect(() => {
-        setCurrentPage(0)
-    }, [searchQuery])
+    // Page index clamped rather than reset from an effect. Searching to a shorter list could leave
+    // currentPage past the end, and slicing beyond the array renders an empty table with nothing to
+    // explain it; the old effect only covered searchQuery, not the status or sort filters.
+    const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
+    const page = Math.min(currentPage, totalPages - 1)
 
     return (
         <>
         <div className="flex-1 flex justify-center px-6 pt-2">
-            <div className="w-full max-w-6xl flex flex-col h-full">
+            <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
                 <PanelSectionHeader
                     title="Clients"
                     actions={
@@ -400,12 +417,12 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-[#E5E7EB]">
-                                            {filteredRows.slice(currentPage * pageSize, (currentPage + 1) * pageSize).map((r) => (
+                                            {filteredRows.slice(page * pageSize, (page + 1) * pageSize).map((r) => (
                                                 <tr key={r.id} className="hover:bg-purple-50">
                                                     <td className="px-4 py-4">
                                                         <div className="flex items-center gap-3">
                                                             <ProfileImage
-                                                                src={r.image ? `/api/admin/getClientImage?clientId=${r.id}&t=${Date.now()}` : null}
+                                                                src={r.image ? `/api/admin/getClientImage?clientId=${r.id}&t=${imageStamp}` : null}
                                                                 name={r.name}
                                                                 size={32}
                                                                 alt={`${r.name}'s profile`}
@@ -455,11 +472,11 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
                 {!loading && filteredRows.length > 0 && (
                     <PaginationControls
-                      currentPage={currentPage}
-                      totalPages={Math.ceil(filteredRows.length / pageSize)}
-                      onPrevious={() => setCurrentPage(Math.max(0, currentPage - 1))}
+                      currentPage={page}
+                      totalPages={totalPages}
+                      onPrevious={() => setCurrentPage(Math.max(0, page - 1))}
                       onNext={() =>
-                        setCurrentPage(Math.min(Math.ceil(filteredRows.length / pageSize) - 1, currentPage + 1))
+                        setCurrentPage(Math.min(totalPages - 1, page + 1))
                       }
                     />
                 )}

@@ -1,9 +1,17 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
-import { EMAIL_REGEX } from "@/lib/utils";
+import {
+  AUDIT_REVENUE_OPTIONS,
+  normalizeAuditSubmission,
+  normalizeEmailAddress,
+  normalizeHttpUrl,
+  normalizePhoneNumber,
+  normalizeRevenueAmount,
+  PUBLIC_FORM_LIMITS,
+} from "@/lib/publicFormValidation";
 import { track } from "@/lib/track";
 import { bricolage, inter } from "@/lib/fonts";
-import { motion, AnimatePresence } from "framer-motion";
+import { m as motion, AnimatePresence } from "framer-motion";
 import { FiX, FiArrowLeft, FiArrowRight } from "react-icons/fi";
 import ModalShell from "@/components/ui/Modal";
 import {
@@ -45,12 +53,7 @@ const EMPTY_FORM: FormState = {
 const TOTAL_STEPS = 3;
 
 const REVENUE_OPTIONS = [
-  { value: "$10k - $25k", label: "$10k - $25k" },
-  { value: "$25k - $50k", label: "$25k - $50k" },
-  { value: "$50k - $100k", label: "$50k - $100k" },
-  { value: "$100k - $250k", label: "$100k - $250k" },
-  { value: "$250k - $500k", label: "$250k - $500k" },
-  { value: "$500k+", label: "$500k+" },
+  ...AUDIT_REVENUE_OPTIONS.map((value) => ({ value, label: value })),
 ];
 
 // Format a free-typed amount as US currency ($ + thousands separators) while the
@@ -91,16 +94,21 @@ export function Modal({ isOpen, onClose }: ModalProps) {
   const [phase, setPhase] = useState<ModalPhase>("active");
   const [bookedWhen, setBookedWhen] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [honeypot, setHoneypot] = useState("");
 
   useLockBodyScroll(isOpen);
 
   useEffect(() => {
     if (isOpen) {
+      // Clearing the form when the modal opens. These fields are state the user types into, so they cannot
+      // be derived; keying this component from the caller is the alternative.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStep(1);
       setFormData(EMPTY_FORM);
       setPhase("active");
       setBookedWhen("");
       setSubmitting(false);
+      setHoneypot("");
       track("lead_form_open");
     }
   }, [isOpen]);
@@ -138,13 +146,14 @@ export function Modal({ isOpen, onClose }: ModalProps) {
     setFormData((prev) => ({ ...prev, desiredRevenue: formatted }));
   };
 
-  const emailValid = EMAIL_REGEX.test(formData.email.trim());
-  const phoneValid = formData.phoneNumber.replace(/\D/g, "").length === 10;
-  const websiteValid = /^(https?:\/\/)?([\w-]+\.)+[a-zA-Z]{2,}$/.test(formData.website.trim());
-  const desiredValid = /^\$?\d[\d,]*(\+)?$/.test(formData.desiredRevenue.trim());
+  const emailValid = normalizeEmailAddress(formData.email) !== null;
+  const phoneValid = normalizePhoneNumber(formData.phoneNumber) !== null;
+  const websiteValid = normalizeHttpUrl(formData.website) !== null;
+  const desiredValid = normalizeRevenueAmount(formData.desiredRevenue) !== null;
 
   const step1Valid =
     !!formData.fullName.trim() &&
+    formData.fullName.trim().length <= PUBLIC_FORM_LIMITS.fullName &&
     !!formData.email.trim() &&
     emailValid &&
     !!formData.phoneNumber.trim() &&
@@ -169,6 +178,9 @@ export function Modal({ isOpen, onClose }: ModalProps) {
   // (the booking calendar) rather than closing the form out.
   const handleSubmit = async () => {
     if (submitting || !step1Valid || !step2Valid) return;
+    const normalized = normalizeAuditSubmission(formData);
+    if (!normalized) return;
+
     setSubmitting(true);
     try {
       // Internal lead notification only — this endpoint never sends a "you're confirmed"
@@ -178,7 +190,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
       const response = await fetch("/api/sendEmail", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...normalized, company: honeypot }),
       });
       if (!response.ok) {
         alert("Failed to submit the form. Please try again.");
@@ -273,6 +285,21 @@ export function Modal({ isOpen, onClose }: ModalProps) {
             </button>
           </div>
 
+          {/* Honeypot â€” kept off-screen so form-filling bots see it but real
+              visitors do not. The API silently ignores filled submissions. */}
+          <div style={{ position: "absolute", left: "-9999px", top: "-9999px", height: 0, width: 0, overflow: "hidden" }} aria-hidden="true">
+            <label htmlFor="company">Company</label>
+            <input
+              id="company"
+              name="company"
+              type="text"
+              tabIndex={-1}
+              autoComplete="off"
+              value={honeypot}
+              onChange={(e) => setHoneypot(e.target.value)}
+            />
+          </div>
+
           {/* Scrollable body — scrollbar hidden (rarely needed; only on short
               viewports), matching the rest of the site's chrome-free scroll. */}
           <div className="modal-scroll-area flex-1 overflow-y-auto px-7 pb-2 pt-1 sm:px-10">
@@ -291,6 +318,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                       <input
                         id="fullName"
                         type="text"
+                        maxLength={PUBLIC_FORM_LIMITS.fullName}
                         value={formData.fullName}
                         onChange={handleChange}
                         className={inputClass}
@@ -306,6 +334,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                         <input
                           id="email"
                           type="email"
+                          maxLength={PUBLIC_FORM_LIMITS.email}
                           value={formData.email}
                           onChange={handleChange}
                           className={`${inputClass} ${formData.email && !emailValid ? "border-red-400 bg-red-50/50" : ""}`}
@@ -320,6 +349,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                         <input
                           id="phoneNumber"
                           type="tel"
+                          maxLength={PUBLIC_FORM_LIMITS.phoneNumber}
                           inputMode="numeric"
                           value={formData.phoneNumber}
                           onChange={handleChange}
@@ -341,6 +371,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                       <input
                         id="website"
                         type="url"
+                        maxLength={PUBLIC_FORM_LIMITS.website}
                         value={formData.website}
                         onChange={handleChange}
                         className={`${inputClass} ${formData.website && !websiteValid ? "border-red-400 bg-red-50/50" : ""}`}
@@ -366,6 +397,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
                           ref={desiredRef}
                           id="desiredRevenue"
                           type="text"
+                          maxLength={PUBLIC_FORM_LIMITS.desiredRevenue}
                           inputMode="numeric"
                           defaultValue={formData.desiredRevenue}
                           onChange={handleDesiredRevenue}

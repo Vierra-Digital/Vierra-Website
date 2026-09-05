@@ -5,17 +5,11 @@ import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import type { Campaign } from "../CampaignsSection";
 import ContactsTab from "./ContactsTab";
 import AnalyticsTab from "./AnalyticsTab";
+import { STATUS_STYLE } from "../CampaignsSection";
 
 const TABS = ["Overview", "Contacts", "Analytics"] as const;
 type Tab = (typeof TABS)[number];
 
-const STATUS_STYLE: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-800",
-  active: "bg-green-100 text-green-800",
-  paused: "bg-amber-100 text-amber-800",
-  completed: "bg-blue-100 text-blue-800",
-  cancelled: "bg-red-100 text-red-800",
-};
 
 type CampaignStep = {
   id: string;
@@ -25,13 +19,33 @@ type CampaignStep = {
   delayDays: number;
 };
 
+type FailedContact = {
+  id: string;
+  email: string;
+  reason: string;
+  failedAt: string | null;
+  attempts: number;
+  gaveUp: boolean;
+};
+
+const DETAIL_CACHE_TTL_MS = 20_000;
+const detailCache = new Map<
+  string,
+  { data: { campaign: Campaign | null; steps: CampaignStep[]; failed: FailedContact[] }; ts: number }
+>();
+
 const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ campaignId, onBack }) => {
-  const [campaign, setCampaign] = useState<Campaign | null>(null);
-  const [steps, setSteps] = useState<CampaignStep[]>([]);
-  const [failed, setFailed] = useState<
-    Array<{ id: string; email: string; reason: string; failedAt: string | null; attempts: number; gaveUp: boolean }>
-  >([]);
-  const [loading, setLoading] = useState(true);
+  // Seeded from the cache in initialisers rather than in the render body: reading the clock while
+  // rendering is impure, and these values are only needed for the first render — load() owns every
+  // change after it. A stale entry still seeds the data while leaving loading true, exactly as
+  // before, so the spinner shows until the refetch lands.
+  const [campaign, setCampaign] = useState<Campaign | null>(() => detailCache.get(campaignId)?.data.campaign ?? null);
+  const [steps, setSteps] = useState<CampaignStep[]>(() => detailCache.get(campaignId)?.data.steps ?? []);
+  const [failed, setFailed] = useState<FailedContact[]>(() => detailCache.get(campaignId)?.data.failed ?? []);
+  const [loading, setLoading] = useState(() => {
+    const entry = detailCache.get(campaignId);
+    return !(entry && Date.now() - entry.ts < DETAIL_CACHE_TTL_MS);
+  });
   const [tab, setTab] = useState<Tab>("Overview");
   const [busy, setBusy] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
@@ -39,25 +53,46 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [campaignRes, stepsRes, failedRes] = await Promise.all([
-        fetch(`/api/campaigns/${campaignId}`),
-        fetch(`/api/campaigns/${campaignId}/steps`),
-        fetch(`/api/campaigns/${campaignId}/failed`),
-      ]);
-      if (campaignRes.ok) setCampaign((await campaignRes.json()).campaign);
-      if (stepsRes.ok) setSteps((await stepsRes.json()).steps || []);
-      if (failedRes.ok) setFailed((await failedRes.json()).failed || []);
-    } catch (e) {
-      console.error("Error loading campaign detail:", e);
-    } finally {
-      setLoading(false);
-    }
-  }, [campaignId]);
+  const load = useCallback(
+    async (force = false) => {
+      const entry = detailCache.get(campaignId);
+      if (!force && entry && Date.now() - entry.ts < DETAIL_CACHE_TTL_MS) {
+        setCampaign(entry.data.campaign);
+        setSteps(entry.data.steps);
+        setFailed(entry.data.failed);
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const [campaignRes, stepsRes, failedRes] = await Promise.all([
+          fetch(`/api/campaigns/${campaignId}`),
+          fetch(`/api/campaigns/${campaignId}/steps`),
+          fetch(`/api/campaigns/${campaignId}/failed`),
+        ]);
+        const nextCampaign = campaignRes.ok ? (await campaignRes.json()).campaign : null;
+        const nextSteps = stepsRes.ok ? (await stepsRes.json()).steps || [] : [];
+        const nextFailed = failedRes.ok ? (await failedRes.json()).failed || [] : [];
+        setCampaign(nextCampaign);
+        setSteps(nextSteps);
+        setFailed(nextFailed);
+        detailCache.set(campaignId, { data: { campaign: nextCampaign, steps: nextSteps, failed: nextFailed }, ts: Date.now() });
+      } catch (e) {
+        console.error("Error loading campaign detail:", e);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [campaignId]
+  );
 
   useEffect(() => {
+    // load() flips its loading flag synchronously before awaiting, which is what the rule sees.
+    // Fetching when the parameters change is the textbook use for an effect; removing the
+    // synchronous flag would mean adopting Suspense-based fetching across the panel, which is an
+    // architectural decision and not a lint fix.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
 
@@ -72,6 +107,8 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to update campaign");
       setCampaign(data.campaign);
+      const entry = detailCache.get(campaignId);
+      if (entry) detailCache.set(campaignId, { ...entry, data: { ...entry.data, campaign: data.campaign } });
     } catch (e: any) {
       alert(e?.message || "Failed to update campaign.");
     } finally {
@@ -90,6 +127,8 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to update campaign");
       setCampaign(data.campaign);
+      const entry = detailCache.get(campaignId);
+      if (entry) detailCache.set(campaignId, { ...entry, data: { ...entry.data, campaign: data.campaign } });
     } catch (e: any) {
       alert(e?.message || "Failed to update campaign.");
     } finally {
@@ -122,6 +161,7 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
         const payload = await res.json().catch(() => ({}));
         throw new Error(payload?.message || "Failed to delete campaign.");
       }
+      detailCache.delete(campaignId);
       setConfirmDelete(false);
       onBack();
     } catch (e) {
@@ -139,7 +179,7 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to sync audience");
       setSyncMessage(`Enrolled ${data.enrolledCount} new contact${data.enrolledCount === 1 ? "" : "s"} (${data.contactCount} total).`);
-      load();
+      load(true);
     } catch (e: any) {
       setSyncMessage(e?.message || "Failed to sync audience.");
     } finally {

@@ -1,8 +1,11 @@
 import { withAuth } from "@/lib/api/withAuth";
+import { mapInBatches } from "@/lib/batch";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
 import { resolveMailboxOwner } from "@/lib/email/mailboxAccess";
 import { asStr } from "@/lib/api/parsing";
 import { scanHtmlForTrackers } from "@/lib/email/trackerDetection";
+import { senderDomain } from "@/lib/email/senderAvatar";
+import { extractHeader, parseAddressFromHeader } from "@/lib/gmail/gmailApi";
 
 /**
  * Batched tracker scan for a page of the message list.
@@ -16,9 +19,12 @@ import { scanHtmlForTrackers } from "@/lib/email/trackerDetection";
  * blocked" badge in the reader can never disagree.
  */
 
+// Must be >= PAGE_SIZE in components/email/constants.tsx (50). At 40 the last ten rows of a
+// full page were silently never scanned, so they never got a tracker dot no matter how long
+// you waited — most visible in mailboxes you reach after the inbox, like Archive.
 const MAX_IDS = 60;
 /** Gmail tolerates parallel gets, but keep a lid on it so a page scan can't stampede the API. */
-const CONCURRENCY = 6;
+const CONCURRENCY = 4;
 
 function decodeBase64Url(data: string) {
   return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf8");
@@ -63,20 +69,6 @@ function extractHtml(payload: unknown): string {
   return html;
 }
 
-/** Run `worker` over `items` with a bounded number of in-flight requests. */
-async function mapWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let cursor = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (cursor < items.length) {
-        const index = cursor++;
-        results[index] = await worker(items[index]);
-      }
-    })
-  );
-  return results;
-}
 
 export default withAuth(
   async (req, res, session) => {
@@ -98,13 +90,13 @@ export default withAuth(
       res.status(403).json({ message: "You don't have permission to read this mailbox." });
       return;
     }
-    const token = await getValidGmailAccessToken(access.ownerUserId, accountEmail);
+    const token = await getValidGmailAccessToken(access.ownerUserId, access.tokenEmail);
     if (!token.ok) {
       res.status(400).json({ message: token.message });
       return;
     }
 
-    const entries = await mapWithConcurrency(messageIds, CONCURRENCY, async (id) => {
+    const entries = await mapInBatches(messageIds, async (id) => {
       try {
         const response = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=full`,
@@ -112,7 +104,10 @@ export default withAuth(
         );
         if (!response.ok) return [id, null] as const;
         const payload = await response.json();
-        const verdict = scanHtmlForTrackers(extractHtml(payload?.payload));
+        // Same reason as message-detail: sender-hosted images must not be scored as third-party.
+        const fromHeader = extractHeader(payload?.payload?.headers, "From") || "";
+        const fromDomain = senderDomain(parseAddressFromHeader(fromHeader) || "");
+        const verdict = scanHtmlForTrackers(extractHtml(payload?.payload), fromDomain);
         // Attachment presence rides along on the same fetch — the list request uses
         // format=metadata and can't see parts, so this is the cheapest place to learn it.
         return [
@@ -128,7 +123,7 @@ export default withAuth(
         // A single unreadable message shouldn't fail the whole page scan.
         return [id, null] as const;
       }
-    });
+    }, CONCURRENCY);
 
     const trackers: Record<string, { tracked: boolean; count: number; vendors: string[]; hasAttachment: boolean }> = {};
     for (const [id, verdict] of entries) {

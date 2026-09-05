@@ -5,6 +5,7 @@ import { Geist } from "next/font/google";
 import Image from "next/image";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/router";
 import { FaGoogle } from "react-icons/fa";
 import {
   FiAlertCircle,
@@ -16,7 +17,6 @@ import {
   FiLock,
   FiChevronsRight,
   FiCornerUpLeft,
-  FiCornerUpRight,
   FiDownload,
   FiCalendar,
   FiEdit3,
@@ -30,12 +30,11 @@ import {
   FiMail,
   FiMaximize2,
   FiMinimize2,
+  FiMoreVertical,
   FiMove,
   FiPlus,
   FiRefreshCw,
   FiChevronLeft,
-  FiInbox,
-  FiSlash,
   FiChevronRight,
   FiSearch,
   FiSend,
@@ -51,6 +50,9 @@ import {
   FiUsers,
   FiX,
 } from "react-icons/fi";
+// Feather has no reply-all glyph; two overlapping arrows read as a smudge at 16px. Material's
+// is the same double-arrow Gmail uses.
+import { MdReplyAll } from "react-icons/md";
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
@@ -61,9 +63,11 @@ import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEdit
 import { printComposeContent } from "@/components/email/printCompose";
 import { getJson } from "@/lib/email/panelApi";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
+import MoveToMenu from "@/components/email/MoveToMenu";
+import { buildReplyReferences } from "@/lib/email/threading";
 import {
-  BRAND_GRADIENT, BRAND_LOGO,
-  ICON_BUTTON, ICON_BUTTON_SOLID, ICON_BUTTON_GHOST, FIELD_LABEL, ALERT,
+  BRAND_LOGO,
+  ICON_BUTTON, FIELD_LABEL, ALERT, REPLY_ACTION_BUTTON,
 } from "@/components/email/emailTheme";
 import {
   PAGE_SIZE,
@@ -74,7 +78,6 @@ import {
   MODULES,
   orderModules,
   BADGE_MODULES,
-  BADGE_MAILBOXES,
 } from "@/components/email/constants";
 import type {
   ModuleKey,
@@ -189,18 +192,132 @@ const MailboxEmpty: React.FC = () => (
 
 // Client-side cap on total compose attachment bytes. Kept conservative (below the server/platform
 // request-body limit) so oversized sends fail fast with a clear message instead of an opaque 413.
-const MAX_TOTAL_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+/**
+ * Total attachment bytes accepted before sending, measured decoded.
+ *
+ * The ceiling is the serverless request-body limit, not Gmail: API routes run as functions with a
+ * 6 MB payload cap, and base64 inflates a file by a third, so 4 MB of files is about 5.4 MB on the
+ * wire with room for the rest of the JSON. This was 20 MB — which encodes to roughly 27 MB — so a
+ * large attachment passed this check and then failed at the platform, surfacing as a bare
+ * "Failed to send." with nothing pointing at the size.
+ */
+const MAX_TOTAL_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Cap on a mailbox action (trash, archive, move…). Comfortably above a normal Gmail round trip but
+ * well under the serverless function limit, so a stalled upstream surfaces as a clear message
+ * rather than a spinner that never ends.
+ */
+const ACTION_TIMEOUT_MS = 15_000;
 
 /** How many mailbox views to keep in the message cache (each is up to PAGE_SIZE rows). */
 const MESSAGE_CACHE_LIMIT = 12;
+
+/**
+ * Last-known enabled account selection, so a repeat visit can start fetching messages/counts
+ * immediately instead of waiting out a full /api/gmail/status + account-preferences round trip
+ * before it even knows which accounts to ask for. Not user-scoped: on a shared browser this can
+ * seed a stale guess from a previous session, but the server always re-derives access from the
+ * live session, so a stale/foreign email just yields an empty result that self-corrects the
+ * moment the real connections response lands — never someone else's data.
+ */
+const LAST_ACCOUNTS_STORAGE_KEY = "vierra:email-panel:last-accounts";
+
+function readCachedSelectedAccounts(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(LAST_ACCOUNTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string" && v.length > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeCachedSelectedAccounts(accounts: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (accounts.length === 0) {
+      window.localStorage.removeItem(LAST_ACCOUNTS_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(LAST_ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+    }
+  } catch {
+    /* storage unavailable (disabled, quota, private mode) — the panel just falls back to the gate wait */
+  }
+}
+
+/**
+ * "Help me write" bolt. The stroke draws itself on a loop rather than pulsing a filled glyph —
+ * a filled icon can only fade or scale, which reads as a notification badge, not as writing.
+ * Drafting speeds the draw up and brightens it.
+ */
+const BoltDraw: React.FC<{ className?: string; drafting?: boolean }> = ({ className, drafting }) => (
+  <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden focusable="false">
+    <path
+      d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12l1-8.5Z"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={drafting ? "bolt-draw is-drafting" : "bolt-draw"}
+    />
+  </svg>
+);
+
+/** Google Drive mark, inline so the button carries the real logo without a remote fetch. */
+const DriveMark: React.FC<{ className?: string }> = ({ className }) => (
+  <svg viewBox="0 0 87.3 78" className={className} aria-hidden focusable="false">
+    <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da" />
+    <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47" />
+    <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335" />
+    <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d" />
+    <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc" />
+    <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#ffba00" />
+  </svg>
+);
+
+/**
+ * Compose footer icon button. Gmail's composer is one row of quiet, chrome-less icons with a
+ * single solid Send — so an "on" toggle (Confidential, Receipt, a set schedule) reads as a soft
+ * brand-tinted disc rather than an outlined box, which is what made the old bar look blocky.
+ */
+const composeIconClass = (active = false) =>
+  `inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors duration-150 disabled:pointer-events-none disabled:opacity-35 ${
+    active ? "bg-[#701CC0]/18 text-[#C8A6F5]" : "text-[#9C95B8] hover:bg-white/[0.07] hover:text-[#E7E2F5]"
+  }`;
+
+/** Row in the compose "More options" menu. */
+const composeMenuItemClass =
+  "flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] font-medium text-[#D8D3EA] transition-colors duration-150 hover:bg-white/[0.06] disabled:pointer-events-none disabled:opacity-40";
 
 const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   initialSelectedAccounts = [],
   initialOpenThreadId = "",
 }) => {
+  const router = useRouter();
   const initialAccountsRef = useRef(initialSelectedAccounts);
   const deepLinkAppliedRef = useRef(false);
-  const [step, setStep] = useState<"gate" | "client">(initialSelectedAccounts.length > 0 ? "client" : "gate");
+  // Browser back/forward for the email panel: module, label, and open-message are pushed to the
+  // URL as they change so the browser's own history stack can step through them. `isApplyingNavRef`
+  // marks a state change as "already reflected in the URL" (came from the URL itself, either the
+  // initial mount sync or a back/forward pop) so the push-effect below doesn't turn around and
+  // push a duplicate/incorrect entry for it. `navReadyRef` withholds any pushes until the very
+  // first URL->state sync has run, so mount doesn't overwrite a deep-linked URL with defaults.
+  const isApplyingNavRef = useRef(false);
+  const navReadyRef = useRef(false);
+  const pendingNavThreadRef = useRef("");
+  // The very first URL write (priming the address bar with the starting module, e.g. "?module=inbox"
+  // on a bare "/panel/email" visit) uses replace so it doesn't consume a "back" step before the
+  // panel is even navigated within; every write after that is a real push.
+  const hasWrittenNavUrlRef = useRef(false);
+  // No URL-preselected accounts: fall back to last time's enabled selection (if any) so the panel
+  // can start fetching messages/counts immediately instead of sitting on the gate loading screen
+  // for a full connections round trip. loadGmailConnections still runs and corrects this if it's wrong.
+  const cachedAccountsRef = useRef(initialSelectedAccounts.length > 0 ? [] : readCachedSelectedAccounts());
+  const initialResolvedAccounts = initialSelectedAccounts.length > 0 ? initialSelectedAccounts : cachedAccountsRef.current;
+  const [step, setStep] = useState<"gate" | "client">(initialResolvedAccounts.length > 0 ? "client" : "gate");
   const [activeModule, setActiveModule] = useState<ModuleKey>("inbox");
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
   /** User's custom sidebar order (module keys). Empty = fall back to MODULES order. */
@@ -208,17 +325,19 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   /** Ids already sent for scanning, so a page never re-scans rows it has seen. */
   const scannedIdsRef = useRef<Set<string>>(new Set());
   /** messageId → tracker verdict. Filled in just after the list paints (see the scan effect). */
+  /** Index into the sender's ordered avatar candidates; advanced on each image error. */
   const [messageTrackers, setMessageTrackers] = useState<
     Record<string, { tracked: boolean; count: number; vendors: string[]; hasAttachment?: boolean }>
   >({});
   const [gmailAccounts, setGmailAccounts] = useState<GmailAccountConnection[]>([]);
   const [gmailLoading, setGmailLoading] = useState(false);
-  const [selectedAccounts, setSelectedAccounts] = useState<string[]>(initialSelectedAccounts);
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>(initialResolvedAccounts);
 
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState("");
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [accountErrors, setAccountErrors] = useState<Array<{ accountEmail: string; message: string }>>([]);
+  const [senderAvatarIndex, setSenderAvatarIndex] = useState(0);
   const [selectedMessageId, setSelectedMessageId] = useState("");
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
@@ -282,21 +401,32 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [composeTemplates, setComposeTemplates] = useState<
     Array<{ id: string; name: string; subject: string | null; bodyHtml: string | null; bodyText: string | null }>
   >([]);
-  const [composeTemplateMenuOpen, setComposeTemplateMenuOpen] = useState(false);
   // Set when a brand-new compose opens (openNewCompose) so the signatures effect appends the
   // account's default signature once — never on replies/drafts (their body is pre-filled).
   const composeInsertDefaultSigRef = useRef(false);
   const [composeSignatures, setComposeSignatures] = useState<
     Array<{ id: string; name: string; signatureHtml: string | null; signatureText: string | null; isDefault: boolean }>
   >([]);
-  const [composeSignatureMenuOpen, setComposeSignatureMenuOpen] = useState(false);
   const [saveTemplateModalOpen, setSaveTemplateModalOpen] = useState(false);
   const [newLabelModalOpen, setNewLabelModalOpen] = useState(false);
   const [newLabelName, setNewLabelName] = useState("");
   const [creatingLabel, setCreatingLabel] = useState(false);
   /** Guards double-fires without greying the toolbar out for the whole round trip. */
-  const actionInFlightRef = useRef(false);
+  /**
+   * Rows with an action in flight, keyed by rowKey.
+   *
+   * This was a single boolean, so ANY action anywhere blocked every other action until Gmail
+   * answered — archive one message, immediately move a different one, and the second was refused
+   * outright with "Still finishing the last action". That is the slowness and the "takes several
+   * attempts": the click was rejected, not slow. Per-row means only the same message is guarded,
+   * which is all the guard was ever for (double-submitting one mutation).
+   */
+  const actionInFlightRef = useRef<Set<string>>(new Set());
+  /** Set below; lets applyAction re-sync after a partial failure without a cyclic dep. */
+  const loadMessagesRef = useRef<() => void>(() => {});
   const [labelToDelete, setLabelToDelete] = useState<{ id: string; name: string } | null>(null);
+  /** Open when the trash button is about to hard-delete (Spam/Trash) — that has no undo. */
+  const [confirmHardDelete, setConfirmHardDelete] = useState(false);
   const [labelToRename, setLabelToRename] = useState<{ id: string; name: string } | null>(null);
   const [renamingLabel, setRenamingLabel] = useState(false);
   const [deletingLabel, setDeletingLabel] = useState(false);
@@ -308,7 +438,9 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [composeFormattingToolbarOpen, setComposeFormattingToolbarOpen] = useState(false);
   const [composeAccountEmail, setComposeAccountEmail] = useState("");
   const [composeFrom, setComposeFrom] = useState("");
-  const [composeAliases, setComposeAliases] = useState<Array<{ email: string; displayName: string; isPrimary: boolean }>>([]);
+  const [composeAliases, setComposeAliases] = useState<
+    Array<{ email: string; displayName: string; isPrimary: boolean; accountEmail: string }>
+  >([]);
   const [composeThreadId, setComposeThreadId] = useState("");
   const [composeInReplyTo, setComposeInReplyTo] = useState("");
   const [composeReferences, setComposeReferences] = useState("");
@@ -317,6 +449,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   /** Scheduled send: ISO-ish `datetime-local` value; empty = send now. */
   const [scheduleAt, setScheduleAt] = useState("");
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  /** Compose overflow menu (Gmail's "⋮ More options") — holds the insert/print actions. */
+  const [composeMoreOpen, setComposeMoreOpen] = useState(false);
   /** Confidential mode: send an access-controlled link instead of the raw body. */
   const [confidentialOn, setConfidentialOn] = useState(false);
   const [confidentialExpiry, setConfidentialExpiry] = useState<"1d" | "1w" | "1m" | "never">("1w");
@@ -329,9 +463,15 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const composeReadReceiptDefaultRef = useRef(false);
   const undoSendTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const undoCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /**
+   * The message waiting out its undo window, as a request body.
+   *
+   * Undo used to live entirely in a setTimeout, and the unmount cleanup cleared it — so closing the
+   * tab or navigating away within the undo window (up to 30s) silently threw the email away. It was
+   * not queued anywhere and no draft survived it. Held here so it can be flushed on the way out.
+   */
+  const pendingSendBodyRef = useRef<string | null>(null);
   const [artemisDrafting, setArtemisDrafting] = useState(false);
-  const [artemisSummary, setArtemisSummary] = useState("");
-  const [artemisSummaryLoading, setArtemisSummaryLoading] = useState(false);
   const [artemisRewriteOpen, setArtemisRewriteOpen] = useState(false);
   const [composeError, setComposeError] = useState("");
   const [composeSuccess, setComposeSuccess] = useState("");
@@ -341,8 +481,22 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [composeActiveDraftKey, setComposeActiveDraftKey] = useState("");
   const [inlineComposeMode, setInlineComposeMode] = useState<null | "reply" | "replyAll" | "forward">(null);
   const [inlineComposeTo, setInlineComposeTo] = useState("");
+  /** Cc/Bcc on the inline reply. Gmail keeps them one click from the recipient line. */
+  const [inlineComposeCc, setInlineComposeCc] = useState("");
+  const [inlineComposeBcc, setInlineComposeBcc] = useState("");
+  const [inlineShowCc, setInlineShowCc] = useState(false);
+  /** Gmail shows the recipient as text; it only becomes a field once you click it. */
+  const [inlineToEditing, setInlineToEditing] = useState(false);
+  /** Formatting bar is opt-in, as in Gmail — the "Aa" toggle in the send row reveals it. */
+  const [inlineShowFormatting, setInlineShowFormatting] = useState(false);
+  const [inlineShowBcc, setInlineShowBcc] = useState(false);
+  /** Inline reply overflow menu — switches reply mode, as Gmail's does. */
+  const [inlineMoreOpen, setInlineMoreOpen] = useState(false);
   const [inlineComposeSubject, setInlineComposeSubject] = useState("");
   const [inlineComposeIntroText, setInlineComposeIntroText] = useState("");
+  /** Rich-text form of the reply body. Plain text stays in sync for the text/plain part. */
+  const [inlineComposeIntroHtml, setInlineComposeIntroHtml] = useState("");
+  const inlineEditorRef = useRef<ComposeRichEditorHandle | null>(null);
   const [inlineComposeBodyText, setInlineComposeBodyText] = useState("");
   const [inlineComposeBodyHtml, setInlineComposeBodyHtml] = useState("");
   const [inlineComposePreviewHtml, setInlineComposePreviewHtml] = useState("");
@@ -384,6 +538,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [contactsTotalCount, setContactsTotalCount] = useState(0);
   const [contactsTags, setContactsTags] = useState<ContactTag[]>([]);
   const [contactSearch, setContactSearch] = useState("");
+  const [debouncedContactSearch, setDebouncedContactSearch] = useState("");
   const [contactTagFilter, setContactTagFilter] = useState("");
   const [contactSourceFilter, setContactSourceFilter] = useState<"" | "MANUAL" | "GMAIL" | "CSV">("");
   const [contactFilterOpen, setContactFilterOpen] = useState(false);
@@ -429,6 +584,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const [providerAccounts, setProviderAccounts] = useState<ProviderAccount[]>([]);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const loadMessagesRequestRef = useRef(0);
+  const loadContactsRequestRef = useRef(0);
   /**
    * Per-view message cache (key = the messages query string) powering stale-while-revalidate,
    * so revisiting a mailbox/page paints instantly instead of spinning. Cleared whenever an action
@@ -443,9 +599,26 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const invalidateMessagesCache = useCallback(() => {
     messagesCacheRef.current.clear();
   }, []);
+  /** Cache keys currently being prefetched, so a fast re-render doesn't fire the same fetch twice. */
+  const prefetchInFlightRef = useRef<Set<string>>(new Set());
+  const storeMessagesCache = useCallback(
+    (key: string, messages: MessageRow[], accountErrors: Array<{ accountEmail: string; message: string }>, hasNextPage: boolean) => {
+      // Bounded LRU-ish cache: re-inserting moves the key to the end, and we evict the oldest.
+      messagesCacheRef.current.delete(key);
+      messagesCacheRef.current.set(key, { messages, accountErrors, hasNextPage });
+      if (messagesCacheRef.current.size > MESSAGE_CACHE_LIMIT) {
+        const oldest = messagesCacheRef.current.keys().next().value;
+        if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
+      }
+    },
+    []
+  );
   const selectedMessageIdRef = useRef("");
   const moveListMenuRef = useRef<HTMLDivElement | null>(null);
+  const snoozeMenuRef = useRef<HTMLDivElement | null>(null);
+  const [snoozeMenuOpen, setSnoozeMenuOpen] = useState(false);
   const moveMessageMenuRef = useRef<HTMLDivElement | null>(null);
+  const labelMenuRef = useRef<HTMLDivElement | null>(null);
   const contactFilterMenuRef = useRef<HTMLDivElement | null>(null);
   const inlineComposeRef = useRef<HTMLDivElement | null>(null);
   const editContactModalRef = useRef<HTMLDivElement | null>(null);
@@ -502,33 +675,27 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     );
   }, [messages, searchTerm]);
 
-  // Conversation grouping: collapse messages sharing a threadId into one row
-  // (latest message represents the thread) with a message count. Compose drafts
-  // and thread-less messages pass through individually.
-  const conversationRows = useMemo(() => {
-    const byThread = new Map<string, MessageRow & { threadCount: number }>();
-    const rows: Array<MessageRow & { threadCount: number }> = [];
-    for (const message of filteredMessages) {
-      const threadId = message.threadId;
-      if (!threadId || message.isComposeDraft) {
-        rows.push({ ...message, threadCount: 1 });
-        continue;
-      }
-      const existing = byThread.get(threadId);
-      if (existing) {
-        existing.threadCount += 1;
-      } else {
-        const row = { ...message, threadCount: 1 };
-        byThread.set(threadId, row);
-        rows.push(row);
-      }
-    }
-    return rows;
-  }, [filteredMessages]);
+  // One row per message. No conversation grouping of any kind.
+  //
+  // Every rule that combined messages got this wrong in practice: Gmail's threadId merges unrelated
+  // mail that shares a subject and participants, and reference headers merge a sender's separate
+  // emails whenever an intervening reply of ours sits in Sent rather than in this mailbox. Both hid
+  // messages, which is worse than showing a chain across several rows. A message is a row.
+  const conversationRows = filteredMessages;
 
   // Lightweight pre-send deliverability lint — proactive warnings shown in the composer.
   // Deliverability guardrail (#2): check the sending domain's SPF/DMARC when compose opens.
   const [composeDeliverability, setComposeDeliverability] = useState<{ spfOk: boolean; dmarcOk: boolean } | null>(null);
+  /**
+   * Recipients that failed verification (bad syntax, or a domain with no MX records).
+   *
+   * /api/gmail/verify-email has existed for a while with nothing calling it, so a typo in a
+   * recipient was only discovered by the bounce. Checked while composing, reported as a warning
+   * rather than a block — a valid address can still look unverifiable to a DNS lookup.
+   */
+  const [composeBadRecipients, setComposeBadRecipients] = useState<string[]>([]);
+  /** Rows per mailbox page. PAGE_SIZE is the default; Settings → Layout can override it. */
+  const [pageSize, setPageSize] = useState<number>(PAGE_SIZE);
   useEffect(() => {
     let cancelled = false;
     fetch("/api/gmail/nav-layout")
@@ -537,12 +704,59 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         if (cancelled || !d) return;
         if (Array.isArray(d.hiddenModules)) setHiddenModules(d.hiddenModules);
         if (Array.isArray(d.moduleOrder)) setModuleOrder(d.moduleOrder);
+        if (Number.isFinite(Number(d.pageSize)) && Number(d.pageSize) > 0) setPageSize(Number(d.pageSize));
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, []);
+
+
+  // Verify recipients as they are typed. Debounced, because this runs a DNS lookup per address,
+  // and skipped entirely while the field is empty or the composer is shut.
+  useEffect(() => {
+    if (!isComposeOpen) {
+      setComposeBadRecipients([]);
+      return;
+    }
+    const addresses = composeTo
+      .split(/[,;]/)
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.includes("@"));
+    if (addresses.length === 0) {
+      setComposeBadRecipients([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      fetch("/api/gmail/verify-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails: addresses.slice(0, 25) }),
+      })
+        .then((response) => (response.ok ? response.json() : null))
+        .then((payload) => {
+          if (cancelled || !payload) return;
+          const results = Array.isArray(payload?.results) ? payload.results : [];
+          setComposeBadRecipients(
+            results
+              // "error" means the lookup itself failed (timeout, resolver trouble), which says
+              // nothing about the address — only report addresses actually judged bad.
+              .filter((entry: { valid?: boolean; reason?: string }) => entry?.valid === false && entry?.reason !== "error")
+              .map((entry: { email?: string }) => String(entry?.email || ""))
+              .filter(Boolean)
+          );
+        })
+        .catch(() => {
+          /* verification is advisory; never block composing on it */
+        });
+    }, 600);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [composeTo, isComposeOpen]);
 
   useEffect(() => {
     if (!isComposeOpen || !composeAccountEmail) {
@@ -582,12 +796,20 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     if (hits.length) {
       warnings.push(`Spam-trigger phrase${hits.length > 1 ? "s" : ""}: "${hits.slice(0, 3).join('", "')}".`);
     }
+    if (composeBadRecipients.length > 0) {
+      const shown = composeBadRecipients.slice(0, 3).join(", ");
+      warnings.push(
+        `Can't verify ${composeBadRecipients.length === 1 ? "recipient" : "recipients"}: ${shown}${
+          composeBadRecipients.length > 3 ? "…" : ""
+        } — the address or its domain looks wrong.`
+      );
+    }
     if (composeDeliverability && (!composeDeliverability.spfOk || !composeDeliverability.dmarcOk)) {
       const gaps = [!composeDeliverability.spfOk && "SPF", !composeDeliverability.dmarcOk && "DMARC"].filter(Boolean).join(" & ");
       warnings.push(`Sending domain is missing ${gaps} — this can hurt inbox placement (see Settings → Deliverability).`);
     }
     return warnings;
-  }, [composeSubject, composeBody, composeDeliverability]);
+  }, [composeSubject, composeBody, composeDeliverability, composeBadRecipients]);
 
   const rowKey = useCallback((message: MessageRow) => `${message.accountEmail}::${message.id}`, []);
 
@@ -602,6 +824,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   }, [messages, rowKey, selectedRows, selectedMessage]);
 
   const hasSelectedEmails = selectedRows.length > 0;
+  /**
+   * Mailboxes where the trash button hard-deletes instead of moving to Trash — matching Gmail,
+   * where Spam and Trash both delete outright. Needs the restricted https://mail.google.com/
+   * scope (gmail.modify can only trash); accounts connected before that scope was requested
+   * get the "reconnect" error from the actions API until they reauthorize.
+   */
+  const deletesPermanently = activeModule === "trash" || activeModule === "spam";
   /** Any unread in the selection (all-unread or mixed) → offer "Mark As Read".
       Only when every selected email is already read do we offer "Mark As Unread". */
   const selectionHasUnread =
@@ -745,6 +974,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
   const loadContacts = useCallback(async () => {
     if (step !== "client" || activeModule !== "contacts") return;
+    // Reloads on every keystroke in the search box, so responses can land out of order and a stale
+    // one would leave the table showing results for a query the user has already moved past.
+    const requestId = ++loadContactsRequestRef.current;
+    const isStale = () => requestId !== loadContactsRequestRef.current;
     setContactsLoading(true);
     setContactsError("");
     try {
@@ -752,14 +985,17 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         limit: String(CONTACTS_PAGE_SIZE),
         page: String(contactCurrentPage),
       });
-      if (contactSearch.trim()) query.set("search", contactSearch.trim());
+      if (debouncedContactSearch) query.set("search", debouncedContactSearch);
       if (contactTagFilter) query.set("tagIds", contactTagFilter);
       if (contactSourceFilter) query.set("source", contactSourceFilter);
-      const response = await fetch(`/api/contacts?${query.toString()}`);
+      // no-store: this reloads right after create/edit/delete/tag writes, and the
+      // server's Cache-Control on this endpoint would otherwise serve the pre-write list.
+      const response = await fetch(`/api/contacts?${query.toString()}`, { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload?.message || "Failed to load contacts.");
       }
+      if (isStale()) return;
       setContacts(Array.isArray(payload?.contacts) ? payload.contacts : []);
       const pagination = payload?.pagination || {};
       const total = Number(pagination.total || 0);
@@ -769,14 +1005,15 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       setContactsTotalCount(total);
       setContactsTotalPages(totalPages);
     } catch (error) {
+      if (isStale()) return;
       setContacts([]);
       setContactsTotalCount(0);
       setContactsTotalPages(1);
       setContactsError(error instanceof Error ? error.message : "Failed to load contacts.");
     } finally {
-      setContactsLoading(false);
+      if (!isStale()) setContactsLoading(false);
     }
-  }, [activeModule, contactCurrentPage, contactSearch, contactSourceFilter, contactTagFilter, step]);
+  }, [activeModule, contactCurrentPage, debouncedContactSearch, contactSourceFilter, contactTagFilter, step]);
 
   const createContact = async () => {
     const firstName = addContactForm.firstName.trim();
@@ -1298,7 +1535,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
   const inlineDraftStorageKey = useMemo(() => {
     if (!inlineComposeMode || !selectedMessage) return "";
-    if (inlineComposeMode === "forward") return "";
     return `inline:${inlineComposeMode}:${selectedMessage.accountEmail.toLowerCase()}:${selectedMessage.id}`;
   }, [inlineComposeMode, selectedMessage]);
 
@@ -1391,6 +1627,17 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       )
       .replace(/\n/g, "<br>");
 
+  /**
+   * Domain of the message being read, so images the sender hosts on its own domain aren't scored as
+   * third-party. Without this the client stripped legitimate sender-hosted images and its count
+   * disagreed with the server's authoritative scan.
+   */
+  const readerSenderDomain = useMemo(() => {
+    const fromRaw = selectedMessageDetail?.fromRaw || selectedMessage?.fromRaw || selectedMessage?.from || "";
+    const email = parseMailboxAddress(fromRaw).email;
+    return (email.split("@")[1] || "").trim().toLowerCase();
+  }, [selectedMessageDetail, selectedMessage]);
+
   const isTrackerPixel = (img: HTMLImageElement, srcValue: string) =>
     scoreTrackerImage({
       src: srcValue,
@@ -1398,6 +1645,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       height: img.getAttribute("height"),
       style: img.getAttribute("style"),
       alt: img.getAttribute("alt"),
+      senderDomain: readerSenderDomain,
     }).tracked;
 
   const detectTrackers = (rawHtml: string): { count: number; vendors: string[] } => {
@@ -1467,6 +1715,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       img.style.maxWidth = "100%";
       img.style.height = "auto";
       img.loading = "lazy";
+      img.decoding = "async";
+      // Many sender CDNs reject requests carrying a cross-site referrer, which is a common cause of
+      // email images silently failing to load. Ask the browser not to send one.
+      img.referrerPolicy = "no-referrer";
     });
     parsed.querySelectorAll<HTMLAnchorElement>("a").forEach((link) => {
       link.target = "_blank";
@@ -1478,7 +1730,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const loadGmailConnections = useCallback(async () => {
     setGmailLoading(true);
     try {
-      const response = await fetch("/api/gmail/status");
+      // Both together: these reads are independent, and this pair gates the whole panel opening —
+      // waiting for status before even asking for preferences cost a full round trip of blank screen.
+      const [response, prefRes] = await Promise.all([
+        fetch("/api/gmail/status"),
+        fetch("/api/gmail/account-preferences").catch(() => null),
+      ]);
       if (!response.ok) {
         setGmailAccounts([]);
         setSelectedAccounts([]);
@@ -1500,25 +1757,42 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
       // Accounts default to enabled; only accounts explicitly disabled in settings are excluded.
       const disabled = new Set<string>();
+      let primary = "";
       try {
-        const prefRes = await fetch("/api/gmail/account-preferences");
-        if (prefRes.ok) {
+        if (prefRes?.ok) {
           const prefData = await prefRes.json();
           for (const pref of Array.isArray(prefData?.preferences) ? prefData.preferences : []) {
-            if (pref?.enabled === false && typeof pref?.accountEmail === "string") disabled.add(pref.accountEmail.toLowerCase());
+            const email = typeof pref?.accountEmail === "string" ? pref.accountEmail.toLowerCase() : "";
+            if (!email) continue;
+            if (pref?.enabled === false) disabled.add(email);
+            if (pref?.isPrimary === true) primary = email;
           }
         }
       } catch {
-        /* default to all enabled */
+        /* default to all enabled, no primary */
       }
-      const enabledConnected = connected.filter((email) => !disabled.has(email.toLowerCase()));
+      // The main inbox leads every list of accounts, so the panel opens on it and it reads as the
+      // account's own mailbox rather than one of several in arbitrary order.
+      if (primary) {
+        const byPrimaryFirst = (a: GmailAccountConnection, b: GmailAccountConnection) =>
+          Number(b.email.toLowerCase() === primary) - Number(a.email.toLowerCase() === primary);
+        setGmailAccounts([...normalized].sort(byPrimaryFirst));
+      }
+      const enabledConnected = connected
+        .filter((email) => !disabled.has(email.toLowerCase()))
+        .sort((a, b) => Number(b.toLowerCase() === primary) - Number(a.toLowerCase() === primary));
       const preselected = initialAccountsRef.current.filter((email) => connected.includes(email));
 
       // The full-page client opens with the chosen accounts (URL param) or all enabled;
       // the "gate" is only shown as a "no accounts connected" state.
-      setSelectedAccounts(preselected.length > 0 ? preselected : enabledConnected);
+      const resolvedAccounts = preselected.length > 0 ? preselected : enabledConnected;
+      setSelectedAccounts(resolvedAccounts);
       setStep(connected.length === 0 ? "gate" : "client");
+      // Remember this for next visit's optimistic seed (see cachedAccountsRef above).
+      writeCachedSelectedAccounts(resolvedAccounts);
     } catch {
+      // Transient failure (network blip, etc.) — leave the cached selection alone rather than
+      // wiping it, so the next visit still gets the fast path instead of being punished for this.
       setGmailAccounts([]);
       setSelectedAccounts([]);
       setStep("gate");
@@ -1556,14 +1830,23 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         throw new Error(payload?.message || "Failed to load mailbox counts.");
       }
       const counts = payload?.counts || {};
-      setMailboxCounts({
+      const next = {
         inbox: Number(counts.inbox || 0),
         sent: Number(counts.sent || 0),
         drafts: Number(counts.drafts || 0),
         archive: Number(counts.archive || 0),
         spam: Number(counts.spam || 0),
         trash: Number(counts.trash || 0),
-      });
+        // Was missing, so mailboxCounts.starred stayed undefined and the badge never rendered
+        // even though the API returns it.
+        starred: Number(counts.starred || 0),
+      };
+      setMailboxCounts(next);
+      // Sidebar badges render from this. They used to be counted off the first page of each
+      // mailbox, which silently capped every badge at PAGE_SIZE — an inbox with 80 unread read
+      // as 50. These are Gmail's own totals, so they're both correct and cheap. Local mark
+      // read/unread still adjusts the number optimistically between refreshes.
+      setModuleUnreadBadges(next);
     } catch {
       setMailboxCounts(EMPTY_COUNTS);
     } finally {
@@ -1575,73 +1858,39 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     loadMailboxCounts();
   }, [loadMailboxCounts]);
 
-  const loadUnreadBadges = useCallback(async () => {
-    if (step !== "client" || selectedAccounts.length === 0) {
-      setModuleUnreadBadges({
-        inbox: 0,
-        sent: 0,
-        drafts: 0,
-        archive: 0,
-        spam: 0,
-        trash: 0,
-      });
-      return;
-    }
+  /**
+   * Unstar every selected message. The Starred view is a label view, so removing the star is the
+   * meaningful bulk action there (Move To / Archive are hidden for it). Rows are dropped from the
+   * list optimistically since they no longer belong in this view, then counts are refreshed.
+   */
+  const unstarSelected = useCallback(async () => {
+    const selected = conversationRows.filter((message) => selectedRows.includes(rowKey(message)));
+    if (selected.length === 0) return;
+    const items = selected.map((message) => ({ accountEmail: message.accountEmail, messageId: message.id }));
+    const affected = new Set(items.map((i) => `${i.accountEmail}::${i.messageId}`));
+    setActionLoading(true);
     try {
-      const results = await Promise.all(
-        BADGE_MAILBOXES.map(async (mailbox) => {
-          const query = new URLSearchParams({
-            mailbox,
-            accounts: selectedAccounts.join(","),
-            limit: String(PAGE_SIZE),
-            page: "1",
-          });
-          const response = await fetch(`/api/gmail/messages?${query.toString()}`);
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok) return [mailbox, 0] as const;
-          const rows: MessageRow[] = Array.isArray(payload?.messages) ? payload.messages : [];
-          // This fetch already pulled the full first page for every standard mailbox — warm
-          // loadMessages's cache with it (identical query shape for a plain tab switch: page
-          // resets to 1, search/label are cleared) so the FIRST visit to that tab also paints
-          // instantly instead of showing the loading spinner. No extra network requests; this
-          // data was previously fetched here just to count unread and then discarded.
-          const cacheKey = query.toString();
-          messagesCacheRef.current.delete(cacheKey);
-          messagesCacheRef.current.set(cacheKey, {
-            messages: rows,
-            accountErrors: Array.isArray(payload?.accountErrors) ? payload.accountErrors : [],
-            hasNextPage: Boolean(payload?.hasNextPage),
-          });
-          if (messagesCacheRef.current.size > MESSAGE_CACHE_LIMIT) {
-            const oldest = messagesCacheRef.current.keys().next().value;
-            if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
-          }
-          return [mailbox, rows.filter((row) => row.unread).length] as const;
-        })
-      );
-      const next: ModuleUnreadBadgeCounts = {
-        inbox: 0,
-        sent: 0,
-        drafts: 0,
-        archive: 0,
-        spam: 0,
-        trash: 0,
-      };
-      for (const [mailbox, count] of results) {
-        next[mailbox] = count;
-      }
-      setModuleUnreadBadges(next);
-    } catch {
-      setModuleUnreadBadges({
-        inbox: 0,
-        sent: 0,
-        drafts: 0,
-        archive: 0,
-        spam: 0,
-        trash: 0,
+      const response = await fetch("/api/gmail/actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "unstar", items }),
       });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.message || "Could not unstar the selected messages.");
+      }
+      setMessages((prev) => prev.filter((m) => !affected.has(`${m.accountEmail}::${m.id}`)));
+      setSelectedRows([]);
+      invalidateMessagesCache();
+      // Not awaited: the rows are already gone from the view, so holding the button disabled until
+      // the badge numbers come back only makes the action feel slower than it was.
+      void loadMailboxCounts();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Could not unstar the selected messages.");
+    } finally {
+      setActionLoading(false);
     }
-  }, [selectedAccounts, step]);
+  }, [conversationRows, selectedRows, rowKey, invalidateMessagesCache, loadMailboxCounts]);
 
   const loadMessages = useCallback(async () => {
     const requestId = ++loadMessagesRequestRef.current;
@@ -1656,7 +1905,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     const query = new URLSearchParams({
       mailbox,
       accounts: activeLabelId ? selectedAccounts[0] || "" : selectedAccounts.join(","),
-      limit: String(PAGE_SIZE),
+      limit: String(pageSize),
       page: String(currentPage),
     });
     if (activeLabelId) query.set("labelId", activeLabelId);
@@ -1684,21 +1933,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         throw new Error(payload?.message || "Failed to load Gmail messages.");
       }
       const nextMessages = Array.isArray(payload?.messages) ? payload.messages : [];
-      const unreadCount = nextMessages.filter((message: MessageRow) => message.unread).length;
       const nextAccountErrors = Array.isArray(payload?.accountErrors) ? payload.accountErrors : [];
       const nextHasNextPage = Boolean(payload?.hasNextPage);
-      // Bounded LRU-ish cache: re-inserting moves the key to the end, and we evict the oldest.
-      messagesCacheRef.current.delete(cacheKey);
-      messagesCacheRef.current.set(cacheKey, {
-        messages: nextMessages,
-        accountErrors: nextAccountErrors,
-        hasNextPage: nextHasNextPage,
-      });
-      if (messagesCacheRef.current.size > MESSAGE_CACHE_LIMIT) {
-        const oldest = messagesCacheRef.current.keys().next().value;
-        if (oldest !== undefined) messagesCacheRef.current.delete(oldest);
+      storeMessagesCache(cacheKey, nextMessages, nextAccountErrors, nextHasNextPage);
+      // Self-heal the mark-read latch: anything Gmail still reports as unread must be markable
+      // again, including messages marked unread from another client since this page loaded.
+      for (const message of nextMessages as MessageRow[]) {
+        if (message.unread) markedReadRef.current.delete(`${message.accountEmail}::${message.id}`);
       }
-      setModuleUnreadBadges((prev) => ({ ...prev, [mailbox as keyof ModuleUnreadBadgeCounts]: unreadCount }));
       setMessages(nextMessages);
       setAccountErrors(nextAccountErrors);
       setHasNextPage(nextHasNextPage);
@@ -1709,18 +1951,48 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         setSelectedMessageDetail(null);
         setViewMode("list");
       }
+      // Quietly warm the next page in the background so paging forward feels instant — by the
+      // time the user clicks "next" the data is usually already sitting in the cache.
+      if (nextHasNextPage) {
+        const nextPageQuery = new URLSearchParams(query);
+        nextPageQuery.set("page", String(currentPage + 1));
+        const nextPageCacheKey = nextPageQuery.toString();
+        if (!messagesCacheRef.current.has(nextPageCacheKey) && !prefetchInFlightRef.current.has(nextPageCacheKey)) {
+          prefetchInFlightRef.current.add(nextPageCacheKey);
+          fetch(`/api/gmail/messages?${nextPageCacheKey}`)
+            .then((prefetchResponse) => prefetchResponse.json().catch(() => ({})))
+            .then((prefetchPayload) => {
+              // Don't let a slow prefetch resurrect stale data after the view moved on (mailbox
+              // switch, new search, or a mutating action that invalidated the cache).
+              if (requestId !== loadMessagesRequestRef.current) return;
+              const prefetchMessages = Array.isArray(prefetchPayload?.messages) ? prefetchPayload.messages : [];
+              const prefetchAccountErrors = Array.isArray(prefetchPayload?.accountErrors) ? prefetchPayload.accountErrors : [];
+              const prefetchHasNextPage = Boolean(prefetchPayload?.hasNextPage);
+              storeMessagesCache(nextPageCacheKey, prefetchMessages, prefetchAccountErrors, prefetchHasNextPage);
+            })
+            .catch(() => {
+              /* best-effort: a failed prefetch just means the next click loads normally */
+            })
+            .finally(() => {
+              prefetchInFlightRef.current.delete(nextPageCacheKey);
+            });
+        }
+      }
     } catch (error) {
       if (requestId !== loadMessagesRequestRef.current) return;
       setMessages([]);
       setHasNextPage(false);
-      setModuleUnreadBadges((prev) => ({ ...prev, [mailbox as keyof ModuleUnreadBadgeCounts]: 0 }));
       setAccountErrors([]);
       setMessagesError(error instanceof Error ? error.message : "Failed to load Gmail messages.");
     } finally {
       if (requestId !== loadMessagesRequestRef.current) return;
       setMessagesLoading(false);
     }
-  }, [activeModule, activeLabelId, canLoadMessages, currentPage, debouncedSearch, selectedAccounts, step]);
+  }, [activeModule, activeLabelId, canLoadMessages, currentPage, debouncedSearch, pageSize, selectedAccounts, step, storeMessagesCache]);
+
+  useEffect(() => {
+    loadMessagesRef.current = () => void loadMessages();
+  }, [loadMessages]);
 
   useEffect(() => {
     loadMessages();
@@ -1776,25 +2048,22 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   }, [debouncedSearch]);
 
   useEffect(() => {
-    // Defer the unread-badge fetch (6 mailbox scans) so it doesn't compete with the
-    // active mailbox load for Gmail rate limit/bandwidth — the visible inbox paints first.
-    const t = setTimeout(() => {
-      loadUnreadBadges();
-    }, 800);
-    return () => clearTimeout(t);
-  }, [loadUnreadBadges]);
-
-  useEffect(() => {
     if (step === "client" && activeModule === "contacts") {
       loadContactTags();
       loadContactVisibility();
     }
   }, [activeModule, loadContactTags, loadContactVisibility, step]);
 
+  // Debounce the contacts search box so typing doesn't fire a request per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedContactSearch(contactSearch.trim()), 400);
+    return () => clearTimeout(t);
+  }, [contactSearch]);
+
   useEffect(() => {
     if (step !== "client" || activeModule !== "contacts") return;
     setContactCurrentPage(1);
-  }, [activeModule, contactSearch, contactSourceFilter, contactTagFilter, step]);
+  }, [activeModule, debouncedContactSearch, contactSourceFilter, contactTagFilter, step]);
 
   useEffect(() => {
     if (contactCurrentPage <= contactsTotalPages) return;
@@ -1818,6 +2087,49 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       document.removeEventListener("touchstart", handleOutsideClick);
     };
   }, [moveMenuOpen]);
+
+  // Snooze behaves like Move To: clicking anywhere outside dismisses it.
+  useEffect(() => {
+    if (!snoozeMenuOpen) return;
+    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
+      const targetNode = event.target as Node | null;
+      if (!targetNode) return;
+      if (snoozeMenuRef.current?.contains(targetNode)) return;
+      setSnoozeMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+    };
+  }, [snoozeMenuOpen]);
+
+  // Label menu dismisses on an outside click, exactly as Move To and Snooze do. It had no ref at
+  // all, so it stayed open until its own button was clicked again.
+  useEffect(() => {
+    if (!labelMenuOpen) return;
+    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
+      const targetNode = event.target as Node | null;
+      if (!targetNode) return;
+      if (labelMenuRef.current?.contains(targetNode)) return;
+      setLabelMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+    };
+  }, [labelMenuOpen]);
+
+  // Any change of context (mailbox, label, opening a message, paging) closes open menus —
+  // they used to survive navigation and hang over the new view.
+  useEffect(() => {
+    setMoveMenuOpen(null);
+    setSnoozeMenuOpen(false);
+    setLabelMenuOpen(false);
+  }, [activeModule, activeLabelId, viewMode, selectedMessageId, currentPage]);
 
   useEffect(() => {
     if (!contactFilterOpen) return;
@@ -1843,6 +2155,29 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   // linked conversation and switch to the reader. Matches by threadId and opens whichever
   // message in that thread is loaded — the reader then renders the full chain (threadMessages
   // from message-detail). Runs once when a row from the target thread appears.
+  // Clear the avatar-failure flag whenever a different message is opened, so one sender's dead
+  // photo URL doesn't suppress every later sender's picture. Keyed on the id so it covers every
+  // path that opens a message (list click, deep link, thread navigation).
+  useEffect(() => {
+    setSenderAvatarIndex(0);
+  }, [selectedMessageId]);
+
+  /**
+   * Current avatar URL for the open message's sender: the Google Contacts photo when one exists,
+   * then Gravatar, then the company favicon. Empty once every candidate has errored, which is the
+   * signal to render the initials avatar. Contacts-only lookup meant most senders had no photo at
+   * all, which is why pictures appeared not to load.
+   */
+  const senderAvatar = useMemo(() => {
+    const sources = selectedMessageDetail?.senderAvatarSources ?? [];
+    if (sources.length === 0) {
+      // Older payloads carry only the single contact photo.
+      const legacy = selectedMessageDetail?.senderPhotoUrl || "";
+      return senderAvatarIndex === 0 && legacy ? { url: legacy, kind: "photo" as const } : null;
+    }
+    return sources[senderAvatarIndex] ?? null;
+  }, [selectedMessageDetail, senderAvatarIndex]);
+
   useEffect(() => {
     if (deepLinkAppliedRef.current || !initialOpenThreadId) return;
     const row = messages.find((m) => m.threadId === initialOpenThreadId);
@@ -1854,9 +2189,134 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     }
   }, [messages, initialOpenThreadId]);
 
+  // Browser back/forward: once the router has resolved the current URL, adopt whatever
+  // module/label it names as the starting state (covers a hard refresh or a shared link that
+  // isn't just the bare initial-thread deep link above), then let every later module/label/message
+  // change push a fresh history entry. Runs once — after the first sync, module/label are driven
+  // entirely by state, and this effect exists only to prime that state from the URL on load.
+  useEffect(() => {
+    if (!router.isReady || navReadyRef.current) return;
+    navReadyRef.current = true;
+    const query = router.query;
+    const moduleParam = Array.isArray(query.module) ? query.module[0] : query.module;
+    const labelParam = (Array.isArray(query.label) ? query.label[0] : query.label) || "";
+    const threadParam = (Array.isArray(query.thread) ? query.thread[0] : query.thread) || "";
+    const moduleValid = moduleParam && MODULES.some((item) => item.key === moduleParam);
+    if ((moduleValid && moduleParam !== activeModule) || (labelParam && labelParam !== activeLabelId)) {
+      isApplyingNavRef.current = true;
+      if (moduleValid) setActiveModule(moduleParam as ModuleKey);
+      setActiveLabelId(labelParam);
+    }
+    // The bare `?thread=` deep link (Discord alert, etc.) is already handled above via
+    // initialOpenThreadId; only pick this up when it names a *different* thread than that one.
+    if (threadParam && threadParam !== initialOpenThreadId) {
+      pendingNavThreadRef.current = threadParam;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady]);
+
+  // Resolves a thread id captured from the URL (initial load or a back/forward pop) into the
+  // actual message row once that mailbox's messages have loaded — mirrors the initialOpenThreadId
+  // deep-link effect above, but re-runs for every later pop instead of firing only once.
+  useEffect(() => {
+    if (!pendingNavThreadRef.current) return;
+    const row = messages.find((m) => m.threadId === pendingNavThreadRef.current);
+    if (row) {
+      pendingNavThreadRef.current = "";
+      isApplyingNavRef.current = true;
+      setSelectedMessageId(row.id);
+      setViewMode("message");
+      setDetailError("");
+    }
+  }, [messages]);
+
+  // A popped label id arrives with no name attached (the URL only carries the id) — recover it
+  // from the loaded labels list, same as clicking the label in the sidebar would set it.
+  useEffect(() => {
+    if (!activeLabelId || activeLabelName) return;
+    const found = labels.find((l) => l.id === activeLabelId);
+    if (found) setActiveLabelName(found.name);
+  }, [labels, activeLabelId, activeLabelName]);
+
+  // Browser back/forward button handling: Next's router only fires beforePopState for
+  // client-side-navigable pops, which is exactly what our own history.pushState entries below are.
+  // Apply the popped module/label/thread to state (guarded so the push-effect doesn't re-push it)
+  // and let Next update its own query bookkeeping to match (`return true`).
+  useEffect(() => {
+    router.beforePopState(({ as }) => {
+      try {
+        const url = new URL(as, window.location.origin);
+        const moduleParam = url.searchParams.get("module");
+        const labelParam = url.searchParams.get("label") || "";
+        const threadParam = url.searchParams.get("thread") || "";
+        const moduleValid = moduleParam && MODULES.some((item) => item.key === moduleParam);
+        isApplyingNavRef.current = true;
+        if (moduleValid) setActiveModule(moduleParam as ModuleKey);
+        setActiveLabelId(labelParam);
+        if (threadParam) {
+          pendingNavThreadRef.current = threadParam;
+        } else {
+          pendingNavThreadRef.current = "";
+          setSelectedMessageId("");
+          setViewMode("list");
+          setDetailError("");
+        }
+      } catch {
+        /* malformed pop target — ignore, current state stands */
+      }
+      return true;
+    });
+    return () => {
+      router.beforePopState(() => true);
+    };
+  }, [router]);
+
+  // Pushes a history entry for every module switch, label switch, and message open/close so the
+  // browser's back/forward buttons can step through the email panel the same way they do a
+  // multi-page site. Skipped while navReadyRef hasn't primed from the URL yet, and skipped for any
+  // change that already came FROM the URL (isApplyingNavRef) — otherwise a back/forward pop would
+  // immediately push a duplicate (or, worse, an out-of-order) entry right back onto the stack.
+  useEffect(() => {
+    if (!navReadyRef.current) return;
+    if (isApplyingNavRef.current) {
+      isApplyingNavRef.current = false;
+      return;
+    }
+    // Start from whatever's already in the address bar (e.g. `?accounts=` from a deep link) and
+    // only touch the three nav keys, so unrelated params survive every module/label/message push.
+    const params = new URLSearchParams(window.location.search);
+    params.set("module", activeModule);
+    if (activeLabelId) params.set("label", activeLabelId);
+    else params.delete("label");
+    if (viewMode === "message" && selectedMessage?.threadId) params.set("thread", selectedMessage.threadId);
+    else params.delete("thread");
+    const nextSearch = params.toString();
+    const currentSearch = window.location.search.replace(/^\?/, "");
+    if (nextSearch === currentSearch) {
+      hasWrittenNavUrlRef.current = true;
+      return;
+    }
+    const writeMethod = hasWrittenNavUrlRef.current ? "push" : "replace";
+    hasWrittenNavUrlRef.current = true;
+    router[writeMethod](
+      { pathname: router.pathname, query: Object.fromEntries(params) },
+      undefined,
+      { shallow: true }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeModule, activeLabelId, viewMode, selectedMessage?.threadId]);
+
   // Opening an unread email marks it read the moment it opens: locally first (so going back
   // shows it read immediately) and on Gmail in the background. Keyed by id so it fires once.
+  /**
+   * Messages already marked read this session, so opening one does not POST twice while the
+   * optimistic update propagates. Entries must be cleared whenever a message becomes unread again —
+   * marking one unread and reopening it used to hit this latch and silently never mark it read.
+   */
   const markedReadRef = useRef<Set<string>>(new Set());
+  /** accountEmail::id -> detail payload, so reopening a message is instant. */
+  const detailCacheRef = useRef<Map<string, MessageDetail>>(new Map());
+  const detailInFlightRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!selectedMessage || viewMode !== "message") return;
     if (!selectedMessage.unread || selectedMessage.isComposeDraft) return;
@@ -1878,12 +2338,79 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         items: [{ accountEmail: selectedMessage.accountEmail, messageId: selectedMessage.id }],
       }),
     })
-      .then(() => Promise.all([loadMailboxCounts(), loadUnreadBadges()]))
+      .then(() => loadMailboxCounts())
       .catch(() => null);
-  }, [selectedMessage, viewMode, loadMailboxCounts, loadUnreadBadges]);
+  }, [selectedMessage, viewMode, loadMailboxCounts]);
+
+  /**
+   * Build a MessageDetail from an API payload.
+   *
+   * Shared by the reader and the hover prefetch, which each had their own copy of this and had
+   * already drifted — the prefetch kept no fallbacks, so a payload missing a field cached a blank
+   * where the reader would have shown the row's own value.
+   */
+  const toMessageDetail = useCallback((payload: any, fallback?: MessageRow): MessageDetail => {
+    const str = (value: unknown, alternative?: string) =>
+      typeof value === "string" ? value : alternative;
+    return {
+      bodyHtml: str(payload?.bodyHtml, "") as string,
+      bodyText: str(payload?.bodyText, "") as string,
+      fromRaw: str(payload?.fromRaw, fallback?.fromRaw),
+      toRaw: str(payload?.toRaw, fallback?.toRaw),
+      subject: str(payload?.subject, fallback?.subject),
+      replyTo: str(payload?.replyTo, fallback?.replyTo),
+      date: str(payload?.date, fallback?.date),
+      timestamp: typeof payload?.timestamp === "number" ? payload.timestamp : fallback?.timestamp,
+      messageIdHeader: str(payload?.messageIdHeader, fallback?.messageIdHeader),
+      references: str(payload?.references, fallback?.references),
+      senderPhotoUrl: str(payload?.senderPhotoUrl, "") as string,
+      senderAvatarSources: Array.isArray(payload?.senderAvatarSources) ? payload.senderAvatarSources : [],
+      threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
+      trackers:
+        payload?.trackers && typeof payload.trackers.count === "number"
+          ? {
+              count: payload.trackers.count,
+              vendors: Array.isArray(payload.trackers.vendors) ? payload.trackers.vendors : [],
+            }
+          : undefined,
+    } as MessageDetail;
+  }, []);
+
+  /** Fetch a message's detail into the cache. Shared by the reader and hover prefetch. */
+  const fetchDetailInto = useCallback(async (accountEmail: string, messageId: string) => {
+    const key = `${accountEmail}::${messageId}`;
+    if (detailCacheRef.current.has(key) || detailInFlightRef.current.has(key)) return;
+    detailInFlightRef.current.add(key);
+    try {
+      const query = new URLSearchParams({ accountEmail, messageId });
+      const response = await fetch(`/api/gmail/message-detail?${query.toString()}`);
+      if (!response.ok) return;
+      const payload = await response.json().catch(() => null);
+      if (!payload) return;
+      detailCacheRef.current.set(key, toMessageDetail(payload));
+    } catch {
+      /* prefetch is best-effort */
+    } finally {
+      detailInFlightRef.current.delete(key);
+    }
+  }, [toMessageDetail]);
 
   useEffect(() => {
     if (!selectedMessage || viewMode !== "message") return;
+    // Cached from a previous open or a hover prefetch — render immediately, no spinner.
+    const cacheKey = `${selectedMessage.accountEmail}::${selectedMessage.id}`;
+    const cached = detailCacheRef.current.get(cacheKey);
+    if (cached) {
+      setSelectedMessageDetail(cached);
+      setDetailLoading(false);
+      setDetailError("");
+      return;
+    }
+    // Guards against a slow open losing a race with a newer one: open a heavy message, click a
+    // light one before it lands, and the first response used to overwrite the second, leaving the
+    // new message's header above the old message's body. The cache write is still allowed — it is
+    // keyed by message, so it is correct regardless of which message is on screen now.
+    let cancelled = false;
     const loadDetail = async () => {
       setDetailLoading(true);
       setDetailError("");
@@ -1897,33 +2424,22 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         if (!response.ok) {
           throw new Error(payload?.message || "Failed to load message detail.");
         }
-        setSelectedMessageDetail({
-          bodyHtml: typeof payload?.bodyHtml === "string" ? payload.bodyHtml : "",
-          bodyText: typeof payload?.bodyText === "string" ? payload.bodyText : "",
-          fromRaw: typeof payload?.fromRaw === "string" ? payload.fromRaw : selectedMessage.fromRaw,
-          toRaw: typeof payload?.toRaw === "string" ? payload.toRaw : selectedMessage.toRaw,
-          subject: typeof payload?.subject === "string" ? payload.subject : selectedMessage.subject,
-          replyTo: typeof payload?.replyTo === "string" ? payload.replyTo : selectedMessage.replyTo,
-          date: typeof payload?.date === "string" ? payload.date : selectedMessage.date,
-          timestamp: typeof payload?.timestamp === "number" ? payload.timestamp : selectedMessage.timestamp,
-          messageIdHeader:
-            typeof payload?.messageIdHeader === "string" ? payload.messageIdHeader : selectedMessage.messageIdHeader,
-          references: typeof payload?.references === "string" ? payload.references : selectedMessage.references,
-          senderPhotoUrl: typeof payload?.senderPhotoUrl === "string" ? payload.senderPhotoUrl : "",
-          threadMessages: Array.isArray(payload?.threadMessages) ? payload.threadMessages : undefined,
-          trackers:
-            payload?.trackers && typeof payload.trackers.count === "number"
-              ? { count: payload.trackers.count, vendors: Array.isArray(payload.trackers.vendors) ? payload.trackers.vendors : [] }
-              : undefined,
-        });
+        const detail = toMessageDetail(payload, selectedMessage);
+        detailCacheRef.current.set(`${selectedMessage.accountEmail}::${selectedMessage.id}`, detail as MessageDetail);
+        if (cancelled) return;
+        setSelectedMessageDetail(detail);
       } catch (error) {
+        if (cancelled) return;
         setDetailError(error instanceof Error ? error.message : "Failed to load message detail.");
         setSelectedMessageDetail(null);
       } finally {
-        setDetailLoading(false);
+        if (!cancelled) setDetailLoading(false);
       }
     };
     loadDetail();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMessage?.id, selectedMessage?.accountEmail, viewMode]);
 
@@ -2009,9 +2525,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
   const flushDraftsNow = useCallback(() => {
     if (!sendingCompose && isComposeOpen && effectiveComposeDraftStorageKey) {
+      // Recipients or a subject with no body still count — closing after typing only a
+      // "To" used to discard it, which reads as the composer losing your work.
       const hasComposeContent =
         composeBody.trim() ||
-        composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim();
+        composeBodyHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim() ||
+        composeTo.trim() ||
+        composeSubject.trim();
       if (hasComposeContent) {
         void saveLocalDraft(
           effectiveComposeDraftStorageKey,
@@ -2032,7 +2552,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
     }
 
-    if (!inlineComposeSending && inlineComposeMode && inlineComposeMode !== "forward" && inlineDraftStorageKey) {
+    if (!inlineComposeSending && inlineComposeMode && inlineDraftStorageKey) {
       const hasInlineContent = inlineComposeIntroText.trim();
       if (hasInlineContent) {
         void saveLocalDraft(
@@ -2143,7 +2663,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   ]);
 
   useEffect(() => {
-    if (inlineComposeSending || !inlineComposeMode || inlineComposeMode === "forward" || !inlineDraftStorageKey) return;
+    if (inlineComposeSending || !inlineComposeMode || !inlineDraftStorageKey) return;
     const hasContent = inlineComposeIntroText.trim();
     const timeout = window.setTimeout(() => {
       if (!hasContent) return;
@@ -2231,6 +2751,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         | "moveToInbox"
         | "moveToSpam"
         | "moveToTrash"
+        | "unspam"
     ) => {
       const composeDraftRows = selectedMessageRows.filter((message) => Boolean(message.isComposeDraft && message.draftKey));
       const selectedComposeDraftKeys = new Set(composeDraftRows.map((message) => rowKey(message)));
@@ -2240,14 +2761,31 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         messageId: message.id,
       }));
       if (items.length === 0 && composeDraftRows.length === 0) return;
-      if (actionInFlightRef.current) return;
-      actionInFlightRef.current = true;
+      const isReadToggle = action === "markRead" || action === "markUnread";
+      const inFlightKeys = selectedMessageRows.map((message) => rowKey(message));
+      if (!isReadToggle && inFlightKeys.some((key) => actionInFlightRef.current.has(key))) {
+        // Only refuse a repeat action on a message already mid-flight; a different message goes
+        // through immediately.
+        setActionError("Still finishing the last action on that message — one moment.");
+        return;
+      }
+      if (!isReadToggle) {
+        for (const key of inFlightKeys) actionInFlightRef.current.add(key);
+      }
 
       setActionError("");
+      // Marking unread clears the "already marked read" latch, or reopening the message would hit it
+      // and skip the mark-read entirely — the message would stay unread no matter how often it was
+      // opened. Cleared before the optimistic pass so it holds even if the Gmail call then fails.
+      if (action === "markUnread") {
+        for (const message of selectedMessageRows) {
+          markedReadRef.current.delete(`${message.accountEmail}::${message.id}`);
+        }
+      }
       // Optimistic pass: mutate the list immediately so the click lands instantly. The
       // authoritative pass below reconciles once Gmail answers. (Previously every action
       // awaited the round trip AND greyed the toolbar out for its duration.)
-      const optimisticKeys = new Set(selectedRows);
+      const optimisticKeys = new Set(selectedMessageRows.map((message) => rowKey(message)));
       setMessages((prev) =>
         prev
           .map((message) => {
@@ -2260,11 +2798,35 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             if (action === "deletePermanently") return null;
             if (action === "untrash" || action === "moveToInbox") return activeModule === "inbox" ? message : null;
             if (action === "moveToSpam") return activeModule === "spam" ? message : null;
+            if (action === "unspam") return activeModule === "spam" ? null : message;
             return message;
           })
           .filter(Boolean) as MessageRow[]
       );
-      if (action !== "markRead" && action !== "markUnread") setSelectedRows([]);
+      // Invalidate the per-view message cache for EVERY action, not just ones taken from the
+      // reader. Deleting straight from the list left the cached page intact, so the next
+      // revalidate repainted the row that had just been removed — the "delete didn't work the
+      // first time, worked on the second" symptom. Clearing it up front means no later paint can
+      // resurrect a message this action already removed.
+      invalidateMessagesCache();
+      if (action !== "markRead" && action !== "markUnread") {
+        setSelectedRows([]);
+        // Leave the reader now, not after Gmail answers. Acting on an open message used to
+        // hold the reader open for the whole round trip, so deleting felt like it hung before
+        // dropping back to the list — even though the row had already gone from the list
+        // underneath. The message is gone either way; the reconcile below only corrects rows.
+        setViewMode("list");
+        setSelectedMessageId("");
+        setSelectedMessageDetail(null);
+      } else if (action === "markUnread") {
+        // Marking unread from the reader means "I'm not done with this" — staying on the open
+        // message contradicts that, and the reader would immediately re-mark it read. Drop back
+        // to the list so the row is visibly unread again. markRead stays put: you're reading it.
+        setSelectedRows([]);
+        setViewMode("list");
+        setSelectedMessageId("");
+        setSelectedMessageDetail(null);
+      }
       try {
         if (
           composeDraftRows.length > 0 &&
@@ -2287,16 +2849,48 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
 
         let results: any[] = [];
         if (items.length > 0) {
-          const response = await fetch("/api/gmail/actions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action, items }),
-          });
+          // Bounded: an unbounded fetch can hang for minutes, and while it hangs the in-flight
+          // guard below silently swallows every further click. Failing fast frees the guard and
+          // surfaces a real message instead.
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), ACTION_TIMEOUT_MS);
+          let response: Response;
+          try {
+            response = await fetch("/api/gmail/actions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action, items }),
+              signal: controller.signal,
+            });
+          } catch (error) {
+            if ((error as Error)?.name === "AbortError") {
+              // The optimistic removal is now unverified, so resync rather than leave the list lying.
+              invalidateMessagesCache();
+              loadMessagesRef.current();
+              throw new Error("Gmail is taking too long to respond. Nothing was lost — try again.");
+            }
+            throw error;
+          } finally {
+            clearTimeout(timeout);
+          }
           const payload = await response.json().catch(() => ({}));
           if (!response.ok && response.status !== 207) {
             throw new Error(payload?.message || "Action failed.");
           }
           results = Array.isArray(payload?.results) ? payload.results : [];
+          // Surface per-message refusals. Previously a 207 passed silently while the rows had
+          // already been removed optimistically, so a failed action looked like it worked.
+          const failures = results.filter((result: any) => result && result.ok === false);
+          if (failures.length > 0) {
+            const reason = String(failures[0]?.error || "Gmail refused the action.");
+            setActionError(
+              failures.length === items.length
+                ? reason
+                : `${failures.length} of ${items.length} messages failed: ${reason}`
+            );
+            invalidateMessagesCache();
+            loadMessagesRef.current();
+          }
         }
         const successfulKeys = new Set(
           results
@@ -2352,29 +2946,27 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             })
             .filter(Boolean) as MessageRow[];
 
-          const unreadCount = next.filter((message) => message.unread).length;
-          setModuleUnreadBadges((prevBadges) =>
-            activeModule in prevBadges ? { ...prevBadges, [activeModule]: unreadCount } : prevBadges
-          );
           return next;
         });
 
         setSelectedRows([]);
-        setViewMode("list");
-        setSelectedMessageId("");
-        setSelectedMessageDetail(null);
-        await Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
+        // Not awaited: the list is already correct optimistically, so blocking the action's
+        // completion on a counts round trip only kept the toolbar spinner up. Badges are
+        // Gmail's own totals now, so deriving them from the visible page here would also have
+        // re-capped them at one page's worth.
+        void loadMailboxCounts();
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "Action failed.");
       } finally {
-        actionInFlightRef.current = false;
+        if (!isReadToggle) {
+          for (const key of inFlightKeys) actionInFlightRef.current.delete(key);
+        }
         setActionLoading(false);
       }
     },
-    [activeModule, loadMailboxCounts, loadUnreadBadges, rowKey, selectedMessageRows, selectedRows]
+    [activeModule, invalidateMessagesCache, loadMailboxCounts, rowKey, selectedMessageRows, selectedRows]
   );
 
-  const [snoozeMenuOpen, setSnoozeMenuOpen] = useState(false);
 
   // Snooze the selected messages until a preset time; the inbound cron re-surfaces them.
   const snoozeSelected = async (preset: "later" | "tomorrow" | "nextweek") => {
@@ -2399,19 +2991,23 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setSnoozeMenuOpen(false);
     setActionLoading(true);
     try {
-      for (const [accountEmail, items] of byAccount) {
-        await fetch("/api/gmail/snooze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accountEmail, items, snoozeUntil: until.toISOString() }),
-        });
-      }
+      // Independent per-mailbox requests — a selection spanning several accounts shouldn't
+      // wait on each mailbox's round trip in turn.
+      await Promise.all(
+        Array.from(byAccount, ([accountEmail, items]) =>
+          fetch("/api/gmail/snooze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accountEmail, items, snoozeUntil: until.toISOString() }),
+          })
+        )
+      );
       // Snoozed mail leaves the mailbox — remove it in place and let the authoritative
       // refresh happen in the background rather than blocking the click on it.
       removeRowsLocally(rows);
       showSentToast("Snoozed");
       invalidateMessagesCache();
-      void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
+      void Promise.all([loadMessages(), loadMailboxCounts()]);
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "Failed to snooze.");
     } finally {
@@ -2430,34 +3026,30 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       // Send the NAME as well as the id: label ids are per-account, so for messages in a second
       // mailbox the server resolves (or creates) the same-named label there instead of failing.
       const labelName = labels.find((entry) => entry.id === labelId)?.name || "";
-      let lastError = "";
-      const results = await Promise.all(
-        gmailRows.map(async (message) => {
-          try {
-            const response = await fetch("/api/gmail/apply-label", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                accountEmail: message.accountEmail,
-                messageId: message.id,
-                labelId,
-                labelName,
-              }),
-            });
-            if (response.ok) return true;
-            const payload = await response.json().catch(() => null);
-            lastError = payload?.message || `Label update failed (${response.status})`;
-            return false;
-          } catch {
-            lastError = "Label update failed — network error.";
-            return false;
-          }
-        })
-      );
-      // Surface WHY rather than doing nothing: a silent no-op here reads as "moving to a
-      // label doesn't work" with nothing to act on.
-      if (!results.some(Boolean) && lastError) setActionError(lastError);
-      return results.some(Boolean);
+      // One request for the whole selection — the server applies bounded concurrency + 429
+      // backoff across all items itself, instead of the client firing N unbounded fetches that
+      // trip Gmail's per-user concurrency limit on anything beyond a handful of messages.
+      const items = gmailRows.map((message) => ({ accountEmail: message.accountEmail, messageId: message.id }));
+      try {
+        const response = await fetch("/api/gmail/apply-label", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items, labelId, labelName }),
+        });
+        const payload = await response.json().catch(() => null);
+        const results: Array<{ ok: boolean; error?: string }> = Array.isArray(payload?.results) ? payload.results : [];
+        const anySucceeded = results.some((r) => r.ok);
+        // Surface WHY rather than doing nothing: a silent no-op here reads as "moving to a
+        // label doesn't work" with nothing to act on.
+        if (!anySucceeded) {
+          const lastError = results.find((r) => !r.ok)?.error || payload?.message || `Label update failed (${response.status})`;
+          setActionError(lastError);
+        }
+        return anySucceeded;
+      } catch {
+        setActionError("Label update failed — network error.");
+        return false;
+      }
     },
     [labels]
   );
@@ -2485,8 +3077,11 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       const keys = new Set(rows.map((message) => rowKey(message)));
       setMessages((prev) => prev.filter((message) => !keys.has(rowKey(message))));
       setSelectedRows((prev) => prev.filter((key) => !keys.has(key)));
+      // The destination mailbox's cached page predates this move; drop the cache so
+      // switching to it fetches a list that actually contains the message.
+      invalidateMessagesCache();
     },
-    [rowKey]
+    [rowKey, invalidateMessagesCache]
   );
 
   /* ── Drag & drop ──────────────────────────────────────────────────────────────
@@ -2570,19 +3165,15 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
           if (!applied) return;
           // Same as "Move to → label": tag it, then take it out of the Inbox.
           if (activeModule === "inbox") await runAction("archive");
-          const label = labels.find((entry) => entry.id === labelId);
-          showSentToast(`Moved to "${label?.name || "label"}"`);
         } else {
           const action = MESSAGE_DROP_ACTIONS[destination];
           if (!action) return;
           const response = await runAction(action);
           if (!response.ok) return;
-          const target = MODULES.find((item) => item.key === destination);
-          showSentToast(`Moved ${rows.length === 1 ? "message" : `${rows.length} messages`} to ${target?.label || destination}`);
         }
         // Update in place — the moved rows just leave the list. No mailbox re-fetch.
         removeRowsLocally(rows);
-        void Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
+        void loadMailboxCounts();
       } catch {
         /* transient — the list refresh below/next poll reconciles */
       }
@@ -2591,11 +3182,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       MESSAGE_DROP_ACTIONS,
       activeModule,
       applyLabelToSelection,
-      labels,
       loadMailboxCounts,
-      loadUnreadBadges,
       removeRowsLocally,
-      showSentToast,
     ]
   );
 
@@ -2635,14 +3223,12 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       }
       const moved = await applyLabelToSelection(labelId, rows);
       if (moved) {
-        const label = labels.find((entry) => entry.id === labelId);
-        showSentToast(`Moved to "${label?.name || "label"}"`);
         // Filing under a label means leaving the Inbox; archive quietly, then drop the rows
         // from the list in place rather than re-fetching the whole mailbox.
         if (activeModule === "inbox") await archiveRowsQuietly(rows);
         removeRowsLocally(rows);
         if (viewMode === "message") setViewMode("list");
-        void Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
+        void loadMailboxCounts();
       }
       return;
     }
@@ -2664,49 +3250,89 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, items }),
     })
-      .then(() => Promise.all([loadMailboxCounts(), loadUnreadBadges()]))
+      .then(() => loadMailboxCounts())
       .catch(() => setActionError("Failed to move the message."));
   };
 
-  const openReplyCompose = () => {
+  /**
+   * Open the inline composer as a reply, with everything a reply shares: the Re: subject, the
+   * threading headers, and a cleared body.
+   *
+   * Reply and Reply all differ only in the recipient list. They were two copies of this, which is
+   * why the References fix — the parent Message-ID that was missing from the chain — had to be
+   * applied twice and could have been applied to only one.
+   */
+  const beginInlineReply = (mode: "reply" | "replyAll", to: string) => {
     if (!selectedMessage) return;
     const latest = threadMessages[threadMessages.length - 1];
-    setInlineComposeMode("reply");
-    setInlineComposeTo(parseMailboxAddress(latest?.replyTo || selectedMessage.replyTo || selectedMessage.fromRaw || selectedMessage.from).email);
+    setInlineComposeMode(mode);
+    setInlineComposeIntroHtml("");
+    setInlineComposeCc("");
+    setInlineComposeBcc("");
+    setInlineShowCc(false);
+    setInlineShowBcc(false);
+    setInlineToEditing(false);
+    setInlineShowFormatting(false);
+    setInlineMoreOpen(false);
+    setInlineComposeTo(to);
     setInlineComposeSubject(
       /^re:/i.test(selectedMessage.subject || "") ? selectedMessage.subject : `Re: ${selectedMessage.subject || ""}`
     );
     setInlineComposeIntroText("");
-    setInlineComposeBodyText("");
-    setInlineComposeBodyHtml("");
-    setInlineComposePreviewHtml("");
+    // Quote the message being replied to, as Gmail does. This used to be cleared, so a reply
+    // carried none of the original AND the "⋯" that reveals it had nothing to show, which is
+    // why the control looked missing — it was rendering conditionally on an always-empty value.
+    {
+      const sourceHtml = latest?.bodyHtml || selectedMessageDetail?.bodyHtml || "";
+      const sourceText = latest?.bodyText || selectedMessageDetail?.bodyText || selectedMessage.snippet || "";
+      const quotedFrom = formatIdentity(latest?.fromRaw || selectedMessage.fromRaw || selectedMessage.from);
+      const quotedDate = formatDetailedDate(latest?.timestamp || selectedMessage.timestamp, latest?.date || selectedMessage.date);
+      const safeHtml = sourceHtml
+        ? sanitizeHtml(sourceHtml)
+        : `<div style="white-space:pre-wrap;">${escapeHtml(sourceText)}</div>`;
+      const quotedHtml = `<div style="border-left:2px solid #D1D5DB;padding-left:12px;margin-top:8px;color:#4B5563;">
+      <p style="font-size:12px;margin:0 0 10px;">On ${escapeHtml(quotedDate)}, ${escapeHtml(quotedFrom)} wrote:</p>
+      <div>${safeHtml}</div>
+    </div>`;
+      setInlineComposeBodyText(`\n\nOn ${quotedDate}, ${quotedFrom} wrote:\n${sourceText}`);
+      setInlineComposeBodyHtml(quotedHtml);
+      setInlineComposePreviewHtml(quotedHtml);
+    }
     setInlineComposeThreadId(selectedMessage.threadId || latest?.threadId || "");
     setInlineComposeInReplyTo(latest?.messageIdHeader || selectedMessage.messageIdHeader || "");
-    setInlineComposeReferences(latest?.references || selectedMessage.references || "");
+    setInlineComposeReferences(
+      buildReplyReferences(
+        latest?.references || selectedMessage.references,
+        latest?.messageIdHeader || selectedMessage.messageIdHeader
+      )
+    );
     setInlineComposeError("");
     setInlineComposeSuccess("");
+  };
+
+  /** The address a reply goes to: Reply-To when the sender set one, otherwise who it came from. */
+  const replyRecipient = () => {
+    if (!selectedMessage) return "";
+    const latest = threadMessages[threadMessages.length - 1];
+    return parseMailboxAddress(
+      latest?.replyTo || selectedMessage.replyTo || selectedMessage.fromRaw || selectedMessage.from
+    ).email;
+  };
+
+  const openReplyCompose = () => {
+    if (!selectedMessage) return;
+    beginInlineReply("reply", replyRecipient());
   };
 
   const openReplyAllCompose = () => {
     if (!selectedMessage) return;
     const latest = threadMessages[threadMessages.length - 1];
-    const fromIdentity = parseMailboxAddress(latest?.replyTo || selectedMessage.replyTo || selectedMessage.fromRaw || selectedMessage.from);
     const toList = parseAddressList(latest?.toRaw || selectedMessage.toRaw || selectedMessage.to);
-    const uniqueEmails = Array.from(new Set([fromIdentity.email, ...toList.map((entry) => entry.email)].filter(Boolean)));
-    setInlineComposeMode("replyAll");
-    setInlineComposeTo(uniqueEmails.join(", "));
-    setInlineComposeSubject(
-      /^re:/i.test(selectedMessage.subject || "") ? selectedMessage.subject : `Re: ${selectedMessage.subject || ""}`
+    // Everyone on the original, deduped, with the sender first.
+    const uniqueEmails = Array.from(
+      new Set([replyRecipient(), ...toList.map((entry) => entry.email)].filter(Boolean))
     );
-    setInlineComposeIntroText("");
-    setInlineComposeBodyText("");
-    setInlineComposeBodyHtml("");
-    setInlineComposePreviewHtml("");
-    setInlineComposeThreadId(selectedMessage.threadId || latest?.threadId || "");
-    setInlineComposeInReplyTo(latest?.messageIdHeader || selectedMessage.messageIdHeader || "");
-    setInlineComposeReferences(latest?.references || selectedMessage.references || "");
-    setInlineComposeError("");
-    setInlineComposeSuccess("");
+    beginInlineReply("replyAll", uniqueEmails.join(", "));
   };
 
   const openForwardCompose = () => {
@@ -2753,7 +3379,18 @@ ${sourceText}`;
     const intro = inlineComposeIntroText.trim();
     const textBody = intro ? `${intro}\n\n${inlineComposeBodyText}` : inlineComposeBodyText || intro;
     if (!textBody.trim()) return;
-    const introHtml = intro ? `<div>${linkifyTextForHtml(intro)}</div><br>` : "";
+    const inlineCcError = validateRecipientCsv("Cc", inlineComposeCc);
+    const inlineBccError = validateRecipientCsv("Bcc", inlineComposeBcc);
+    if (inlineCcError || inlineBccError) {
+      setInlineComposeError(inlineCcError || inlineBccError || "");
+      return;
+    }
+    // The editor's own markup wins when it has any; linkified plain text is the fallback for a
+    // draft restored before the rich editor mounted.
+    const introRich = inlineComposeIntroHtml.replace(/<[^>]+>/g, "").replace(/&nbsp;/gi, " ").trim()
+      ? inlineComposeIntroHtml
+      : "";
+    const introHtml = introRich ? `${introRich}<br>` : intro ? `<div>${linkifyTextForHtml(intro)}</div><br>` : "";
     const htmlBody = inlineComposeBodyHtml ? `${introHtml}${inlineComposeBodyHtml}` : introHtml || linkifyTextForHtml(textBody);
 
     setInlineComposeSending(true);
@@ -2766,6 +3403,8 @@ ${sourceText}`;
         body: JSON.stringify({
           accountEmail: selectedMessage.accountEmail,
           to: inlineComposeTo.trim(),
+          cc: inlineComposeCc.trim() || undefined,
+          bcc: inlineComposeBcc.trim() || undefined,
           subject: inlineComposeSubject.trim(),
           body: textBody,
           bodyHtml: htmlBody,
@@ -2789,7 +3428,7 @@ ${sourceText}`;
       showSentToast("Message Sent");
       setInlineComposeMode(null);
       invalidateMessagesCache();
-      void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
+      void Promise.all([loadMessages(), loadMailboxCounts()]);
       setDetailError("");
       setSelectedMessageDetail(null);
     } catch (error) {
@@ -2853,7 +3492,8 @@ ${sourceText}`;
     setComposeBody("");
     setComposeBodyHtml("");
     setComposeAttachments([]);
-    setComposeTemplateMenuOpen(false);
+    setComposeMoreOpen(false);
+    setArtemisRewriteOpen(false);
     setComposeFormattingToolbarOpen(false);
     setScheduleAt("");
     setScheduleOpen(false);
@@ -2894,22 +3534,58 @@ ${sourceText}`;
     loadLabels();
   }, [loadLabels]);
 
-  // Load verified send-as aliases for the composing account (for the From selector).
+  /**
+   * Load send-as identities for every connected mailbox, not just the active one.
+   *
+   * These used to be fetched for composeAccountEmail alone, which made aliases undiscoverable:
+   * opening compose on a mailbox with no aliases showed none, and the only way to reach an
+   * alias on another mailbox was to already know it was there and switch accounts first. Now
+   * every address the user can legitimately send from is in the list up front, each tagged with
+   * the mailbox that owns it (Gmail rejects sending as an alias through a mailbox that doesn't).
+   */
+  const composeAliasAccountsKey = useMemo(
+    () => (selectedAccounts.length > 0 ? selectedAccounts : connectedAccounts.map((a) => a.email)).join(","),
+    [selectedAccounts, connectedAccounts]
+  );
   useEffect(() => {
-    if (!isComposeOpen || !composeAccountEmail) return;
+    if (!isComposeOpen) return;
+    const accounts = composeAliasAccountsKey.split(",").filter(Boolean);
+    if (accounts.length === 0) return;
     let cancelled = false;
-    setComposeFrom(composeAccountEmail);
-    fetch(`/api/gmail/send-as?accountEmail=${encodeURIComponent(composeAccountEmail)}`)
-      .then((response) => response.json())
-      .then((payload) => {
-        if (!cancelled) setComposeAliases(Array.isArray(payload?.aliases) ? payload.aliases : []);
+    Promise.all(
+      accounts.map(async (accountEmail) => {
+        const response = await fetch(`/api/gmail/send-as?accountEmail=${encodeURIComponent(accountEmail)}`);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(`${accountEmail}: ${payload?.message || "failed to load send-as addresses"}`);
+        }
+        const aliases: Array<{ email: string; displayName: string; isPrimary: boolean }> = Array.isArray(
+          payload?.aliases
+        )
+          ? payload.aliases
+          : [];
+        return aliases.map((alias) => ({ ...alias, accountEmail }));
       })
-      .catch(() => {
-        if (!cancelled) setComposeAliases([]);
+    )
+      .then((perAccount) => {
+        if (!cancelled) setComposeAliases(perAccount.flat());
+      })
+      // A failure used to be indistinguishable from "this account has no aliases" — both ended
+      // as an empty list — so a broken fetch looked like the feature not existing.
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setComposeAliases([]);
+        setComposeError(
+          `Couldn't load your send-as addresses: ${error instanceof Error ? error.message : "unknown error"}`
+        );
       });
     return () => {
       cancelled = true;
     };
+  }, [isComposeOpen, composeAliasAccountsKey]);
+
+  useEffect(() => {
+    if (isComposeOpen && composeAccountEmail) setComposeFrom(composeAccountEmail);
   }, [isComposeOpen, composeAccountEmail]);
 
   const openLabel = (label: { id: string; name: string }) => {
@@ -2930,7 +3606,10 @@ ${sourceText}`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accountEmail: selectedMessage.accountEmail, messageId: selectedMessage.id, labelId }),
       });
-      if (response.ok) {
+      // A partial-failure bulk response still comes back as HTTP 207 (in the 2xx range, so
+      // response.ok alone doesn't distinguish it) — check the payload's own ok flag too.
+      const payload = await response.json().catch(() => null);
+      if (response.ok && payload?.ok) {
         const label = labels.find((entry) => entry.id === labelId);
         showSentToast(`Labeled${label ? ` "${label.name}"` : ""}`);
       }
@@ -3045,25 +3724,28 @@ ${sourceText}`;
     setArtemisPromptOpen(true);
   };
 
-  const runArtemisDraft = async (intent: string) => {
-    if (!intent.trim() || artemisDrafting) return;
-    setArtemisPromptOpen(false);
+  /**
+   * Ask Artemis for body text and put the result in the composer.
+   *
+   * Drafting and rewriting were the same twenty lines twice over, differing only in the endpoint,
+   * the request body and the error wording — including their own private copies of the
+   * plain-text-to-HTML conversion, which is the part that would quietly diverge.
+   */
+  const runArtemis = async (endpoint: string, body: Record<string, unknown>, failureMessage: string) => {
     setArtemisDrafting(true);
     setComposeError("");
     try {
-      const response = await fetch("/api/ai/compose", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intent: intent.trim(), tone: getArtemisTone() }),
+        body: JSON.stringify(body),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.message || "Artemis couldn't draft that.");
+      if (!response.ok) throw new Error(payload?.message || failureMessage);
       const text = String(payload?.text || "").trim();
-      if (text) {
-        setComposeBody(text);
-        const esc = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        setComposeBodyHtml(`<p>${esc(text).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br />")}</p>`);
-      }
+      if (!text) return;
+      setComposeBody(text);
+      setComposeBodyHtml(`<p>${escapeHtml(text).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br />")}</p>`);
     } catch (error) {
       setComposeError(error instanceof Error ? error.message : "Artemis error.");
     } finally {
@@ -3071,74 +3753,24 @@ ${sourceText}`;
     }
   };
 
-  const buildThreadContext = () =>
-    threadMessages
-      .map((message) => {
-        const who = parseMailboxAddress(message.fromRaw || "").name || message.fromRaw || "Unknown";
-        const body = (message.bodyText || message.snippet || "").trim();
-        return `From: ${who}\n${body}`;
-      })
-      .join("\n\n---\n\n")
-      .slice(0, 12000);
-
-  const handleArtemisSummarize = async () => {
-    if (artemisSummaryLoading) return;
-    const thread = buildThreadContext();
-    if (!thread) return;
-    setArtemisSummaryLoading(true);
-    setArtemisSummary("");
-    try {
-      const response = await fetch("/api/ai/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ thread }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.message || "Couldn't summarize.");
-      setArtemisSummary(String(payload?.text || "").trim());
-    } catch (error) {
-      setArtemisSummary(`⚠ ${error instanceof Error ? error.message : "Error"}`);
-    } finally {
-      setArtemisSummaryLoading(false);
-    }
+  const runArtemisDraft = async (intent: string) => {
+    if (!intent.trim() || artemisDrafting) return;
+    setArtemisPromptOpen(false);
+    await runArtemis("/api/ai/compose", { intent: intent.trim(), tone: getArtemisTone() }, "Artemis couldn't draft that.");
   };
 
   const handleArtemisRewrite = async (mode: string) => {
     setArtemisRewriteOpen(false);
     const current = (composeBody || "").trim();
     if (!current || artemisDrafting) return;
-    setArtemisDrafting(true);
-    setComposeError("");
-    try {
-      const response = await fetch("/api/ai/rewrite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: current, mode }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload?.message || "Artemis couldn't rewrite that.");
-      const text = String(payload?.text || "").trim();
-      if (text) {
-        setComposeBody(text);
-        const esc = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        setComposeBodyHtml(`<p>${esc(text).replace(/\n{2,}/g, "</p><p>").replace(/\n/g, "<br />")}</p>`);
-      }
-    } catch (error) {
-      setComposeError(error instanceof Error ? error.message : "Artemis error.");
-    } finally {
-      setArtemisDrafting(false);
-    }
+    await runArtemis("/api/ai/rewrite", { text: current, mode }, "Artemis couldn't rewrite that.");
   };
 
-  const performSendCompose = async () => {
-    setSendingCompose(true);
-    setComposeError("");
-    setComposeSuccess("");
-    try {
-      const response = await fetch("/api/gmail/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+  /**
+   * The send request body. Extracted so the undo window can hold the exact same payload and flush
+   * it if the page goes away mid-countdown.
+   */
+  const buildSendPayload = () => ({
           accountEmail: composeAccountEmail,
           from: composeFrom && composeFrom !== composeAccountEmail ? composeFrom : undefined,
           to: composeTo.trim(),
@@ -3163,7 +3795,19 @@ ${sourceText}`;
             contentType: a.contentType,
             contentBase64: a.contentBase64,
           })),
-        }),
+  });
+
+  const performSendCompose = async () => {
+    // Being sent now, so there is nothing left for the unload path to flush.
+    pendingSendBodyRef.current = null;
+    setSendingCompose(true);
+    setComposeError("");
+    setComposeSuccess("");
+    try {
+      const response = await fetch("/api/gmail/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildSendPayload()),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -3202,9 +3846,9 @@ ${sourceText}`;
       setRequestReceipt(false);
       if (activeModule === "sent" || activeModule === "drafts") {
         invalidateMessagesCache();
-        void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
+        void Promise.all([loadMessages(), loadMailboxCounts()]);
       } else {
-        void Promise.all([loadMailboxCounts(), loadUnreadBadges()]);
+        void loadMailboxCounts();
       }
     } catch (error) {
       setComposeError(error instanceof Error ? error.message : "Failed to send email.");
@@ -3214,6 +3858,8 @@ ${sourceText}`;
   };
 
   const cancelUndoSend = () => {
+    // Undo is the one path that genuinely discards the pending send.
+    pendingSendBodyRef.current = null;
     if (undoSendTimeoutRef.current) {
       clearTimeout(undoSendTimeoutRef.current);
       undoSendTimeoutRef.current = null;
@@ -3230,7 +3876,17 @@ ${sourceText}`;
   // running would send a message the user just tried to abort (and could clobber a fresh draft).
   const closeCompose = () => {
     cancelUndoSend();
+    // The autosave is debounced 450ms and its cleanup cancels the pending write, so closing
+    // right after a keystroke dropped those edits. Flush synchronously first, then resync the
+    // Drafts badge so the count reflects a draft created by this close.
+    flushDraftsNow();
     setIsComposeOpen(false);
+    void loadMailboxCounts();
+    // Closing a compose can create, update or empty a draft, so the cached Drafts page is now
+    // stale. Only the badge was refreshed before, which left the Drafts LIST showing the old
+    // contents until a manual refresh. Drop the cache and, if that list is on screen, refetch it.
+    invalidateMessagesCache();
+    if (activeModule === "drafts") void loadMessages();
   };
 
   // Undo-send: hold the message for a short window with an Undo affordance, then actually send.
@@ -3266,6 +3922,7 @@ ${sourceText}`;
     }
     setComposeError("");
     setUndoCountdown(delay);
+    pendingSendBodyRef.current = JSON.stringify(buildSendPayload());
     undoSendTimeoutRef.current = setTimeout(() => {
       cancelUndoSend();
       void performSendCompose();
@@ -3275,8 +3932,50 @@ ${sourceText}`;
     }, 1000);
   };
 
+  /**
+   * Send anything still inside its undo window when the page goes away.
+   *
+   * sendBeacon is built for exactly this and survives unload, where a normal fetch is cancelled. It
+   * caps the payload at roughly 64KB, so a message with attachments can be too big to flush — in
+   * that case beforeunload asks the user to stay rather than losing it silently. The user pressed
+   * Send, so completing the send is the expected outcome of leaving; only undo cancels it.
+   */
   useEffect(() => {
+    const flushPendingSend = () => {
+      const body = pendingSendBodyRef.current;
+      if (!body) return true;
+      try {
+        const sent = navigator.sendBeacon?.(
+          "/api/gmail/send",
+          new Blob([body], { type: "application/json" })
+        );
+        if (sent) {
+          pendingSendBodyRef.current = null;
+          return true;
+        }
+      } catch {
+        /* fall through to reporting that it could not be flushed */
+      }
+      return false;
+    };
+
+    const handlePageHide = () => {
+      flushPendingSend();
+    };
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!pendingSendBodyRef.current) return;
+      if (flushPendingSend()) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("beforeunload", handleBeforeUnload);
     return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      // Unmounting mid-countdown is a navigation away, not an undo: flush rather than drop.
+      flushPendingSend();
       if (undoSendTimeoutRef.current) clearTimeout(undoSendTimeoutRef.current);
       if (undoCountdownRef.current) clearInterval(undoCountdownRef.current);
     };
@@ -3316,7 +4015,8 @@ ${sourceText}`;
     const additionBytes = additions.reduce((sum, a) => sum + decodedBytes(a.contentBase64), 0);
     if (currentBytes + additionBytes > MAX_TOTAL_ATTACHMENT_BYTES) {
       setComposeError(
-        `Attachments exceed the ${Math.round(MAX_TOTAL_ATTACHMENT_BYTES / (1024 * 1024))} MB limit — remove some and try again.`
+        `Attachments exceed the ${Math.round(MAX_TOTAL_ATTACHMENT_BYTES / (1024 * 1024))} MB limit — ` +
+          `send a link instead, or split them across messages.`
       );
       return;
     }
@@ -3392,7 +4092,7 @@ ${sourceText}`;
         value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
       setComposeBodyHtml(`<p>${esc(raw).replace(/\n/g, "<br />")}</p>`);
     }
-    setComposeTemplateMenuOpen(false);
+    setComposeMoreOpen(false);
   };
 
   // Append a chosen signature to the end of the current body (unlike templates, which replace it).
@@ -3406,7 +4106,7 @@ ${sourceText}`;
         : `<p>${escSig(sig.signatureText || "").replace(/\n/g, "<br />")}</p>`;
     setComposeBodyHtml((prev) => `${prev || ""}<p><br /></p>${sigHtml}`);
     setComposeBody((prev) => `${(prev || "").replace(/\s+$/, "")}\n\n${sig.signatureText || ""}`.trim());
-    setComposeSignatureMenuOpen(false);
+    setComposeMoreOpen(false);
   };
 
   const handlePrintCompose = () => {
@@ -3438,8 +4138,14 @@ ${sourceText}`;
       return Number.isFinite(draftCount) && draftCount > 0 ? draftCount : 0;
     }
     if (!BADGE_MODULES.has(moduleKey)) return 0;
-    const countMap: Record<"inbox" | "sent" | "drafts" | "archive" | "spam" | "trash", number> = moduleUnreadBadges;
-    const count = countMap[moduleKey as keyof typeof countMap];
+    // Starred isn't a mailbox we page through, so its unread count comes from the label totals
+    // rather than from the currently-loaded page of rows.
+    if (moduleKey === "starred") {
+      const starredUnread = Number(mailboxCounts.starred || 0);
+      return Number.isFinite(starredUnread) && starredUnread > 0 ? starredUnread : 0;
+    }
+    const countMap: Record<string, number> = moduleUnreadBadges as unknown as Record<string, number>;
+    const count = countMap[moduleKey];
     return Number.isFinite(count) && count > 0 ? count : 0;
   };
 
@@ -3493,7 +4199,11 @@ ${sourceText}`;
       byAccount.set(message.accountEmail, list);
     }
     let cancelled = false;
-    (async () => {
+    // Hold the scan back briefly. It pulls full bodies for the page, so firing it the moment
+    // the list paints put ~60 requests in flight against the same connection the mailbox and
+    // reader are using — the list felt slow because the scan was competing with it.
+    const startDelay = setTimeout(() => {
+      void (async () => {
       for (const [accountEmail, messageIds] of byAccount) {
         try {
           const response = await fetch("/api/gmail/tracker-scan", {
@@ -3510,9 +4220,11 @@ ${sourceText}`;
           /* a failed scan just leaves those rows dot-less */
         }
       }
-    })();
+      })();
+    }, 700);
     return () => {
       cancelled = true;
+      clearTimeout(startDelay);
     };
   }, [conversationRows, messagesLoading]);
 
@@ -3529,6 +4241,17 @@ ${sourceText}`;
   // The toolbar stays fully populated on an empty mailbox — an empty Inbox should still show
   // its count, refresh, search and paging, exactly like a full one. Only select-all is
   // disabled, since there is genuinely nothing to select.
+  /**
+   * Whether this view may move messages between mailboxes (Move To, Archive).
+   *
+   * One predicate rather than the module name repeated at each control: this rule was missed at some
+   * of them twice, leaving Archive live in a view it had already been removed from.
+   *
+   * Starred is a label, not a mailbox, so moving out of it (Archive included) is disorienting. Sent
+   * is a record of what was sent — filing those into other mailboxes has no meaning.
+   */
+  const allowsMailboxMoves = activeModule !== "starred" && activeModule !== "sent";
+
   const mailboxListIsEmpty = !messagesLoading && conversationRows.length === 0;
   const showListSearch = true;
   const showListPaging = true;
@@ -3960,24 +4683,52 @@ ${sourceText}`;
                                     type="button"
                                     onClick={() => {
                                       invalidateMessagesCache();
-                                      void Promise.all([loadMessages(), loadMailboxCounts(), loadUnreadBadges()]);
+                                      void Promise.all([loadMessages(), loadMailboxCounts()]);
                                     }}
                                     disabled={messagesLoading}
-                                    className={`${ICON_BUTTON_SOLID} email-tip`}
+                                    className={`${ICON_BUTTON} email-tip`}
                                     aria-label="Refresh"
                                     data-tip="Refresh"
                                   >
                                     <MdRefresh className={`h-[18px] w-[18px] ${messagesLoading ? "motion-safe:animate-spin" : ""}`} />
                                   </button>
+                                  {/* Starred-only: the useful action here is removing the star. Placed
+                                      between Refresh and Trash, replacing Move To / Archive — moving a
+                                      starred message out of the view it lives in was disorienting, and
+                                      Starred is a label view rather than a mailbox. */}
+                                  {activeModule === "starred" && hasSelectedEmails ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => void unstarSelected()}
+                                      disabled={actionLoading}
+                                      className={`${ICON_BUTTON} email-tip`}
+                                      aria-label="Unstar"
+                                      data-tip="Unstar"
+                                    >
+                                      <FiStar className="h-4 w-4 fill-[#F5A623]" />
+                                    </button>
+                                  ) : null}
+                                  {/* Spam-only: restore to the inbox and tell Gmail it isn't spam. */}
+                                  {activeModule === "spam" && hasSelectedEmails ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => applyAction("unspam")}
+                                      className={`${ICON_BUTTON} email-tip`}
+                                      aria-label="Mark As Not Spam"
+                                      data-tip="Mark As Not Spam"
+                                    >
+                                      <FiShield className="h-4 w-4" />
+                                    </button>
+                                  ) : null}
                                 </>
                               ) : null}
                               {hasSelectedEmails ? (
                                 <>
                                   <button
                                     type="button"
-                                    onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
-                                    className={`${ICON_BUTTON_SOLID} email-tip`}
-                                    data-tip={activeModule === "trash" ? "Delete Permanently" : "Move To Trash"}
+                                    onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
+                                    className={`${ICON_BUTTON} email-tip`}
+                                    data-tip={deletesPermanently ? "Delete Permanently" : "Move To Trash"}
                                   >
                                     <FiTrash2 className="w-4 h-4" />
                                   </button>
@@ -3989,7 +4740,7 @@ ${sourceText}`;
                                       <button
                                         type="button"
                                         onClick={() => applyAction(selectionHasUnread ? "markRead" : "markUnread")}
-                                        className={`${ICON_BUTTON_SOLID} email-tip`}
+                                        className={`${ICON_BUTTON} email-tip`}
                                         aria-label={selectionHasUnread ? "Mark As Read" : "Mark As Unread"}
                                         data-tip={selectionHasUnread ? "Mark As Read" : "Mark As Unread"}
                                       >
@@ -4001,82 +4752,50 @@ ${sourceText}`;
                                       </button>
                                     </>
                                   ) : null}
-                                  {activeModule !== "drafts" ? (
+                                  {activeModule !== "drafts" && allowsMailboxMoves ? (
                                     <div ref={moveListMenuRef} className="relative">
                                       <button
                                         type="button"
                                         onClick={() => setMoveMenuOpen((prev) => (prev === "list" ? null : "list"))}
-                                        className={`${ICON_BUTTON_SOLID} email-tip`}
+                                        className={`${ICON_BUTTON} email-tip`}
                                         aria-label="Move To"
                                         data-tip="Move To"
                                       >
                                         <FiMove className="w-4 h-4" />
                                       </button>
                                       {moveMenuOpen === "list" ? (
-                                        <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 min-w-[210px] overflow-hidden rounded-xl shadow-2xl">
-                                          <div className="email-menu-heading">Move to</div>
-                                          {moveToOptions
-                                            .filter((option) => !option.value.startsWith("label:"))
-                                            .map((option) => (
-                                              <button
-                                                key={`list-move-${option.value}`}
-                                                type="button"
-                                                onClick={() => handleMoveToChange(option.value)}
-                                                className="email-menu-item flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm"
-                                              >
-                                                {option.value === "inbox" ? <FiInbox className="h-4 w-4 shrink-0" /> : null}
-                                                {option.value === "archive" ? <FiArchive className="h-4 w-4 shrink-0" /> : null}
-                                                {option.value === "spam" ? <FiSlash className="h-4 w-4 shrink-0" /> : null}
-                                                {option.value === "trash" ? <FiTrash2 className="h-4 w-4 shrink-0" /> : null}
-                                                <span className="truncate">{option.label}</span>
-                                              </button>
-                                            ))}
-                                          {moveToOptions.some((option) => option.value.startsWith("label:")) ? (
-                                            <>
-                                              <div className="email-menu-heading border-t border-white/[0.07]">Labels</div>
-                                              <div className="max-h-56 overflow-y-auto">
-                                                {moveToOptions
-                                                  .filter((option) => option.value.startsWith("label:"))
-                                                  .map((option) => (
-                                                    <button
-                                                      key={`list-move-${option.value}`}
-                                                      type="button"
-                                                      onClick={() => handleMoveToChange(option.value)}
-                                                      className="email-menu-item flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm"
-                                                    >
-                                                      <FiTag className="h-4 w-4 shrink-0" />
-                                                      <span className="truncate">{option.label}</span>
-                                                    </button>
-                                                  ))}
-                                              </div>
-                                            </>
-                                          ) : null}
-                                        </div>
+                                        <MoveToMenu options={moveToOptions} onSelect={handleMoveToChange} keyPrefix="list-move" />
                                       ) : null}
                                     </div>
                                   ) : null}
+                                  {/* Archive is hidden in Starred for the same reason as Move To:
+                                      Starred is a label view, so archiving from it just makes the
+                                      message vanish from where you were working. Unstar is the
+                                      meaningful action and sits by Refresh. */}
                                   {activeModule !== "drafts" ? (
                                     <>
-                                      <button
-                                        type="button"
-                                        onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                                        className={`${ICON_BUTTON_SOLID} email-tip`}
-                                        data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
-                                      >
-                                        <FiArchive className="w-4 h-4" />
-                                      </button>
-                                      <div className="relative">
+                                      {allowsMailboxMoves ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
+                                          className={`${ICON_BUTTON} email-tip`}
+                                          data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
+                                        >
+                                          <FiArchive className="w-4 h-4" />
+                                        </button>
+                                      ) : null}
+                                      <div ref={snoozeMenuRef} className="relative">
                                         <button
                                           type="button"
                                           onClick={() => setSnoozeMenuOpen((open) => !open)}
-                                          className={`${ICON_BUTTON_SOLID} email-tip`}
+                                          className={`${ICON_BUTTON} email-tip`}
                                           data-tip="Snooze"
                                           aria-label="Snooze"
                                         >
                                           <FiClock className="w-4 h-4" />
                                         </button>
                                         {snoozeMenuOpen ? (
-                                          <div className="email-menu absolute z-[130] mt-1 w-44 overflow-hidden rounded-lg shadow-lg">
+                                          <div className="email-menu absolute z-[130] mt-1.5 w-44">
                                             {(
                                               [
                                                 ["later", "Later today"],
@@ -4088,7 +4807,7 @@ ${sourceText}`;
                                                 key={preset}
                                                 type="button"
                                                 onClick={() => snoozeSelected(preset)}
-                                                className="email-menu-item block w-full px-3 py-2 text-left text-sm"
+                                                className="email-menu-item block w-full px-2.5 py-[7px] text-left text-[12.5px] font-medium"
                                               >
                                                 {label}
                                               </button>
@@ -4107,7 +4826,7 @@ ${sourceText}`;
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     placeholder="Search"
-                                    className="w-full border-0 bg-transparent text-sm text-[#D6D1E6] placeholder:text-[#6F6889] shadow-none outline-none focus:ring-0"
+                                    className="w-full border-0 bg-transparent text-sm text-[#D6D1E6] placeholder:text-[#857F9B] shadow-none outline-none focus:ring-0"
                                   />
                                   {searchTerm.trim() ? (
                                     <button
@@ -4541,9 +5260,20 @@ ${sourceText}`;
                                   type="button"
                                   /* Drag onto a sidebar mailbox or label to move it there.
                                      Compose drafts live only locally, so they aren't draggable. */
-                                  draggable={!message.isComposeDraft}
+                                  /* Dragging a row onto a sidebar mailbox moves it there, so it is
+                                     off wherever moving between mailboxes is not allowed — otherwise
+                                     it would be a way around the hidden Move To and Archive. */
+                                  draggable={!message.isComposeDraft && allowsMailboxMoves}
                                   onDragStart={(event) => startMessageDrag(event, message)}
                                   onDragEnd={endMessageDrag}
+                                  /* Warm the reader while the pointer is on the row, so opening
+                                     it is usually a cache hit rather than a fresh round trip. */
+                                  onMouseEnter={() => {
+                                    if (!message.isComposeDraft) void fetchDetailInto(message.accountEmail, message.id);
+                                  }}
+                                  onFocus={() => {
+                                    if (!message.isComposeDraft) void fetchDetailInto(message.accountEmail, message.id);
+                                  }}
                                   onClick={() => {
                                     if (message.isComposeDraft) {
                                       openComposeDraftFromRow(message);
@@ -4581,37 +5311,40 @@ ${sourceText}`;
                                     >
                                       <FiStar className={`h-4 w-4 ${message.starred ? "fill-[#F5A623]" : ""}`} aria-hidden />
                                     </span>
-                                    {/* ONE status slot, same 16px box as the checkbox and star so the
-                                        pitch is uniform. (There used to be a second, usually-empty
-                                        slot here for outbound tracking — its width plus the flex gap
-                                        was the phantom space between the star and this dot.)
-                                        Outbound tracking wins on sent mail; otherwise it reports an
-                                        incoming beacon. */}
+                                    {/* Tracking status. Outbound (mail we sent, with our tracker)
+                                        shows a green CHECK; incoming mail carrying someone else's
+                                        beacon shows a DOT. Same 16px box as the checkbox and star
+                                        so the gutter keeps a uniform pitch. */}
                                     <span
                                       className={`flex w-4 shrink-0 items-center justify-center ${
                                         message.tracked || incomingTracker?.tracked ? "email-tip" : ""
                                       }`}
                                       data-tip={
-                                        message.tracked && incomingTracker?.tracked
-                                          ? `${outboundTip} · Incoming tracker: ${incomingTracker.vendors.length ? incomingTracker.vendors.join(", ") : `${incomingTracker.count} beacon${incomingTracker.count === 1 ? "" : "s"}`}`
-                                          : message.tracked
-                                            ? outboundTip
-                                            : incomingTracker?.tracked
-                                              ? `Email tracked · ${incomingTracker.vendors.length ? incomingTracker.vendors.join(", ") : `${incomingTracker.count} beacon${incomingTracker.count === 1 ? "" : "s"}`}`
-                                              : undefined
+                                        message.tracked
+                                          ? outboundTip
+                                          : incomingTracker?.tracked
+                                            ? `Incoming Tracker · ${
+                                                incomingTracker.vendors.length
+                                                  ? incomingTracker.vendors.join(", ")
+                                                  : `${incomingTracker.count} Beacon${incomingTracker.count === 1 ? "" : "s"}`
+                                              }`
+                                            : undefined
                                       }
                                       aria-label={
                                         message.tracked
                                           ? openCount > 0
-                                            ? "Opened by recipient"
+                                            ? "Tracked, opened by recipient"
                                             : "Tracked, not yet opened"
                                           : incomingTracker?.tracked
-                                            ? "Email tracked"
+                                            ? "Contains a tracking pixel"
                                             : undefined
                                       }
                                     >
                                       {message.tracked ? (
-                                        <span className={`h-1.5 w-1.5 rounded-full ${openCount > 0 ? "bg-[#22C55E]" : "bg-[#6F6889]"}`} />
+                                        <FiCheck
+                                          className={`h-3.5 w-3.5 ${openCount > 0 ? "text-[#22C55E]" : "text-[#6F6889]"}`}
+                                          aria-hidden
+                                        />
                                       ) : incomingTracker?.tracked ? (
                                         <span className="h-1.5 w-1.5 rounded-full bg-[#22C55E]" />
                                       ) : null}
@@ -4636,15 +5369,6 @@ ${sourceText}`;
 
                                   {/* Subject leads, snippet trails in a quieter tone. */}
                                   <span className="flex min-w-0 items-center gap-2">
-                                    {message.threadCount && message.threadCount > 1 ? (
-                                      <span
-                                        className="email-tip flex shrink-0 items-center text-[#8F88A8]"
-                                        data-tip={`${message.threadCount} messages in this conversation`}
-                                        aria-label={`${message.threadCount} messages in this conversation`}
-                                      >
-                                        <FiCornerUpRight className="h-3.5 w-3.5" aria-hidden />
-                                      </span>
-                                    ) : null}
                                     <span className="min-w-0 truncate text-[13px]">
                                       <span className={message.unread ? "font-semibold text-white" : "font-normal text-[#CFC9E0]"}>
                                         {message.subject || "(No Subject)"}
@@ -4691,15 +5415,18 @@ ${sourceText}`;
                           <FiChevronsRight className="w-4 h-4 rotate-180" />
                           Back
                         </button>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* The same three actions as at the foot of the message. Both places are
+                              wanted: the toolbar is where they are reached for out of habit, the
+                              foot is where they belong while reading. */}
                           <button
                             type="button"
                             onClick={() => {
                               void openReplyCompose();
                             }}
-                            className={ICON_BUTTON}
+                            className={`${ICON_BUTTON} email-tip`}
                             aria-label="Reply"
-                            title="Reply"
+                            data-tip="Reply"
                           >
                             <FiCornerUpLeft className="w-4 h-4" />
                           </button>
@@ -4708,113 +5435,173 @@ ${sourceText}`;
                             onClick={() => {
                               void openReplyAllCompose();
                             }}
-                            className={ICON_BUTTON}
+                            className={`${ICON_BUTTON} email-tip`}
                             aria-label="Reply All"
-                            title="Reply All"
+                            data-tip="Reply All"
                           >
-                            <FiUsers className="w-4 h-4" />
+                            <MdReplyAll className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
                             onClick={() => {
                               void openForwardCompose();
                             }}
-                            className={ICON_BUTTON}
+                            className={`${ICON_BUTTON} email-tip`}
                             aria-label="Forward"
-                            title="Forward"
+                            data-tip="Forward"
                           >
                             <FiSend className="w-4 h-4" />
+                          </button>
+
+
+                          {/* Every shared action in the same order as the
+                              list toolbar (star, spam, trash, read, move, archive, snooze), so the
+                              two toolbars are not two different sequences of the same icons.
+                              Reader-only actions (label, block) come last. */}
+                          <button
+                            type="button"
+                            onClick={() => (deletesPermanently ? setConfirmHardDelete(true) : applyAction("trash"))}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label={deletesPermanently ? "Delete Permanently" : "Move To Trash"}
+                            data-tip={deletesPermanently ? "Delete Permanently" : "Move To Trash"}
+                          >
+                            <FiTrash2 className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
                             onClick={() => applyAction("markUnread")}
-                            className={ICON_BUTTON}
-                            title="Mark As Unread"
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label="Mark As Unread"
+                            data-tip="Mark As Unread"
                           >
                             <FiMail className="w-4 h-4" />
                           </button>
-                          <div className="relative">
+                          {/* Hidden wherever moving between mailboxes is meaningless — see
+                              allowsMailboxMoves. */}
+                          <div ref={moveMessageMenuRef} className={`relative ${allowsMailboxMoves ? "" : "hidden"}`}>
+                            <button
+                              type="button"
+                              onClick={() => setMoveMenuOpen((prev) => (prev === "message" ? null : "message"))}
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label="Move To"
+                              data-tip="Move To"
+                            >
+                              <FiMove className="w-4 h-4" />
+                            </button>
+                            {moveMenuOpen === "message" ? (
+                              <MoveToMenu options={moveToOptions} onSelect={handleMoveToChange} keyPrefix="message-move" />
+                            ) : null}
+                          </div>
+                          {allowsMailboxMoves ? (
+                            <button
+                              type="button"
+                              onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label={activeModule === "archive" ? "Unarchive" : "Archive"}
+                              data-tip={activeModule === "archive" ? "Unarchive" : "Archive"}
+                            >
+                              <FiArchive className="w-4 h-4" />
+                            </button>
+                          ) : null}
+                          {/* After Archive, before Snooze — matching the list toolbar's order.
+                              These must stay DIRECT children of the row: nested inside snooze's
+                              `relative` dropdown anchor (display:block, no gap) they rendered
+                              flush against each other while every other joint had 6px, which is
+                              what the uneven spacing was. */}
+                          {selectedMessage ? (
+                            <button
+                              type="button"
+                              onClick={() => void toggleStar(selectedMessage)}
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label={selectedMessage.starred ? "Unstar" : "Star"}
+                              data-tip={selectedMessage.starred ? "Unstar" : "Star"}
+                            >
+                              <FiStar className={`w-4 h-4 ${selectedMessage.starred ? "fill-[#F5A623] text-[#F5A623]" : ""}`} />
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => applyAction(spamActionType)}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label={spamActionTitle}
+                            data-tip={spamActionTitle}
+                          >
+                            <FiAlertCircle className="w-4 h-4" />
+                          </button>
+                          {/* Snooze existed only on the list, so an open message had to be closed to
+                              snooze it. Same presets, same menu, same dismissal. */}
+                          <div ref={snoozeMenuRef} className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setSnoozeMenuOpen((open) => !open)}
+                              className={`${ICON_BUTTON} email-tip`}
+                              aria-label="Snooze"
+                              data-tip="Snooze"
+                            >
+                              <FiClock className="w-4 h-4" />
+                            </button>
+                            {snoozeMenuOpen ? (
+                              <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 w-44">
+                                {(
+                                  [
+                                    ["later", "Later today"],
+                                    ["tomorrow", "Tomorrow"],
+                                    ["nextweek", "Next week"],
+                                  ] as const
+                                ).map(([preset, label]) => (
+                                  <button
+                                    key={preset}
+                                    type="button"
+                                    onClick={() => snoozeSelected(preset)}
+                                    className="email-menu-item block w-full px-2.5 py-[7px] text-left text-[12.5px] font-medium"
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+
+
+                          {/* Label: ref-scoped like every other menu here. It previously had no ref,
+                              so clicking outside it or changing view left it hanging open, and it was
+                              styled by hand instead of with the shared menu classes. */}
+                          <div ref={labelMenuRef} className="relative">
                             <button
                               type="button"
                               onClick={() => setLabelMenuOpen((open) => !open)}
-                              className={ICON_BUTTON}
-                              title="Label"
+                              className={`${ICON_BUTTON} email-tip`}
                               aria-label="Label"
+                              data-tip="Label"
                             >
                               <FiTag className="w-4 h-4" />
                             </button>
                             {labelMenuOpen ? (
-                              <div className="absolute right-0 top-[calc(100%+6px)] z-20 max-h-64 min-w-[180px] overflow-y-auto rounded-lg border border-[#E5E7EB] bg-white shadow-lg py-1">
+                              <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 max-h-64 min-w-[180px] overflow-y-auto">
                                 {labels.length === 0 ? (
-                                  <div className="px-3 py-2 text-sm text-[#847FA0]">No labels yet.</div>
+                                  <div className="px-2.5 py-[7px] text-[12.5px] text-[#847FA0]">No labels yet.</div>
                                 ) : (
                                   labels.map((label) => (
                                     <button
                                       key={`apply-${label.id}`}
                                       type="button"
                                       onClick={() => applyLabelToMessage(label.id)}
-                                      className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm text-[#374151] hover:bg-[#F3F4F6]"
+                                      className="email-menu-item flex w-full items-center gap-2.5 px-2.5 py-[7px] text-left text-[12.5px] font-medium"
                                     >
-                                      <FiTag className="h-3.5 w-3.5 text-[#847FA0]" /> {label.name}
+                                      <FiTag className="h-3.5 w-3.5 shrink-0" />
+                                      <span className="truncate">{label.name}</span>
                                     </button>
                                   ))
                                 )}
                               </div>
                             ) : null}
                           </div>
-                          <div ref={moveMessageMenuRef} className="relative">
-                            <button
-                              type="button"
-                              onClick={() => setMoveMenuOpen((prev) => (prev === "message" ? null : "message"))}
-                              className={ICON_BUTTON}
-                              title="Move To"
-                            >
-                              <FiMove className="w-4 h-4" />
-                            </button>
-                            {moveMenuOpen === "message" ? (
-                              <div className="email-menu absolute right-0 top-[calc(100%+6px)] z-20 min-w-[160px] overflow-hidden rounded-lg shadow-lg">
-                                {moveToOptions.map((option) => (
-                                  <button
-                                    key={`message-move-${option.value}`}
-                                    type="button"
-                                    onClick={() => handleMoveToChange(option.value)}
-                                    className="email-menu-item w-full px-3 py-2 text-left text-sm"
-                                  >
-                                    {option.label}
-                                  </button>
-                                ))}
-                              </div>
-                            ) : null}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => applyAction(activeModule === "archive" ? "moveToInbox" : "archive")}
-                            className={ICON_BUTTON}
-                            title={activeModule === "archive" ? "Unarchive" : "Archive"}
-                          >
-                            <FiArchive className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => applyAction(activeModule === "trash" ? "deletePermanently" : "trash")}
-                            className={ICON_BUTTON}
-                            title={activeModule === "trash" ? "Delete Permanently" : "Trash"}
-                          >
-                            <FiTrash2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => applyAction(spamActionType)}
-                            className={ICON_BUTTON}
-                            title={spamActionTitle}
-                          >
-                            <FiAlertCircle className="w-4 h-4" />
-                          </button>
                           <button
                             type="button"
                             onClick={blockSelectedSender}
-                            className={ICON_BUTTON}
-                            title={selectedBlockedEntry ? "Unblock Sender" : "Block Sender"}
+                            className={`${ICON_BUTTON} email-tip`}
+                            aria-label={selectedBlockedEntry ? "Unblock Sender" : "Block Sender"}
+                            data-tip={selectedBlockedEntry ? "Unblock Sender" : "Block Sender"}
                           >
                             <FiX className="w-4 h-4" />
                           </button>
@@ -4822,17 +5609,30 @@ ${sourceText}`;
                       </div>
 
                       {selectedMessage ? (
-                        <div className="flex-1 overflow-y-auto px-6 pb-0 pt-5">
+                        <div className="flex-1 overflow-y-auto px-6 pt-5 pb-10">
                           <h2 className="text-[22px] font-semibold tracking-tight text-[#1E1B2E]">{selectedMessage.subject || "(No Subject)"}</h2>
                           <div className="mt-4 flex items-start gap-3">
-                            {selectedMessageDetail?.senderPhotoUrl ? (
-                              <Image
-                                src={selectedMessageDetail.senderPhotoUrl}
-                                alt="Sender"
+                            {senderAvatar ? (
+                              // Deliberately a plain <img>, not next/image: the optimizer rejects any
+                              // host absent from images.remotePatterns (Google serves contact photos
+                              // from lh3.googleusercontent.com), and those URLs 403 when a referrer
+                              // is sent. onError advances to the next candidate — contact photo,
+                              // Gravatar, then company favicon — and initials show once they run out.
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img
+                                key={senderAvatar.url}
+                                src={senderAvatar.url}
+                                alt=""
                                 width={40}
                                 height={40}
-                                unoptimized
-                                className="w-10 h-10 rounded-full object-cover border border-[#E5E7EB]"
+                                referrerPolicy="no-referrer"
+                                loading="eager"
+                                decoding="async"
+                                onError={() => setSenderAvatarIndex((i) => i + 1)}
+                                /* Fills the circle. Padding a logo inside it left a small mark
+                                   floating in a white ring, which read as a half-loaded image;
+                                   sources here are square, so cover crops nothing meaningful. */
+                                className="h-10 w-10 shrink-0 rounded-full border border-[#E5E7EB] bg-white object-cover"
                               />
                             ) : (
                               <div className="w-10 h-10 rounded-full bg-[#ECE3FF] text-[#5B21B6] border border-[#E5E7EB] flex items-center justify-center text-sm font-semibold">
@@ -4848,12 +5648,12 @@ ${sourceText}`;
                                   selectedMessageDetail?.trackers ?? detectTrackers(selectedMessageDetail?.bodyHtml || "");
                                 if (trackers === 0) return null;
                                 const label = vendors.length
-                                  ? `${vendors.slice(0, 2).join(", ")}${vendors.length > 2 ? ` +${vendors.length - 2}` : ""} tracker blocked`
-                                  : `${trackers} tracker${trackers === 1 ? "" : "s"} blocked`;
+                                  ? `${vendors.slice(0, 2).join(", ")}${vendors.length > 2 ? ` +${vendors.length - 2}` : ""} Tracker${trackers === 1 ? "" : "s"} Blocked`
+                                  : `${trackers} Tracker${trackers === 1 ? "" : "s"} Blocked`;
                                 return (
                                   <p>
                                     <span
-                                      className="inline-flex items-center gap-1.5 rounded-md bg-[#F5EFFF] px-2 py-0.5 text-[11px] font-semibold text-[#701CC0]"
+                                      className="-ml-2 inline-flex items-center gap-1.5 rounded-md bg-[#F5EFFF] px-2 py-0.5 text-[11px] font-semibold text-[#701CC0]"
                                       title={
                                         vendors.length
                                           ? `Detected ${vendors.join(", ")} tracking. Remote pixels were blocked, so the sender can't tell you opened this.`
@@ -4881,144 +5681,393 @@ ${sourceText}`;
                                   <div key={`${threadMessage.id || index}`} className="email-body-card rounded-2xl border border-white/70 bg-white/70 p-5">
                                     {threadMessage.bodyHtml ? (
                                       <div
-                                        className="text-sm text-[#374151] leading-6"
+                                        className="email-body text-[14px] leading-[1.65]"
                                         dangerouslySetInnerHTML={{ __html: sanitizeHtml(threadMessage.bodyHtml) }}
                                       />
                                     ) : (
-                                      <div className="text-sm text-[#374151] whitespace-pre-wrap leading-6">
+                                      <div className="email-body whitespace-pre-wrap text-[14px] leading-[1.65]">
                                         {threadMessage.bodyText || threadMessage.snippet || "No message content available."}
                                       </div>
                                     )}
                                   </div>
                                 ))}
 
+                                {/* Reply / Reply all / Forward sit with the message, the way Gmail
+                                    puts them at the foot of the conversation rather than in the
+                                    window chrome — the reply you are about to write belongs to this
+                                    message, so the control for it belongs next to it. Hidden while a
+                                    composer is open, since the composer already is that action. */}
                                 {!inlineComposeMode ? (
-                                  <div className="mt-4 rounded-2xl border border-[#701CC0]/20 bg-gradient-to-br from-[#701CC0]/[0.07] to-[#C42B9F]/[0.05] p-4">
-                                    <div className="mb-2 flex items-center gap-2">
-                                      <span
-                                        className="inline-flex h-6 w-6 items-center justify-center rounded-lg text-white"
-                                        style={{ backgroundImage: BRAND_GRADIENT }}
-                                      >
-                                        <FiZap className="h-3.5 w-3.5" aria-hidden />
-                                      </span>
-                                      <b className="text-[13px] text-[#1E1B2E]">Artemis</b>
-                                      <button
-                                        type="button"
-                                        onClick={handleArtemisSummarize}
-                                        disabled={artemisSummaryLoading}
-                                        className="ml-auto text-[12px] font-semibold text-[#701CC0] hover:underline disabled:opacity-50"
-                                      >
-                                        {artemisSummaryLoading ? "Summarizing…" : "Summarize thread"}
-                                      </button>
-                                    </div>
-                                    {artemisSummary ? (
-                                      <div className="mb-3 whitespace-pre-wrap rounded-xl border border-white/70 bg-white/70 p-3 text-[12.5px] leading-relaxed text-[#4A465C]">
-                                        {artemisSummary}
-                                      </div>
-                                    ) : null}
+                                  <div className="flex flex-wrap items-center gap-2 pt-3">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void openReplyCompose();
+                                      }}
+                                      className={REPLY_ACTION_BUTTON}
+                                    >
+                                      <FiCornerUpLeft className="h-4 w-4" aria-hidden />
+                                      Reply
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void openReplyAllCompose();
+                                      }}
+                                      className={REPLY_ACTION_BUTTON}
+                                    >
+                                      <MdReplyAll className="h-[18px] w-[18px]" aria-hidden />
+                                      Reply all
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        void openForwardCompose();
+                                      }}
+                                      className={REPLY_ACTION_BUTTON}
+                                    >
+                                      <FiSend className="h-4 w-4" aria-hidden />
+                                      Forward
+                                    </button>
                                   </div>
                                 ) : null}
 
                                 {inlineComposeMode ? (
+                                  /* Inline reply, shaped the way Gmail's is: one recipient line, the
+                                     message, then Send. No uppercase field labels and no stacked
+                                     boxes — a reply already has its recipient and its subject, so
+                                     presenting them as a form to fill in is noise.
+
+                                     Authored light-first (bg-white, text-[#1E1B2E]) like the rest of
+                                     the panel, because the dark theme remaps those classes. The
+                                     previous version set its background with a gradient utility,
+                                     which the dark layer does not remap — so the card stayed white
+                                     while its text was remapped to near-white and became illegible. */
                                   <div ref={inlineComposeRef} className="pt-3">
-                                    <div className="rounded-2xl border border-[#E8EAEF] bg-gradient-to-b from-[#FAFBFF] to-white p-4 shadow-[0_4px_24px_-8px_rgba(15,23,42,0.08)] ring-1 ring-black/[0.03]">
-                                      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-                                        <div className="flex items-center gap-2.5 min-w-0">
-                                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#701CC0]/10 text-[#701CC0]">
-                                            <FiCornerUpLeft className="h-4 w-4" />
-                                          </div>
-                                          <div className="min-w-0">
-                                            <p className="text-[15px] font-semibold text-[#1E1B2E] leading-tight">
-                                              {inlineComposeMode === "forward"
-                                                ? "Forward"
-                                                : inlineComposeMode === "replyAll"
-                                                  ? "Reply all"
-                                                  : "Reply"}
-                                            </p>
-                                            <p className="text-xs text-[#6B7280] mt-0.5">Compose below the thread</p>
-                                          </div>
-                                        </div>
-                                        <span className="inline-flex items-center rounded-full bg-[#701CC0]/8 px-2.5 py-1 text-[11px] font-medium uppercase tracking-wide text-[#5B21B6]">
-                                          Draft
-                                        </span>
-                                      </div>
-                                      <div className="space-y-3">
-                                        <div>
-                                          <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
-                                            {inlineComposeMode === "forward" ? "To" : "Replying to"}
-                                          </label>
+                                    <div className="inline-reply-card rounded-xl border border-[#E5E7EB] bg-white shadow-sm">
+                                      {/* Recipient line. Gmail shows the address as plain text with
+                                          Cc/Bcc one click away, rather than a labelled form row and a
+                                          mode caption repeating what the button you just pressed said. */}
+                                      <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
+                                        <span className="shrink-0 text-[13px] text-[#6B7280]">To</span>
+                                        {inlineToEditing ? (
                                           <input
                                             value={inlineComposeTo}
                                             onChange={(event) => setInlineComposeTo(event.target.value)}
-                                            className="w-full rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-2.5 text-sm text-[#1E1B2E] outline-none transition placeholder:text-[#9CA3AF] focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
-                                            placeholder="name@email.com"
+                                            onBlur={() => setInlineToEditing(false)}
+                                            autoFocus
+                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none placeholder:text-[#9CA3AF]"
+                                            placeholder="name@email.com, second@email.com"
+                                            aria-label="To (comma separated)"
+                                          />
+                                        ) : (
+                                          /* Each address is its own chip so several are countable at
+                                             a glance; the whole row is still one comma-separated
+                                             value, so clicking it edits the list as text. */
+                                          <button
+                                            type="button"
+                                            onClick={() => setInlineToEditing(true)}
+                                            className="flex min-w-0 flex-1 flex-wrap items-center gap-1 text-left"
+                                            title="Click to edit recipients (comma separated)"
+                                          >
+                                            {inlineComposeTo
+                                              .split(",")
+                                              .map((entry) => entry.trim())
+                                              .filter(Boolean).length === 0 ? (
+                                              <span className="text-[13px] text-[#9CA3AF]">Add recipients</span>
+                                            ) : (
+                                              inlineComposeTo
+                                                .split(",")
+                                                .map((entry) => entry.trim())
+                                                .filter(Boolean)
+                                                .map((addr, index, all) => {
+                                                  const bare = addr.includes("<")
+                                                    ? (addr.match(/<([^>]+)>/)?.[1] || addr).trim()
+                                                    : addr;
+                                                  const valid = EMAIL_REGEX.test(bare);
+                                                  return (
+                                                    <span
+                                                      key={`${addr}-${index}`}
+                                                      className={`recipient-chip ${valid ? "" : "is-invalid"}`}
+                                                      title={valid ? addr : `${addr} — not a valid address`}
+                                                    >
+                                                      <span className="truncate">{addr}</span>
+                                                      <span
+                                                        role="button"
+                                                        tabIndex={0}
+                                                        aria-label={`Remove ${addr}`}
+                                                        className="recipient-chip-x"
+                                                        onClick={(event) => {
+                                                          event.stopPropagation();
+                                                          setInlineComposeTo(all.filter((_, i) => i !== index).join(", "));
+                                                        }}
+                                                        onKeyDown={(event) => {
+                                                          if (event.key !== "Enter" && event.key !== " ") return;
+                                                          event.stopPropagation();
+                                                          event.preventDefault();
+                                                          setInlineComposeTo(all.filter((_, i) => i !== index).join(", "));
+                                                        }}
+                                                      >
+                                                        <FiX className="h-3 w-3" aria-hidden />
+                                                      </span>
+                                                    </span>
+                                                  );
+                                                })
+                                            )}
+                                          </button>
+                                        )}
+                                        <div className="flex shrink-0 items-center gap-2">
+                                          <button
+                                            type="button"
+                                            onClick={() => setInlineShowCc((open) => !open)}
+                                            aria-pressed={inlineShowCc}
+                                            className="text-[12px] font-medium text-[#701CC0] hover:underline"
+                                          >
+                                            Cc
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setInlineShowBcc((open) => !open)}
+                                            aria-pressed={inlineShowBcc}
+                                            className="text-[12px] font-medium text-[#701CC0] hover:underline"
+                                          >
+                                            Bcc
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {inlineShowCc ? (
+                                        <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
+                                          <span className="shrink-0 text-[13px] text-[#6B7280]">Cc</span>
+                                          <input
+                                            value={inlineComposeCc}
+                                            onChange={(event) => setInlineComposeCc(event.target.value)}
+                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none"
+                                            aria-label="Cc"
                                           />
                                         </div>
-                                        <div>
-                                          <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
-                                            Subject
-                                          </label>
+                                      ) : null}
+                                      {inlineShowBcc ? (
+                                        <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
+                                          <span className="shrink-0 text-[13px] text-[#6B7280]">Bcc</span>
+                                          <input
+                                            value={inlineComposeBcc}
+                                            onChange={(event) => setInlineComposeBcc(event.target.value)}
+                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none"
+                                            aria-label="Bcc"
+                                          />
+                                        </div>
+                                      ) : null}
+
+                                      {/* Subject only when forwarding. A reply inherits the thread's
+                                          subject, as in Gmail; offering it as a field here invites
+                                          breaking the thread. */}
+                                      {inlineComposeMode === "forward" ? (
+                                        <div className="flex items-center gap-2 border-b border-[#E5E7EB] px-4 py-2.5">
+                                          <span className="shrink-0 text-[13px] text-[#6B7280]">Subject</span>
                                           <input
                                             value={inlineComposeSubject}
                                             onChange={(event) => setInlineComposeSubject(event.target.value)}
-                                            className="w-full rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-2.5 text-sm text-[#1E1B2E] outline-none transition focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
+                                            className="min-w-0 flex-1 border-0 bg-transparent p-0 text-[13px] text-[#1E1B2E] outline-none"
+                                            aria-label="Subject"
                                           />
                                         </div>
-                                        <div>
-                                          <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
-                                            Message
-                                          </label>
-                                          <textarea
-                                            value={inlineComposeIntroText}
-                                            onChange={(event) => setInlineComposeIntroText(event.target.value)}
-                                            rows={5}
-                                            className="w-full min-h-[120px] resize-y rounded-xl border-0 bg-[#F3F4F6] px-3.5 py-3 text-sm text-[#1E1B2E] outline-none transition placeholder:text-[#9CA3AF] focus:bg-white focus:ring-2 focus:ring-[#701CC0]/25"
-                                            placeholder="Write your message…"
+                                      ) : null}
+
+                                      {/* Same rich editor the main composer uses, with its formatting
+                                          toolbar pinned open — Gmail's reply always shows one, and a
+                                          plain textarea meant a reply could not carry bold, a list or
+                                          a link at all. */}
+                                      {/* The reply body. Removing the trimmed-content block took
+                                          this with it, leaving the composer with no input at all —
+                                          the recipient row and the send bar rendered, but there was
+                                          nowhere to type. */}
+                                      <div className="px-2 pb-1 pt-2">
+                                        <ComposeRichEditor
+                                          ref={inlineEditorRef}
+                                          valueHtml={inlineComposeIntroHtml}
+                                          onChange={({ html, text }) => {
+                                            setInlineComposeIntroHtml(html);
+                                            setInlineComposeIntroText(text);
+                                          }}
+                                          minHeightClass="min-h-[150px]"
+                                          showToolbar={inlineShowFormatting}
+                                        />
+                                      </div>
+
+                                      {inlineComposeMode === "forward" && inlineComposePreviewHtml ? (
+                                        <div className="mx-4 mb-3 rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] p-3">
+                                          <p className="mb-2 text-[11px] uppercase tracking-wide text-[#6B7280]">
+                                            Forwarded message
+                                          </p>
+                                          <div
+                                            className="max-h-48 overflow-y-auto text-sm leading-6 text-[#374151]"
+                                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(inlineComposePreviewHtml) }}
                                           />
                                         </div>
-                                        {inlineComposeMode === "forward" && inlineComposePreviewHtml ? (
-                                          <div className="rounded-xl border border-[#E8EAEF] bg-[#F9FAFB] p-3">
-                                            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-[#9CA3AF]">
-                                              Forwarded content
-                                            </p>
-                                            <div
-                                              className="text-sm text-[#374151] leading-6 max-h-48 overflow-y-auto"
-                                              dangerouslySetInnerHTML={{ __html: sanitizeHtml(inlineComposePreviewHtml) }}
-                                            />
-                                          </div>
-                                        ) : null}
-                                        {inlineComposeError ? (
-                                          <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
-                                            {inlineComposeError}
-                                          </div>
-                                        ) : null}
-                                        {inlineComposeSuccess ? (
-                                          <div className="rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-                                            {inlineComposeSuccess}
-                                          </div>
-                                        ) : null}
-                                        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-[#EEF0F6] pt-4">
+                                      ) : null}
+
+                                      {inlineComposeError ? (
+                                        <p className="mx-4 mb-3 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+                                          {inlineComposeError}
+                                        </p>
+                                      ) : null}
+                                      {inlineComposeSuccess ? (
+                                        <p className="mx-4 mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                                          {inlineComposeSuccess}
+                                        </p>
+                                      ) : null}
+
+                                      {/* One control strip, per Gmail: a compact Send, then the insert/mode controls
+                                          as quiet icons, then discard at the far edge. The formatting
+                                          toolbar is rendered into this same row by the editor above
+                                          (toolbarSlot), so there is no second bar competing with it. */}
+                                      <div className="inline-reply-bar flex flex-wrap items-center gap-1 px-3 pb-2.5 pt-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={sendInlineCompose}
+                                          disabled={
+                                            inlineComposeSending ||
+                                            !inlineComposeTo.trim() ||
+                                            !inlineComposeTo
+                                              .split(",")
+                                              .map((entry) => entry.trim())
+                                              .filter(Boolean)
+                                              .every((entry) =>
+                                                EMAIL_REGEX.test(entry.includes("<") ? (entry.match(/<([^>]+)>/)?.[1] || entry).trim() : entry)
+                                              ) ||
+                                            (!inlineComposeIntroText.trim() && !inlineComposeBodyText.trim())
+                                          }
+                                          className="compose-cta inline-flex shrink-0 items-center justify-center gap-2 rounded-md px-4 py-2 text-[13px] font-medium text-white shadow-[0_6px_20px_-8px_rgba(94,23,168,0.9)] transition-[filter] duration-200 ease-out hover:brightness-[1.08] active:brightness-[0.96] disabled:pointer-events-none disabled:opacity-40"
+                                        >
+                                          <FiSend className="h-4 w-4 shrink-0" aria-hidden />
+                                          {inlineComposeSending ? "Sending…" : "Send"}
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => void handleArtemisDraft()}
+                                          disabled={artemisDrafting}
+                                          className="inline-reply-icon email-tip"
+                                          data-tip={artemisDrafting ? "Writing…" : "Help me write"}
+                                          aria-label="Help me write"
+                                        >
+                                          <BoltDraw className="h-4 w-4" drafting={artemisDrafting} />
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() => setInlineShowFormatting((open) => !open)}
+                                          aria-pressed={inlineShowFormatting}
+                                          className={`inline-reply-icon email-tip ${inlineShowFormatting ? "is-on" : ""}`}
+                                          data-tip="Formatting options"
+                                          aria-label="Formatting options"
+                                        >
+                                          <FiType className="h-4 w-4" aria-hidden />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => composeAttachInputRef.current?.click()}
+                                          className="inline-reply-icon email-tip"
+                                          data-tip="Attach files"
+                                          aria-label="Attach files"
+                                        >
+                                          <FiPaperclip className="h-4 w-4" aria-hidden />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled
+                                          className="inline-reply-icon email-tip"
+                                          data-tip="Insert from Drive (coming soon)"
+                                          aria-label="Insert from Drive"
+                                        >
+                                          <DriveMark className="h-4 w-4" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => inlineEditorRef.current?.promptInsertLink()}
+                                          className="inline-reply-icon email-tip"
+                                          data-tip="Insert link"
+                                          aria-label="Insert link"
+                                        >
+                                          <FiLink className="h-4 w-4" aria-hidden />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => inlineEditorRef.current?.promptInsertImage()}
+                                          className="inline-reply-icon email-tip"
+                                          data-tip="Insert image"
+                                          aria-label="Insert image"
+                                        >
+                                          <FiImage className="h-4 w-4" aria-hidden />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setConfidentialOpen((open) => !open)}
+                                          aria-pressed={confidentialOn}
+                                          className={`inline-reply-icon email-tip ${confidentialOn ? "is-on" : ""}`}
+                                          data-tip="Confidential mode"
+                                          aria-label="Confidential mode"
+                                        >
+                                          <FiLock className="h-4 w-4" aria-hidden />
+                                        </button>
+                                        <div className="relative shrink-0">
                                           <button
                                             type="button"
-                                            onClick={() => setInlineComposeMode(null)}
-                                            className="rounded-xl border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#F9FAFB]"
+                                            onClick={() => setInlineMoreOpen((open) => !open)}
+                                            className="inline-reply-icon email-tip"
+                                            data-tip="Insert signature"
+                                            aria-label="Insert signature"
+                                            aria-expanded={inlineMoreOpen}
                                           >
-                                            Cancel
+                                            <FiEdit3 className="h-4 w-4" aria-hidden />
                                           </button>
-                                          <button
-                                            type="button"
-                                            onClick={sendInlineCompose}
-                                            disabled={
-                                              inlineComposeSending ||
-                                              !inlineComposeTo.trim() ||
-                                              (!inlineComposeIntroText.trim() && !inlineComposeBodyText.trim())
+                                          {inlineMoreOpen ? (
+                                            <div className="compose-menu absolute bottom-full left-0 z-[60] mb-2 w-52">
+                                              {composeSignatures.length === 0 ? (
+                                                <p className="px-3 py-2 text-xs text-[#8C86A6]">No signatures yet</p>
+                                              ) : (
+                                                composeSignatures.map((sig) => (
+                                                  <button
+                                                    key={sig.id}
+                                                    type="button"
+                                                    className={`${composeMenuItemClass} truncate`}
+                                                    onClick={() => {
+                                                      setInlineMoreOpen(false);
+                                                      applyComposeSignature(sig.id);
+                                                    }}
+                                                  >
+                                                    <FiEdit3 className="h-4 w-4 shrink-0" aria-hidden />
+                                                    <span className="truncate">
+                                                      {sig.name}
+                                                      {sig.isDefault ? " (default)" : ""}
+                                                    </span>
+                                                  </button>
+                                                ))
+                                              )}
+                                            </div>
+                                          ) : null}
+                                        </div>
+
+                                        <span className="flex-1" aria-hidden />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            // Discard means gone: drop the autosaved draft rather
+                                            // than flushing it, or every abandoned reply would
+                                            // accumulate in Drafts.
+                                            if (inlineDraftStorageKey) {
+                                              void clearLocalDraft(inlineDraftStorageKey).catch(() => null);
                                             }
-                                            className="inline-flex items-center gap-2 rounded-xl bg-[#701CC0] px-5 py-2 text-sm font-semibold text-white shadow-md shadow-[#701CC0]/25 transition hover:bg-[#5f17a5] disabled:pointer-events-none disabled:opacity-45"
-                                          >
-                                            <FiSend className="h-4 w-4" />
-                                            {inlineComposeSending ? "Sending…" : "Send"}
-                                          </button>
-                                        </div>
+                                            setInlineComposeMode(null);
+                                            void loadMailboxCounts();
+                                          }}
+                                          className="inline-reply-icon email-tip"
+                                          data-tip="Discard Reply"
+                                          aria-label="Discard Reply"
+                                        >
+                                          <FiTrash2 className="h-4 w-4" aria-hidden />
+                                        </button>
                                       </div>
                                     </div>
                                   </div>
@@ -5345,7 +6394,7 @@ ${sourceText}`;
         <div
           className={
             composeExpanded
-              ? "fixed inset-0 z-[120] flex items-center justify-center bg-[#2E1050]/45 backdrop-blur-sm p-4"
+              ? "fixed inset-0 z-[120] flex items-center justify-center bg-black/45 backdrop-blur-sm p-4"
               : "contents"
           }
           onClick={composeExpanded ? () => setComposeExpanded(false) : undefined}
@@ -5353,7 +6402,7 @@ ${sourceText}`;
         >
           <div
             onClick={(event) => event.stopPropagation()}
-            className={`flex flex-col overflow-hidden bg-white shadow-[0_24px_60px_-18px_rgba(46,16,80,0.5)] border border-white/70 ring-1 ring-black/5 ${
+            className={`compose-hud flex flex-col overflow-hidden bg-white shadow-[0_24px_60px_-18px_rgba(46,16,80,0.5)] ${
               composeExpanded
                 ? "h-[75vh] w-[75vw] max-h-[75vh] max-w-[75vw] rounded-2xl"
                 : "fixed bottom-6 right-6 z-[120] w-[min(100vw-1.5rem,572px)] max-h-[min(92vh,760px)] rounded-2xl"
@@ -5361,9 +6410,9 @@ ${sourceText}`;
             role="dialog"
             aria-label={composeThreadId ? "Reply composer" : "New message composer"}
           >
-            <div style={{ backgroundImage: BRAND_GRADIENT }} className="flex shrink-0 cursor-default items-center justify-between gap-2 px-4 py-3">
+            <div className="compose-hud-header flex shrink-0 cursor-default items-center justify-between gap-2 px-4 py-2.5">
               <p className="min-w-0 flex-1 truncate pr-2 text-sm font-semibold text-white">
-                {composeThreadId ? "Reply" : "New message"}
+                {composeThreadId ? "Reply" : "New Message"}
               </p>
               <div className="flex shrink-0 items-center">
                 <button
@@ -5379,6 +6428,7 @@ ${sourceText}`;
                   type="button"
                   onClick={closeCompose}
                   className="rounded-full p-2 text-white/90 hover:bg-white/15"
+                  title="Close"
                   aria-label="Close compose"
                 >
                   <FiX className="h-5 w-5" />
@@ -5391,23 +6441,26 @@ ${sourceText}`;
                 className={`flex min-h-0 flex-1 flex-col px-0 ${
                   composeExpanded
                     ? "overflow-hidden"
-                    : `max-h-[min(52vh,440px)] overflow-y-auto ${COMPOSE_NEUTRAL_SCROLLBAR}`
+                    : `max-h-[min(66vh,580px)] overflow-y-auto ${COMPOSE_NEUTRAL_SCROLLBAR}`
                 }`}
               >
                 <div className="shrink-0 px-3">
-                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
+                  <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
                     <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">From</span>
                     <div className="relative min-w-0">
                       <select
                         value={composeFrom || composeAccountEmail}
                         onChange={(event) => {
                           const value = event.target.value;
+                          setComposeFrom(value);
                           if (composeFromOptions.includes(value)) {
                             setComposeAccountEmail(value);
-                            setComposeFrom(value);
-                          } else {
-                            setComposeFrom(value);
+                            return;
                           }
+                          // An alias only sends through the mailbox that owns it — picking one
+                          // has to move the sending account too, or Gmail rejects the send.
+                          const owner = composeAliases.find((alias) => alias.email === value)?.accountEmail;
+                          if (owner) setComposeAccountEmail(owner);
                         }}
                         className="min-w-0 w-full cursor-pointer appearance-none border-0 bg-transparent py-1.5 pl-0 pr-7 text-sm text-[#1E1B2E] outline-none focus:ring-0"
                       >
@@ -5417,10 +6470,11 @@ ${sourceText}`;
                           </option>
                         ))}
                         {composeAliases
-                          .filter((alias) => !composeFromOptions.includes(alias.email) && alias.email !== composeAccountEmail)
+                          // Drop the primaries — they're already listed above as accounts.
+                          .filter((alias) => !composeFromOptions.includes(alias.email))
                           .map((alias) => (
-                            <option key={alias.email} value={alias.email}>
-                              {alias.displayName ? `${alias.displayName} <${alias.email}>` : alias.email} (alias)
+                            <option key={`${alias.accountEmail}::${alias.email}`} value={alias.email}>
+                              {alias.displayName ? `${alias.displayName} <${alias.email}>` : alias.email}
                             </option>
                           ))}
                       </select>
@@ -5431,7 +6485,7 @@ ${sourceText}`;
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
+                  <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
                     <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">To</span>
                     <div className="flex min-w-0 items-center gap-2">
                       <input
@@ -5468,7 +6522,7 @@ ${sourceText}`;
                   </div>
 
                   {showCc ? (
-                    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
+                    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
                       <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Cc</span>
                       <input
                         value={composeCc}
@@ -5480,7 +6534,7 @@ ${sourceText}`;
                   ) : null}
 
                   {showBcc ? (
-                    <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
+                    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
                       <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Bcc</span>
                       <input
                         value={composeBcc}
@@ -5491,7 +6545,7 @@ ${sourceText}`;
                     </div>
                   ) : null}
 
-                  <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-2">
+                  <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-x-2 border-b border-[#EAE5F4] py-1">
                     <span className="min-w-0 text-left text-sm leading-none text-[#5f6368]">Subject</span>
                     <input
                       value={composeSubject}
@@ -5516,7 +6570,7 @@ ${sourceText}`;
                       setComposeBodyHtml(html);
                       setComposeBody(text);
                     }}
-                    minHeightClass={composeExpanded ? "min-h-0 flex-1" : "min-h-[140px]"}
+                    minHeightClass={composeExpanded ? "min-h-0 flex-1" : "min-h-[280px]"}
                     className={composeExpanded ? "min-h-0 flex-1 flex flex-col overflow-hidden" : ""}
                     showToolbar={composeFormattingToolbarOpen}
                   />
@@ -5585,8 +6639,8 @@ ${sourceText}`;
                     {composeSuccess}
                   </div>
                 ) : null}
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex min-w-0 flex-wrap items-center gap-3">
+                <div className="compose-actions flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-0.5">
                     <button
                       type="button"
                       onClick={handleSendCompose}
@@ -5597,7 +6651,7 @@ ${sourceText}`;
                         !composeHasMeaningfulBody ||
                         !composeAccountEmail
                       }
-                      className="inline-flex min-h-9 shrink-0 items-center rounded bg-[#701CC0] px-4 text-sm font-medium text-white hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
+                      className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-md bg-[#701CC0] px-6 text-sm font-semibold text-white hover:bg-[#5F17A5] disabled:pointer-events-none disabled:opacity-40"
                     >
                       {sendingCompose ? "Sending…" : scheduleAt ? "Schedule send" : "Send"}
                     </button>
@@ -5608,16 +6662,9 @@ ${sourceText}`;
                         title="Schedule send"
                         aria-label="Schedule send"
                         aria-pressed={scheduleOpen || Boolean(scheduleAt)}
-                        className={`inline-flex min-h-9 items-center gap-1.5 rounded border px-2.5 text-sm font-medium transition ${
-                          scheduleAt
-                            ? "border-[#701CC0] bg-[#F5EFFF] text-[#701CC0]"
-                            : "border-[#DEC9F6] text-[#701CC0] hover:bg-[#F5EFFF]"
-                        }`}
+                        className={composeIconClass(Boolean(scheduleAt) || scheduleOpen)}
                       >
-                        <FiClock className="h-4 w-4" aria-hidden />
-                        {scheduleAt
-                          ? new Date(scheduleAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })
-                          : "Schedule"}
+                        <FiClock className="h-[18px] w-[18px]" aria-hidden />
                       </button>
                       {scheduleOpen ? (
                         <div className="absolute bottom-full left-0 z-[130] mb-1 w-72 rounded-lg border border-[#EAE5F4] bg-white p-3 shadow-lg">
@@ -5669,14 +6716,9 @@ ${sourceText}`;
                         title="Confidential mode"
                         aria-label="Confidential mode"
                         aria-pressed={confidentialOn}
-                        className={`inline-flex min-h-9 items-center gap-1.5 rounded border px-2.5 text-sm font-medium transition ${
-                          confidentialOn
-                            ? "border-[#701CC0] bg-[#F5EFFF] text-[#701CC0]"
-                            : "border-[#DEC9F6] text-[#701CC0] hover:bg-[#F5EFFF]"
-                        }`}
+                        className={composeIconClass(confidentialOn || confidentialOpen)}
                       >
-                        <FiLock className="h-4 w-4" aria-hidden />
-                        Confidential
+                        <FiLock className="h-[18px] w-[18px]" aria-hidden />
                       </button>
                       {confidentialOpen ? (
                         <div className="absolute bottom-full left-0 z-[130] mb-1 w-72 rounded-lg border border-[#EAE5F4] bg-white p-3 shadow-lg">
@@ -5734,39 +6776,40 @@ ${sourceText}`;
                       title="Request read receipt"
                       aria-label="Request read receipt"
                       aria-pressed={requestReceipt}
-                      className={`inline-flex min-h-9 items-center gap-1.5 rounded border px-2.5 text-sm font-medium transition ${
-                        requestReceipt
-                          ? "border-[#701CC0] bg-[#F5EFFF] text-[#701CC0]"
-                          : "border-[#DEC9F6] text-[#701CC0] hover:bg-[#F5EFFF]"
-                      }`}
+                      className={composeIconClass(requestReceipt)}
                     >
-                      <FiCheckSquare className="h-4 w-4" aria-hidden />
-                      Receipt
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleArtemisDraft}
-                      disabled={artemisDrafting}
-                      title="Draft with Artemis AI"
-                      aria-label="Draft with Artemis AI"
-                      className="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded px-3 text-sm font-semibold text-white transition disabled:opacity-50"
-                      style={{ backgroundImage: BRAND_GRADIENT }}
-                    >
-                      <FiZap className="h-4 w-4" aria-hidden />
-                      {artemisDrafting ? "Drafting…" : "Artemis"}
+                      <FiCheckSquare className="h-[18px] w-[18px]" aria-hidden />
                     </button>
                     <div className="relative shrink-0">
                       <button
                         type="button"
                         onClick={() => setArtemisRewriteOpen((open) => !open)}
-                        disabled={artemisDrafting || !composeBody.trim()}
-                        title="Rewrite with Artemis"
-                        className="inline-flex min-h-9 items-center gap-1 rounded border border-[#DEC9F6] px-2.5 text-sm font-medium text-[#701CC0] hover:bg-[#F5EFFF] disabled:opacity-40"
+                        disabled={artemisDrafting}
+                        title="Artemis AI"
+                        aria-label="Artemis AI"
+                        aria-expanded={artemisRewriteOpen}
+                        className={composeIconClass(artemisRewriteOpen || artemisDrafting)}
                       >
-                        <FiZap className="h-3.5 w-3.5" aria-hidden /> Rewrite
+                        <FiZap className={`h-[18px] w-[18px] ${artemisDrafting ? "animate-pulse" : ""}`} aria-hidden />
                       </button>
                       {artemisRewriteOpen ? (
-                        <div className="email-menu absolute bottom-full left-0 z-[130] mb-1 w-44 overflow-hidden rounded-lg shadow-lg">
+                        <div className="compose-menu absolute bottom-full left-0 z-[130] mb-2 w-52">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setArtemisRewriteOpen(false);
+                              void handleArtemisDraft();
+                            }}
+                            disabled={artemisDrafting}
+                            className={composeMenuItemClass}
+                          >
+                            <FiZap className="h-4 w-4 shrink-0" aria-hidden />
+                            {artemisDrafting ? "Drafting…" : "Draft for me"}
+                          </button>
+                          <div className="my-1 h-px bg-white/[0.07]" />
+                          <p className="px-3 pb-1 pt-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-[#7C7695]">
+                            Rewrite
+                          </p>
                           {([
                             ["shorten", "Make shorter"],
                             ["expand", "Expand"],
@@ -5778,7 +6821,8 @@ ${sourceText}`;
                               key={mode}
                               type="button"
                               onClick={() => handleArtemisRewrite(mode)}
-                              className="email-menu-item block w-full px-3 py-2 text-left text-sm"
+                              disabled={artemisDrafting || !composeBody.trim()}
+                              className={composeMenuItemClass}
                             >
                               {label}
                             </button>
@@ -5786,16 +6830,11 @@ ${sourceText}`;
                         </div>
                       ) : null}
                     </div>
-                    <span className="inline-block h-6 w-px shrink-0 self-center bg-[#EAE5F4]" aria-hidden />
-                    <div className="relative flex min-w-0 flex-wrap items-center gap-0.5">
+                    <div className="relative flex min-w-0 items-center gap-0.5">
                       <button
                         type="button"
                         onClick={() => setComposeFormattingToolbarOpen((open) => !open)}
-                        className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded ${
-                          composeFormattingToolbarOpen
-                            ? "bg-[#e8eaed] text-[#1E1B2E]"
-                            : "text-[#5f6368] hover:bg-[#f1f3f4]"
-                        }`}
+                        className={composeIconClass(composeFormattingToolbarOpen)}
                         title="Formatting options"
                         aria-label="Formatting options"
                         aria-pressed={composeFormattingToolbarOpen}
@@ -5805,26 +6844,17 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => composeAttachInputRef.current?.click()}
-                        className={ICON_BUTTON_GHOST}
+                        className={composeIconClass()}
                         title="Attach files"
                         aria-label="Attach files"
                       >
                         <FiPaperclip className="h-[18px] w-[18px]" aria-hidden />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setSignModalOpen(true)}
-                        className={ICON_BUTTON_GHOST}
-                        title="Request signature"
-                        aria-label="Request signature"
-                      >
-                        <FiFeather className="h-[18px] w-[18px]" aria-hidden />
-                      </button>
                       <div className="relative shrink-0">
                         <button
                           type="button"
                           onClick={toggleBookingMenu}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded text-[#5f6368] hover:bg-[#f1f3f4]"
+                          className={composeIconClass(bookingMenuOpen)}
                           title="Insert booking link"
                           aria-label="Insert booking link"
                           aria-expanded={bookingMenuOpen}
@@ -5832,9 +6862,9 @@ ${sourceText}`;
                           <FiCalendar className="h-[18px] w-[18px]" aria-hidden />
                         </button>
                         {bookingMenuOpen ? (
-                          <div className="absolute bottom-full left-0 z-20 mb-1 w-64 rounded-lg border border-[#E5E7EB] bg-white py-1 shadow-lg">
+                          <div className="compose-menu absolute bottom-full left-0 z-[130] mb-2 w-64">
                             {composeBookingLinks.length === 0 ? (
-                              <p className="px-3 py-2 text-xs text-[#847FA0]">
+                              <p className="px-3 py-2 text-xs leading-relaxed text-[#8C86A6]">
                                 No active booking links. Create one in Settings → Meeting booking.
                               </p>
                             ) : (
@@ -5843,7 +6873,7 @@ ${sourceText}`;
                                   key={l.id}
                                   type="button"
                                   onClick={() => insertBookingLink(l.slug, l.title)}
-                                  className="block w-full truncate px-3 py-2 text-left text-sm text-[#374151] hover:bg-[#F5EFFF] hover:text-[#701CC0]"
+                                  className={`${composeMenuItemClass} truncate`}
                                 >
                                   {l.title}
                                 </button>
@@ -5855,7 +6885,7 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => composeEditorRef.current?.promptInsertLink()}
-                        className={ICON_BUTTON_GHOST}
+                        className={composeIconClass()}
                         title="Insert link"
                         aria-label="Insert link"
                       >
@@ -5864,100 +6894,124 @@ ${sourceText}`;
                       <button
                         type="button"
                         onClick={() => composeEditorRef.current?.promptInsertImage()}
-                        className={ICON_BUTTON_GHOST}
+                        className={composeIconClass()}
                         title="Insert image"
                         aria-label="Insert image"
                       >
                         <FiImage className="h-[18px] w-[18px]" aria-hidden />
                       </button>
-                      <button
-                        type="button"
-                        onClick={handlePrintCompose}
-                        className={ICON_BUTTON_GHOST}
-                        title="Print"
-                        aria-label="Print"
-                      >
-                        <FiPrinter className="h-[18px] w-[18px]" aria-hidden />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setComposeTemplateMenuOpen((open) => !open)}
-                        className={ICON_BUTTON_GHOST}
-                        title="Load template"
-                        aria-label="Load template"
-                        aria-expanded={composeTemplateMenuOpen}
-                      >
-                        <FiFileText className="h-[18px] w-[18px]" aria-hidden />
-                      </button>
-                      {composeTemplateMenuOpen ? (
-                        <div className="absolute left-0 top-full z-[130] mt-1 max-h-56 w-56 overflow-y-auto rounded-md border border-[#EAE5F4] bg-white py-1 shadow-lg">
-                          {composeTemplates.length === 0 ? (
-                            <div className="px-3 py-2 text-xs text-[#5f6368]">No templates yet</div>
-                          ) : (
-                            composeTemplates.map((template) => (
-                              <button
-                                key={template.id}
-                                type="button"
-                                className="block w-full truncate px-3 py-2 text-left text-sm text-[#1E1B2E] hover:bg-[#f1f3f4]"
-                                onClick={() => applyComposeTemplate(template.id)}
-                              >
-                                {template.name}
-                              </button>
-                            ))
-                          )}
-                          <div className="border-t border-[#e8eaed]" />
-                          <button
-                            type="button"
-                            className="block w-full px-3 py-2 text-left text-sm font-medium text-[#701CC0] hover:bg-[#f1f3f4]"
-                            onClick={() => {
-                              setComposeTemplateMenuOpen(false);
-                              setSaveTemplateName("");
-                              setSaveTemplateModalOpen(true);
-                            }}
-                          >
-                            Save as template…
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setComposeSignatureMenuOpen((open) => !open)}
-                        className={ICON_BUTTON_GHOST}
-                        title="Insert signature"
-                        aria-label="Insert signature"
-                        aria-expanded={composeSignatureMenuOpen}
-                      >
-                        <FiEdit3 className="h-[18px] w-[18px]" aria-hidden />
-                      </button>
-                      {composeSignatureMenuOpen ? (
-                        <div className="absolute left-0 top-full z-[130] mt-1 max-h-56 w-56 overflow-y-auto rounded-md border border-[#EAE5F4] bg-white py-1 shadow-lg">
-                          {composeSignatures.length === 0 ? (
-                            <div className="px-3 py-2 text-xs text-[#5f6368]">No signatures yet</div>
-                          ) : (
-                            composeSignatures.map((sig) => (
-                              <button
-                                key={sig.id}
-                                type="button"
-                                className="block w-full truncate px-3 py-2 text-left text-sm text-[#1E1B2E] hover:bg-[#f1f3f4]"
-                                onClick={() => applyComposeSignature(sig.id)}
-                              >
-                                {sig.name}
-                                {sig.isDefault ? " (default)" : ""}
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      ) : null}
+                      {/* Gmail keeps its second-tier actions behind one "More options" button rather
+                          than a second row of controls — templates, signatures, print and the
+                          signature request live here so the bar stays a single line. */}
+                      <div className="relative shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setComposeMoreOpen((open) => !open)}
+                          className={composeIconClass(composeMoreOpen)}
+                          title="More options"
+                          aria-label="More options"
+                          aria-expanded={composeMoreOpen}
+                        >
+                          <FiMoreVertical className="h-[18px] w-[18px]" aria-hidden />
+                        </button>
+                        {composeMoreOpen ? (
+                          <div className="compose-menu absolute bottom-full left-0 z-[130] mb-2 max-h-[min(60vh,22rem)] w-60 overflow-y-auto">
+                            <p className="px-3 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-wider text-[#7C7695]">
+                              Templates
+                            </p>
+                            {composeTemplates.length === 0 ? (
+                              <p className="px-3 pb-1.5 text-xs text-[#8C86A6]">No templates yet</p>
+                            ) : (
+                              composeTemplates.map((template) => (
+                                <button
+                                  key={template.id}
+                                  type="button"
+                                  className={`${composeMenuItemClass} truncate`}
+                                  onClick={() => {
+                                    setComposeMoreOpen(false);
+                                    applyComposeTemplate(template.id);
+                                  }}
+                                >
+                                  <FiFileText className="h-4 w-4 shrink-0" aria-hidden />
+                                  <span className="truncate">{template.name}</span>
+                                </button>
+                              ))
+                            )}
+                            <button
+                              type="button"
+                              className={`${composeMenuItemClass} text-[#C8A6F5]`}
+                              onClick={() => {
+                                setComposeMoreOpen(false);
+                                setSaveTemplateName("");
+                                setSaveTemplateModalOpen(true);
+                              }}
+                            >
+                              <FiPlus className="h-4 w-4 shrink-0" aria-hidden />
+                              Save as template…
+                            </button>
+
+                            <div className="my-1 h-px bg-white/[0.07]" />
+                            <p className="px-3 pb-1 pt-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-[#7C7695]">
+                              Signatures
+                            </p>
+                            {composeSignatures.length === 0 ? (
+                              <p className="px-3 pb-1.5 text-xs text-[#8C86A6]">No signatures yet</p>
+                            ) : (
+                              composeSignatures.map((sig) => (
+                                <button
+                                  key={sig.id}
+                                  type="button"
+                                  className={`${composeMenuItemClass} truncate`}
+                                  onClick={() => {
+                                    setComposeMoreOpen(false);
+                                    applyComposeSignature(sig.id);
+                                  }}
+                                >
+                                  <FiEdit3 className="h-4 w-4 shrink-0" aria-hidden />
+                                  <span className="truncate">
+                                    {sig.name}
+                                    {sig.isDefault ? " (default)" : ""}
+                                  </span>
+                                </button>
+                              ))
+                            )}
+
+                            <div className="my-1 h-px bg-white/[0.07]" />
+                            <button
+                              type="button"
+                              className={composeMenuItemClass}
+                              onClick={() => {
+                                setComposeMoreOpen(false);
+                                setSignModalOpen(true);
+                              }}
+                            >
+                              <FiFeather className="h-4 w-4 shrink-0" aria-hidden />
+                              Request signature
+                            </button>
+                            <button
+                              type="button"
+                              className={composeMenuItemClass}
+                              onClick={() => {
+                                setComposeMoreOpen(false);
+                                handlePrintCompose();
+                              }}
+                            >
+                              <FiPrinter className="h-4 w-4 shrink-0" aria-hidden />
+                              Print
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={closeCompose}
-                    className="shrink-0 rounded px-3 py-1.5 text-sm font-medium text-[#5f6368] hover:bg-[#f1f3f4]"
+                    className={composeIconClass()}
+                    title="Discard draft"
+                    aria-label="Discard draft"
                   >
-                    Discard
+                    <FiTrash2 className="h-[18px] w-[18px]" aria-hidden />
                   </button>
                 </div>
               </div>
@@ -6177,13 +7231,37 @@ ${sourceText}`;
         onConfirm={confirmDeleteContact}
       />
       <ConfirmActionModal
+        isOpen={confirmHardDelete}
+        title="Delete Permanently"
+        message={
+          <>
+            {selectedRows.length > 1 ? (
+              <>
+                Permanently delete <span className="font-semibold text-white">{selectedRows.length} emails</span>?
+              </>
+            ) : (
+              <>Permanently delete this email?</>
+            )}{" "}
+            They will not go to Trash and this cannot be undone.
+          </>
+        }
+        confirmLabel="Delete Permanently"
+        danger
+        dark
+        onCancel={() => setConfirmHardDelete(false)}
+        onConfirm={() => {
+          setConfirmHardDelete(false);
+          void applyAction("deletePermanently");
+        }}
+      />
+      <ConfirmActionModal
         isOpen={Boolean(labelToDelete)}
         title="Delete Label"
         message={
           <>
             Are you sure you want to delete{" "}
-            <span className="font-semibold text-[#1E1B2E]">{labelToDelete?.name || "this label"}</span>? Messages keep
-            their content.
+            <span className="font-semibold text-white">{labelToDelete?.name || "this label"}</span>? Messages keep their
+            content.
           </>
         }
         confirmLabel={deletingLabel ? "Deleting..." : "Delete Label"}

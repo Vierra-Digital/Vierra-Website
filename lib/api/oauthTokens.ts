@@ -1,6 +1,7 @@
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/crypto";
+import { invalidateAccessibleAccountsCache } from "@/lib/email/mailboxAccess";
 
 interface PersistTokenInput {
   platform: string;
@@ -34,6 +35,9 @@ export async function persistPlatformToken(userId: string, input: PersistTokenIn
     update: data,
     create: { user_id: userId, platform: input.platform, ...data },
   });
+  // A newly-connected (or reconnected) Gmail account changes what getAccessibleGmailAccounts
+  // returns for this user — drop the cached list so it shows up immediately, not after its TTL.
+  if (input.platform.startsWith("gmail:")) invalidateAccessibleAccountsCache(userId);
 }
 
 /** Same as persistPlatformToken, but for the pre-account onboarding flow. */

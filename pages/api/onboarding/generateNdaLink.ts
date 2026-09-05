@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { saveSessionData } from "@/lib/sessionStore"
 import { getPresetById } from "@/lib/presets"
 import { getPresetFieldsOverride } from "@/lib/presetOverrides"
-import { parse as parseCookie } from "cookie"
+import { parseCookie } from "@/lib/api/cookies"
 
 const NDA_PRESET_ID = "non-disclosure-agreement"
 
@@ -46,8 +46,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const cwd = process.cwd()
   const pathsToTry = [
-    path.join(cwd, preset.pdfPath),
-    path.join(cwd, preset.pdfPath.replace("data/presets/", "public/presets/")),
+    path.join(/*turbopackIgnore: true*/ cwd, preset.pdfPath),
+    path.join(/*turbopackIgnore: true*/ cwd, preset.pdfPath.replace("data/presets/", "public/presets/")),
   ]
   const pdfFullPath = pathsToTry.find((p) => fs.existsSync(p))
   if (!pdfFullPath) {

@@ -39,6 +39,7 @@ interface BoardMember {
   name: string | null;
   email: string | null;
   position: string | null;
+  image: boolean;
 }
 
 interface ProjectTask {
@@ -199,10 +200,15 @@ export default function ProjectManagement() {
   }, [selectedBoard]);
 
   useEffect(() => {
+    // Loading the board list on mount; the fetch flips its own loading and error state after
+    // awaiting, which is what an effect is for.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchBoards();
   }, [fetchBoards]);
 
   useEffect(() => {
+    // Tasks belong to the selected board, so they are re-fetched when the selection changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (selectedBoard) fetchTasks();
   }, [selectedBoard, fetchTasks]);
 
@@ -219,6 +225,8 @@ export default function ProjectManagement() {
   }, []);
 
   useEffect(() => {
+    // Assignable members are the same for every board, so this loads once on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchBoardMembers();
   }, [fetchBoardMembers]);
 
@@ -450,7 +458,7 @@ export default function ProjectManagement() {
   return (
     <div className={`w-full h-full bg-[#FAFAFA] text-[#111014] flex flex-col ${inter.className}`}>
       <div className="flex-1 flex justify-center px-6 pt-2">
-        <div className="w-full max-w-6xl flex flex-col h-full">
+        <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
           <div className="w-full flex justify-between items-center mb-2">
             <div>
               <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Project Tasks</h1>
@@ -606,7 +614,7 @@ export default function ProjectManagement() {
                                           title={m.name || m.email || ""}
                                         >
                                           <ProfileImage
-                                            src={`/api/admin/getUserImage?userId=${m.id}`}
+                                            src={m.image ? `/api/admin/getUserImage?userId=${m.id}` : null}
                                             alt={m.name || ""}
                                             name={m.name || m.email || "?"}
                                             size={24}
@@ -893,7 +901,7 @@ function AddTaskModal({
                           className="rounded border-[#E5E7EB] text-[#701CC0] focus:ring-[#701CC0]"
                         />
                         <ProfileImage
-                          src={`/api/admin/getUserImage?userId=${m.id}`}
+                          src={m.image ? `/api/admin/getUserImage?userId=${m.id}` : null}
                           alt={m.name || ""}
                           name={m.name || m.email || "?"}
                           size={24}
@@ -1069,7 +1077,7 @@ function TaskDetailModal({
                     title={`${m.name || m.email}${m.position ? ` · ${m.position}` : ""}`}
                   >
                     <ProfileImage
-                      src={`/api/admin/getUserImage?userId=${m.id}`}
+                      src={m.image ? `/api/admin/getUserImage?userId=${m.id}` : null}
                       alt={m.name || ""}
                       name={m.name || m.email || "?"}
                       size={32}
@@ -1382,7 +1390,7 @@ function EditTaskModal({
                         className="rounded border-[#E5E7EB] text-[#701CC0] focus:ring-[#701CC0]"
                       />
                       <ProfileImage
-                        src={`/api/admin/getUserImage?userId=${m.id}`}
+                        src={m.image ? `/api/admin/getUserImage?userId=${m.id}` : null}
                         alt={m.name || ""}
                         name={m.name || m.email || "?"}
                         size={24}

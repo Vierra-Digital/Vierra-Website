@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import Head from "next/head"
 import { inter } from "@/lib/fonts";
 import Image from "next/image"
 import ProfileImage from "@/components/ProfileImage"
 import { profileImageSrc } from "@/lib/profileImage"
+import { getInitialUserProfile } from "@/lib/profileImage.server"
 import Link from "next/link"
 import { FiLogOut, FiFolder } from "react-icons/fi"
 import { AiOutlineAppstore } from "react-icons/ai"
@@ -15,6 +16,7 @@ import { useSession, signOut } from "@/lib/session-client"
 import { requireSession } from "@/lib/auth"
 import type { GetServerSideProps } from "next"
 import dynamic from "next/dynamic"
+import { useActivityHeartbeat } from "@/hooks/useActivityHeartbeat"
 
 const UserSettingsPage = dynamic(() => import("@/components/UserSettingsPage"), {
   ssr: false,
@@ -27,62 +29,52 @@ const LinkedInContextSection = dynamic(
   { ssr: false }
 )
 
+type ClientPageProps = {
+  initialUserName: string | null
+  initialImageVersion: number | string
+}
 
-const ClientPage = () => {
+const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) => {
   const router = useRouter()
   const [showSettings, setShowSettings] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [currentSection, setCurrentSection] = useState(0)
   const { data: session, status } = useSession()
-  const [currentUserName, setCurrentUserName] = useState<string | null>(null)
-  const [imageVersion, setImageVersion] = useState<number>(0)
+  const [currentUserName, setCurrentUserName] = useState<string | null>(initialUserName)
+  const [imageVersion, setImageVersion] = useState<number | string>(initialImageVersion)
 
   useEffect(() => {
+    // Scoped to the effect that is its only caller. It used to sit further down the component and
+    // be called from up here — legal, since a function declaration is hoisted, but it read as a
+    // use-before-declaration and the compiler flagged it as one.
+    async function fetchCurrentUser() {
+      try {
+        const response = await fetch("/api/profile/getUser")
+        if (response.ok) {
+          const userData = await response.json()
+          setCurrentUserName(userData.name)
+          if (userData.imageVersion) setImageVersion(userData.imageVersion)
+        }
+      } catch (error) {
+        console.error("Failed to fetch current user:", error)
+      }
+    }
+
     fetchCurrentUser()
   }, [])
 
   useEffect(() => {
     if (router.query.settings === "1") {
+      // ?settings=1 opens the settings panel on load. Reading it during render would tie the markup to the
+      // query string on a page whose first render has to match the server's.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowSettings(true)
     }
   }, [router.query.settings])
 
-  useEffect(() => {
-    const updateActivity = async () => {
-      try {
-        await fetch("/api/profile/updateActivity", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "online" }),
-        })
-      } catch (error) {
-        console.error("Failed to update activity:", error)
-      }
-    }
-    updateActivity()
-    const interval = setInterval(updateActivity, 2 * 60 * 1000)
-    const handleVisibilityChange = () => {
-      if (!document.hidden) updateActivity()
-    }
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-    return () => {
-      clearInterval(interval)
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
-    }
-  }, [])
+  useActivityHeartbeat()
 
-  async function fetchCurrentUser() {
-    try {
-      const response = await fetch("/api/profile/getUser")
-      if (response.ok) {
-        const userData = await response.json()
-        setCurrentUserName(userData.name)
-        if (userData.imageVersion) setImageVersion(userData.imageVersion)
-      }
-    } catch (error) {
-      console.error("Failed to fetch current user:", error)
-    }
-  }
+
 
   if (status === "loading") {
     return (
@@ -105,7 +97,7 @@ const ClientPage = () => {
         <meta name="robots" content="noindex,nofollow" />
       </Head>
       <div id="main-panel" className="fixed inset-0 w-full h-full bg-white flex flex-row overflow-hidden">
-        <div id="left-side" className={`relative flex flex-col h-full z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
+        <div id="left-side" className={`relative flex flex-col h-full shrink-0 z-20 bg-[#701CC0] transition-all ease-in-out duration-300 ${isSidebarOpen ? "min-w-[243px]" : "w-0"} md:w-[243px] overflow-hidden`}>
           <div id="vierra-nameplate-body" className="w-full h-20 flex items-center justify-center mb-4">
             <Link href="/">
               <Image
@@ -149,7 +141,7 @@ const ClientPage = () => {
           </div>
         </div>
 
-        <div id="right-side" className="flex flex-col w-full h-full overflow-y-auto relative">
+        <div id="right-side" className="flex flex-col flex-1 min-w-0 h-full overflow-y-auto overflow-x-hidden relative">
           <div id="right-side-heading" className="flex w-full flex-row h-16 bg-[#F8F0FF]">
             <div className="md:hidden flex items-center pl-2">
               <button
@@ -221,6 +213,7 @@ const ClientPage = () => {
                   email: session?.user?.email || "",
                   image: profileImageSrc(imageVersion),
                 }}
+                userRole="user"
                 onNameUpdate={setCurrentUserName}
                 onImageUpdate={async () => {
                   const r = await fetch("/api/profile/getUser")
@@ -265,7 +258,13 @@ export const getServerSideProps: GetServerSideProps = async (ctx) => {
     return { redirect: { destination: "/panel", permanent: false } }
   }
 
-  return { props: {} }
+  const profile = await getInitialUserProfile(session.user.id)
+  return {
+    props: {
+      initialUserName: profile.name,
+      initialImageVersion: profile.imageVersion,
+    },
+  }
 }
 
 export default ClientPage

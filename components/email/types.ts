@@ -41,7 +41,6 @@ export type MessageRow = {
   references: string;
   unread: boolean;
   starred?: boolean;
-  threadCount?: number;
   tracked: boolean;
   trackingOpenCount?: number;
   trackingClickCount?: number;
@@ -57,6 +56,8 @@ export type MessageRow = {
   composeBodyText?: string;
   composeBodyHtml?: string;
   composePreviewHtml?: string;
+  /** How many messages the collapsed conversation stands for (1 when it is a single message). */
+  threadCount?: number;
 };
 
 export type MessageDetail = {
@@ -71,6 +72,11 @@ export type MessageDetail = {
   messageIdHeader?: string;
   references?: string;
   senderPhotoUrl?: string;
+  /**
+   * Ordered avatar sources (contact photo → Gravatar → company favicon), built server-side.
+   * `kind` drives rendering: a photo fills the circle, a logo is contained so it isn't cropped.
+   */
+  senderAvatarSources?: Array<{ url: string; kind: "photo" | "logo" }>;
   threadMessages?: ThreadMessage[];
   trackers?: { count: number; vendors: string[] };
 };
@@ -98,6 +104,8 @@ export type MailboxCounts = {
   archive: number;
   spam: number;
   trash: number;
+  /** Unread count for the Starred view. Optional so older payloads still type-check. */
+  starred?: number;
 };
 
 export type ModuleUnreadBadgeCounts = MailboxCounts;

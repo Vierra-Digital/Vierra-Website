@@ -1,11 +1,29 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getAccessibleGmailAccounts } from "@/lib/email/mailboxAccess";
-import { extractHeader } from "@/lib/gmail/gmailApi";
+import { getAccessibleGmailAccounts, getGmailAliasAccounts, selectFetchAccounts } from "@/lib/email/mailboxAccess";
+import { extractHeader, buildAliasScopeQuery } from "@/lib/gmail/gmailApi";
 import { asQueryStr } from "@/lib/api/parsing";
+import { collapsesThreads } from "@/lib/gmail/mailboxCollapse";
+import { mapInBatches } from "@/lib/batch";
+import {
+  getAccountBucket,
+  getStaleCacheEntry,
+  freshCacheEntry,
+  putCacheEntry,
+  withListLock,
+  type CacheEntry,
+} from "@/lib/gmail/messageListCache";
 
 type Mailbox = "inbox" | "sent" | "drafts" | "spam" | "trash" | "archive" | "allmail" | "starred" | "important" | "scheduled";
+/**
+ * Concurrency for per-message GET calls when filling in a list page. Gmail's write endpoints cap
+ * at 5 (see pages/api/gmail/actions.ts) specifically because concurrent *writes* triggered "Too
+ * many concurrent requests for user" — reads carry a materially higher per-user quota, so reusing
+ * the write-path ceiling here just makes a 50-message page wait through ~5 sequential rounds of
+ * latency for no rate-limit benefit.
+ */
+const MESSAGE_DETAIL_CONCURRENCY = 20;
 const OPEN_BASE_WINDOW_MS = 15_000;
 const OPEN_SESSION_GAP_MS = 5 * 60 * 1000;
 const OPEN_MAX_CONTINUOUS_STEP_MS = 60_000;
@@ -78,7 +96,13 @@ function parseMailbox(v: string | undefined): Mailbox {
 
 function buildMailboxQuery(mailbox: Mailbox) {
   if (mailbox === "archive") {
-    return { q: "-in:inbox -in:sent -in:drafts -in:spam -in:trash" };
+    // "Archived" in Gmail means one thing: no INBOX label. This used to also exclude in:sent,
+    // which silently swallowed anything self-addressed — a form notification your own site
+    // mails to you carries BOTH SENT and INBOX, so archiving it removed INBOX (correct) and
+    // then the -in:sent clause hid it here (wrong). The message was archived and unfindable,
+    // which reads exactly like archive deleting mail. Sent copies now show up in Archive too;
+    // that's the honest definition, and being able to find what you archived matters more.
+    return { q: "-in:inbox -in:drafts -in:spam -in:trash" };
   }
   if (mailbox === "sent") {
     return { q: "in:sent -in:trash" };
@@ -133,8 +157,16 @@ function firstRecipient(text: string) {
   return first || cleaned;
 }
 
-async function fetchGmailList(accessToken: string, mailbox: Mailbox, maxResults: number, search?: string, labelId?: string) {
+async function fetchGmailList(
+  accessToken: string,
+  mailbox: Mailbox,
+  maxResults: number,
+  search?: string,
+  labelId?: string,
+  pageToken?: string
+) {
   const params = new URLSearchParams({ maxResults: String(maxResults) });
+  if (pageToken) params.set("pageToken", pageToken);
   const searchTerm = (search || "").trim();
   if (labelId) {
     // Viewing a custom label overrides the mailbox filter.
@@ -208,6 +240,121 @@ async function fetchWithRetry(url: string, init: RequestInit, attempts = 3): Pro
   return lastResponse as Response;
 }
 
+type HistoryLabelId = "INBOX" | "SPAM" | "TRASH" | "STARRED" | "IMPORTANT" | "SENT" | "DRAFT";
+
+/**
+ * Only views that map 1:1 onto a single Gmail system label can be safely repaired via the
+ * History API's `labelId` filter — everything else (free-text search, a custom label, "archive"
+ * which is defined as the ABSENCE of several labels, "allmail"/"scheduled" which are compound
+ * queries) has no equivalent history filter, and always takes the existing full list+get path.
+ */
+function historyLabelIdFor(mailbox: Mailbox, labelIdFilter: string, searchQuery: string): HistoryLabelId | null {
+  if (labelIdFilter || searchQuery.trim()) return null;
+  switch (mailbox) {
+    case "inbox": return "INBOX";
+    case "spam": return "SPAM";
+    case "trash": return "TRASH";
+    case "starred": return "STARRED";
+    case "important": return "IMPORTANT";
+    case "sent": return "SENT";
+    case "drafts": return "DRAFT";
+    default: return null;
+  }
+}
+
+/** The mailbox's current change-cursor — the baseline a later request diffs against via history.list. */
+async function fetchMailboxHistoryId(accessToken: string): Promise<string | null> {
+  const response = await fetchWithRetry("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!response.ok) return null;
+  const payload = (await response.json()) as { historyId?: string };
+  return payload.historyId || null;
+}
+
+type HistoryListResponse = {
+  history?: Array<{
+    messagesAdded?: Array<{ message?: { id?: string } }>;
+    messagesDeleted?: Array<{ message?: { id?: string } }>;
+    labelsAdded?: Array<{ message?: { id?: string } }>;
+    labelsRemoved?: Array<{ message?: { id?: string } }>;
+  }>;
+  historyId?: string;
+  nextPageToken?: string;
+};
+
+/** Bound the worst case of a very stale historyId — beyond this, trust a full resync instead. */
+const HISTORY_PAGE_CAP = 5;
+
+/**
+ * Which message ids newly entered or left `labelId` since `startHistoryId`. Gmail filters
+ * history records to this label server-side, so a messagesAdded/labelsAdded record always means
+ * "now has this label" and labelsRemoved/messagesDeleted always means "no longer does" — no need
+ * to re-check labelIds locally.
+ *
+ * Returns null when the delta can't be trusted: a 404 means `startHistoryId` fell outside
+ * Gmail's retained history window (it only keeps about a week), and hitting the page cap means
+ * there were too many changes to be sure a partial read isn't missing an add/remove pair split
+ * across the untruncated pages. Either way the caller must fall back to a full list+get, exactly
+ * as it would for a plain cache miss — this is a latency optimization, never a correctness path.
+ */
+async function fetchLabelHistoryDelta(
+  accessToken: string,
+  startHistoryId: string,
+  labelId: HistoryLabelId
+): Promise<{ added: Set<string>; removed: Set<string>; historyId: string } | null> {
+  const added = new Set<string>();
+  const removed = new Set<string>();
+  let latestHistoryId = startHistoryId;
+  let pageToken: string | undefined;
+  let pages = 0;
+
+  do {
+    const params = new URLSearchParams({ startHistoryId, labelId });
+    params.append("historyTypes", "messageAdded");
+    params.append("historyTypes", "messageDeleted");
+    params.append("historyTypes", "labelAdded");
+    params.append("historyTypes", "labelRemoved");
+    if (pageToken) params.set("pageToken", pageToken);
+
+    const response = await fetchWithRetry(`https://gmail.googleapis.com/gmail/v1/users/me/history?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) return null;
+    const payload = (await response.json()) as HistoryListResponse;
+    if (payload.historyId) latestHistoryId = payload.historyId;
+
+    for (const record of payload.history || []) {
+      for (const item of record.messagesAdded || []) {
+        if (!item.message?.id) continue;
+        added.add(item.message.id);
+        removed.delete(item.message.id);
+      }
+      for (const item of record.labelsAdded || []) {
+        if (!item.message?.id) continue;
+        added.add(item.message.id);
+        removed.delete(item.message.id);
+      }
+      for (const item of record.labelsRemoved || []) {
+        if (!item.message?.id) continue;
+        removed.add(item.message.id);
+        added.delete(item.message.id);
+      }
+      for (const item of record.messagesDeleted || []) {
+        if (!item.message?.id) continue;
+        removed.add(item.message.id);
+        added.delete(item.message.id);
+      }
+    }
+
+    pageToken = payload.nextPageToken;
+    pages += 1;
+  } while (pageToken && pages < HISTORY_PAGE_CAP);
+
+  if (pageToken) return null;
+  return { added, removed, historyId: latestHistoryId };
+}
+
 export default withAuth(async (req, res, session) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
@@ -235,8 +382,14 @@ export default withAuth(async (req, res, session) => {
   // Accessible = owned + admin-granted (shared inboxes). Each carries the ownerUserId whose
   // token/data to use; for owned accounts ownerUserId === userId (identical to before).
   const accessibleAccounts = await getAccessibleGmailAccounts(userId);
-  const accountRows = accessibleAccounts.filter((row) =>
-    selectedEmails.length ? selectedEmails.includes(row.email) : true
+  // Selected accounts, plus any selected send-as alias resolved back to the account that holds its
+  // mail — and never an alias whose parent is already being read, which would return it twice.
+  const accountRows = selectFetchAccounts(
+    accessibleAccounts,
+    selectedEmails.some((email) => !accessibleAccounts.some((row) => row.email === email))
+      ? await getGmailAliasAccounts(userId)
+      : [],
+    selectedEmails
   );
 
   if (accountRows.length === 0) {
@@ -249,22 +402,48 @@ export default withAuth(async (req, res, session) => {
   const messagesByAccount = await Promise.all(
     accountRows.map(async (account) => {
       try {
-        const tokenResult = await getValidGmailAccessToken(account.ownerUserId, account.email);
+        const tokenAccountEmail = account.aliasOfEmail || account.email;
+        const tokenResult = await getValidGmailAccessToken(account.ownerUserId, tokenAccountEmail);
         if (!tokenResult.ok) {
           throw new Error(tokenResult.message);
         }
 
-        const loadAccountMessages = async (accessToken: string) => {
-          const list = await fetchGmailList(accessToken, mailbox, maxResults, searchQuery, labelIdFilter);
-          accountHasMore.push(Boolean(list.nextPageToken));
-          const ids = (list.messages || []).map((m) => m.id).filter(Boolean);
-          if (ids.length === 0) return [] as MessageRow[];
+        // An alias has no inbox of its own — it shares the owning account's, so scope the fetch
+        // to just the mail addressed to (or, for sent/drafts, sent from) that alias.
+        const aliasDirection = mailbox === "sent" || mailbox === "drafts" ? "from" : "to";
+        const effectiveSearch = account.aliasOfEmail
+          ? `${buildAliasScopeQuery(account.email, aliasDirection)} ${searchQuery}`.trim()
+          : searchQuery;
 
-          const detailed = await Promise.all(ids.map((id) => fetchGmailMessage(accessToken, id)));
-          const visibleDetailed =
+        const mapDetailedMessages = (detailed: GmailMessageResponse[]): MessageRow[] => {
+          let visibleDetailed =
             mailbox === "sent"
               ? detailed.filter((msg) => !(Array.isArray(msg.labelIds) && msg.labelIds.includes("TRASH")))
               : detailed;
+
+          if (mailbox === "archive") {
+            /**
+             * Archive is "no INBOX label", which Gmail search expresses fine — but mail this
+             * account sent also has no INBOX, so the query alone drags every sent message in.
+             * The previous `-in:sent` clause excluded those AND excluded self-addressed mail,
+             * which carries SENT *and* INBOX; archiving such a message removed INBOX and then
+             * the clause hid it, so it vanished with nowhere to be found.
+             *
+             * Gmail applies CATEGORY_* labels only to mail it received. A message you sent
+             * carries SENT and nothing else; a self-addressed one (your site mailing a form
+             * notification to your own address) carries SENT *and* a CATEGORY_*, because it
+             * arrived as well. That distinction is what search can't express, so use it here:
+             * a SENT message stays only if Gmail also treated it as received.
+             *
+             * Keeps archived self-addressed mail findable — the bug where a message archived
+             * fine and then vanished — while ordinary sent mail stays out of Archive.
+             */
+            visibleDetailed = visibleDetailed.filter((msg) => {
+              const labels = Array.isArray(msg.labelIds) ? msg.labelIds : [];
+              if (!labels.includes("SENT")) return true;
+              return labels.some((label) => label.startsWith("CATEGORY_"));
+            });
+          }
           return visibleDetailed.map((msg) => {
             const headers = msg.payload?.headers || [];
             const subject = decodeHtmlEntities(extractHeader(headers, "Subject") || "(No Subject)");
@@ -300,11 +479,102 @@ export default withAuth(async (req, res, session) => {
           });
         };
 
+        // Cached per (owner+account, mailbox+label+search): a later page for the same view only
+        // fetches the incremental window (via Gmail's pageToken) instead of redoing everything
+        // already fetched for earlier pages of this view. See messageListCache.ts.
+        const cacheSubKey = `${mailbox}::${labelIdFilter}::${effectiveSearch}`;
+        const bucket = getAccountBucket(account.ownerUserId, tokenAccountEmail);
+        const lockKey = `${account.ownerUserId}::${tokenAccountEmail.toLowerCase()}::${cacheSubKey}`;
+        // Only set for a simple, single-label view — see historyLabelIdFor. Everything else
+        // (search, custom label, "archive"/"allmail"/"scheduled") always takes the full path.
+        const syncLabelId = historyLabelIdFor(mailbox, labelIdFilter, effectiveSearch);
+
+        const loadAccountMessages = async (accessToken: string) => {
+          const cached = getStaleCacheEntry<MessageRow>(bucket, cacheSubKey);
+          const isFresh = !!cached && cached.expiresAt > Date.now();
+          let entry: CacheEntry<MessageRow> = isFresh ? (cached as CacheEntry<MessageRow>) : freshCacheEntry<MessageRow>();
+
+          if (!isFresh || (entry.rows.length < maxResults && !entry.exhausted)) {
+            // Serialized: a concurrent request for this same view (e.g. quick back/forward paging)
+            // must see this request's progress rather than growing the same entry independently —
+            // see withListLock in messageListCache.ts.
+            entry = await withListLock(lockKey, async () => {
+              // Re-read: the lock may have queued behind a request that already refreshed this
+              // entry far enough, in which case there's nothing left to do.
+              const recheck = getStaleCacheEntry<MessageRow>(bucket, cacheSubKey);
+              let current: CacheEntry<MessageRow>;
+              if (recheck && recheck.expiresAt > Date.now()) {
+                current = recheck;
+              } else {
+                // Cheap path: repair the previous rows via Gmail's History API instead of a full
+                // list+get, when the stale entry still holds rows and a historyId to diff from.
+                // ANY failure (see fetchLabelHistoryDelta) falls straight through to the full
+                // refetch below — this is a latency optimization, never a correctness risk.
+                const delta =
+                  syncLabelId && recheck && recheck.rows.length > 0 && recheck.historyId
+                    ? await fetchLabelHistoryDelta(accessToken, recheck.historyId, syncLabelId).catch(() => null)
+                    : null;
+                if (recheck && delta) {
+                  let rows = recheck.rows.filter((row) => !delta.removed.has(row.id));
+                  const existingIds = new Set(rows.map((row) => row.id));
+                  const newIds = [...delta.added].filter((id) => !existingIds.has(id));
+                  if (newIds.length > 0) {
+                    const detailed = await mapInBatches(newIds, (id) => fetchGmailMessage(accessToken, id), MESSAGE_DETAIL_CONCURRENCY);
+                    rows = [...mapDetailedMessages(detailed), ...rows].sort((a, b) => b.timestamp - a.timestamp);
+                  }
+                  current = {
+                    rows,
+                    nextPageToken: recheck.nextPageToken,
+                    exhausted: recheck.exhausted,
+                    expiresAt: 0,
+                    historyId: delta.historyId,
+                  };
+                } else {
+                  current = freshCacheEntry<MessageRow>();
+                }
+              }
+
+              const seenIds = new Set(current.rows.map((row) => row.id));
+              while (current.rows.length < maxResults && !current.exhausted) {
+                const needed = maxResults - current.rows.length;
+                const list = await fetchGmailList(accessToken, mailbox, needed, effectiveSearch, labelIdFilter, current.nextPageToken);
+                current.nextPageToken = list.nextPageToken;
+                if (!list.nextPageToken) current.exhausted = true;
+                // Gmail's pageToken pagination isn't guaranteed stable if the mailbox changes
+                // between pages, which can hand back an id this entry already has — drop it rather
+                // than let a duplicate corrupt the merged/sorted list downstream.
+                const ids = (list.messages || []).map((m) => m.id).filter((id) => id && !seenIds.has(id));
+                if (ids.length === 0) {
+                  if (!list.nextPageToken) break;
+                  continue;
+                }
+
+                // Bounded, not all at once — see MESSAGE_DETAIL_CONCURRENCY.
+                const detailed = await mapInBatches(ids, (id) => fetchGmailMessage(accessToken, id), MESSAGE_DETAIL_CONCURRENCY);
+                for (const row of mapDetailedMessages(detailed)) {
+                  seenIds.add(row.id);
+                  current.rows.push(row);
+                }
+              }
+              // First full fetch for a repairable view: establish the historyId baseline a later
+              // request can diff against. Best-effort — a failure here just means the next stale
+              // read falls back to a full refetch instead of a repair, exactly like today.
+              if (syncLabelId && !current.historyId) {
+                current.historyId = (await fetchMailboxHistoryId(accessToken).catch(() => null)) || undefined;
+              }
+              putCacheEntry(bucket, cacheSubKey, current);
+              return current;
+            });
+          }
+          accountHasMore.push(!entry.exhausted);
+          return entry.rows.slice(0, maxResults);
+        };
+
         try {
           return await loadAccountMessages(tokenResult.accessToken);
         } catch (error) {
           if (!isAuthFailure(error)) throw error;
-          const refreshResult = await getValidGmailAccessToken(account.ownerUserId, account.email, { forceRefresh: true });
+          const refreshResult = await getValidGmailAccessToken(account.ownerUserId, tokenAccountEmail, { forceRefresh: true });
           if (!refreshResult.ok) {
             throw new Error(refreshResult.message);
           }
@@ -319,7 +589,53 @@ export default withAuth(async (req, res, session) => {
     })
   );
 
-  let mergedMessages = messagesByAccount.flat().sort((a, b) => b.timestamp - a.timestamp);
+  /**
+   * Dedupe by Gmail message id before anything else reads the list.
+   *
+   * selectFetchAccounts already tries to avoid reading a mailbox twice via one of its send-as
+   * aliases, but any path that slips past it — an alias whose parent resolves differently, or the
+   * same mailbox reachable as both owned and granted — fetches the same messages again and both
+   * copies land here. It showed up worst in Archive and Sent, where self-addressed mail is common.
+   * A message id is unique within a mailbox, so keying on it collapses the repeats while leaving
+   * genuinely distinct messages from different accounts alone.
+   */
+  /**
+   * One row per conversation, in every mailbox — what Gmail does everywhere.
+   *
+   * Collapsing only Archive and Sent left the duplicates visible in Inbox, which is where they
+   * were actually being seen. The reported pair is instructive: two real submissions 30 minutes
+   * apart, different Message-IDs, that Gmail threaded together because the subject, sender and
+   * recipient all match — and because the site mails them from alex@vierradev.com TO
+   * alex@vierradev.com, each one carries SENT *and* INBOX, so it surfaces in two mailboxes at
+   * once. Per-message rendering therefore showed the same conversation twice in both.
+   *
+   * Drafts are exempt: each draft is its own editable object, not a message in a conversation.
+   * Rows are sorted newest-first above, so the kept row is the latest message in the thread, and
+   * threadCount tells the UI how many it stands for.
+   */
+  const threadCounts = new Map<string, number>();
+  for (const message of messagesByAccount.flat()) {
+    const key = String(message.threadId || message.id || "");
+    if (key) threadCounts.set(key, (threadCounts.get(key) ?? 0) + 1);
+  }
+  // See lib/gmail/mailboxCollapse.ts for why only these two views collapse.
+  const collapseThreads = collapsesThreads(mailbox);
+  const seenThreadIds = new Set<string>();
+  let mergedMessages: MessageRow[] = messagesByAccount
+    .flat()
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .filter((message) => {
+      if (!collapseThreads) return true;
+      const threadKey = String(message.threadId || "");
+      if (!threadKey) return true;
+      if (seenThreadIds.has(threadKey)) return false;
+      seenThreadIds.add(threadKey);
+      return true;
+    })
+    .map((message) => ({
+      ...message,
+      threadCount: threadCounts.get(String(message.threadId || message.id || "")) ?? 1,
+    }));
   if (mailbox === "drafts") {
     // Resolve account_ids for selected emails when filtering
     let selectedAccountIds: string[] = [];

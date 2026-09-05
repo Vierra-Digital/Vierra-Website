@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from "react"
 import { bricolage, inter } from "@/lib/fonts";
 import Image from "next/image"
 import dynamic from "next/dynamic"
-import { motion, useScroll, useTransform } from "framer-motion"
+import { m as motion, useScroll, useTransform } from "framer-motion"
 import { ArrowUpRight, Sparkles } from "lucide-react"
 import { Button } from "../components/ui/button"
 import { Header } from "@/components/Header"
@@ -12,6 +12,7 @@ import { track } from "@/lib/track"
 import LazyMount from "@/components/LazyMount"
 import { BusinessSolutions } from "@/components/BusinessSection/BusinessSolutions"
 import { SECTION_SCROLL_KEY, scrollWindowToSection } from "@/lib/sectionScroll"
+import { jsonLd } from "@/lib/jsonLd";
 
 // Below-the-fold sections are code-split so they stay out of the homepage's
 // initial JS chunk. Text-bearing sections keep SSR (next/dynamic defaults to
@@ -233,7 +234,7 @@ export default function HomeClient() {
               <script
                 type="application/ld+json"
                 dangerouslySetInnerHTML={{
-                  __html: JSON.stringify({
+                  __html: jsonLd({
                     "@context": "https://schema.org",
                     "@type": "WebPage",
                     "@id": "https://vierradev.com/#webpage",
@@ -287,7 +288,7 @@ export default function HomeClient() {
                 aria-label="UMass Isenberg School of Management"
                 className="opacity-80 transition-opacity duration-300 hover:opacity-100"
               >
-                <Image src="/assets/Partners/Isenberg-w.png" alt="UMass Isenberg School of Management logo" width={580} height={120} className="h-7 w-auto object-contain" />
+                <Image src="/assets/Partners/Isenberg-w.png" alt="UMass Isenberg School of Management logo" width={580} height={120} sizes="136px" className="h-7 w-auto object-contain" />
               </a>
               <a
                 href="https://ironandwaterco.com"
@@ -307,7 +308,7 @@ export default function HomeClient() {
                 aria-label="Granite Logistics"
                 className="opacity-80 transition-opacity duration-300 hover:opacity-100"
               >
-                <Image src="/assets/Partners/Granite-w.png" alt="Granite Logistics logo" width={1041} height={240} className="h-8 w-auto object-contain" />
+                <Image src="/assets/Partners/Granite-w.png" alt="Granite Logistics logo" width={1041} height={240} sizes="139px" className="h-8 w-auto object-contain" />
               </a>
               <a
                 href="https://thearoundhub.com"
@@ -316,7 +317,7 @@ export default function HomeClient() {
                 aria-label="The Around Hub"
                 className="opacity-80 transition-opacity duration-300 hover:opacity-100"
               >
-                <Image src="/assets/Partners/AroundHub-w.png" alt="The Around Hub logo" width={457} height={120} className="h-7 w-auto object-contain" />
+                <Image src="/assets/Partners/AroundHub-w.png" alt="The Around Hub logo" width={457} height={120} sizes="107px" className="h-7 w-auto object-contain" />
               </a>
               <a
                 href="https://freeclass.qigonginfusedyoga.com/"
@@ -325,7 +326,7 @@ export default function HomeClient() {
                 aria-label="Qigong Infused Yoga"
                 className="opacity-80 transition-opacity duration-300 hover:opacity-100"
               >
-                <Image src="/assets/Partners/Qigong-w.png" alt="Qigong Infused Yoga logo" width={282} height={120} className="h-9 w-auto object-contain" />
+                <Image src="/assets/Partners/Qigong-w.png" alt="Qigong Infused Yoga logo" width={282} height={120} sizes="85px" className="h-9 w-auto object-contain" />
               </a>
               <a
                 href="https://somervilledentalassociates.com/"

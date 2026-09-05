@@ -3,6 +3,7 @@ import formidable from "formidable"
 import fs from "fs"
 import { v4 as uuidv4 } from "uuid"
 import { SessionData, saveSessionData, PdfField } from "@/lib/sessionStore"
+import { requireRole } from "@/lib/auth"
 
 export const config = {
   api: {
@@ -18,6 +19,12 @@ export default async function handler(
     res.setHeader("Allow", ["POST"])
     return res.status(405).json({ message: `Method ${req.method} Not Allowed` })
   }
+
+  // Creating a signing session means accepting a PDF upload and minting a link that presents as an
+  // official Vierra document. generateSignLinkFromPreset — the same operation from a stored preset —
+  // has always required this; this route was reachable by anyone.
+  const session = await requireRole(req, res, ["admin", "staff"])
+  if (!session) return
 
   const form = formidable({})
   let tempPdfPath: string | null = null
@@ -45,7 +52,7 @@ export default async function handler(
     }
 
     if (pdfFile.mimetype !== "application/pdf") {
-      if (tempPdfPath && fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath)
+      if (tempPdfPath && fs.existsSync(/*turbopackIgnore: true*/ tempPdfPath)) fs.unlinkSync(tempPdfPath)
       return res
         .status(400)
         .json({ message: "Invalid file type. Only PDF is allowed." })
@@ -60,7 +67,7 @@ export default async function handler(
         }
         const hasSignature = parsed.some((f: { type?: string }) => f.type === "signature")
         if (!hasSignature) {
-          if (tempPdfPath && fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath)
+          if (tempPdfPath && fs.existsSync(/*turbopackIgnore: true*/ tempPdfPath)) fs.unlinkSync(tempPdfPath)
           return res.status(400).json({ message: "At least one signature field is required." })
         }
         for (const f of parsed) {
@@ -95,7 +102,7 @@ export default async function handler(
         }]
       }
     } catch {
-      if (tempPdfPath && fs.existsSync(tempPdfPath)) fs.unlinkSync(tempPdfPath)
+      if (tempPdfPath && fs.existsSync(/*turbopackIgnore: true*/ tempPdfPath)) fs.unlinkSync(tempPdfPath)
       return res.status(400).json({ message: "Invalid coordinates or fields format." })
     }
 
@@ -106,10 +113,10 @@ export default async function handler(
       throw new Error("Temporary PDF path is null.")
     }
 
-    const pdfContent = fs.readFileSync(tempPdfPath);
+    const pdfContent = fs.readFileSync(/*turbopackIgnore: true*/ tempPdfPath);
     const pdfBase64 = pdfContent.toString('base64');
 
-    if (tempPdfPath && fs.existsSync(tempPdfPath)) {
+    if (tempPdfPath && fs.existsSync(/*turbopackIgnore: true*/ tempPdfPath)) {
       fs.unlinkSync(tempPdfPath);
     }
     tempPdfPath = null;
@@ -131,7 +138,7 @@ export default async function handler(
     if (error instanceof Error) {
       console.error("[generate-sign-link] Error processing PDF upload:", error)
 
-      if (tempPdfPath && fs.existsSync(tempPdfPath)) {
+      if (tempPdfPath && fs.existsSync(/*turbopackIgnore: true*/ tempPdfPath)) {
         try {
           fs.unlinkSync(tempPdfPath)
         } catch (cleanupError) {
