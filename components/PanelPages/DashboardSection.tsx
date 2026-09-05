@@ -577,7 +577,8 @@ const DashboardSection = () => {
                             )}
                         </div>
                     </div>
-<div className="bg-[#F1EFF6] rounded-xl p-4 flex flex-col">
+<div className="flex flex-col gap-4">
+                            <div className="bg-[#F1EFF6] rounded-xl p-4 flex flex-col">
                             <h3 className="text-lg font-semibold text-[#111827] mb-3">Recent Blog Posts</h3>
                             {postsLoading ? (
                                 <div className="space-y-2">
@@ -609,50 +610,53 @@ const DashboardSection = () => {
                                 </ul>
                             )}
                         </div>
+        <div className="bg-[#F1EFF6] rounded-xl p-4">
+                                    <h3 className="text-lg font-semibold text-[#111827] mb-3">Staff Activity</h3>
+                                    {/* Sits under Recent Blog Posts and inherits its 320px track, so
+                                        no width of its own. Height follows the list. */}
+                                    {staffLoading ? (
+                                        <div className="space-y-2">
+                                            {[...Array(3)].map((_, i) => (
+                                                <div key={i} className="dash-skeleton h-9 rounded-lg" style={{ animationDelay: `${i * 70}ms` }} />
+                                            ))}
+                                        </div>
+                                    ) : staffActivity.length === 0 ? (
+                                        <p className="text-xs text-[#6B7280]">No teammates yet.</p>
+                                    ) : (
+                                        <ul className="divide-y divide-[#F1EFF5]">
+                                            {staffActivity.map((row) => (
+                                                <li key={row.userId} className="flex items-center gap-2.5 py-2">
+                                                    <span
+                                                        className={`h-2 w-2 shrink-0 rounded-full ${
+                                                            row.isLive
+                                                                ? "bg-emerald-500"
+                                                                : row.status === "away" || row.status === "busy"
+                                                                  ? "bg-amber-400"
+                                                                  : "bg-[#D1D5DB]"
+                                                        }`}
+                                                        aria-hidden
+                                                    />
+                                                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#111827]">
+                                                        {row.name || row.email || "Unknown"}
+                                                    </span>
+                                                    <span className="shrink-0 text-[11px] text-[#6B7280]">
+                                                        {row.isLive
+                                                    ? "Active Now"
+                                                    : row.status === "away" || row.status === "busy"
+                                                      ? `Away · ${formatActiveSince(row.lastActiveAt)}`
+                                                      : `Offline · ${formatActiveSince(row.lastActiveAt)}`}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                        </div>
                     </div>
 
-                    {/* Staff Activity and the LTV launcher share the row under the chart. */}
-                    <div className="mb-4 grid w-full max-w-[820px] grid-cols-1 items-start gap-4 sm:grid-cols-[290px_224px]">
-                        <div className="bg-[#F1EFF6] rounded-xl p-4">
-                            <h3 className="text-lg font-semibold text-[#111827] mb-3">Staff Activity</h3>
-                            {/* Narrow and tall: half the width it had, with room reserved for the
-                                five rows the endpoint serves. The tile beside it is items-start,
-                                so it keeps its own height rather than matching this one. */}
-                            {staffLoading ? (
-                                <div className="space-y-2">
-                                    {[...Array(3)].map((_, i) => (
-                                        <div key={i} className="dash-skeleton h-9 rounded-lg" style={{ animationDelay: `${i * 70}ms` }} />
-                                    ))}
-                                </div>
-                            ) : staffActivity.length === 0 ? (
-                                <p className="text-xs text-[#6B7280]">No teammates yet.</p>
-                            ) : (
-                                <ul className="min-h-[200px] divide-y divide-[#F1EFF5]">
-                                    {staffActivity.map((row) => (
-                                        <li key={row.userId} className="flex items-center gap-2.5 py-2">
-                                            <span
-                                                className={`h-2 w-2 shrink-0 rounded-full ${
-                                                    row.isLive
-                                                        ? "bg-emerald-500"
-                                                        : row.status === "away" || row.status === "busy"
-                                                          ? "bg-amber-400"
-                                                          : "bg-[#D1D5DB]"
-                                                }`}
-                                                aria-hidden
-                                            />
-                                            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#111827]">
-                                                {row.name || row.email || "Unknown"}
-                                            </span>
-                                            <span className="shrink-0 text-[11px] text-[#6B7280]">
-                                                {row.isLive ? "Active Now" : formatActiveSince(row.lastActiveAt)}
-                                            </span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-
-                        {/* LTV lives here rather than in the rail: it is a scratchpad you open,
+                    {/* The LTV launcher keeps this row to itself now. */}
+                    <div className="mb-4 w-full max-w-[224px]">
+                                                {/* LTV lives here rather than in the rail: it is a scratchpad you open,
                             try numbers in, and close — not a destination worth a permanent tab. */}
                         <button
                             type="button"
