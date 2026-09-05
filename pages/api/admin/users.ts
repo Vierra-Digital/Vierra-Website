@@ -124,7 +124,86 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           hasAccount: Boolean(c.user_id),
         }));
 
-      return res.status(200).json([...shaped, ...shapedClients]);
+      /**
+       * Last successful sign-in per user, in one round trip.
+       *
+       * DISTINCT ON is the point: login_attempts holds every attempt ever made, so fetching them
+       * and reducing in JS would pull the whole history to pick one row per person. Postgres
+       * returns the first row of each user_id group, and the ORDER BY decides which that is.
+       */
+      const everyone = [...shaped, ...shapedClients];
+      const realUserIds = everyone.map((row) => row.id).filter((id) => !id.startsWith("client:"));
+      const lastLogins = realUserIds.length
+        ? await prisma.$queryRaw<Array<{ user_id: string; attempted_at: Date; ip_address: string | null }>>`
+            SELECT DISTINCT ON (user_id) user_id, attempted_at, ip_address
+            FROM login_attempts
+            WHERE success = true AND user_id = ANY(${realUserIds}::uuid[])
+            ORDER BY user_id, attempted_at DESC
+          `
+        : [];
+      const loginByUser = new Map(lastLogins.map((row) => [row.user_id, row]));
+
+      /**
+       * Invitations that were sent and never accepted. They have no user row at all, so a page
+       * listing users could not show them — someone invited a week ago was simply absent, with
+       * nothing to say whether the invite had been sent.
+       */
+      const pendingInvites = await prisma.invitation.findMany({
+        where: {
+          accepted_at: null,
+          ...(isPlatformAdmin ? {} : { company_id: companyId }),
+        },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          created_at: true,
+          expires_at: true,
+          companies: { select: { name: true } },
+        },
+        orderBy: { created_at: "desc" },
+      });
+      const nowForInvites = new Date();
+      const shapedInvites = pendingInvites.map((invite) => ({
+        id: `invite:${invite.id}`,
+        name: null,
+        email: invite.email,
+        role: invite.role,
+        position: null,
+        country: null,
+        company_email: null,
+        mentor: null,
+        strikes: 0,
+        time_zone: null,
+        status: "offline",
+        lastActiveAt: null,
+        clientName: null,
+        companyName: isPlatformAdmin ? (invite.companies?.name ?? null) : null,
+        isPlatformAdmin: false,
+        hasPassword: false,
+        isSelf: false,
+        hasAccount: false,
+        lastLoginAt: null,
+        lastLoginIp: null,
+        pendingInvite: {
+          id: invite.id,
+          invitedAt: invite.created_at.toISOString(),
+          expiresAt: invite.expires_at.toISOString(),
+          expired: invite.expires_at.getTime() < nowForInvites.getTime(),
+        },
+      }));
+
+      const withLogins = everyone.map((row) => {
+        const login = loginByUser.get(row.id);
+        return {
+          ...row,
+          lastLoginAt: login ? login.attempted_at.toISOString() : null,
+          lastLoginIp: login?.ip_address ?? null,
+          pendingInvite: null,
+        };
+      });
+
+      return res.status(200).json([...withLogins, ...shapedInvites]);
     } catch (e) {
       console.error("admin/users GET", e);
       return res.status(500).json({ message: "Internal Server Error" });

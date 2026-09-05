@@ -228,7 +228,7 @@ export const PanelPagination: React.FC<{
           onClick={() => onPageChange(Math.max(0, page - 1))}
           disabled={page === 0}
           aria-label="Previous page"
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#374151] transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-40"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#374151] transition-colors hover:bg-white disabled:pointer-events-none"
         >
           <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
           Previous
@@ -241,7 +241,7 @@ export const PanelPagination: React.FC<{
           onClick={() => onPageChange(Math.min(totalPages - 1, page + 1))}
           disabled={page >= totalPages - 1}
           aria-label="Next page"
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#374151] transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-40"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#374151] transition-colors hover:bg-white disabled:pointer-events-none"
         >
           Next
           <ChevronRight className="h-3.5 w-3.5" aria-hidden />

@@ -54,6 +54,14 @@ type ListedUser = {
     isPlatformAdmin?: boolean
     isSelf?: boolean
     hasAccount?: boolean
+    lastLoginAt?: string | null
+    lastLoginIp?: string | null
+    pendingInvite?: {
+        id: string
+        invitedAt: string
+        expiresAt: string
+        expired: boolean
+    } | null
 }
 
 type SessionStatus = "pending" | "in_progress" | "completed" | "expired" | "canceled"
@@ -111,6 +119,21 @@ const ROLE_TONES: Record<RoleKey, "accent" | "info" | "neutral"> = {
     staff: "info",
     client: "neutral",
 }
+/** "3m ago" up to a week, then a date — a raw timestamp is rarely what you want to read here. */
+const formatRelative = (iso?: string | null) => {
+    if (!iso) return null
+    const then = new Date(iso).getTime()
+    if (!Number.isFinite(then)) return null
+    const minutes = Math.floor((Date.now() - then) / 60000)
+    if (minutes < 1) return "Just now"
+    if (minutes < 60) return `${minutes}m ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    if (days < 7) return `${days}d ago`
+    return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+}
+
 const ROLE_CHOICES: Array<{ value: RoleKey; label: string }> = [
     { value: "admin", label: "Admin" },
     { value: "staff", label: "Staff" },
@@ -139,6 +162,7 @@ function UsersPanel() {
     const [resetSending, setResetSending] = useState<Record<string, boolean>>({})
     const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
     const [userToDelete, setUserToDelete] = useState<{ id: string; name: string | null; email: string | null } | null>(null)
+    const [rescindingInvite, setRescindingInvite] = useState<string | null>(null)
     const [deleteError, setDeleteError] = useState<string>("")
     const [deletingUser, setDeletingUser] = useState<boolean>(false)
     const [searchQuery, setSearchQuery] = useState<string>("")
@@ -292,6 +316,24 @@ function UsersPanel() {
         }
     }
 
+    const rescindInvite = async (inviteId: string) => {
+        setRescindingInvite(inviteId)
+        setError("")
+        try {
+            const r = await fetch(`/api/admin/invitations/${encodeURIComponent(inviteId)}`, { method: "DELETE" })
+            if (!r.ok) {
+                const body = await r.json().catch(() => ({}))
+                setError(body?.message || `Could not rescind the invite (HTTP ${r.status}).`)
+                return
+            }
+            await load()
+        } catch {
+            setError("Could not rescind the invite — the request failed.")
+        } finally {
+            setRescindingInvite(null)
+        }
+    }
+
     const expireSessions = useCallback(async () => {
         try {
             setExpiring(true)
@@ -399,6 +441,7 @@ function UsersPanel() {
             if (claimed.has(key)) continue
             merged.push({
                 id: `session:${s.token}`,
+                pendingInvite: null,
                 name: s.clientName || s.clientEmail,
                 email: s.clientEmail,
                 image: false,
@@ -608,13 +651,14 @@ function UsersPanel() {
                                     <PanelTh>User</PanelTh>
                                     <PanelTh>Role</PanelTh>
                                     {showCompanyColumn && <PanelTh>Company</PanelTh>}
+                                    <PanelTh>Last Login</PanelTh>
                                     <PanelTh>Session</PanelTh>
                                     <PanelTh>Manage</PanelTh>
                                 </PanelThead>
                                 <PanelTbody>
                                     {paginatedRows.map((u) => {
                                         const session = u.session
-                                        const canManageAccount = !u.isSessionOnly && u.hasAccount !== false
+                                        const canManageAccount = !u.isSessionOnly && u.hasAccount !== false && !u.pendingInvite
                                         return (
                                             <PanelTr key={u.id}>
                                                 <PanelTd>
@@ -636,10 +680,34 @@ function UsersPanel() {
                                                         <PanelBadge tone={ROLE_TONES[normalizeRole(u.role)]}>
                                                             {ROLE_LABELS[normalizeRole(u.role)]}
                                                         </PanelBadge>
-                                                        {!canManageAccount && <PanelBadge tone="neutral">No account</PanelBadge>}
+                                                        {u.pendingInvite ? (
+                                                            <PanelBadge tone={u.pendingInvite.expired ? "danger" : "warning"}>
+                                                                {u.pendingInvite.expired ? "Invite expired" : "Invited"}
+                                                            </PanelBadge>
+                                                        ) : (
+                                                            !canManageAccount && <PanelBadge tone="neutral">No account</PanelBadge>
+                                                        )}
                                                     </div>
                                                 </PanelTd>
                                                 {showCompanyColumn && <PanelTd>{u.companyName || <PanelEmptyCell />}</PanelTd>}
+                                                <PanelTd>
+                                                    {u.pendingInvite ? (
+                                                        <span className="text-[12px] text-[#9CA3AF]">
+                                                            Invited {formatRelative(u.pendingInvite.invitedAt)}
+                                                        </span>
+                                                    ) : u.lastLoginAt ? (
+                                                        <div className="flex flex-col items-start">
+                                                            <span>{formatRelative(u.lastLoginAt)}</span>
+                                                            {/* The address is the reason this column is worth a join, but it is
+                                                                reference detail — muted and underneath, not competing with the time. */}
+                                                            <span className="text-[11.5px] tabular-nums text-[#9CA3AF]">
+                                                                {u.lastLoginIp || "IP unknown"}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-[12px] text-[#9CA3AF]">Never</span>
+                                                    )}
+                                                </PanelTd>
                                                 <PanelTd>
                                                     {session ? (
                                                         <PanelBadge tone={SESSION_TONES[session.status]}>
@@ -694,7 +762,9 @@ function UsersPanel() {
                                                                 Renew session
                                                             </RowActionMenuItem>
                                                         )}
-                                                        {(session || (canManageAccount && !u.isSelf && !u.isPlatformAdmin)) && <RowActionMenuDivider />}
+                                                        {(session || u.pendingInvite || (canManageAccount && !u.isSelf && !u.isPlatformAdmin)) && (
+                                                            <RowActionMenuDivider />
+                                                        )}
                                                         {session && (
                                                             <RowActionMenuItem
                                                                 onClick={() => {
@@ -705,6 +775,16 @@ function UsersPanel() {
                                                                 tone="danger"
                                                             >
                                                                 Delete session
+                                                            </RowActionMenuItem>
+                                                        )}
+                                                        {u.pendingInvite && (
+                                                            <RowActionMenuItem
+                                                                onClick={() => rescindInvite(u.pendingInvite!.id)}
+                                                                disabled={rescindingInvite === u.pendingInvite.id}
+                                                                icon={<Trash2 className="w-4 h-4" />}
+                                                                tone="danger"
+                                                            >
+                                                                Rescind invite
                                                             </RowActionMenuItem>
                                                         )}
                                                         {canManageAccount && !u.isSelf && !u.isPlatformAdmin && (
