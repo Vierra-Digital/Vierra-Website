@@ -42,7 +42,7 @@ const GROUPS: Array<{ title: string; fields: FieldDef[] }> = [
     title: "Over the relationship",
     fields: [
       { key: "returnsPerYear", label: "Purchases per Year" },
-      { key: "customerTerm", label: "Customer Term" },
+      { key: "customerTerm", label: "Customer Term", suffix: "yrs" },
     ],
   },
   {
@@ -155,7 +155,7 @@ const LTVCalculatorModal: React.FC<Props> = ({ open, onClose }) => {
                           }
                           className={`h-9 w-full rounded-lg border border-[#E5E7EB] bg-white text-[13px] text-[#111827] placeholder:text-[#C7C4D2] transition-shadow focus:border-[#701CC0] focus:ring-2 focus:ring-[#701CC0]/25 focus:outline-none ${
                             field.prefix ? "pl-7" : "pl-3"
-                          } ${field.suffix ? "pr-8" : "pr-3"}`}
+                          } ${field.suffix ? (field.suffix.length > 1 ? "pr-11" : "pr-8") : "pr-3"}`}
                         />
                         {field.suffix ? (
                           <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-[#9CA3AF]">
