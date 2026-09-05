@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { FiCheck, FiX, FiRefreshCw } from "react-icons/fi";
+import { FiCheck, FiX, FiRefreshCw, FiExternalLink } from "react-icons/fi";
 import type { CartographyReviewRow } from "@/pages/api/cartography/contacts";
 import type { PromoteResult } from "@/pages/api/cartography/contacts/promote";
+import { companyUrl } from "@/lib/cartography/companyUrl";
 
 /**
  * Cartography's review queue (see docs/CARTOGRAPHY_DESIGN.md Rollout M4) — the screen that
@@ -235,7 +236,19 @@ const ReviewQueue: React.FC = () => {
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-medium text-[#111827]">{row.company}</p>
+                      {companyUrl(row.domain) ? (
+                        <a
+                          href={companyUrl(row.domain)!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-sm font-medium text-[#111827] hover:text-[#701CC0] hover:underline"
+                        >
+                          {row.company}
+                          <FiExternalLink className="h-3 w-3 shrink-0 text-[#9CA3AF]" />
+                        </a>
+                      ) : (
+                        <p className="text-sm font-medium text-[#111827]">{row.company}</p>
+                      )}
                       {row.industry ? (
                         <span className="inline-flex items-center rounded-full bg-[#F3E8FF] px-2 py-0.5 text-[11px] font-medium text-[#701CC0]">
                           {row.industry}
