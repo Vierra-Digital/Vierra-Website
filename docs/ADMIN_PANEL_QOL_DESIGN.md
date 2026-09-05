@@ -37,7 +37,13 @@ The original document was delivered without application changes. The subsequent 
 
 A5, A9, A11, A12 verification note: on inspection this pass, Project Tasks (Mine/Needs review/assignee filters, per-column counts, URL-persisted board choice, transition-blocker tooltips+text) and the Dashboard's client-workspace disclosure (A14 — the shared Dashboard already labels which figures follow the active company selection vs. the viewer's own account, rather than claiming client-scoped data it doesn't have) were already implemented; no changes were needed there.
 
-Not yet started: A1 (Dashboard drill-throughs/widget-level retry), A3 (Staff Orbital), A6 (PDF Signer), A10 (Artemis), A13 (Account Settings), A15 (`/manage-users`), E2 (Contacts), E3 (Email Analytics), E4 (Cartography), the P2 E6 settings-section rows, and the remaining G2 concurrency work for Blog/Tasks server revisions.
+### Slice 4 (current, uncommitted)
+
+| Scope | Implemented | Remaining |
+| --- | --- | --- |
+| A6 | Visible Prepare PDF → Review & place fields → Generate link → Save & share progress indicator; document name shown consistently on the Link Generated / Save To Files cards; searchable staff/client recipient list; "Saved to files" now a persistent inline state (not just a transient modal) with an "Open saved file" action (`/files/preview`) and a distinct way to save the same document to a second recipient; the generated link and the confirmation modal explicitly say saving is not the same as being signed; failed save keeps the same link/recipient selection and states that explicitly; copy-link failure falls back to "select and copy manually" instead of doing nothing. | Draft persistence across a browser reload (P3, L — separate document-storage decision, unchanged from the original doc); live "has this been signed yet" status (no signing-status read endpoint currently wired into this page) |
+
+Not yet started: A1 (Dashboard drill-throughs/widget-level retry), A3 (Staff Orbital), A10 (Artemis), A13 (Account Settings), A15 (`/manage-users`), E2 (Contacts), E3 (Email Analytics), E4 (Cartography), the P2 E6 settings-section rows, and the remaining G2 concurrency work for Blog/Tasks server revisions.
 
 Validation for this slice: `npx prisma generate && npx tsc --noEmit && npm run lint && npm test && npx next build` all clean (486 tests, zero lint errors, zero build warnings). Browser interaction and viewport checks remain outstanding; no browser automation package is installed in this workspace. Existing endpoint authorization and mutation semantics are preserved. The Email link keeps its existing new-tab behavior and now exposes that behavior through a semantic link and accessible label.
 
