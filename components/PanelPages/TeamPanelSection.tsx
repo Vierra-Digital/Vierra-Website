@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { FiSearch, FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck, FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck, FiChevronDown } from "react-icons/fi";
 import Image from "next/image";
 import ProfileImage from "../ProfileImage";
 import { inter } from "@/lib/fonts";
@@ -7,6 +7,25 @@ import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import Modal from "@/components/ui/Modal";
+import {
+    PanelBadge,
+    PanelButton,
+    PanelCard,
+    PanelEmptyCell,
+    PanelEmptyState,
+    PanelHeader,
+    PanelPage,
+    PanelPagination,
+    PanelPopover,
+    PanelSearch,
+    PanelSelect,
+    PanelTable,
+    PanelTbody,
+    PanelTd,
+    PanelTh,
+    PanelThead,
+    PanelTr,
+} from "@/components/panel/PanelTable";
 
 /** Strict email-shape check shared by the team invite/edit modals below. */
 const isValidEmail = (value: string) => /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(value);
@@ -116,7 +135,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const [showRescindModal, setShowRescindModal] = useState(false)
     const [inviteToRescind, setInviteToRescind] = useState<{ id: string; email: string } | null>(null)
     const [searchTerm, setSearchTerm] = useState("")
-    const [sortBy, setSortBy] = useState<"position" | "country" | "strikes" | "status">("position")
+    const [sortBy, setSortBy] = useState<"position" | "timeZone" | "strikes" | "status">("position")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
     const [statusFilter, setStatusFilter] = useState<"all" | "online" | "away" | "offline" | "pending">("all")
     const [isFilterOpen, setIsFilterOpen] = useState(false)
@@ -328,9 +347,9 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                     aValue = positionOrder[a.position as keyof typeof positionOrder] || 999
                     bValue = positionOrder[b.position as keyof typeof positionOrder] || 999
                     break
-                case "country":
-                    aValue = a.country || ""
-                    bValue = b.country || ""
+                case "timeZone":
+                    aValue = a.time_zone || ""
+                    bValue = b.time_zone || ""
                     break
                 case "strikes":
                     aValue = parseInt(a.strikes?.split("/")[0] || "0")
@@ -366,8 +385,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         const baseColumns = [
             { key: "name", header: "Name" },
             { key: "position", header: "Position" },
-            { key: "country", header: "Country" },
-            { key: "company_email", header: "Company Email" },
+            { key: "time_zone", header: "Time Zone" },
             { key: "mentor", header: "Mentor" },
             { key: "strikes", header: "Strikes" },
             { key: "status", header: "Status" },
@@ -379,20 +397,20 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         return baseColumns
     }, [userRole])
 
-    const getPositionColor = (position: string) => {
+    const positionTone = (position: string) => {
         switch (position) {
             case "Founder":
             case "Leadership":
             case "Business Advisor":
-                return "bg-red-100 text-red-800"
+                return "danger" as const
             case "Developer":
-                return "bg-blue-100 text-blue-800"
+                return "info" as const
             case "Designer":
-                return "bg-purple-100 text-purple-800"
+                return "accent" as const
             case "Outreach":
-                return "bg-green-100 text-green-800"
+                return "positive" as const
             default:
-                return "bg-gray-100 text-gray-800"
+                return "neutral" as const
         }
     }
 
@@ -403,290 +421,180 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const paginatedRows = filteredRows.slice(page * pageSize, (page + 1) * pageSize)
 
     return (
-        <div className="w-full h-full bg-white text-[#111014] flex flex-col">
-            <div className="flex-1 px-8 lg:px-14 pt-1 overflow-y-auto overflow-x-hidden">
-                <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full pb-16">
-            <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em] text-[#111827] mt-8 mb-5">Staff Orbital</h1>
-            {/* Search / filter / invite belong under the title, not competing with it on the
-                same line — at 30px the heading and a row of controls fight for the same band. */}
-            <div className="w-full flex flex-wrap items-center gap-3 mb-5">
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
-                        <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
-                        <label htmlFor="staff-search" className="sr-only">Search Staff</label>
-                                <input 
-                                    id="staff-search" 
-                                    type="search" 
-                                    placeholder="Search Staff" 
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-64 md:w-80 text-sm placeholder:text-[#9CA3AF] bg-transparent outline-none" 
-                                />
-                    </div>
-                            <div className="relative" ref={filterRef}>
-                                <button 
-                                    onClick={() => setIsFilterOpen(!isFilterOpen)}
-                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
-                                >
-                        <FiFilter className="w-4 h-4" />
-                                    <span className="text-sm font-medium">Filter</span>
-                                    <svg 
-                                        className={`w-4 h-4 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`}
-                                        fill="none" 
-                                        stroke="currentColor" 
-                                        viewBox="0 0 24 24"
-                                    >
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-                                {isFilterOpen && (
-                                    <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#E5E7EB] py-4 z-50">
-                                        <div className="px-5">
-                                            <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
-                                            
-                                            
-                                            <div className="mb-5">
-                                                <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By</label>
-                                                <div className="relative">
-                                                    <select
-                                                        value={sortBy}
-                                                        onChange={(e) => setSortBy(e.target.value as "position" | "country" | "strikes" | "status")}
-                                                        className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
-                                                    >
-                                                        <option value="position">Position</option>
-                                                        <option value="country">Country/Timezone</option>
-                                                        <option value="strikes">Strikes</option>
-                                                        <option value="status">Status</option>
-                                                    </select>
-                                                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                        <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                        </svg>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            
-                                            <div className="mb-5">
-                                                <label className="block text-xs font-medium text-[#6B7280] mb-2">Order</label>
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => setSortOrder("asc")}
-                                                        className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                            sortOrder === "asc" 
-                                                                ? "bg-[#701CC0] text-white shadow-sm" 
-                                                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                                        }`}
-                                                    >
-                                                        Ascending
-                    </button>
-                                                    <button
-                                                        onClick={() => setSortOrder("desc")}
-                                                        className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                            sortOrder === "desc" 
-                                                                ? "bg-[#701CC0] text-white shadow-sm" 
-                                                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                                        }`}
-                                                    >
-                                                        Descending
-                    </button>
-                </div>
-            </div>
-
-                                            
-                                            <div className="mb-4">
-                                                <label className="block text-xs font-medium text-[#6B7280] mb-2">Status</label>
-                                                <div className="relative">
-                                                    <select
-                                                        value={statusFilter}
-                                                        onChange={(e) => setStatusFilter(e.target.value as "all" | "online" | "away" | "offline" | "pending")}
-                                                        className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
-                                                    >
-                                                        <option value="all">All Status</option>
-                                                        <option value="online">Online</option>
-                                                        <option value="away">Away</option>
-                                                        <option value="offline">Offline</option>
-                                                        <option value="pending">Pending</option>
-                                                    </select>
-                                                    <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                        <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                        </svg>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            
-                                            
-                                            <div className="pt-3 border-t border-[#E5E7EB]">
-                                                <button
-                                                    onClick={() => {
-                                                        setSearchTerm("")
-                                                        setSortBy("position")
-                                                        setSortOrder("asc")
-                                                        setStatusFilter("all")
-                                                        setIsFilterOpen(false)
-                                                    }}
-                                                    className="w-full text-xs py-2 px-3 rounded-lg font-medium text-[#6B7280] bg-gray-50 hover:bg-gray-100 hover:text-[#374151] transition-colors duration-200"
-                                                >
-                                                    Clear All Filters
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+        <PanelPage>
+            <PanelHeader title="Staff Orbital">
+                <PanelSearch
+                    id="staff-search"
+                    label="Search Staff"
+                    placeholder="Search staff"
+                    value={searchTerm}
+                    onChange={setSearchTerm}
+                />
+                <div className="relative" ref={filterRef}>
+                    <PanelButton
+                        onClick={() => setIsFilterOpen(!isFilterOpen)}
+                        icon={<FiFilter className="h-4 w-4" />}
+                    >
+                        Filter
+                        <FiChevronDown className={`h-3.5 w-3.5 transition-transform ${isFilterOpen ? "rotate-180" : ""}`} />
+                    </PanelButton>
+                    {isFilterOpen && (
+                        <PanelPopover>
+                            <h3 className="mb-3 text-[13px] font-semibold text-[#111827]">Sort &amp; Filter</h3>
+                            <PanelSelect
+                                label="Sort By"
+                                value={sortBy}
+                                onChange={(value) => setSortBy(value as typeof sortBy)}
+                                options={[
+                                    { value: "position", label: "Position" },
+                                    { value: "timeZone", label: "Time Zone" },
+                                    { value: "strikes", label: "Strikes" },
+                                    { value: "status", label: "Status" },
+                                ]}
+                            />
+                            <PanelSelect
+                                label="Status"
+                                value={statusFilter}
+                                onChange={(value) => setStatusFilter(value as typeof statusFilter)}
+                                options={[
+                                    { value: "all", label: "All Status" },
+                                    { value: "online", label: "Online" },
+                                    { value: "away", label: "Away" },
+                                    { value: "offline", label: "Offline" },
+                                    { value: "pending", label: "Pending" },
+                                ]}
+                            />
+                            <div className="mb-4">
+                                <span className="mb-1.5 block text-[11px] font-medium text-[#6B7280]">Order</span>
+                                <div className="flex gap-2">
+                                    {(["asc", "desc"] as const).map((dir) => (
+                                        <button
+                                            key={dir}
+                                            type="button"
+                                            onClick={() => setSortOrder(dir)}
+                                            className={`h-8 flex-1 rounded-lg text-[12px] font-medium transition-colors ${
+                                                sortOrder === dir
+                                                    ? "bg-[#701CC0] text-white"
+                                                    : "bg-[#F3F1F8] text-[#5B5468] hover:bg-[#EAE6F3]"
+                                            }`}
+                                        >
+                                            {dir === "asc" ? "Ascending" : "Descending"}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                        {userRole === "admin" && (
                             <button
-                                onClick={() => setShowAddStaff(true)}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium"
+                                type="button"
+                                onClick={() => {
+                                    setSearchTerm("")
+                                    setSortBy("position")
+                                    setSortOrder("asc")
+                                    setStatusFilter("all")
+                                    setIsFilterOpen(false)
+                                }}
+                                className="h-8 w-full rounded-lg border-t border-[#EFECF4] text-[12px] font-medium text-[#6B7280] transition-colors hover:bg-[#FAF9FD] hover:text-[#374151]"
                             >
-                                <FiPlus className="w-4 h-4" />
-                                Invite Teammate
+                                Clear All Filters
                             </button>
-                        )}
-                        </div>
-                    </div>
+                        </PanelPopover>
+                    )}
+                </div>
+                {userRole === "admin" && (
+                    <PanelButton variant="primary" onClick={() => setShowAddStaff(true)} icon={<FiPlus className="h-4 w-4" />}>
+                        Invite Teammate
+                    </PanelButton>
+                )}
+            </PanelHeader>
 
-                    {loading ? (
-                        <div className="flex items-center justify-center py-12">
-                            <LoadingSpinner label="Loading Staff Data..." />
-                        </div>
+            {loading ? (
+                <div className="flex items-center justify-center py-12">
+                    <LoadingSpinner label="Loading Staff Data..." />
+                </div>
+            ) : (
+                <PanelCard>
+                    {filteredRows.length === 0 ? (
+                        <PanelEmptyState
+                            message={searchTerm ? "No staff match your search." : "You have no staff added."}
+                            image={
+                                <Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" />
+                            }
+                        >
+                            {userRole === "admin" && !searchTerm && (
+                                <PanelButton variant="primary" onClick={() => setShowAddStaff(true)} icon={<FiPlus className="h-4 w-4" />}>
+                                    Invite Teammate
+                                </PanelButton>
+                            )}
+                        </PanelEmptyState>
                     ) : (
                         <>
-                            {!loading && filteredRows.length === 0 && (
-                                <div className="text-center py-12">
-                                    <div className="w-full h-full flex flex-col items-center justify-center text-center">
-                                        <Image src="/assets/no-client.png" alt="No staff" width={224} height={224} className="w-56 h-auto mb-3" />
-                                        <p className="text-sm text-gray-500 mb-3">You have no staff added.</p>
-                                        {userRole === "admin" && (
-                                            <button
-                                                onClick={() => setShowAddStaff(true)}
-                                                className="inline-flex items-center px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
-                                            >
-                                                <FiPlus className="w-4 h-4 mr-2" />
-                                                Invite Teammate
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {!loading && filteredRows.length > 0 && (
-                                <div className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white">
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-[#F7F5FB] border-b border-[#E4E0EC]">
-                                        <tr>
-                                            {columns.map((column) => (
-                                                <th key={column.key} className="px-5 py-3.5 first:pl-6 last:pr-6 text-left text-[11px] font-semibold uppercase tracking-[0.06em] text-[#6B7280]">
-                                                    {column.header}
-                                                </th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-[#EFECF4]">
-                                        {paginatedRows.map((r) => (
-                                            <tr key={r.id} className="transition-colors hover:bg-[#F9F7FD]">
-                                                <td className="px-5 py-4 first:pl-6 last:pr-6">
-                                                    <div className="flex items-center">
-                                                        <ProfileImage
-                                                            src={r.image ? `/api/admin/getUserImage?userId=${r.id}&v=${r.imageVersion ?? 0}` : null}
-                                                            name={r.name}
-                                                            size={32}
-                                                            alt={`${r.name}'s profile`}
-                                                        />
-                                                        <div className="ml-3">
-                                                            <div className="text-sm font-medium text-[#111827]">{r.name}</div>
-                                                            <div className="text-sm text-[#6B7280]">{r.email}</div>
-                                                        </div>
+                            <PanelTable>
+                                <PanelThead>
+                                    {columns.map((column) => (
+                                        <PanelTh key={column.key}>{column.header}</PanelTh>
+                                    ))}
+                                </PanelThead>
+                                <PanelTbody>
+                                    {paginatedRows.map((r) => (
+                                        <PanelTr key={r.id}>
+                                            <PanelTd>
+                                                <div className="flex items-center gap-3">
+                                                    <ProfileImage
+                                                        src={r.image ? `/api/admin/getUserImage?userId=${r.id}&v=${r.imageVersion ?? 0}` : null}
+                                                        name={r.name}
+                                                        size={32}
+                                                        alt={`${r.name}'s profile`}
+                                                    />
+                                                    <div className="min-w-0">
+                                                        <div className="truncate font-medium text-[#111827]">{r.name}</div>
+                                                        <div className="truncate text-[12px] text-[#6B7280]">{r.email}</div>
                                                     </div>
-                                                </td>
-                                                <td className="px-5 py-4 first:pl-6 last:pr-6 text-sm">
-                                                    {/* No position renders an em-dash like every other blank column; the
-                                                        badge with nothing in it read as a grey smudge. */}
-                                                    {r.position ? (
-                                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPositionColor(r.position)}`}>
-                                                            {r.position}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-[#111827]">—</span>
-                                                    )}
-                                                </td>
-                                                <td className="px-5 py-4 first:pl-6 last:pr-6 text-sm text-[#111827]">
-                                                    <div>{r.country || "—"}</div>
-                                                    {r.time_zone ? <div className="text-xs text-[#6B7280]">{r.time_zone}</div> : null}
-                                                </td>
-                                                <td className="px-5 py-4 first:pl-6 last:pr-6 text-sm text-[#111827]">{r.company_email || "—"}</td>
-                                                <td className="px-5 py-4 first:pl-6 last:pr-6 text-sm text-[#111827]">{r.mentor || "—"}</td>
-                                                <td className="px-5 py-4 first:pl-6 last:pr-6 text-sm">{r.strikes || "0/3"}</td>
-                                                <td className="px-5 py-4 first:pl-6 last:pr-6 text-sm">
-                                                    <StatusBadge lastActiveAt={r.lastActiveAt} isPending={r.isPending} />
-                                    </td>
-                                                {userRole === "admin" && (
-                                                    <td className="px-5 py-4 first:pl-6 last:pr-6 text-sm text-[#6B7280] relative">
-                                                        {r.isPending ? (
-                                                            <InviteActionsMenu
-                                                                inviteEmail={r.email}
-                                                                onRescind={() => handleRescindInvite(r.id, r.email)}
-                                                            />
-                                                        ) : (
-                                                            <StaffActionsMenu
-                                                                staffId={r.id}
-                                                                staffName={r.name}
-                                                                onEdit={() => handleManageStaff(r)}
-                                                                onDelete={() => handleDeleteStaff(r.id, r.name)}
-                                                                isSelf={r.isSelf}
-                                                            />
-                                                        )}
-                                    </td>
+                                                </div>
+                                            </PanelTd>
+                                            <PanelTd>
+                                                {r.position ? (
+                                                    <PanelBadge tone={positionTone(r.position)}>{r.position}</PanelBadge>
+                                                ) : (
+                                                    <PanelEmptyCell />
                                                 )}
-                                </tr>
-                            ))}
-                        </tbody>
-                            </table>
-                        </div>
-                        {/* Range left, controls right — the shape a table footer usually takes,
-                            rather than a centred huddle of three small elements. Inside the card
-                            so the range lines up with the first column's gutter. */}
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#EFECF4] bg-[#FCFBFE] px-6 py-3.5">
-                            <p className="text-[12.5px] text-[#6B7280]">
-                                Showing{" "}
-                                <span className="font-medium text-[#374151]">
-                                    {page * pageSize + 1}–{Math.min((page + 1) * pageSize, filteredRows.length)}
-                                </span>{" "}
-                                of <span className="font-medium text-[#374151]">{filteredRows.length}</span>
-                            </p>
-                            <div className="flex items-center gap-1.5">
-                                <button
-                                    onClick={() => setCurrentPage(Math.max(0, page - 1))}
-                                    disabled={page === 0}
-                                    aria-label="Previous page"
-                                    className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#374151] transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-40"
-                                >
-                                    <FiChevronLeft className="h-3.5 w-3.5" aria-hidden />
-                                    Previous
-                                </button>
-                                <span className="px-1 text-[12.5px] tabular-nums text-[#6B7280]">
-                                    {page + 1} / {totalPages}
-                                </span>
-                                <button
-                                    onClick={() => setCurrentPage(Math.min(totalPages - 1, page + 1))}
-                                    disabled={page >= totalPages - 1}
-                                    aria-label="Next page"
-                                    className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#374151] transition-colors hover:bg-white disabled:pointer-events-none disabled:opacity-40"
-                                >
-                                    Next
-                                    <FiChevronRight className="h-3.5 w-3.5" aria-hidden />
-                                </button>
-                            </div>
-                        </div>
-                                </div>
-                            )}
+                                            </PanelTd>
+                                            <PanelTd>{r.time_zone || <PanelEmptyCell />}</PanelTd>
+                                            <PanelTd>{r.mentor || <PanelEmptyCell />}</PanelTd>
+                                            <PanelTd className="tabular-nums">{r.strikes || "0/3"}</PanelTd>
+                                            <PanelTd>
+                                                <StatusBadge lastActiveAt={r.lastActiveAt} isPending={r.isPending} />
+                                            </PanelTd>
+                                            {userRole === "admin" && (
+                                                <PanelTd className="relative">
+                                                    {r.isPending ? (
+                                                        <InviteActionsMenu
+                                                            inviteEmail={r.email}
+                                                            onRescind={() => handleRescindInvite(r.id, r.email)}
+                                                        />
+                                                    ) : (
+                                                        <StaffActionsMenu
+                                                            staffId={r.id}
+                                                            staffName={r.name}
+                                                            onEdit={() => handleManageStaff(r)}
+                                                            onDelete={() => handleDeleteStaff(r.id, r.name)}
+                                                            isSelf={r.isSelf}
+                                                        />
+                                                    )}
+                                                </PanelTd>
+                                            )}
+                                        </PanelTr>
+                                    ))}
+                                </PanelTbody>
+                            </PanelTable>
+                            <PanelPagination
+                                page={page}
+                                pageSize={pageSize}
+                                total={filteredRows.length}
+                                onPageChange={setCurrentPage}
+                            />
                         </>
                     )}
-
-                </div>
-            </div>
+                </PanelCard>
+            )}
 
             {showAddStaff && userRole === "admin" && (
                 <InviteTeammateModal
@@ -748,7 +656,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                     onConfirm={confirmRescindInvite}
                 />
             )}
-        </div>
+        </PanelPage>
     )
 }
 const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void }> = ({ onClose, onCreated }) => {
