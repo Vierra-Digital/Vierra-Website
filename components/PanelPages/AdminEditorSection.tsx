@@ -25,21 +25,14 @@ import ProfileImage from "@/components/ProfileImage"
 import {
     PanelBadge,
     PanelButton,
-    PanelCard,
+    PanelClearFilters,
+    PanelDataTable,
     PanelEmptyCell,
-    PanelEmptyState,
     PanelHeader,
     PanelPage,
-    PanelPagination,
     PanelPopover,
     PanelSearch,
     PanelSelect,
-    PanelTable,
-    PanelTbody,
-    PanelTd,
-    PanelTh,
-    PanelThead,
-    PanelTr,
 } from "@/components/panel/PanelTable"
 
 type ListedUser = {
@@ -119,6 +112,14 @@ const ROLE_TONES: Record<RoleKey, "accent" | "info" | "neutral"> = {
     staff: "info",
     client: "neutral",
 }
+/** Loopback addresses say "localhost" — "::1" is not an address anyone needs to read as one. */
+const formatIp = (ip?: string | null) => {
+    if (!ip) return null
+    const trimmed = ip.trim()
+    if (trimmed === "::1" || trimmed === "127.0.0.1" || trimmed.startsWith("::ffff:127.")) return "localhost"
+    return trimmed
+}
+
 /** "3m ago" up to a week, then a date — a raw timestamp is rarely what you want to read here. */
 const formatRelative = (iso?: string | null) => {
     if (!iso) return null
@@ -503,7 +504,6 @@ function UsersPanel() {
 
     const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
     const page = Math.min(currentPage, totalPages - 1)
-    const paginatedRows = filteredRows.slice(page * pageSize, (page + 1) * pageSize)
     // Only platform admins get companyName back from the API — show the column just for them,
     // so everyone else's table (scoped to their own company) looks the same as before.
     const showCompanyColumn = rows.some((u) => u.companyName)
@@ -596,8 +596,7 @@ function UsersPanel() {
                                     ))}
                                 </div>
                             </div>
-                            <button
-                                type="button"
+                            <PanelClearFilters
                                 onClick={() => {
                                     setSearchQuery("")
                                     setRoleFilter("all")
@@ -607,10 +606,7 @@ function UsersPanel() {
                                     setCurrentPage(0)
                                     setIsFilterOpen(false)
                                 }}
-                                className="h-8 w-full rounded-lg border-t border-[#EFECF4] text-[12px] font-medium text-[#6B7280] transition-colors hover:bg-[#FAF9FD] hover:text-[#374151]"
-                            >
-                                Clear All Filters
-                            </button>
+                            />
                         </PanelPopover>
                     )}
                 </div>
@@ -627,192 +623,183 @@ function UsersPanel() {
                 </PanelButton>
             </PanelHeader>
 
-            {loading ? (
-                <div className="flex items-center justify-center py-12">
-                    <LoadingSpinner label="Loading User Data..." />
-                </div>
-            ) : (
-                <PanelCard>
-                    {filteredRows.length === 0 ? (
-                        <PanelEmptyState
-                            message={searchQuery ? "No users match your search." : "No users found."}
-                            image={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" />}
-                        >
-                            {!searchQuery && (
-                                <PanelButton variant="primary" onClick={() => setShowCreate(true)} icon={<Plus className="h-4 w-4" />}>
-                                    Create User
-                                </PanelButton>
-                            )}
-                        </PanelEmptyState>
-                    ) : (
-                        <>
-                            <PanelTable>
-                                <PanelThead>
-                                    <PanelTh>User</PanelTh>
-                                    <PanelTh>Role</PanelTh>
-                                    {showCompanyColumn && <PanelTh>Company</PanelTh>}
-                                    <PanelTh>Last Login</PanelTh>
-                                    <PanelTh>Session</PanelTh>
-                                    <PanelTh>Manage</PanelTh>
-                                </PanelThead>
-                                <PanelTbody>
-                                    {paginatedRows.map((u) => {
-                                        const session = u.session
-                                        const canManageAccount = !u.isSessionOnly && u.hasAccount !== false && !u.pendingInvite
-                                        return (
-                                            <PanelTr key={u.id}>
-                                                <PanelTd>
-                                                    <div className="flex items-center gap-3">
-                                                        <ProfileImage
-                                                            src={u.image ? `/api/admin/getUserImage?userId=${u.id}&v=${u.imageVersion ?? 0}` : null}
-                                                            name={u.name || u.email || "User"}
-                                                            size={32}
-                                                            alt={`${u.name || u.email || "User"}'s profile`}
-                                                        />
-                                                        <div className="min-w-0">
-                                                            <div className="truncate font-medium text-[#111827]">{u.name || "—"}</div>
-                                                            <div className="truncate text-[12px] text-[#6B7280]">{u.email || "—"}</div>
-                                                        </div>
-                                                    </div>
-                                                </PanelTd>
-                                                <PanelTd>
-                                                    <div className="flex flex-wrap items-center gap-1.5">
-                                                        <PanelBadge tone={ROLE_TONES[normalizeRole(u.role)]}>
-                                                            {ROLE_LABELS[normalizeRole(u.role)]}
-                                                        </PanelBadge>
-                                                        {u.pendingInvite ? (
-                                                            <PanelBadge tone={u.pendingInvite.expired ? "danger" : "warning"}>
-                                                                {u.pendingInvite.expired ? "Invite expired" : "Invited"}
-                                                            </PanelBadge>
-                                                        ) : (
-                                                            !canManageAccount && <PanelBadge tone="neutral">No account</PanelBadge>
-                                                        )}
-                                                    </div>
-                                                </PanelTd>
-                                                {showCompanyColumn && <PanelTd>{u.companyName || <PanelEmptyCell />}</PanelTd>}
-                                                <PanelTd>
-                                                    {u.pendingInvite ? (
-                                                        <span className="text-[12px] text-[#9CA3AF]">
-                                                            Invited {formatRelative(u.pendingInvite.invitedAt)}
-                                                        </span>
-                                                    ) : u.lastLoginAt ? (
-                                                        <div className="flex flex-col items-start">
-                                                            <span>{formatRelative(u.lastLoginAt)}</span>
-                                                            {/* The address is the reason this column is worth a join, but it is
-                                                                reference detail — muted and underneath, not competing with the time. */}
-                                                            <span className="text-[11.5px] tabular-nums text-[#9CA3AF]">
-                                                                {u.lastLoginIp || "IP unknown"}
-                                                            </span>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-[12px] text-[#9CA3AF]">Never</span>
-                                                    )}
-                                                </PanelTd>
-                                                <PanelTd>
-                                                    {session ? (
-                                                        <PanelBadge tone={SESSION_TONES[session.status]}>
-                                                            {SESSION_LABELS[session.status]}
-                                                        </PanelBadge>
-                                                    ) : (
-                                                        <PanelEmptyCell />
-                                                    )}
-                                                </PanelTd>
-                                                <PanelTd className="relative">
-                                                    <RowActionMenu label={`Manage ${u.name || u.email || "user"}`}>
-                                                        {canManageAccount && (
-                                                            <RowActionMenuItem
-                                                                onClick={() => sendPasswordReset(u.id)}
-                                                                disabled={resetSending[u.id]}
-                                                                icon={<KeyRound className="w-4 h-4" />}
-                                                               
-                                                            >
-                                                                {resetSending[u.id] ? "Sending…" : "Send reset email"}
-                                                            </RowActionMenuItem>
-                                                        )}
-                                                        {canManageAccount && !u.isPlatformAdmin && (
-                                                            <>
-                                                                <RowActionMenuLabel>Change role</RowActionMenuLabel>
-                                                                {ROLE_CHOICES.filter((choice) => choice.value !== normalizeRole(u.role)).map((choice) => (
-                                                                    <RowActionMenuItem
-                                                                        key={choice.value}
-                                                                        onClick={() => updateRole(u.id, choice.value === "client" ? "user" : choice.value)}
-                                                                        icon={<UserCog className="w-4 h-4" />}
-                                                                    >
-                                                                        {choice.label}
-                                                                    </RowActionMenuItem>
-                                                                ))}
-                                                            </>
-                                                        )}
-                                                        {session && <RowActionMenuLabel>Session</RowActionMenuLabel>}
-                                                        {session && session.status !== "expired" && (
-                                                            <RowActionMenuItem
-                                                                onClick={() => handleGetLink(session.token, session.clientEmail)}
-                                                                disabled={loadingLink === session.token}
-                                                                icon={<LinkIcon className="w-4 h-4" />}
-                                                            >
-                                                                {loadingLink === session.token ? "Loading…" : "Get session link"}
-                                                            </RowActionMenuItem>
-                                                        )}
-                                                        {session && (
-                                                            <RowActionMenuItem
-                                                                onClick={() => handleRenewSession(session.token)}
-                                                                disabled={renewingSession === session.token}
-                                                                icon={<RotateCw className={`w-4 h-4 ${renewingSession === session.token ? "animate-spin" : ""}`} />}
-                                                            >
-                                                                Renew session
-                                                            </RowActionMenuItem>
-                                                        )}
-                                                        {(session || u.pendingInvite || (canManageAccount && !u.isSelf && !u.isPlatformAdmin)) && (
-                                                            <RowActionMenuDivider />
-                                                        )}
-                                                        {session && (
-                                                            <RowActionMenuItem
-                                                                onClick={() => {
-                                                                    setSessionToDelete({ token: session.token, clientName: session.clientName })
-                                                                    setDeleteSessionModalOpen(true)
-                                                                }}
-                                                                icon={<Trash2 className="w-4 h-4" />}
-                                                                tone="danger"
-                                                            >
-                                                                Delete session
-                                                            </RowActionMenuItem>
-                                                        )}
-                                                        {u.pendingInvite && (
-                                                            <RowActionMenuItem
-                                                                onClick={() => rescindInvite(u.pendingInvite!.id)}
-                                                                disabled={rescindingInvite === u.pendingInvite.id}
-                                                                icon={<Trash2 className="w-4 h-4" />}
-                                                                tone="danger"
-                                                            >
-                                                                Rescind invite
-                                                            </RowActionMenuItem>
-                                                        )}
-                                                        {canManageAccount && !u.isSelf && !u.isPlatformAdmin && (
-                                                            <RowActionMenuItem
-                                                                onClick={() => deleteUser(u.id)}
-                                                                icon={<Trash2 className="w-4 h-4" />}
-                                                                tone="danger"
-                                                            >
-                                                                Remove user
-                                                            </RowActionMenuItem>
-                                                        )}
-                                                    </RowActionMenu>
-                                                </PanelTd>
-                                            </PanelTr>
-                                        )
-                                    })}
-                                </PanelTbody>
-                            </PanelTable>
-                            <PanelPagination
-                                page={page}
-                                pageSize={pageSize}
-                                total={filteredRows.length}
-                                onPageChange={setCurrentPage}
-                            />
-                        </>
-                    )}
-                </PanelCard>
-            )}
+            <PanelDataTable<MergedRow>
+                rows={filteredRows}
+                getRowKey={(u) => u.id}
+                loading={loading}
+                loadingLabel={<LoadingSpinner label="Loading User Data..." />}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                emptyMessage={searchQuery ? "No users match your search." : "No users found."}
+                emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" />}
+                emptyAction={
+                    !searchQuery ? (
+                        <PanelButton variant="primary" onClick={() => setShowCreate(true)} icon={<Plus className="h-4 w-4" />}>
+                            Create User
+                        </PanelButton>
+                    ) : null
+                }
+                columns={[
+                    {
+                        key: "user",
+                        header: "User",
+                        cell: (u) => (
+                            <div className="flex items-center gap-3">
+                                <ProfileImage
+                                    src={u.image ? `/api/admin/getUserImage?userId=${u.id}&v=${u.imageVersion ?? 0}` : null}
+                                    name={u.name || u.email || "User"}
+                                    size={32}
+                                    alt={`${u.name || u.email || "User"}'s profile`}
+                                />
+                                <div className="min-w-0">
+                                    <div className="truncate font-medium text-[#111827]">{u.name || "—"}</div>
+                                    <div className="truncate text-[12px] text-[#6B7280]">{u.email || "—"}</div>
+                                </div>
+                            </div>
+                        ),
+                    },
+                    {
+                        key: "role",
+                        header: "Role",
+                        cell: (u) => (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                <PanelBadge tone={ROLE_TONES[normalizeRole(u.role)]}>{ROLE_LABELS[normalizeRole(u.role)]}</PanelBadge>
+                                {u.pendingInvite ? (
+                                    <PanelBadge tone={u.pendingInvite.expired ? "danger" : "warning"}>
+                                        {u.pendingInvite.expired ? "Invite expired" : "Invited"}
+                                    </PanelBadge>
+                                ) : (
+                                    u.hasAccount === false && !u.isSessionOnly && <PanelBadge tone="neutral">No account</PanelBadge>
+                                )}
+                            </div>
+                        ),
+                    },
+                    ...(showCompanyColumn
+                        ? [{ key: "company", header: "Company", cell: (u: MergedRow) => u.companyName || <PanelEmptyCell /> }]
+                        : []),
+                    {
+                        key: "lastLogin",
+                        header: "Last Login",
+                        cell: (u) =>
+                            u.pendingInvite ? (
+                                <span className="text-[12px] text-[#9CA3AF]">Invited {formatRelative(u.pendingInvite.invitedAt)}</span>
+                            ) : u.lastLoginAt ? (
+                                /* Time first, address underneath and muted: the address is why the column
+                                   is worth a join, but it is reference detail, and `whitespace-nowrap`
+                                   keeps an IPv6 address on one line instead of wrapping mid-address. */
+                                <div className="flex flex-col items-start gap-0.5">
+                                    <span className="whitespace-nowrap" title={new Date(u.lastLoginAt).toLocaleString()}>
+                                        {formatRelative(u.lastLoginAt)}
+                                    </span>
+                                    <span
+                                        className="whitespace-nowrap text-[11.5px] text-[#9CA3AF]"
+                                        title={u.lastLoginIp ? `IP ${u.lastLoginIp}` : undefined}
+                                    >
+                                        {formatIp(u.lastLoginIp) || "IP unknown"}
+                                    </span>
+                                </div>
+                            ) : (
+                                <span className="text-[12px] text-[#9CA3AF]">Never</span>
+                            ),
+                    },
+                    {
+                        key: "session",
+                        header: "Session",
+                        cell: (u) =>
+                            u.session ? (
+                                <PanelBadge tone={SESSION_TONES[u.session.status]}>{SESSION_LABELS[u.session.status]}</PanelBadge>
+                            ) : (
+                                <PanelEmptyCell />
+                            ),
+                    },
+                    {
+                        key: "manage",
+                        header: "Manage",
+                        className: "relative",
+                        cell: (u) => {
+                            const session = u.session
+                            const canManageAccount = !u.isSessionOnly && u.hasAccount !== false && !u.pendingInvite
+                            return (
+                                <RowActionMenu label={`Manage ${u.name || u.email || "user"}`}>
+                                    {canManageAccount && (
+                                        <RowActionMenuItem
+                                            onClick={() => sendPasswordReset(u.id)}
+                                            disabled={resetSending[u.id]}
+                                            icon={<KeyRound className="w-4 h-4" />}
+                                        >
+                                            {resetSending[u.id] ? "Sending…" : "Send reset email"}
+                                        </RowActionMenuItem>
+                                    )}
+                                    {canManageAccount && !u.isPlatformAdmin && (
+                                        <>
+                                            <RowActionMenuLabel>Change role</RowActionMenuLabel>
+                                            {ROLE_CHOICES.filter((choice) => choice.value !== normalizeRole(u.role)).map((choice) => (
+                                                <RowActionMenuItem
+                                                    key={choice.value}
+                                                    onClick={() => updateRole(u.id, choice.value === "client" ? "user" : choice.value)}
+                                                    icon={<UserCog className="w-4 h-4" />}
+                                                >
+                                                    {choice.label}
+                                                </RowActionMenuItem>
+                                            ))}
+                                        </>
+                                    )}
+                                    {session && <RowActionMenuLabel>Session</RowActionMenuLabel>}
+                                    {session && session.status !== "expired" && (
+                                        <RowActionMenuItem
+                                            onClick={() => handleGetLink(session.token, session.clientEmail)}
+                                            disabled={loadingLink === session.token}
+                                            icon={<LinkIcon className="w-4 h-4" />}
+                                        >
+                                            {loadingLink === session.token ? "Loading…" : "Get session link"}
+                                        </RowActionMenuItem>
+                                    )}
+                                    {session && (
+                                        <RowActionMenuItem
+                                            onClick={() => handleRenewSession(session.token)}
+                                            disabled={renewingSession === session.token}
+                                            icon={<RotateCw className={`w-4 h-4 ${renewingSession === session.token ? "animate-spin" : ""}`} />}
+                                        >
+                                            Renew session
+                                        </RowActionMenuItem>
+                                    )}
+                                    {(session || u.pendingInvite || (canManageAccount && !u.isSelf && !u.isPlatformAdmin)) && (
+                                        <RowActionMenuDivider />
+                                    )}
+                                    {session && (
+                                        <RowActionMenuItem
+                                            onClick={() => {
+                                                setSessionToDelete({ token: session.token, clientName: session.clientName })
+                                                setDeleteSessionModalOpen(true)
+                                            }}
+                                            icon={<Trash2 className="w-4 h-4" />}
+                                            tone="danger"
+                                        >
+                                            Delete session
+                                        </RowActionMenuItem>
+                                    )}
+                                    {u.pendingInvite && (
+                                        <RowActionMenuItem
+                                            onClick={() => rescindInvite(u.pendingInvite!.id)}
+                                            disabled={rescindingInvite === u.pendingInvite.id}
+                                            icon={<Trash2 className="w-4 h-4" />}
+                                            tone="danger"
+                                        >
+                                            Rescind invite
+                                        </RowActionMenuItem>
+                                    )}
+                                    {canManageAccount && !u.isSelf && !u.isPlatformAdmin && (
+                                        <RowActionMenuItem onClick={() => deleteUser(u.id)} icon={<Trash2 className="w-4 h-4" />} tone="danger">
+                                            Remove user
+                                        </RowActionMenuItem>
+                                    )}
+                                </RowActionMenu>
+                            )
+                        },
+                    },
+                ]}
+            />
 
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
             {notice && !error && <div className="mt-3 text-sm text-[#6B7280]">{notice}</div>}

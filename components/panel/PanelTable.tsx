@@ -209,9 +209,10 @@ export const PanelBadge: React.FC<{ tone?: BadgeTone; icon?: React.ReactNode; ch
 )
 
 /**
- * Pagination as a footer inside the card, centred. It used to hang below the table joined to it
- * by nothing but margin; the row count that sat opposite the controls has gone, since the table
- * above it is the count.
+ * Pagination: two chevrons and a position, centred in the card's footer.
+ *
+ * "‹ Previous  1 / 3  Next ›" spelled out in two directions what the arrows already say, and put
+ * three text elements where the eye only needs one.
  */
 export const PanelPagination: React.FC<{
   page: number
@@ -220,46 +221,152 @@ export const PanelPagination: React.FC<{
   onPageChange: (page: number) => void
 }> = ({ page, pageSize, total, onPageChange }) => {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const step = (delta: number) => onPageChange(Math.min(totalPages - 1, Math.max(0, page + delta)))
+  const arrow =
+    "inline-flex h-7 w-7 items-center justify-center rounded-md text-[#6B7280] transition-colors hover:bg-white hover:text-[#111827] disabled:pointer-events-none disabled:text-[#C7C4D2]"
   return (
-    <div className="flex items-center justify-center border-t border-[#EFECF4] bg-[#FCFBFE] px-6 py-3.5">
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => onPageChange(Math.max(0, page - 1))}
-          disabled={page === 0}
-          aria-label="Previous page"
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#374151] transition-colors hover:bg-white disabled:pointer-events-none"
-        >
-          <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
-          Previous
-        </button>
-        <span className="px-1 text-[12.5px] tabular-nums text-[#6B7280]">
-          {page + 1} / {totalPages}
-        </span>
-        <button
-          type="button"
-          onClick={() => onPageChange(Math.min(totalPages - 1, page + 1))}
-          disabled={page >= totalPages - 1}
-          aria-label="Next page"
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-medium text-[#374151] transition-colors hover:bg-white disabled:pointer-events-none"
-        >
-          Next
-          <ChevronRight className="h-3.5 w-3.5" aria-hidden />
-        </button>
-      </div>
+    <div className="flex items-center justify-center gap-1 border-t border-[#EFECF4] bg-[#FCFBFE] px-6 py-3">
+      <button type="button" onClick={() => step(-1)} disabled={page === 0} aria-label="Previous page" className={arrow}>
+        <ChevronLeft className="h-4 w-4" aria-hidden />
+      </button>
+      <span className="min-w-[76px] text-center text-[12.5px] tabular-nums text-[#6B7280]">
+        Page <span className="font-medium text-[#374151]">{page + 1}</span> of {totalPages}
+      </span>
+      <button
+        type="button"
+        onClick={() => step(1)}
+        disabled={page >= totalPages - 1}
+        aria-label="Next page"
+        className={arrow}
+      >
+        <ChevronRight className="h-4 w-4" aria-hidden />
+      </button>
     </div>
   )
 }
 
-/** Empty state, sized to sit inside the card rather than replacing it. */
+/**
+ * Reset control at the foot of a filter popover. It used to be a full-width button carrying its
+ * own `border-t`, so the rule was part of the button and moved with its hover state.
+ */
+export const PanelClearFilters: React.FC<{ onClick: () => void }> = ({ onClick }) => (
+  <div className="mt-1 border-t border-[#EFECF4] pt-3">
+    <button
+      type="button"
+      onClick={onClick}
+      className="h-8 w-full rounded-lg bg-[#F4F2F8] text-[12.5px] font-medium text-[#6B7280] transition-colors hover:bg-[#EAE6F3] hover:text-[#374151]"
+    >
+      Clear all filters
+    </button>
+  </div>
+)
+
+/**
+ * Empty state, standing on its own rather than inside the table card. Drawing a bordered box
+ * around an illustration and one line of text framed the absence of results as though it were
+ * a result.
+ */
 export const PanelEmptyState: React.FC<{ message: string; image?: React.ReactNode; children?: React.ReactNode }> = ({
   message,
   image,
   children,
 }) => (
-  <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
+  <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
     {image}
     <p className="text-[13px] text-[#6B7280]">{message}</p>
     {children}
   </div>
 )
+
+export type PanelColumn<T> = {
+  key: string
+  header: React.ReactNode
+  cell: (row: T) => React.ReactNode
+  /** Right-aligns both the heading and the cells — for action or numeric columns. */
+  align?: "left" | "right"
+  className?: string
+}
+
+/**
+ * The list page itself: loading, empty, table, pagination.
+ *
+ * Every page repeated the same four branches around its own copy of the table markup, which is
+ * how they drifted — one paginated inside the card and another below it, one showed an
+ * illustration when empty and another a sentence. A page now supplies its columns and its rows;
+ * the shape around them is decided once, here.
+ *
+ * Rows are sliced here too, so a page cannot paginate its display and count something else.
+ */
+export function PanelDataTable<T>({
+  rows,
+  columns,
+  getRowKey,
+  loading = false,
+  loadingLabel,
+  page,
+  pageSize,
+  onPageChange,
+  emptyMessage,
+  emptyImage,
+  emptyAction,
+}: {
+  rows: T[]
+  columns: Array<PanelColumn<T>>
+  getRowKey: (row: T) => string
+  loading?: boolean
+  loadingLabel?: React.ReactNode
+  page: number
+  pageSize: number
+  onPageChange: (page: number) => void
+  emptyMessage: string
+  emptyImage?: React.ReactNode
+  emptyAction?: React.ReactNode
+}) {
+  if (loading) {
+    return <div className="flex items-center justify-center py-12">{loadingLabel}</div>
+  }
+  if (rows.length === 0) {
+    return (
+      <PanelEmptyState message={emptyMessage} image={emptyImage}>
+        {emptyAction}
+      </PanelEmptyState>
+    )
+  }
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize))
+  // Clamped rather than reset: a filter that shrinks the list can leave the page index past the
+  // end, and slicing beyond the array renders an empty table with no way to tell why.
+  const safePage = Math.min(page, totalPages - 1)
+  const visible = rows.slice(safePage * pageSize, (safePage + 1) * pageSize)
+
+  return (
+    <PanelCard>
+      <PanelTable>
+        <PanelThead>
+          {columns.map((column) => (
+            <PanelTh key={column.key} className={column.align === "right" ? "!text-right" : ""}>
+              {column.header}
+            </PanelTh>
+          ))}
+        </PanelThead>
+        <PanelTbody>
+          {visible.map((row) => (
+            <PanelTr key={getRowKey(row)}>
+              {columns.map((column) => (
+                <PanelTd
+                  key={column.key}
+                  className={`${column.align === "right" ? "text-right" : ""} ${column.className ?? ""}`}
+                >
+                  {column.cell(row)}
+                </PanelTd>
+              ))}
+            </PanelTr>
+          ))}
+        </PanelTbody>
+      </PanelTable>
+      {rows.length > pageSize && (
+        <PanelPagination page={safePage} pageSize={pageSize} total={rows.length} onPageChange={onPageChange} />
+      )}
+    </PanelCard>
+  )
+}

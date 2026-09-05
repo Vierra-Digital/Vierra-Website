@@ -10,21 +10,14 @@ import Modal from "@/components/ui/Modal";
 import {
     PanelBadge,
     PanelButton,
-    PanelCard,
+    PanelClearFilters,
+    PanelDataTable,
     PanelEmptyCell,
-    PanelEmptyState,
     PanelHeader,
     PanelPage,
-    PanelPagination,
     PanelPopover,
     PanelSearch,
     PanelSelect,
-    PanelTable,
-    PanelTbody,
-    PanelTd,
-    PanelTh,
-    PanelThead,
-    PanelTr,
 } from "@/components/panel/PanelTable";
 
 /** Strict email-shape check shared by the team invite/edit modals below. */
@@ -394,22 +387,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         loadTeamData()
     }, [loadTeamData])
 
-    const columns = useMemo(() => {
-        const baseColumns = [
-            { key: "name", header: "Name" },
-            { key: "position", header: "Position" },
-            { key: "time_zone", header: "Time Zone" },
-            { key: "mentor", header: "Mentor" },
-            { key: "strikes", header: "Strikes" },
-            { key: "status", header: "Status" },
-        ]
-        if (userRole === "admin") {
-            baseColumns.push({ key: "manage", header: "Manage" })
-        }
-        
-        return baseColumns
-    }, [userRole])
-
     const positionTone = (position: string) => {
         switch (position) {
             case "Founder":
@@ -431,7 +408,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     // Clamped rather than reset: a filter that shrinks the list can leave currentPage past the end,
     // and slicing beyond the array renders an empty table with no way to tell why.
     const page = Math.min(currentPage, totalPages - 1)
-    const paginatedRows = filteredRows.slice(page * pageSize, (page + 1) * pageSize)
 
     return (
         <PanelPage>
@@ -496,8 +472,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                     ))}
                                 </div>
                             </div>
-                            <button
-                                type="button"
+                            <PanelClearFilters
                                 onClick={() => {
                                     setSearchTerm("")
                                     setSortBy("position")
@@ -505,10 +480,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                     setStatusFilter("all")
                                     setIsFilterOpen(false)
                                 }}
-                                className="h-8 w-full rounded-lg border-t border-[#EFECF4] text-[12px] font-medium text-[#6B7280] transition-colors hover:bg-[#FAF9FD] hover:text-[#374151]"
-                            >
-                                Clear All Filters
-                            </button>
+                            />
                         </PanelPopover>
                     )}
                 </div>
@@ -519,98 +491,84 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 )}
             </PanelHeader>
 
-            {loading ? (
-                <div className="flex items-center justify-center py-12">
-                    <LoadingSpinner label="Loading Staff Data..." />
-                </div>
-            ) : (
-                <PanelCard>
-                    {filteredRows.length === 0 ? (
-                        <PanelEmptyState
-                            message={searchTerm ? "No staff match your search." : "You have no staff added."}
-                            image={
-                                <Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" />
-                            }
-                        >
-                            {userRole === "admin" && !searchTerm && (
-                                <PanelButton variant="primary" onClick={() => setShowAddStaff(true)} icon={<FiPlus className="h-4 w-4" />}>
-                                    Invite Teammate
-                                </PanelButton>
-                            )}
-                        </PanelEmptyState>
-                    ) : (
-                        <>
-                            <PanelTable>
-                                <PanelThead>
-                                    {columns.map((column) => (
-                                        <PanelTh key={column.key}>{column.header}</PanelTh>
-                                    ))}
-                                </PanelThead>
-                                <PanelTbody>
-                                    {paginatedRows.map((r) => (
-                                        <PanelTr key={r.id}>
-                                            <PanelTd>
-                                                <div className="flex items-center gap-3">
-                                                    <ProfileImage
-                                                        src={r.image ? `/api/admin/getUserImage?userId=${r.id}&v=${r.imageVersion ?? 0}` : null}
-                                                        name={r.name}
-                                                        size={32}
-                                                        alt={`${r.name}'s profile`}
-                                                    />
-                                                    <div className="min-w-0">
-                                                        <div className="truncate font-medium text-[#111827]">{r.name}</div>
-                                                        <div className="truncate text-[12px] text-[#6B7280]">{r.email}</div>
-                                                    </div>
-                                                </div>
-                                            </PanelTd>
-                                            <PanelTd>
-                                                {r.position ? (
-                                                    <PanelBadge tone={positionTone(r.position)}>{r.position}</PanelBadge>
-                                                ) : (
-                                                    <PanelEmptyCell />
-                                                )}
-                                            </PanelTd>
-                                            <PanelTd>{r.time_zone || <PanelEmptyCell />}</PanelTd>
-                                            <PanelTd>{r.mentor || <PanelEmptyCell />}</PanelTd>
-                                            <PanelTd className="tabular-nums">{r.strikes || "0/3"}</PanelTd>
-                                            <PanelTd>
-                                                <StatusBadge lastActiveAt={r.lastActiveAt} isPending={r.isPending} />
-                                            </PanelTd>
-                                            {userRole === "admin" && (
-                                                <PanelTd className="relative">
-                                                    {r.isPending ? (
-                                                        <InviteActionsMenu
-                                                            inviteEmail={r.email}
-                                                            onRescind={() => handleRescindInvite(r.id, r.email)}
-                                                        />
-                                                    ) : (
-                                                        <StaffActionsMenu
-                                                            staffId={r.id}
-                                                            staffName={r.name}
-                                                            onEdit={() => handleManageStaff(r)}
-                                                            onDelete={() => handleDeleteStaff(r.id, r.name)}
-                                                            isSelf={r.isSelf}
-                                                        />
-                                                    )}
-                                                </PanelTd>
-                                            )}
-                                        </PanelTr>
-                                    ))}
-                                </PanelTbody>
-                            </PanelTable>
-                            <PanelPagination
-                                page={page}
-                                pageSize={pageSize}
-                                total={filteredRows.length}
-                                onPageChange={setCurrentPage}
-                            />
-                        </>
-                    )}
-                </PanelCard>
-            )}
+            <PanelDataTable<TeamRow>
+                rows={filteredRows}
+                getRowKey={(r) => r.id}
+                loading={loading}
+                loadingLabel={<LoadingSpinner label="Loading Staff Data..." />}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                emptyMessage={searchTerm ? "No staff match your search." : "You have no staff added."}
+                emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" />}
+                emptyAction={
+                    userRole === "admin" && !searchTerm ? (
+                        <PanelButton variant="primary" onClick={() => setShowAddStaff(true)} icon={<FiPlus className="h-4 w-4" />}>
+                            Invite Teammate
+                        </PanelButton>
+                    ) : null
+                }
+                columns={[
+                    {
+                        key: "name",
+                        header: "Name",
+                        cell: (r) => (
+                            <div className="flex items-center gap-3">
+                                <ProfileImage
+                                    src={r.image ? `/api/admin/getUserImage?userId=${r.id}&v=${r.imageVersion ?? 0}` : null}
+                                    name={r.name}
+                                    size={32}
+                                    alt={`${r.name}'s profile`}
+                                />
+                                <div className="min-w-0">
+                                    <div className="truncate font-medium text-[#111827]">{r.name}</div>
+                                    <div className="truncate text-[12px] text-[#6B7280]">{r.email}</div>
+                                </div>
+                            </div>
+                        ),
+                    },
+                    {
+                        key: "position",
+                        header: "Position",
+                        cell: (r) => (r.position ? <PanelBadge tone={positionTone(r.position)}>{r.position}</PanelBadge> : <PanelEmptyCell />),
+                    },
+                    { key: "time_zone", header: "Time Zone", cell: (r) => r.time_zone || <PanelEmptyCell /> },
+                    { key: "mentor", header: "Mentor", cell: (r) => r.mentor || <PanelEmptyCell /> },
+                    { key: "strikes", header: "Strikes", className: "tabular-nums", cell: (r) => r.strikes || "0/3" },
+                    {
+                        key: "status",
+                        header: "Status",
+                        cell: (r) => <StatusBadge lastActiveAt={r.lastActiveAt} isPending={r.isPending} />,
+                    },
+                    ...(userRole === "admin"
+                        ? [
+                              {
+                                  key: "manage",
+                                  header: "Manage",
+                                  className: "relative",
+                                  cell: (r: TeamRow) =>
+                                      r.isPending ? (
+                                          <InviteActionsMenu inviteEmail={r.email} onRescind={() => handleRescindInvite(r.id, r.email)} />
+                                      ) : (
+                                          <StaffActionsMenu
+                                              staffId={r.id}
+                                              staffName={r.name}
+                                              onEdit={() => handleManageStaff(r)}
+                                              onDelete={() => handleDeleteStaff(r.id, r.name)}
+                                              isSelf={r.isSelf}
+                                          />
+                                      ),
+                              },
+                          ]
+                        : []),
+                ]}
+            />
 
             {showAddStaff && userRole === "admin" && (
                 <InviteTeammateModal
+                    mentorOptions={rows
+                        .filter((r) => !r.isPending)
+                        .map((r) => ({ id: r.id, name: r.name, email: r.email }))}
                     onClose={() => setShowAddStaff(false)}
                     onCreated={() => {
                         setShowAddStaff(false)
@@ -678,9 +636,28 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         </PanelPage>
     )
 }
-const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void }> = ({ onClose, onCreated }) => {
+const FIELD =
+    "h-9 w-full rounded-[10px] bg-[#F4F2F8] px-3 text-[13px] text-[#111827] ring-1 ring-inset ring-transparent transition-shadow focus:bg-white focus:outline-none focus:ring-[#701CC0]/35"
+
+const POSITION_OPTIONS = ["Founder", "Leadership", "Business Advisor", "Developer", "Designer", "Outreach"]
+
+/**
+ * Invite dialog, with the staff detail it used to collect before invitations replaced direct
+ * account creation: position, mentor, time zone and strikes. None of it can be written to a user
+ * that does not exist yet, so it rides on the invitation row and is applied to the membership
+ * when the invite is accepted (see lib/auth/resolveUser.ts).
+ */
+const InviteTeammateModal: React.FC<{
+    onClose: () => void
+    onCreated: () => void
+    mentorOptions: Array<{ id: string; name: string; email: string }>
+}> = ({ onClose, onCreated, mentorOptions }) => {
     const [email, setEmail] = useState("")
     const [role, setRole] = useState<"admin" | "staff">("staff")
+    const [position, setPosition] = useState("")
+    const [mentorId, setMentorId] = useState("")
+    const [timeZone, setTimeZone] = useState("")
+    const [strikes, setStrikes] = useState(0)
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState("")
     const [showSuccess, setShowSuccess] = useState(false)
@@ -692,7 +669,7 @@ const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void
             const response = await fetch("/api/admin/invitations", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, role }),
+                body: JSON.stringify({ email, role, position, mentorId, timeZone, strikes }),
             })
             if (!response.ok) {
                 const errorData = await response.json()
@@ -751,7 +728,7 @@ const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void
         <Modal
             zIndexClass="z-50"
             backdropClassName="bg-black/50 backdrop-blur-sm"
-            cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+            cardClassName="bg-white rounded-2xl shadow-xl p-6 max-w-lg w-full mx-4"
             label="Invite Teammate"
             onClose={onClose}
         >
@@ -762,9 +739,9 @@ const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void
                     <h3 className="text-xl font-semibold text-[#111827]">Invite Teammate</h3>
             </div>
 
-                <div className="space-y-4">
-                    <div>
-                        <label className="block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598] mb-1.5">Email</label>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Email</label>
                         <input
                             type="email"
                             value={email}
@@ -772,25 +749,67 @@ const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void
                                 setEmail(e.target.value)
                                 if (error) setError("")
                             }}
-                            className={`w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
-                                email && !isValidEmail(email) ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB]'
+                            className={`h-9 w-full rounded-[10px] px-3 text-[13px] ring-1 ring-inset transition-shadow focus:outline-none focus:ring-[#701CC0]/35 ${
+                                email && !isValidEmail(email) ? "bg-red-50 ring-red-300" : "bg-[#F4F2F8] ring-transparent focus:bg-white"
                             }`}
                             placeholder="teammate@company.com"
                             required
                         />
                     </div>
                     <div>
-                        <label className="block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598] mb-1.5">Role</label>
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Role</label>
                         <select
                             value={role}
                             onChange={(e) => setRole(e.target.value as "admin" | "staff")}
-                            className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent bg-white"
+                            className={FIELD}
                         >
                             <option value="staff">Staff</option>
                             <option value="admin">Admin</option>
                         </select>
                     </div>
+                    <div>
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Position</label>
+                        <select value={position} onChange={(e) => setPosition(e.target.value)} className={FIELD}>
+                            <option value="">Not set</option>
+                            {POSITION_OPTIONS.map((option) => (
+                                <option key={option} value={option}>{option}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        {/* A picker, not the free-text box the edit dialog still uses: the column is a
+                            uuid foreign key to a user, so a typed name could never have been stored. */}
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Mentor</label>
+                        <select value={mentorId} onChange={(e) => setMentorId(e.target.value)} className={FIELD}>
+                            <option value="">None</option>
+                            {mentorOptions.map((option) => (
+                                <option key={option.id} value={option.id}>{option.name || option.email}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Strikes</label>
+                        <select value={String(strikes)} onChange={(e) => setStrikes(Number(e.target.value))} className={FIELD}>
+                            {[0, 1, 2, 3].map((n) => (
+                                <option key={n} value={n}>{n}/3</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="sm:col-span-2">
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Time Zone</label>
+                        <input
+                            type="text"
+                            value={timeZone}
+                            onChange={(e) => setTimeZone(e.target.value)}
+                            placeholder="America/New_York"
+                            className={FIELD}
+                        />
+                    </div>
                 </div>
+
+                <p className="mt-3 text-[12px] text-[#6B7280]">
+                    Everything below the email is optional and applied when the invite is accepted.
+                </p>
 
                 {error && <div className="mt-4 text-sm text-red-600">{error}</div>}
 

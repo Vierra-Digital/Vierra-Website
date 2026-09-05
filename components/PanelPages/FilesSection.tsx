@@ -127,8 +127,7 @@ const FilesSection: React.FC<{
               <LoadingSpinner label="Loading File Data..." />
             </div>
           ) : filteredFiles.length === 0 ? (
-            <PanelCard>
-              <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+            <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
                 <div className="relative mb-4 flex h-14 w-14 items-center justify-center">
                   <div className="files-empty-ping absolute inset-0 rounded-full bg-[#E9D5FF]" />
                   <div className="files-empty-icon relative flex h-14 w-14 items-center justify-center rounded-full bg-[#F3E8FF]">
@@ -139,8 +138,7 @@ const FilesSection: React.FC<{
                 <p className="text-sm text-[#6B7280] mt-2 max-w-md">
                   {search ? "No files match your search." : "Files you upload will appear here."}
                 </p>
-              </div>
-            </PanelCard>
+            </div>
           ) : (
             <PanelCard>
               <PanelTable>

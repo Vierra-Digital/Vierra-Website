@@ -6,21 +6,14 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import {
     PanelBadge,
     PanelButton,
-    PanelCard,
+    PanelClearFilters,
+    PanelDataTable,
     PanelEmptyCell,
-    PanelEmptyState,
     PanelHeader,
     PanelPage,
-    PanelPagination,
     PanelPopover,
     PanelSearch,
     PanelSelect,
-    PanelTable,
-    PanelTbody,
-    PanelTd,
-    PanelTh,
-    PanelThead,
-    PanelTr,
 } from "@/components/panel/PanelTable"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
@@ -178,18 +171,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
         }
     }
 
-    const columns = useMemo(
-        () => [
-            { key: "name", header: "Client Name" },
-            { key: "businessName", header: "Business Name" },
-            { key: "industry", header: "Industry" },
-            { key: "monthlyRetainer", header: "Monthly Retainer ($)" },
-            { key: "clientGoal", header: "Client Goal" },
-            { key: "status", header: "Status" },
-            { key: "manage", header: "Manage" },
-        ],
-        []
-    )
 
     const filteredRows = useMemo(() => {
         const query = searchQuery.trim().toLowerCase()
@@ -308,18 +289,14 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                     { value: "pending", label: "Pending" },
                                 ]}
                             />
-                            <button
-                                type="button"
+                            <PanelClearFilters
                                 onClick={() => {
                                     setNameSort("none")
                                     setRetainerSort("none")
                                     setStatusFilter("all")
                                     setIsFilterOpen(false)
                                 }}
-                                className="h-8 w-full rounded-lg border-t border-[#EFECF4] text-[12px] font-medium text-[#6B7280] transition-colors hover:bg-[#FAF9FD] hover:text-[#374151]"
-                            >
-                                Clear All Filters
-                            </button>
+                            />
                         </PanelPopover>
                     )}
                 </div>
@@ -328,90 +305,85 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                 </PanelButton>
             </PanelHeader>
 
-            {loading ? (
-                <div className="flex items-center justify-center py-12">
-                    <LoadingSpinner label="Loading Client Data..." />
-                </div>
-            ) : (
-                <PanelCard>
-                    {filteredRows.length === 0 ? (
-                        <PanelEmptyState
-                            message={searchQuery ? "No clients match your search." : "You have no clients added."}
-                            image={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" />}
-                        >
-                            {!searchQuery && (
-                                <PanelButton variant="primary" onClick={onAddClient} icon={<FiPlus className="h-4 w-4" />}>
-                                    Add Client
-                                </PanelButton>
-                            )}
-                        </PanelEmptyState>
-                    ) : (
-                        <>
-                            <PanelTable>
-                                <PanelThead>
-                                    {columns.map((c) => (
-                                        <PanelTh key={c.key}>{c.header}</PanelTh>
-                                    ))}
-                                </PanelThead>
-                                <PanelTbody>
-                                    {filteredRows.slice(page * pageSize, (page + 1) * pageSize).map((r) => (
-                                        <PanelTr key={r.id}>
-                                            <PanelTd>
-                                                <div className="flex items-center gap-3">
-                                                    <ProfileImage
-                                                        src={r.image ? `/api/admin/getClientImage?clientId=${r.id}&t=${imageStamp}` : null}
-                                                        name={r.name}
-                                                        size={32}
-                                                        alt={`${r.name}'s profile`}
-                                                    />
-                                                    <div className="min-w-0">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
-                                                            className="block max-w-full truncate text-left font-medium text-[#111827] transition-colors hover:text-[#701CC0]"
-                                                        >
-                                                            {r.name || "—"}
-                                                        </button>
-                                                        <div className="truncate text-[12px] text-[#6B7280]">{r.email || ""}</div>
-                                                    </div>
-                                                </div>
-                                            </PanelTd>
-                                            <PanelTd>{r.businessName || <PanelEmptyCell />}</PanelTd>
-                                            <PanelTd>{r.industry || r.targetAudience || <PanelEmptyCell />}</PanelTd>
-                                            <PanelTd className="tabular-nums">
-                                                {typeof r.monthlyRetainer === "number" ? `$${r.monthlyRetainer.toLocaleString()}` : <PanelEmptyCell />}
-                                            </PanelTd>
-                                            <PanelTd className="tabular-nums">
-                                                {typeof r.clientGoal === "number"
-                                                    ? `${r.clientGoal.toLocaleString()} ${r.clientGoal === 1 ? "Lead" : "Leads"}`
-                                                    : <PanelEmptyCell />}
-                                            </PanelTd>
-                                            <PanelTd><StatusBadge status={r.status} /></PanelTd>
-                                            <PanelTd className="relative">
-                                                <ClientActionsMenu
-                                                    clientId={r.id}
-                                                    clientName={r.name}
-                                                    isActive={r.isActive}
-                                                    hasImage={r.image}
-                                                    onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
-                                                    onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
-                                                    onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
-                                                />
-                                            </PanelTd>
-                                        </PanelTr>
-                                    ))}
-                                </PanelTbody>
-                            </PanelTable>
-                            <PanelPagination
-                                page={page}
-                                pageSize={pageSize}
-                                total={filteredRows.length}
-                                onPageChange={setCurrentPage}
+            <PanelDataTable<ClientRow>
+                rows={filteredRows}
+                getRowKey={(r) => r.id}
+                loading={loading}
+                loadingLabel={<LoadingSpinner label="Loading Client Data..." />}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                emptyMessage={searchQuery ? "No clients match your search." : "You have no clients added."}
+                emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" />}
+                emptyAction={
+                    !searchQuery ? (
+                        <PanelButton variant="primary" onClick={onAddClient} icon={<FiPlus className="h-4 w-4" />}>
+                            Add Client
+                        </PanelButton>
+                    ) : null
+                }
+                columns={[
+                    {
+                        key: "name",
+                        header: "Client Name",
+                        cell: (r) => (
+                            <div className="flex items-center gap-3">
+                                <ProfileImage
+                                    src={r.image ? `/api/admin/getClientImage?clientId=${r.id}&t=${imageStamp}` : null}
+                                    name={r.name}
+                                    size={32}
+                                    alt={`${r.name}'s profile`}
+                                />
+                                <div className="min-w-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
+                                        className="block max-w-full truncate text-left font-medium text-[#111827] transition-colors hover:text-[#701CC0]"
+                                    >
+                                        {r.name || "—"}
+                                    </button>
+                                    <div className="truncate text-[12px] text-[#6B7280]">{r.email || ""}</div>
+                                </div>
+                            </div>
+                        ),
+                    },
+                    { key: "business", header: "Business Name", cell: (r) => r.businessName || <PanelEmptyCell /> },
+                    { key: "industry", header: "Industry", cell: (r) => r.industry || r.targetAudience || <PanelEmptyCell /> },
+                    {
+                        key: "retainer",
+                        header: "Monthly Retainer ($)",
+                        className: "tabular-nums",
+                        cell: (r) =>
+                            typeof r.monthlyRetainer === "number" ? `$${r.monthlyRetainer.toLocaleString()}` : <PanelEmptyCell />,
+                    },
+                    {
+                        key: "goal",
+                        header: "Client Goal",
+                        className: "tabular-nums",
+                        cell: (r) =>
+                            typeof r.clientGoal === "number"
+                                ? `${r.clientGoal.toLocaleString()} ${r.clientGoal === 1 ? "Lead" : "Leads"}`
+                                : <PanelEmptyCell />,
+                    },
+                    { key: "status", header: "Status", cell: (r) => <StatusBadge status={r.status} /> },
+                    {
+                        key: "manage",
+                        header: "Manage",
+                        className: "relative",
+                        cell: (r) => (
+                            <ClientActionsMenu
+                                clientId={r.id}
+                                clientName={r.name}
+                                isActive={r.isActive}
+                                hasImage={r.image}
+                                onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
+                                onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
+                                onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
                             />
-                        </>
-                    )}
-                </PanelCard>
-            )}
+                        ),
+                    },
+                ]}
+            />
 
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
         </PanelPage>
