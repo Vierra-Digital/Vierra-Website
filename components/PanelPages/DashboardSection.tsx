@@ -657,17 +657,17 @@ const DashboardSection = () => {
                             className="group flex w-full flex-col justify-between rounded-xl bg-gradient-to-br from-[#701CC0] to-[#8F42FF] p-4 text-left text-white transition-[filter] duration-200 hover:brightness-[1.06]"
                         >
                             <div>
-                                <div className="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-white/70">
-                                    Tool
-                                </div>
-                                <h3 className="mt-1 text-lg font-semibold text-white">LTV Calculator</h3>
+                                <h3 className="text-lg font-semibold text-white">LTV Calculator</h3>
                                 <p className="mt-1 text-[12.5px] leading-relaxed text-white/75">
                                     Model lifetime value and retainer pricing from purchase value, term and referrals.
                                 </p>
                             </div>
                             <span className="mt-4 inline-flex items-center gap-1.5 self-start rounded-full bg-white/15 px-3 py-1.5 text-[12px] font-medium text-white transition-colors group-hover:bg-white/25">
-                                Open calculator
-                                <FiArrowRight className="h-3.5 w-3.5" aria-hidden />
+                                Open Calculator
+                                <FiArrowRight
+                                    className="h-3.5 w-3.5 motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out motion-safe:group-hover:translate-x-1"
+                                    aria-hidden
+                                />
                             </span>
                         </button>
 
