@@ -29,7 +29,15 @@ The original document was delivered without application changes. The subsequent 
 
 **Action required before this slice can send email in production:** `prisma/manual/20260909_email_send_attempts.sql` creates the table `runSendAttempt` depends on. The panel's compose/reply/send-queue paths always send a `requestId`, so until this SQL is applied to the live database every send will fail closed (503, "Send protection is unavailable... nothing was sent") rather than silently double-sending — but no mail will go out. Apply it before merging or deploying this slice.
 
-Not yet started: A1, A3, A5–A8, A10, A13, A15, E2, E3, E4, E6 (settings-section-specific rows), and the remaining G2 concurrency work for Blog/Tasks server revisions.
+### Slice 3 (current, uncommitted)
+
+| Scope | Implemented | Remaining |
+| --- | --- | --- |
+| A7 | LTV Calculator: explicit `$` / `%` / per-customer / per-year / years units on every field, blank/negative/non-finite input sanitized to 0 without ever surfacing NaN, cost-of-goods percentage clamped to 0–100 with an inline hint when the typed value was out of range, formula shown with a fixed worked example, Reset, and Copy summary (inputs, units, and an explicit "not a guaranteed outcome" line). Calculation itself (`lib/ltv/calculate.ts`) is unchanged and covered by `tests/ltvCalculate.test.ts`. | Named scenario comparison (P3, separately scoped) |
+
+A5, A9, A11, A12 verification note: on inspection this pass, Project Tasks (Mine/Needs review/assignee filters, per-column counts, URL-persisted board choice, transition-blocker tooltips+text) and the Dashboard's client-workspace disclosure (A14 — the shared Dashboard already labels which figures follow the active company selection vs. the viewer's own account, rather than claiming client-scoped data it doesn't have) were already implemented; no changes were needed there.
+
+Not yet started: A1 (Dashboard drill-throughs/widget-level retry), A3 (Staff Orbital), A6 (PDF Signer), A10 (Artemis), A13 (Account Settings), A15 (`/manage-users`), E2 (Contacts), E3 (Email Analytics), E4 (Cartography), the P2 E6 settings-section rows, and the remaining G2 concurrency work for Blog/Tasks server revisions.
 
 Validation for this slice: `npx prisma generate && npx tsc --noEmit && npm run lint && npm test && npx next build` all clean (486 tests, zero lint errors, zero build warnings). Browser interaction and viewport checks remain outstanding; no browser automation package is installed in this workspace. Existing endpoint authorization and mutation semantics are preserved. The Email link keeps its existing new-tab behavior and now exposes that behavior through a semantic link and accessible label.
 
