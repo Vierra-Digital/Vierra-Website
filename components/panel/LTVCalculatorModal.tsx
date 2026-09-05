@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FiX } from "react-icons/fi";
+import { X } from "lucide-react";
 import { inter } from "@/lib/fonts";
 
 /**
@@ -111,22 +111,17 @@ const LTVCalculatorModal: React.FC<Props> = ({ open, onClose }) => {
         aria-modal="true"
         aria-label="LTV calculator"
       >
-        {/* One centred row: the close control lines up with the block as a whole rather than
-            hanging off the first line of it. */}
-        <header className="flex items-center justify-between gap-4 border-b border-[#ECEAF1] px-6 py-4">
-          <div className="min-w-0">
-            <h2 className="text-[17px] font-semibold tracking-[-0.01em] text-[#111827]">LTV Calculator</h2>
-            <p className="mt-0.5 text-[12.5px] text-[#6B7280]">
-              Estimate what a customer is worth over their lifetime, and what to charge to win one.
-            </p>
-          </div>
+        {/* No divider under the header: the tinted input card already separates it from the
+            body, and the rule on top of that read as a seam. */}
+        <header className="flex items-center justify-between gap-4 px-6 pt-5 pb-1">
+          <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-[#111827]">LTV Calculator</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[#6B7280] transition-colors hover:bg-black/5 hover:text-[#111827]"
+            className="p-2 rounded-lg text-[#6B7280] hover:text-red-600 hover:bg-red-50 transition-colors"
           >
-            <FiX className="h-4 w-4" />
+            <X className="w-5 h-5" />
           </button>
         </header>
 
