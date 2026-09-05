@@ -67,7 +67,52 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           isSelf: u.id === session.user.id,
         };
       });
-      return res.status(200).json(shaped);
+      /**
+       * Client accounts have a `clients` row but no company membership, so a membership-only
+       * query listed staff and admins and quietly omitted every client — the page called "User
+       * Management" showed a subset of users. Clients are appended with role "client" and the
+       * same shape, so the table renders them without special-casing.
+       */
+      const clients = await prisma.client.findMany({
+        where: isPlatformAdmin ? {} : { company_id: companyId },
+        select: {
+          id: true,
+          user_id: true,
+          name: true,
+          email: true,
+          business_name: true,
+          company_id: true,
+          companies: { select: { name: true } },
+        },
+      });
+      // A client whose user_id already appears as a member would otherwise be listed twice.
+      const memberUserIds = new Set(shaped.map((row) => row.id));
+      const shapedClients = clients
+        .filter((c) => !c.user_id || !memberUserIds.has(c.user_id))
+        .map((c) => ({
+          id: c.user_id ?? `client:${c.id}`,
+          name: c.name,
+          email: c.email,
+          role: "client",
+          position: c.business_name ?? null,
+          country: null,
+          company_email: null,
+          mentor: null,
+          strikes: 0,
+          time_zone: null,
+          status: "offline",
+          lastActiveAt: null,
+          clientName: c.name,
+          companyName: isPlatformAdmin ? (c.companies?.name ?? null) : null,
+          isPlatformAdmin: false,
+          hasPassword: false,
+          isSelf: false,
+          // Clients have no auth user until they accept an invite; the UI needs to know that a
+          // row cannot be managed like a member before offering member-only actions on it.
+          hasAccount: Boolean(c.user_id),
+        }));
+
+      return res.status(200).json([...shaped, ...shapedClients]);
     } catch (e) {
       console.error("admin/users GET", e);
       return res.status(500).json({ message: "Internal Server Error" });

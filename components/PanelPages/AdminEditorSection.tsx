@@ -33,8 +33,8 @@ const AdminEditorSection = () => {
 
     return (
         <div className="w-full h-full bg-white text-[#111014] flex flex-col">
-            <div className="flex-1 flex justify-center px-6 pt-2">
-                <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
+            <div className="flex-1 px-8 lg:px-14 pt-1 overflow-y-auto overflow-x-hidden">
+                <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full pb-16">
                     {currentView === "users" ? (
                         <UsersPanel onManageSessions={() => setCurrentView("sessions")} />
                     ) : (
@@ -210,7 +210,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
         <>
             <div className="w-full flex justify-between items-center mb-2">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">User Management</h1>
+                    <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em] text-[#111827] mt-8 mb-6">User Management</h1>
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
@@ -1052,7 +1052,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
         <>
             <div className="w-full flex justify-between items-center mb-2">
                 <div>
-                    <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Client Sessions</h1>
+                    <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em] text-[#111827] mt-8 mb-6">Client Sessions</h1>
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
@@ -1561,7 +1561,7 @@ const GetLinkModal: React.FC<{
                 {link ? (
                     <>
                         <div className="mb-4">
-                            <label className="block text-sm font-medium text-[#374151] mb-2">Session Link</label>
+                            <label className="block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598] mb-1.5">Session Link</label>
                             <div className="flex items-center gap-2">
                                 <input
                                     type="text"

@@ -404,8 +404,8 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
     return (
         <div className="w-full h-full bg-white text-[#111014] flex flex-col">
-            <div className="flex-1 px-8 lg:px-14 pt-1 overflow-x-hidden">
-                <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
+            <div className="flex-1 px-8 lg:px-14 pt-1 overflow-y-auto overflow-x-hidden">
+                <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full pb-16">
             <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em] text-[#111827] mt-8 mb-5">Staff Orbital</h1>
             {/* Search / filter / invite belong under the title, not competing with it on the
                 same line — at 30px the heading and a row of controls fight for the same band. */}
@@ -572,7 +572,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                             )}
 
                             {!loading && filteredRows.length > 0 && (
-                                <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB]">
+                                <div className="bg-[#F1EFF6] rounded-xl">
                             <div className="overflow-x-auto">
                                 <table className="w-full">
                                     <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
@@ -821,7 +821,7 @@ const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void
 
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-2">Email</label>
+                        <label className="block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598] mb-1.5">Email</label>
                         <input
                             type="email"
                             value={email}
@@ -837,7 +837,7 @@ const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-2">Role</label>
+                        <label className="block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598] mb-1.5">Role</label>
                         <select
                             value={role}
                             onChange={(e) => setRole(e.target.value as "admin" | "staff")}
