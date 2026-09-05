@@ -27,6 +27,7 @@ export default function SlotCalendar({
     selectedDayLabel,
     weekdayLabels,
     calendarWeeks,
+    timezone,
   } = state;
 
   if (slotsByDay.size === 0) {
@@ -109,7 +110,7 @@ export default function SlotCalendar({
                 onClick={() => onSelectTime(iso)}
                 className="w-full rounded-lg border border-[#E5E7EB] px-4 py-3 text-base font-medium text-[#1E1B2E] transition hover:border-[#701CC0] hover:bg-[#F9F5FD]"
               >
-                {new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                {new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone: timezone })}
               </button>
             ))
           )}

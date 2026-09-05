@@ -1,31 +1,44 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
-import { useBookingSlots, bookSlot } from "@/lib/booking/useBookingSlots";
+import { m as motion } from "framer-motion";
+import {
+  useBookingSlots,
+  bookSlot,
+  formatLocalDateTime,
+  detectBrowserTimeZone,
+  COMMON_TIMEZONES,
+  BookingConflictError,
+  type BookingConfirmation,
+} from "@/lib/booking/useBookingSlots";
 import SlotCalendar from "@/components/booking/SlotCalendar";
 import { inter } from "@/lib/fonts";
 import { track } from "@/lib/track";
+import { inputClass } from "@/components/ui/modalForm";
 
 export const AUDIT_CALL_BOOKING_SLUG = process.env.NEXT_PUBLIC_AUDIT_CALL_BOOKING_SLUG || "audit-call";
-// Matches the server-side window for this slug (see BOOKING_LINKS_UNBOUNDED_WINDOW in
-// pages/api/booking/[id]/slots.ts) — the server won't return slots past its own cap regardless
-// of what's requested here, but requesting less than it allows would just re-impose a shorter
-// window client-side for no reason.
-const DAYS_AHEAD = 365;
+// A year-out horizon didn't make sense for a call this short-notice, and it's what pushed every
+// slots fetch over Google's freeBusy ~3-month range cap (see the fail-closed handling and
+// getBusyOverRange in lib/calendar/googleCalendar.ts) — 3 weeks stays well under both the
+// business need and that limit. This slug stays in BOOKING_LINKS_UNBOUNDED_WINDOW (.env) despite
+// the name: at 7 days/week x 32 fifteen-minute slots/day, the default 200-slot cap that env var
+// also lifts would otherwise truncate the picker to under a week, well short of the 21 requested.
+const DAYS_AHEAD = 21;
 
 type AuditBookingStepProps = {
   prefill: { name: string; email: string; notes?: string };
-  onBooked: (when: string) => void;
+  onBooked: (confirmation: BookingConfirmation) => void;
 };
 
 export default function AuditBookingStep({ prefill, onBooked }: AuditBookingStepProps) {
-  const booking = useBookingSlots(AUDIT_CALL_BOOKING_SLUG, DAYS_AHEAD);
+  const [timezone, setTimezone] = useState(detectBrowserTimeZone);
+  const timezoneOptions = Array.from(new Set([timezone, ...COMMON_TIMEZONES]));
+  const booking = useBookingSlots(AUDIT_CALL_BOOKING_SLUG, DAYS_AHEAD, timezone);
   // TODO(audit-call-booking): a missing/misconfigured BookingLink (404 on the slots fetch —
   // `notFound`) and a real link with zero open slots both land here as an empty
   // `slotsByDay`, and both get the same "send us your availability" fallback below rather
   // than a distinct broken-link error. Once the real Vierra Meeting Link is provisioned
   // (Phase 0) and this stops being the common case in every environment, decide whether a
   // *genuinely* broken link still deserves its own error state instead of sharing this one.
-  const { loading, slotsByDay, selected, setSelected } = booking;
+  const { loading, data, slotsByDay, selected, setSelected, refetch } = booking;
 
   const [notes, setNotes] = useState(prefill.notes || "");
   const [submitting, setSubmitting] = useState(false);
@@ -36,16 +49,27 @@ export default function AuditBookingStep({ prefill, onBooked }: AuditBookingStep
     setSubmitting(true);
     setError("");
     try {
-      const when = await bookSlot({
+      const result = await bookSlot({
         slug: AUDIT_CALL_BOOKING_SLUG,
         start: selected,
         inviteeName: prefill.name,
         inviteeEmail: prefill.email,
         notes: notes.trim(),
       });
-      onBooked(when);
+      onBooked({
+        when: formatLocalDateTime(selected, timezone),
+        startIso: selected,
+        durationMinutes: data?.durationMinutes || 30,
+        title: data?.title || "Vierra Audit Call",
+        id: result.id,
+        joinUrl: result.joinUrl,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not book that time. Please try another slot.");
+      // A 409 means the picker's slot list is stale (someone else booked it, or it was taken in
+      // another tab) — refetch so the dead slot disappears instead of leaving the visitor to
+      // retry the same time and get the same error again.
+      if (e instanceof BookingConflictError) refetch();
     } finally {
       setSubmitting(false);
     }
@@ -65,6 +89,23 @@ export default function AuditBookingStep({ prefill, onBooked }: AuditBookingStep
         Pick a time that works and we&apos;ll send a calendar invite with the video link to{" "}
         <span className="font-medium text-[#1A1033]">{prefill.email}</span>.
       </p>
+      {data ? (
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-[#9A93AE]">
+          <span>{data.durationMinutes} minutes · times shown in</span>
+          <select
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            aria-label="Timezone"
+            className="rounded border border-[#E5E7EB] bg-white px-1 py-0.5 text-xs text-[#4A465C] outline-none focus:border-[#701CC0]"
+          >
+            {timezoneOptions.map((tz) => (
+              <option key={tz} value={tz}>
+                {tz.replace(/_/g, " ")}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
       {selected ? (
         <div className="mt-5">
@@ -75,17 +116,14 @@ export default function AuditBookingStep({ prefill, onBooked }: AuditBookingStep
           >
             ← Choose a different time
           </button>
-          <p className="text-sm font-medium text-[#1E1B2E]">
-            {new Date(selected).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })} at{" "}
-            {new Date(selected).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-          </p>
+          <p className="text-sm font-medium text-[#1E1B2E]">{formatLocalDateTime(selected, timezone)}</p>
           <div className="mt-3 space-y-2 border-t border-[#EEF0F4] pt-4">
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Anything to share before the call? (optional)"
               rows={2}
-              className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#701CC0]"
+              className={`${inputClass} text-sm`}
             />
             {error ? <p className="text-sm text-red-600">{error}</p> : null}
             <motion.button
@@ -160,7 +198,7 @@ function AvailabilityNoteFallback({ prefill }: { prefill: { name: string; email:
           onChange={(e) => setNote(e.target.value)}
           placeholder="e.g. Weekday afternoons EST work best for me"
           rows={3}
-          className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#701CC0]"
+          className={`${inputClass} text-sm`}
         />
         {error ? <p className="text-sm text-red-600">{error}</p> : null}
         <motion.button

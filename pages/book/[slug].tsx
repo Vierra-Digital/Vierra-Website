@@ -1,8 +1,9 @@
 import { useState } from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
-import { useBookingSlots, bookSlot } from "@/lib/booking/useBookingSlots";
+import { useBookingSlots, bookSlot, formatLocalDateTime, googleCalendarAddUrl, BookingConflictError, type BookingConfirmation } from "@/lib/booking/useBookingSlots";
 import SlotCalendar from "@/components/booking/SlotCalendar";
+import { inputClass } from "@/components/ui/modalForm";
 
 export default function BookingPage() {
   const router = useRouter();
@@ -12,30 +13,40 @@ export default function BookingPage() {
   // plain shared booking-page links — booking still works identically either way.
   const ref = typeof router.query.ref === "string" ? router.query.ref : "";
   const booking = useBookingSlots(slug);
-  const { data, loading, notFound, selected, setSelected } = booking;
+  const { data, loading, notFound, selected, setSelected, refetch } = booking;
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [confirmed, setConfirmed] = useState<string>("");
+  const [confirmation, setConfirmation] = useState<BookingConfirmation | null>(null);
 
   const book = async () => {
     if (!selected || !name.trim() || !email.trim() || submitting) return;
     setSubmitting(true);
     setError("");
     try {
-      const when = await bookSlot({ slug, start: selected, inviteeName: name.trim(), inviteeEmail: email.trim(), notes: notes.trim(), ref });
-      setConfirmed(when);
+      const result = await bookSlot({ slug, start: selected, inviteeName: name.trim(), inviteeEmail: email.trim(), notes: notes.trim(), ref });
+      setConfirmation({
+        when: formatLocalDateTime(selected),
+        startIso: selected,
+        durationMinutes: data?.durationMinutes || 30,
+        title: data?.title || "Meeting",
+        id: result.id,
+        joinUrl: result.joinUrl,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not book.");
+      // Stale slot list (someone else took it, or it was booked in another tab) — refetch so
+      // the dead slot drops out instead of the visitor retrying the same time again.
+      if (e instanceof BookingConflictError) refetch();
     } finally {
       setSubmitting(false);
     }
   };
 
-  const picking = !loading && !notFound && !confirmed && !selected;
+  const picking = !loading && !notFound && !confirmation && !selected;
   const cardWidth = picking ? "max-w-4xl" : "max-w-lg";
 
   return (
@@ -58,7 +69,7 @@ export default function BookingPage() {
               <h1 className="text-lg font-semibold text-[#1E1B2E]">Link not found</h1>
               <p className="mt-2 text-sm text-[#6B7280]">This booking link is inactive or doesn&apos;t exist.</p>
             </div>
-          ) : confirmed ? (
+          ) : confirmation ? (
             <div className="text-center">
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-500 shadow-lg shadow-green-500/30">
                 <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8">
@@ -66,7 +77,27 @@ export default function BookingPage() {
                 </svg>
               </div>
               <h1 className="text-lg font-semibold text-[#1E1B2E]">You&apos;re booked!</h1>
-              <p className="mt-2 text-sm text-[#6B7280]">{data?.title} — {confirmed}. A confirmation is on its way to {email}.</p>
+              <p className="mt-2 text-sm text-[#6B7280]">{data?.title} — {confirmation.when}. A confirmation is on its way to {email}.</p>
+              <div className="mt-4 flex flex-col items-center gap-2">
+                <a
+                  href={googleCalendarAddUrl(confirmation)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-medium text-[#701CC0] hover:underline"
+                >
+                  Add to Google Calendar
+                </a>
+                {confirmation.id ? (
+                  <a
+                    href={`/manage/${confirmation.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-[#9A93AE] hover:underline"
+                  >
+                    Need to reschedule or cancel?
+                  </a>
+                ) : null}
+              </div>
             </div>
           ) : (
             <>
@@ -83,14 +114,11 @@ export default function BookingPage() {
                   >
                     ← Choose a different time
                   </button>
-                  <p className="text-sm font-medium text-[#1E1B2E]">
-                    {new Date(selected).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })} at{" "}
-                    {new Date(selected).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                  </p>
+                  <p className="text-sm font-medium text-[#1E1B2E]">{formatLocalDateTime(selected)}</p>
                   <div className="mt-3 space-y-2 border-t border-[#EEF0F4] pt-4">
-                    <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#701CC0]" />
-                    <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Your email" className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#701CC0]" />
-                    <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything to share? (optional)" rows={2} className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#701CC0]" />
+                    <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" className={`${inputClass} text-sm`} />
+                    <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="Your email" className={`${inputClass} text-sm`} />
+                    <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Anything to share? (optional)" rows={2} className={`${inputClass} text-sm`} />
                     {error ? <p className="text-sm text-red-600">{error}</p> : null}
                     <button
                       type="button"

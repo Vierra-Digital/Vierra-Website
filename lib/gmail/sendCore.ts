@@ -512,7 +512,12 @@ export async function sendEmailCore(
 
   const notifyTo = payload.requestReceipt ? fromAlias || accountEmail : "";
   const rawMime = buildRawMime({
-    from: fromAlias || "",
+    // A blank `from` here (previously `fromAlias || ""`) omits the MIME From header entirely —
+    // Gmail's send API then silently substitutes the account's own default "send as" alias
+    // instead of accountEmail, which is how a booking confirmation from alex@vierradev.com went
+    // out as his configured default alias (business@alexshick.com) instead. The SMTP path below
+    // already falls back to accountEmail; this brings the Gmail path in line with it.
+    from: fromAlias || accountEmail,
     to: toRecipients.join(", "),
     cc: ccRecipients.length > 0 ? ccRecipients.join(", ") : "",
     bcc: bccRecipients.length > 0 ? bccRecipients.join(", ") : "",

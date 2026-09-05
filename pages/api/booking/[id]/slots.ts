@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { asStr } from "@/lib/api/parsing";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getBusy } from "@/lib/calendar/googleCalendar";
+import { getBusyOverRange, type BusyInterval } from "@/lib/calendar/googleCalendar";
 import { computeSlots, DEFAULT_AVAILABILITY, type Availability } from "@/lib/booking/slots";
 import { getTeamBusyIntersection } from "@/lib/booking/teamAvailability";
 
@@ -46,12 +46,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const rangeStart = now;
   const rangeEnd = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000);
 
-  const busy = link.company_id
-    ? await getTeamBusyIntersection(link.company_id, rangeStart.toISOString(), rangeEnd.toISOString())
-    : await (async () => {
-        const token = await getValidGmailAccessToken(link.user_id, link.account_email);
-        return token.ok ? getBusy(token.accessToken, rangeStart.toISOString(), rangeEnd.toISOString()) : [];
-      })();
+  let busy: BusyInterval[];
+  if (!link.company_id) {
+    const [token, localBookings] = await Promise.all([
+      getValidGmailAccessToken(link.user_id, link.account_email),
+      prisma.booking.findMany({
+        where: { booking_link_id: link.id, status: "confirmed", end_at: { gt: now } },
+        select: { start_at: true, end_at: true },
+      }),
+    ]);
+    const calendarBusy = token.ok ? await getBusyOverRange(token.accessToken, rangeStart.toISOString(), rangeEnd.toISOString()) : null;
+    // getBusy (and an invalid/expired token) can't tell us the host is actually free — only that
+    // we couldn't check. Previously that was treated as "no busy events" and merged in as `[]`,
+    // which showed the host as wide open (including over real meetings) whenever the Calendar
+    // call had a hiccup or the token needed reconnecting. Fail closed instead: report the outage
+    // rather than a false, easily-double-booked availability list.
+    if (calendarBusy === null) {
+      res.status(502).json({ message: "Could not check host availability right now — please try again shortly." });
+      return;
+    }
+    busy = [...calendarBusy, ...localBookings.map((b) => ({ start: b.start_at.toISOString(), end: b.end_at.toISOString() }))];
+  } else {
+    // A team-link claim (status='slot_claimed') has no host assigned yet, so it never gets a
+    // real Calendar event — it's invisible to getTeamBusyIntersection until someone claims
+    // and confirms it. Without this overlay, an already-claimed slot keeps showing as open
+    // here and only 409s once a prospect actually tries to book it (the POST claim path,
+    // lib/booking/teamSlotClaim.ts, already merges these in for its own validation).
+    const [teamBusy, localBookings] = await Promise.all([
+      getTeamBusyIntersection(link.company_id, rangeStart.toISOString(), rangeEnd.toISOString()),
+      prisma.booking.findMany({
+        where: { booking_link_id: link.id, status: { in: ["confirmed", "slot_claimed"] }, end_at: { gt: now } },
+        select: { start_at: true, end_at: true },
+      }),
+    ]);
+    busy = [...teamBusy, ...localBookings.map((b) => ({ start: b.start_at.toISOString(), end: b.end_at.toISOString() }))];
+  }
 
   const availability = (link.availability as unknown as Availability) || DEFAULT_AVAILABILITY;
   const slots = computeSlots({
@@ -66,6 +95,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     max: unbounded ? UNBOUNDED_MAX_SLOTS : undefined,
   });
 
+  // Availability changes with every booking made against this link — without an explicit
+  // no-store, Next's default ETag on a cacheable-looking JSON response lets the browser serve
+  // a stale copy for an identical URL (same slug+days) within the same tab/session, which is
+  // exactly how a visitor can be shown an already-taken slot that then 409s on submit.
+  res.setHeader("Cache-Control", "no-store");
   res.status(200).json({
     title: link.title,
     description: link.description,

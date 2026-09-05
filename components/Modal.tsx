@@ -23,6 +23,7 @@ import {
   formatPhone,
 } from "@/components/ui/modalForm";
 import AuditBookingStep from "@/components/audit/AuditBookingStep";
+import { googleCalendarAddUrl, type BookingConfirmation } from "@/lib/booking/useBookingSlots";
 
 
 interface ModalProps {
@@ -92,7 +93,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState<FormState>(EMPTY_FORM);
   const [phase, setPhase] = useState<ModalPhase>("active");
-  const [bookedWhen, setBookedWhen] = useState("");
+  const [confirmation, setConfirmation] = useState<BookingConfirmation | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [honeypot, setHoneypot] = useState("");
 
@@ -106,7 +107,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
       setStep(1);
       setFormData(EMPTY_FORM);
       setPhase("active");
-      setBookedWhen("");
+      setConfirmation(null);
       setSubmitting(false);
       setHoneypot("");
       track("lead_form_open");
@@ -215,8 +216,8 @@ export function Modal({ isOpen, onClose }: ModalProps) {
     .filter(Boolean)
     .join(" · ");
 
-  const handleBooked = (when: string) => {
-    setBookedWhen(when);
+  const handleBooked = (result: BookingConfirmation) => {
+    setConfirmation(result);
     setPhase("done");
     track("audit_booking_confirmed");
   };
@@ -263,7 +264,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
       )}
 
       {phase === "done" ? (
-        <SuccessView onClose={onClose} bookedWhen={bookedWhen} />
+        <SuccessView onClose={onClose} confirmation={confirmation} />
       ) : (
         <>
           {/* Header */}
@@ -465,7 +466,7 @@ export function Modal({ isOpen, onClose }: ModalProps) {
   );
 }
 
-const SuccessView: React.FC<{ onClose: () => void; bookedWhen?: string }> = ({ onClose, bookedWhen }) => (
+const SuccessView: React.FC<{ onClose: () => void; confirmation: BookingConfirmation | null }> = ({ onClose, confirmation }) => (
   <div className="relative flex flex-col items-center px-6 py-12 text-center sm:px-10">
     <button
       onClick={onClose}
@@ -499,13 +500,35 @@ const SuccessView: React.FC<{ onClose: () => void; bookedWhen?: string }> = ({ o
       </svg>
     </motion.div>
     <h2 className={`text-2xl font-semibold tracking-tight text-[#1A1033] ${bricolage.className}`}>
-      {bookedWhen ? "You're Booked" : "Free Audit Claimed"}
+      {confirmation ? "You're Booked" : "Free Audit Claimed"}
     </h2>
     <p className="mx-auto mt-2 max-w-sm text-[15px] leading-7 text-[#6B6480]">
-      {bookedWhen
-        ? `See you ${bookedWhen}. A calendar invite and video link are on their way to your inbox.`
+      {confirmation
+        ? `See you ${confirmation.when}. A calendar invite and video link are on their way to your inbox.`
         : "We’ve received your details and our team will be in touch within 24 hours."}
     </p>
+    {confirmation ? (
+      <div className="mt-3 flex flex-col items-center gap-1.5">
+        <a
+          href={googleCalendarAddUrl(confirmation)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm font-medium text-[#701CC0] hover:underline"
+        >
+          Add to Google Calendar
+        </a>
+        {confirmation.id ? (
+          <a
+            href={`/manage/${confirmation.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-[#9A93AE] hover:underline"
+          >
+            Need to reschedule or cancel?
+          </a>
+        ) : null}
+      </div>
+    ) : null}
     <motion.button
       type="button"
       onClick={onClose}

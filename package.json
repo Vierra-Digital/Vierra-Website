@@ -17,7 +17,8 @@
     "db:generate": "prisma generate",
     "syncdb": "node scripts/sync-db.js",
     "create-client": "node scripts/create-client.js",
-    "connect-ga4": "node scripts/connect-ga4.js"
+    "connect-ga4": "node scripts/connect-ga4.js",
+    "provision-audit-call-link": "node scripts/provision-audit-call-link.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

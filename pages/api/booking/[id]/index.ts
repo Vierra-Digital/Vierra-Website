@@ -110,8 +110,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     where: { booking_link_id: link.id, status: "confirmed", end_at: { gt: now } },
     select: { start_at: true, end_at: true },
   });
+  const calendarBusy = await getBusy(token.accessToken, now.toISOString(), validationRangeEnd.toISOString());
+  // null means the freeBusy call failed, not that the host has nothing on their calendar —
+  // proceeding as if it were `[]` would let this booking go through over a real conflict we
+  // simply couldn't see (see the matching fail-closed change in slots.ts).
+  if (calendarBusy === null) {
+    res.status(502).json({ message: "Could not verify host availability right now — please try again shortly." });
+    return;
+  }
   const busy: BusyInterval[] = [
-    ...(await getBusy(token.accessToken, now.toISOString(), validationRangeEnd.toISOString())),
+    ...calendarBusy,
     ...localBookings.map((b) => ({ start: b.start_at.toISOString(), end: b.end_at.toISOString() })),
   ];
   const availability = (link.availability as unknown as Availability) || DEFAULT_AVAILABILITY;
@@ -279,5 +287,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ).catch(() => null);
   }
 
-  res.status(200).json({ ok: true, when });
+  res.status(200).json({ ok: true, when, id: booking.id, joinUrl: finalJoinUrl });
 }
