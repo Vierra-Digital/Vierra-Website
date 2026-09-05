@@ -18,7 +18,7 @@ import { FiCheck, FiPlus, FiTrash2 } from "react-icons/fi"
 import { inter } from "@/lib/fonts";
 import Image from "next/image"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
-import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
+import RowActionMenu, { RowActionMenuDivider, RowActionMenuItem, RowActionMenuLabel } from "@/components/ui/RowActionMenu"
 import Modal from "@/components/ui/Modal"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import ProfileImage from "@/components/ProfileImage"
@@ -641,7 +641,7 @@ function UsersPanel() {
                                                     )}
                                                 </PanelTd>
                                                 <PanelTd className="relative">
-                                                    <RowActionMenu label={`Manage ${u.name || u.email || "user"}`} menuWidthClassName="w-56">
+                                                    <RowActionMenu label={`Manage ${u.name || u.email || "user"}`}>
                                                         {canManageAccount && (
                                                             <RowActionMenuItem
                                                                 onClick={() => sendPasswordReset(u.id)}
@@ -652,17 +652,21 @@ function UsersPanel() {
                                                                 {resetSending[u.id] ? "Sending…" : "Send reset email"}
                                                             </RowActionMenuItem>
                                                         )}
-                                                        {canManageAccount &&
-                                                            !u.isPlatformAdmin &&
-                                                            ROLE_CHOICES.filter((choice) => choice.value !== normalizeRole(u.role)).map((choice) => (
-                                                                <RowActionMenuItem
-                                                                    key={choice.value}
-                                                                    onClick={() => updateRole(u.id, choice.value === "client" ? "user" : choice.value)}
-                                                                    icon={<UserCog className="w-4 h-4" />}
-                                                                >
-                                                                    Make {choice.label}
-                                                                </RowActionMenuItem>
-                                                            ))}
+                                                        {canManageAccount && !u.isPlatformAdmin && (
+                                                            <>
+                                                                <RowActionMenuLabel>Change role</RowActionMenuLabel>
+                                                                {ROLE_CHOICES.filter((choice) => choice.value !== normalizeRole(u.role)).map((choice) => (
+                                                                    <RowActionMenuItem
+                                                                        key={choice.value}
+                                                                        onClick={() => updateRole(u.id, choice.value === "client" ? "user" : choice.value)}
+                                                                        icon={<UserCog className="w-4 h-4" />}
+                                                                    >
+                                                                        {choice.label}
+                                                                    </RowActionMenuItem>
+                                                                ))}
+                                                            </>
+                                                        )}
+                                                        {session && <RowActionMenuLabel>Session</RowActionMenuLabel>}
                                                         {session && session.status !== "expired" && (
                                                             <RowActionMenuItem
                                                                 onClick={() => handleGetLink(session.token, session.clientEmail)}
@@ -681,6 +685,7 @@ function UsersPanel() {
                                                                 Renew session
                                                             </RowActionMenuItem>
                                                         )}
+                                                        {(session || (canManageAccount && !u.isSelf && !u.isPlatformAdmin)) && <RowActionMenuDivider />}
                                                         {session && (
                                                             <RowActionMenuItem
                                                                 onClick={() => {
