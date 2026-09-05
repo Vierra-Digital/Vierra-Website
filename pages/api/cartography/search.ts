@@ -5,6 +5,7 @@ import { screenCartographyQuery } from "@/lib/cartography/screenQuery";
 
 export type CartographySearchResult = {
   company: string;
+  domain: string | null;
   industry: string | null;
   description: string | null;
   location: string | null;
@@ -17,6 +18,7 @@ export type CartographySearchResult = {
 
 type Row = {
   company: string;
+  domain: string | null;
   industry: string | null;
   description: string | null;
   location: string | null;
@@ -28,6 +30,28 @@ type Row = {
 };
 
 const MAX_RESULTS = 50;
+
+// Discovery is shared by authenticated company members. company_id records the contributor;
+// source edits retain ownership checks, while imports belong to the requesting user.
+
+/**
+ * Turns a free-text query into a prefix-matching tsquery string (e.g. "dental clin" ->
+ * "dental:* & clin:*") so a still-being-typed word matches instead of requiring the whole
+ * word — plainto_tsquery has no prefix support at all. Each token is stripped to
+ * alphanumerics before being handed to to_tsquery, since tsquery's own mini-language
+ * (&, |, !, (, ), :) would otherwise misparse punctuation in the input; this is defense
+ * against a malformed query erroring the whole request, not a security boundary — the value
+ * still only ever reaches Postgres as a bound parameter, never concatenated SQL.
+ * Returns null when nothing usable survives (e.g. a query of pure punctuation).
+ */
+export function buildPrefixTsQuery(q: string): string | null {
+  const terms = q
+    .split(/\s+/)
+    .map((word) => word.replace(/[^a-z0-9]/gi, ""))
+    .filter(Boolean)
+    .slice(0, 8); // matches screenCartographyQuery's length cap in spirit — a bound on query cost
+  return terms.length > 0 ? terms.map((term) => `${term}:*`).join(" & ") : null;
+}
 
 /**
  * Cartography's Search-mode backend (see docs/CARTOGRAPHY_DESIGN.md Rollout M3). Queries the
@@ -47,7 +71,7 @@ const MAX_RESULTS = 50;
  * just avoids building a second, riskier code path for "only some filters are present."
  */
 export default withAuth(
-  async (req, res, session) => {
+  async (req, res) => {
     const q = asQueryStr(req.query.q) || null;
     const centerLat = req.query.centerLat ? Number(asQueryStr(req.query.centerLat)) : null;
     const centerLng = req.query.centerLng ? Number(asQueryStr(req.query.centerLng)) : null;
@@ -55,6 +79,7 @@ export default withAuth(
 
     const hasCenter =
       centerLat !== null && Number.isFinite(centerLat) && centerLng !== null && Number.isFinite(centerLng);
+    const prefixQuery = q ? buildPrefixTsQuery(q) : null;
 
     if (q) {
       const screening = screenCartographyQuery(q);
@@ -74,6 +99,7 @@ export default withAuth(
       const rows = await prisma.$queryRaw<Row[]>`
         SELECT
           co.name AS company,
+          co.domain AS domain,
           co.industry AS industry,
           co.description AS description,
           co.address AS location,
@@ -81,6 +107,10 @@ export default withAuth(
           co.lng AS lng,
           cc.name AS contact_name,
           cc.title AS title,
+          COALESCE(ts_rank_cd(co.search_vector, to_tsquery('english', ${prefixQuery})), 0)
+            + CASE WHEN ${q}::text IS NOT NULL AND cc.title ILIKE '%' || ${q} || '%' THEN 0.5 ELSE 0 END
+            + CASE WHEN ${q}::text IS NOT NULL AND cc.name ILIKE '%' || ${q} || '%' THEN 0.5 ELSE 0 END
+            AS relevance,
           CASE
             WHEN ${hasCenter}::boolean AND co.lat IS NOT NULL AND co.lng IS NOT NULL THEN
               3958.8 * 2 * asin(least(1, sqrt(
@@ -92,11 +122,10 @@ export default withAuth(
           END AS distance_miles
         FROM cartography_contacts cc
         JOIN cartography_companies co ON co.id = cc.cartography_company_id
-        WHERE cc.company_id = ${session.companyId}::uuid
-          AND cc.status NOT IN ('rejected', 'duplicate')
+        WHERE cc.status NOT IN ('rejected', 'duplicate')
           AND (
             ${q}::text IS NULL
-            OR co.search_vector @@ plainto_tsquery('english', ${q})
+            OR co.search_vector @@ to_tsquery('english', ${prefixQuery})
             OR cc.title ILIKE '%' || ${q} || '%'
             OR cc.name ILIKE '%' || ${q} || '%'
           )
@@ -117,6 +146,7 @@ export default withAuth(
             WHEN cc.title ~* '(cmo|cto|coo|cfo|director|gm\b)' THEN 1
             ELSE 2
           END,
+          relevance DESC,
           distance_miles ASC NULLS LAST,
           co.name ASC
         LIMIT ${MAX_RESULTS}
@@ -124,6 +154,7 @@ export default withAuth(
 
       const results: CartographySearchResult[] = rows.map((r) => ({
         company: r.company,
+        domain: r.domain,
         industry: r.industry,
         description: r.description,
         location: r.location,

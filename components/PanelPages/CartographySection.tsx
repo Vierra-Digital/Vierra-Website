@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { FiSearch, FiZap, FiInbox } from "react-icons/fi";
+import { FiSearch, FiZap, FiInbox, FiExternalLink } from "react-icons/fi";
 import type { CartographyAgentCandidate, SubAgentTaskResult } from "@/pages/api/cartography/agent";
 import type { CartographySearchResult } from "@/pages/api/cartography/search";
 import type { CartographyLocation } from "@/pages/api/cartography/locations";
 import ReviewQueue from "@/components/PanelPages/CartographySection/ReviewQueue";
+import { companyUrl } from "@/lib/cartography/companyUrl";
 
 type CartographyScreen = "discover" | "review";
 type CartographyMode = "search" | "agentic";
@@ -38,7 +39,7 @@ const CartographySection: React.FC = () => {
   const [radiusMiles, setRadiusMiles] = useState(50);
   const [submittedQuery, setSubmittedQuery] = useState<string | null>(null);
 
-  // Populated from what's actually in this tenant's pool (see pages/api/cartography/locations.ts)
+  // Populated from the shared pool (see pages/api/cartography/locations.ts)
   // rather than a fixed list — a hardcoded set of cities would almost certainly not overlap
   // with any real leads once the pool is real data instead of the 8-row seed fixture.
   const [referenceLocations, setReferenceLocations] = useState<CartographyLocation[]>([]);
@@ -124,6 +125,12 @@ const CartographySection: React.FC = () => {
       }
       setAgentCandidates(Array.isArray(data?.candidates) ? data.candidates : []);
       setAgentTasks(Array.isArray(data?.tasks) ? data.tasks : []);
+      const attemptedTasks = Array.isArray(data?.tasks)
+        ? (data.tasks as SubAgentTaskResult[]).filter((task) => task.status !== "not_implemented")
+        : [];
+      if (attemptedTasks.length > 0 && attemptedTasks.every((task) => task.status === "failed")) {
+        setAgentError(attemptedTasks.map((task) => task.status === "failed" ? task.error : "").join(" "));
+      }
     } catch {
       setAgentError("Couldn't reach the agent endpoint.");
     } finally {
@@ -329,7 +336,19 @@ const CartographySection: React.FC = () => {
                     {searchResults.map((r, i) => (
                       <div key={`${r.company}-${i}`} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-[#111827]">{r.company}</p>
+                          {companyUrl(r.domain) ? (
+                            <a
+                              href={companyUrl(r.domain)!}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-sm font-medium text-[#111827] hover:text-[#701CC0] hover:underline"
+                            >
+                              {r.company}
+                              <FiExternalLink className="h-3 w-3 shrink-0 text-[#9CA3AF]" />
+                            </a>
+                          ) : (
+                            <p className="text-sm font-medium text-[#111827]">{r.company}</p>
+                          )}
                           <p className="mt-0.5 text-xs text-[#6B7280]">{r.description || "—"}</p>
                         </div>
                         <div className="flex flex-wrap items-center gap-4 text-right">
@@ -408,7 +427,19 @@ const CartographySection: React.FC = () => {
                     {agentCandidates.map((c, i) => (
                       <div key={`${c.company}-${i}`} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-[#111827]">{c.company}</p>
+                          {companyUrl(c.domain) ? (
+                            <a
+                              href={companyUrl(c.domain)!}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-sm font-medium text-[#111827] hover:text-[#701CC0] hover:underline"
+                            >
+                              {c.company}
+                              <FiExternalLink className="h-3 w-3 shrink-0 text-[#9CA3AF]" />
+                            </a>
+                          ) : (
+                            <p className="text-sm font-medium text-[#111827]">{c.company}</p>
+                          )}
                           <p className="mt-0.5 text-xs text-[#6B7280]">{c.description}</p>
                         </div>
                         <div className="flex flex-wrap items-center gap-4 text-right">

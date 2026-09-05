@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { FiCheck, FiX, FiRefreshCw } from "react-icons/fi";
+import { FiCheck, FiX, FiRefreshCw, FiExternalLink } from "react-icons/fi";
 import type { CartographyReviewRow } from "@/pages/api/cartography/contacts";
 import type { PromoteResult } from "@/pages/api/cartography/contacts/promote";
+import { companyUrl } from "@/lib/cartography/companyUrl";
 
 /**
  * Cartography's review queue (see docs/CARTOGRAPHY_DESIGN.md Rollout M4) — the screen that
@@ -57,8 +58,9 @@ const ReviewQueue: React.FC = () => {
   };
 
   const saveField = async (row: CartographyReviewRow, field: "name" | "email" | "title") => {
+    if (!row.canEdit) return true;
     const value = fieldValue(row, field);
-    if (value === (row[field] || "")) return; // unchanged — nothing to save
+    if (value === (row[field] || "")) return true; // unchanged — nothing to save
     try {
       const res = await fetch(`/api/cartography/contacts/${row.id}`, {
         method: "PATCH",
@@ -68,15 +70,18 @@ const ReviewQueue: React.FC = () => {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setRowMessages((prev) => ({ ...prev, [row.id]: data?.message || "Save failed." }));
-        return;
+        return false;
       }
       setRows((prev) => (prev ? prev.map((r) => (r.id === row.id ? { ...r, [field]: value } : r)) : prev));
+      return true;
     } catch {
       setRowMessages((prev) => ({ ...prev, [row.id]: "Couldn't reach the Cartography store." }));
+      return false;
     }
   };
 
   const reject = async (row: CartographyReviewRow) => {
+    if (!row.canEdit || promoting) return;
     try {
       const res = await fetch(`/api/cartography/contacts/${row.id}`, {
         method: "PATCH",
@@ -116,10 +121,21 @@ const ReviewQueue: React.FC = () => {
     if (ids.length === 0) return;
     setPromoting(true);
     try {
+      const readyIds: string[] = [];
+      for (const id of ids) {
+        const row = rows?.find((item) => item.id === id);
+        if (!row) continue;
+        let saved = true;
+        for (const field of ["name", "email", "title"] as const) {
+          if (!(await saveField(row, field))) saved = false;
+        }
+        if (saved) readyIds.push(id);
+      }
+      if (readyIds.length === 0) return;
       const res = await fetch("/api/cartography/contacts/promote", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify({ ids: readyIds }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -220,7 +236,19 @@ const ReviewQueue: React.FC = () => {
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-medium text-[#111827]">{row.company}</p>
+                      {companyUrl(row.domain) ? (
+                        <a
+                          href={companyUrl(row.domain)!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-sm font-medium text-[#111827] hover:text-[#701CC0] hover:underline"
+                        >
+                          {row.company}
+                          <FiExternalLink className="h-3 w-3 shrink-0 text-[#9CA3AF]" />
+                        </a>
+                      ) : (
+                        <p className="text-sm font-medium text-[#111827]">{row.company}</p>
+                      )}
                       {row.industry ? (
                         <span className="inline-flex items-center rounded-full bg-[#F3E8FF] px-2 py-0.5 text-[11px] font-medium text-[#701CC0]">
                           {row.industry}
@@ -234,6 +262,7 @@ const ReviewQueue: React.FC = () => {
 
                     <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
                       <input
+                        readOnly={!row.canEdit || promoting}
                         value={fieldValue(row, "name")}
                         onChange={(e) => setField(row.id, "name", e.target.value)}
                         onBlur={() => saveField(row, "name")}
@@ -242,6 +271,7 @@ const ReviewQueue: React.FC = () => {
                         className="rounded-md border border-[#E5E7EB] px-2.5 py-1.5 text-sm text-[#111827] outline-none placeholder:text-[#9CA3AF] focus:ring-2 focus:ring-[#701CC0]/25"
                       />
                       <input
+                        readOnly={!row.canEdit || promoting}
                         value={fieldValue(row, "email")}
                         onChange={(e) => setField(row.id, "email", e.target.value)}
                         onBlur={() => saveField(row, "email")}
@@ -250,6 +280,7 @@ const ReviewQueue: React.FC = () => {
                         className="rounded-md border border-[#E5E7EB] px-2.5 py-1.5 text-sm text-[#111827] outline-none placeholder:text-[#9CA3AF] focus:ring-2 focus:ring-[#701CC0]/25"
                       />
                       <input
+                        readOnly={!row.canEdit || promoting}
                         value={fieldValue(row, "title")}
                         onChange={(e) => setField(row.id, "title", e.target.value)}
                         onBlur={() => saveField(row, "title")}
@@ -265,6 +296,7 @@ const ReviewQueue: React.FC = () => {
                   <div className="flex shrink-0 items-center gap-1.5">
                     <button
                       type="button"
+                      disabled={!row.canEdit || promoting}
                       onClick={() => reject(row)}
                       title="Reject"
                       aria-label={`Reject ${row.company}`}
@@ -274,6 +306,7 @@ const ReviewQueue: React.FC = () => {
                     </button>
                     <button
                       type="button"
+                      disabled={promoting}
                       onClick={() => promoteIds([row.id])}
                       title="Promote this one"
                       aria-label={`Promote ${row.company}`}

@@ -4,6 +4,7 @@ import { asQueryStr } from "@/lib/api/parsing";
 
 export type CartographyReviewRow = {
   id: string;
+  canEdit: boolean;
   company: string;
   domain: string | null;
   industry: string | null;
@@ -19,15 +20,15 @@ export type CartographyReviewRow = {
   runId: string | null;
 };
 
-const REVIEWABLE_STATUSES = ["candidate", "reviewed"];
+const REVIEWABLE_STATUSES = ["candidate", "reviewed", "promoted"];
 
 /**
  * Cartography's review queue backend (see docs/CARTOGRAPHY_DESIGN.md Rollout M4). Lists
  * cartography_contacts rows a staff member still needs to act on — accept, edit, reject, or
  * promote into a real Contact (pages/api/cartography/contacts/promote.ts).
  *
- * Defaults to status in ('candidate', 'reviewed') — the two states still awaiting a
- * decision. Pass ?status=rejected|duplicate|promoted to look at anything already resolved.
+ * Includes legacy promoted rows: importing does not consume the shared candidate.
+ * Only the contributing company may edit its source fields.
  */
 export default withAuth(
   async (req, res, session) => {
@@ -36,7 +37,7 @@ export default withAuth(
 
     try {
       const rows = await prisma.cartographyContact.findMany({
-        where: { company_id: session.companyId, status: { in: statuses } },
+        where: { status: { in: statuses } },
         include: { cartography_companies: true },
         orderBy: { created_at: "desc" },
         take: 200,
@@ -44,6 +45,7 @@ export default withAuth(
 
       const results: CartographyReviewRow[] = rows.map((r) => ({
         id: r.id,
+        canEdit: r.company_id === session.companyId && r.status !== "promoted",
         company: r.cartography_companies.name,
         domain: r.cartography_companies.domain,
         industry: r.cartography_companies.industry,

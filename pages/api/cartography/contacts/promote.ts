@@ -32,12 +32,8 @@ export default withAuth(
           include: { cartography_companies: true },
         });
 
-        if (!candidate || candidate.company_id !== session.companyId) {
+        if (!candidate) {
           results.push({ id, ok: false, reason: "Not found." });
-          continue;
-        }
-        if (candidate.status === "promoted") {
-          results.push({ id, ok: false, reason: "Already promoted." });
           continue;
         }
         if (candidate.status === "rejected" || candidate.status === "duplicate") {
@@ -77,10 +73,8 @@ export default withAuth(
             },
           }));
 
-        await prisma.cartographyContact.update({
-          where: { id },
-          data: { promoted_contact_id: contact.id, status: "promoted", updated_at: new Date() },
-        });
+        // The shared candidate remains available to other users. Import ownership and
+        // deduplication belong to the destination Contacts list, not the source row.
 
         results.push({ id, ok: true, contactId: contact.id });
       } catch (error) {

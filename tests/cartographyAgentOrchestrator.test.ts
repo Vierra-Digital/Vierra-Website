@@ -90,13 +90,13 @@ describe("runCartographyAgent", () => {
     expect(candidates.map((c) => c.company)).toEqual(["Acme Co", "Beta Inc"]);
   });
 
-  it("caps candidates at 6", async () => {
+  it("caps candidates at 10", async () => {
     mockGenerate.mockResolvedValue({
       ok: true,
-      text: candidateJson(["A", "B", "C", "D", "E", "F", "G", "H"]),
+      text: candidateJson(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]),
     });
     const { candidates } = await runCartographyAgent("dental clinics near Austin");
-    expect(candidates).toHaveLength(6);
+    expect(candidates).toHaveLength(10);
   });
 
   it("strips a markdown code fence if Artemis wraps the JSON anyway", async () => {

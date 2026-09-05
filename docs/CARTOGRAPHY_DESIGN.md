@@ -1,5 +1,16 @@
 # Cartography: agentic lead sourcing
 
+## Shared discovery access (09/05/2026)
+
+Search and the city picker read the Cartography directory across all contributing companies.
+Both endpoints still require an authenticated company member. A row's `company_id` records
+its contributor, rather than restricting discovery access. Existing data needs no ownership
+change or migration. The Review Queue also lists shared candidates. Import copies into the
+current user's Contacts, deduplicates by that user and email, and leaves the shared source
+available for others. Legacy promoted rows remain importable. Editing and rejection remain
+restricted to the contributing company; other companies see read-only source fields.
+This supersedes tenant-scoped search references in the original design below.
+
 ## Problem
 
 Cartography is the only unbuilt stage of the outreach pipeline (Cartography ->
@@ -621,6 +632,24 @@ Agentic mode's are — that table's `mode` CHECK constraint only allows
 `'general'`/`'client_spec'`, neither of which honestly describes a rejected
 pool lookup; a dedicated audit path for search-mode rejections is a
 follow-up, not forced into the run-oriented schema now.
+
+**Matching (2026-09-05 update).** The keyword filter moved from
+`plainto_tsquery` (whole-word only) to a hand-built prefix `tsquery`
+(`buildPrefixTsQuery()` in `search.ts`, unit-tested in
+`tests/cartographySearchQuery.test.ts`) — each token is stemmed and
+suffixed `:*`, so a still-being-typed word like `"dent"` now matches
+`"dental"` instead of requiring the whole word. Ordering now also folds in
+an actual relevance score (`ts_rank_cd` against `search_vector`, plus a
+fixed bonus when the keyword hits a contact's `name`/`title` via `ILIKE`,
+since those columns aren't part of the generated tsvector) ahead of the
+distance/name tiebreakers — previously two matches of very different
+quality could tie and fall back to alphabetical order once they landed in
+the same seniority tier. The seniority-tier-first ordering itself is
+unchanged. Not done in this pass: `search_vector`'s generated expression
+still weights name/description/industry equally — giving company-name
+matches more weight than description matches would need an actual schema
+migration (rewriting the `GENERATED ALWAYS AS` column), which needs to be
+applied to the live database separately, not bundled into a code change.
 
 **M4 — Review queue + "Import to Contacts." [DONE, listing verified live —
 promote not yet exercised live]**

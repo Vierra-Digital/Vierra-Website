@@ -18,6 +18,11 @@ export type DiscoveryMethod = "general" | "google_business" | "linkedin_sales_na
 
 export const DISCOVERY_METHODS: DiscoveryMethod[] = ["general", "google_business", "linkedin_sales_nav"];
 
+/** Cap on candidates a single sub-agent can contribute per run — keeps one Agentic-mode call
+ * from producing an unbounded review-queue dump. Enforced in code (below), not just asked of
+ * Artemis, since the prompt asking nicely is not a guarantee. */
+const MAX_CANDIDATES_PER_METHOD = 10;
+
 export type CartographyAgentCandidate = {
   company: string;
   industry: string;
@@ -69,8 +74,8 @@ async function runGeneralDiscovery(
   const result = await artemisGenerate({
     system:
       "You are Artemis, helping Vierra staff seed lead-sourcing research. Given a target " +
-      "customer/ICP description, propose up to 6 plausible example companies that would " +
-      "fit it. For each: a company name, industry, a one-sentence description, a " +
+      `customer/ICP description, propose up to ${MAX_CANDIDATES_PER_METHOD} plausible example ` +
+      "companies that would fit it. For each: a company name, industry, a one-sentence description, a " +
       "plausible city/state location, and a job title to target (e.g. \"Owner\", \"CEO\", " +
       "\"CMO\") — never a specific person's name, since you cannot know who actually holds " +
       "that role at a real company and inventing one would be a fabricated contact. If you " +
@@ -87,7 +92,11 @@ async function runGeneralDiscovery(
         content: `<<<ICP DESCRIPTION>>>\n${description}\n<<<END ICP DESCRIPTION>>>`,
       },
     ],
-    maxTokens: 1200,
+    // Scaled with MAX_CANDIDATES_PER_METHOD (was 1200 for a cap of 6) so a fuller candidate
+    // list isn't truncated mid-JSON before it reaches the slice() cap below.
+    maxTokens: 2000,
+    // This response is parsed as JSON; prose cleanup can introduce unescaped quotes.
+    humanize: false,
   });
 
   if (!result.ok) return { error: result.error };
@@ -100,7 +109,7 @@ async function runGeneralDiscovery(
         (c): c is RawCandidate =>
           c && typeof c === "object" && typeof c.company === "string" && c.company.trim().length > 0
       )
-      .slice(0, 6)
+      .slice(0, MAX_CANDIDATES_PER_METHOD)
       .map((c) => ({
         company: asStr(c.company),
         industry: asStr(c.industry),
