@@ -35,6 +35,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         orderBy: { joined_at: "asc" },
       });
 
+      /**
+       * Presence is derived from the heartbeat, not the stored word. Sign-out and session-expiry
+       * paths write "offline" without clearing last_active_at, so an active member can sit on a
+       * stale "offline" — which is why Staff Orbital showed you as offline while you were using
+       * it. Same five-minute window the dashboard's staff panel uses.
+       */
+      const PRESENCE_WINDOW_MS = 5 * 60 * 1000;
+      const nowMs = Date.now();
       const shaped = memberships
         // Superadmins are invisible to everyone except other superadmins — a regular company
         // admin/staff member shouldn't even know the account exists, let alone see it in the list.
@@ -58,8 +66,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           mentor: m.mentor_id ?? null,
           strikes: m.strikes,
           time_zone: u.user_preferences?.time_zone ?? null,
-          status: m.status,
-          lastActiveAt: null,
+          status: (() => {
+            const seen = m.last_active_at ? m.last_active_at.getTime() : null;
+            if (seen === null || nowMs - seen > PRESENCE_WINDOW_MS) return "offline";
+            return m.status === "away" || m.status === "busy" ? m.status : "online";
+          })(),
+          lastActiveAt: m.last_active_at ? m.last_active_at.toISOString() : null,
           clientName: u.clients_clients_user_idTousers?.name ?? null,
           companyName: isPlatformAdmin ? ((m as any).companies?.name ?? null) : null,
           isPlatformAdmin: u.is_platform_admin,
