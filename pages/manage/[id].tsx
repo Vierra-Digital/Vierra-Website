@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Head from "next/head";
 import { useRouter } from "next/router";
+import { inputClass } from "@/components/ui/modalForm";
 
 type BookingInfo = {
   id: string;
@@ -133,7 +134,7 @@ export default function ManageBookingPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     type="email"
                     placeholder="Confirm your email"
-                    className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#701CC0]"
+                    className={`${inputClass} text-sm`}
                   />
                   {mode === "reschedule" ? (
                     <>

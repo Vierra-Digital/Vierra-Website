@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { sendEmail, sendAuditConfirmationEmail } from "@/lib/emailSender";
+import { sendEmail } from "@/lib/emailSender";
 import { normalizeAuditSubmission } from "@/lib/publicFormValidation";
 import { asStr } from "@/lib/api/parsing";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
@@ -7,6 +7,10 @@ import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
 const RATE_LIMIT = 5;
 const RATE_WINDOW_MS = 15 * 60 * 1000;
 
+// Internal lead-notification only. The audit-call modal (components/Modal.tsx) intentionally
+// never gets a "you're confirmed" email from this endpoint — that confirmation only exists
+// once a real Booking is created (the booking API's own confirmation email), since a step-2
+// submit with no follow-through to step 3 isn't a booked meeting.
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ message: "Method not allowed" });
 
@@ -30,12 +34,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     await sendEmail(submission);
-    // Best-effort auto-reply to the submitter; a bounce here must not fail the form.
-    try {
-      await sendAuditConfirmationEmail(submission);
-    } catch (confirmError) {
-      console.error("Audit confirmation email failed:", confirmError);
-    }
     res.status(200).json({ message: "Email sent successfully!" });
   } catch (error) {
     console.error("Audit email submission failed:", error);

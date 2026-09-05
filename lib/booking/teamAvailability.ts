@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";
-import { getBusy, type BusyInterval } from "@/lib/calendar/googleCalendar";
+import { getBusy, getBusyOverRange, type BusyInterval } from "@/lib/calendar/googleCalendar";
 
 /** First connected Gmail account for a user — used to resolve a claiming/candidate host's own calendar. */
 export async function findFirstGmailAccountForUser(userId: string): Promise<string | null> {
@@ -62,7 +62,7 @@ export async function getTeamBusyIntersection(companyId: string, rangeStartIso: 
         if (!email) return null;
         const token = await getValidGmailAccessToken(user_id, email);
         if (!token.ok) return null;
-        return getBusy(token.accessToken, rangeStartIso, rangeEndIso);
+        return getBusyOverRange(token.accessToken, rangeStartIso, rangeEndIso);
       })
     )
   ).filter((b): b is BusyInterval[] => b !== null);
@@ -82,6 +82,7 @@ export async function findFreeCompanyMembers(companyId: string, startIso: string
       const token = await getValidGmailAccessToken(user_id, email);
       if (!token.ok) return user_id;
       const busy = await getBusy(token.accessToken, startIso, endIso);
+      if (busy === null) return user_id; // calendar check failed — can't verify, don't exclude (soft-fallback)
       const overlapsThisSlot = busy.some((b) => new Date(b.start).getTime() < new Date(endIso).getTime() && new Date(b.end).getTime() > new Date(startIso).getTime());
       return overlapsThisSlot ? null : user_id;
     })
