@@ -48,8 +48,10 @@ export const PanelSearch: React.FC<{
   onChange: (value: string) => void
   className?: string
 }> = ({ id, label, placeholder, value, onChange, className = "w-56 lg:w-72" }) => (
+  /* Filled, not outlined. A row of hairline boxes is the look this panel is moving away from;
+     a tinted field reads as an input without drawing a rectangle around every control. */
   <div
-    className={`${CONTROL_HEIGHT} flex items-center gap-2 rounded-lg border border-[#E4E0EC] bg-white px-3 transition-colors focus-within:border-[#701CC0] ${className}`}
+    className={`${CONTROL_HEIGHT} flex items-center gap-2 rounded-[10px] bg-[#F4F2F8] px-3 ring-1 ring-inset ring-transparent transition-shadow focus-within:bg-white focus-within:ring-[#701CC0]/35 ${className}`}
   >
     <Search className="h-4 w-4 shrink-0 text-[#9CA3AF]" aria-hidden />
     <label htmlFor={id} className="sr-only">
@@ -90,10 +92,10 @@ export const PanelButton: React.FC<ButtonProps> = ({
     onClick={onClick}
     disabled={disabled}
     title={title}
-    className={`${CONTROL_HEIGHT} inline-flex items-center gap-2 rounded-lg px-3.5 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+    className={`${CONTROL_HEIGHT} inline-flex items-center gap-2 rounded-[10px] px-3.5 text-[13px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
       variant === "primary"
-        ? "bg-[#701CC0] text-white hover:bg-[#5f17a5]"
-        : "border border-[#E4E0EC] bg-white text-[#374151] hover:border-[#D6CFE4] hover:bg-[#FAF9FD]"
+        ? "bg-[#701CC0] text-white shadow-[0_1px_2px_rgba(112,28,192,0.35)] hover:bg-[#5f17a5]"
+        : "bg-[#F4F2F8] text-[#374151] hover:bg-[#EAE6F3]"
     }`}
   >
     {icon ? <span className="inline-flex h-4 w-4 items-center justify-center">{icon}</span> : null}
@@ -107,7 +109,7 @@ export const PanelPopover: React.FC<{ children: React.ReactNode; className?: str
   className = "w-72",
 }) => (
   <div
-    className={`absolute right-0 z-50 mt-2 rounded-xl border border-[#E4E0EC] bg-white p-4 shadow-[0_16px_40px_-12px_rgba(16,24,40,0.25)] ${className}`}
+    className={`absolute right-0 z-50 mt-2 rounded-xl border border-[#E4E0EC] bg-white p-4 shadow-[0_16px_40px_-12px_rgba(16,24,40,0.22)] ${className}`}
   >
     {children}
   </div>
@@ -124,7 +126,7 @@ export const PanelSelect: React.FC<{
     <select
       value={value}
       onChange={(event) => onChange(event.target.value)}
-      className="h-9 w-full rounded-lg border border-[#E4E0EC] bg-white px-3 text-[13px] text-[#111827] focus:border-[#701CC0] focus:outline-none focus:ring-2 focus:ring-[#701CC0]/20"
+      className="h-9 w-full rounded-[10px] bg-[#F4F2F8] px-3 text-[13px] text-[#111827] ring-1 ring-inset ring-transparent transition-shadow focus:bg-white focus:outline-none focus:ring-[#701CC0]/35"
     >
       {options.map((option) => (
         <option key={option.value} value={option.value}>
