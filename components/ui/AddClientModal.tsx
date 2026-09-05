@@ -11,9 +11,13 @@ interface AddClientModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreated?: (row: SessionItem) => void;
+  /** Rendered above the "Add Client" title on step 1 only — lets a caller (e.g. User
+   * Management's combined create flow) offer a way to switch to a different creation mode
+   * without this modal needing to know what that other mode is. */
+  modeSwitcher?: React.ReactNode;
 }
 
-const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCreated }) => {
+const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCreated, modeSwitcher }) => {
   const [step, setStep] = useState(1);
   const [clientData, setClientData] = useState({ clientName: "", clientEmail: "", businessName: "", industry: "", monthlyRetainer: "", clientGoal: "" });
   const [sessionLink, setSessionLink] = useState<string | null>(null);
@@ -25,7 +29,10 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   const pending = useRef(false);
   const [emailStatus, setEmailStatus] = useState("");
   const canClose = useDraftGuard(isOpen && step < 3 && Object.values(clientData).some(Boolean), "new client", "1", submitting);
-  const close = () => { if (!pending.current && canClose()) onClose(); };
+  const close = () => {
+    if (pending.current) return;
+    void (async () => { if (await canClose()) onClose(); })();
+  };
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -175,6 +182,8 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
       closeOnBackdrop={true}
       label="Add Client"
     >
+
+        {step === 1 && modeSwitcher}
 
         <div className="flex items-center gap-3 mb-6">
           {(step === 1 || step === 2) && (

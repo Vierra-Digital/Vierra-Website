@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { confirmDiscardDrafts, draftState, registerDraft } from "@/lib/panel/drafts";
+import { confirmDiscardDrafts, draftState, registerDraft, subscribeToDiscardConfirm } from "@/lib/panel/drafts";
 import { resolvePanelSection } from "@/lib/panel/navigation";
 
 const cleanups: Array<() => void> = [];
@@ -13,18 +13,45 @@ describe("panel draft protection", () => {
     cleanup();
     expect(draftState().dirty).toBe(false);
   });
-  it("blocks navigation during a save without offering discard", () => {
-    const confirm = vi.fn();
-    vi.stubGlobal("window", { alert: vi.fn(), confirm });
+  it("blocks navigation during a save without offering discard", async () => {
+    const alert = vi.fn();
+    vi.stubGlobal("window", { alert });
     cleanups.push(registerDraft(Symbol(), { scope: "7", label: "Blog", busy: true }));
-    expect(confirmDiscardDrafts()).toBe(false);
-    expect(confirm).not.toHaveBeenCalled();
+    await expect(confirmDiscardDrafts()).resolves.toBe(false);
+    expect(alert).toHaveBeenCalledTimes(1);
   });
-  it("honors a declined discard and keeps draft registration", () => {
-    vi.stubGlobal("window", { confirm: vi.fn().mockReturnValue(false) });
+  it("resolves the shared modal request instead of a native confirm", async () => {
     cleanups.push(registerDraft(Symbol(), { scope: "client", label: "Context", busy: false }));
-    expect(confirmDiscardDrafts("client")).toBe(false);
+    const requests: unknown[] = [];
+    const unsubscribe = subscribeToDiscardConfirm((request) => requests.push(request));
+    cleanups.push(unsubscribe);
+
+    const pending = confirmDiscardDrafts("client");
+    // The request is published synchronously so a mounted modal can render it immediately.
+    expect(requests.at(-1)).toMatchObject({ message: expect.stringContaining("Context") });
+
+    (requests.at(-1) as { resolve: (v: boolean) => void }).resolve(false);
+    await expect(pending).resolves.toBe(false);
     expect(draftState("client").dirty).toBe(true);
+  });
+  it("actually clears the matching drafts on a confirmed discard", async () => {
+    // Regression test: a caller that retries its action right after confirming (e.g.
+    // usePageLeaveGuard re-issuing a navigation it had to cancel) needs draftState() to already
+    // read clean, or it re-triggers this same confirm forever — the dirty component itself may
+    // still be mounted for a few more ticks, so this can't rely on its own unmount to clear it.
+    cleanups.push(registerDraft(Symbol(), { scope: "email-settings", label: "Domain mailbox setup", busy: false }));
+    cleanups.push(registerDraft(Symbol(), { scope: "other", label: "Unrelated", busy: false }));
+
+    const requests: unknown[] = [];
+    cleanups.push(subscribeToDiscardConfirm((request) => requests.push(request)));
+
+    const pending = confirmDiscardDrafts("email-settings");
+    (requests.at(-1) as { resolve: (v: boolean) => void }).resolve(true);
+    await expect(pending).resolves.toBe(true);
+
+    expect(draftState("email-settings").dirty).toBe(false);
+    // A discard scoped to one editor must not clear an unrelated one.
+    expect(draftState("other").dirty).toBe(true);
   });
 });
 describe("panel destinations", () => {

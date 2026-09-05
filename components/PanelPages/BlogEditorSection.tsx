@@ -299,7 +299,7 @@ export default function BlogEditorSection() {
         )}
         {mode === "edit" && (
           <button
-            onClick={() => { if (canLeave()) { resetForm(); setMode("list") } }}
+            onClick={() => { void (async () => { if (await canLeave()) { resetForm(); setMode("list") } })(); }}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[#E5E7EB] bg-white text-sm font-medium text-[#374151] hover:bg-gray-50"
           >
             Back To Posts
@@ -530,11 +530,11 @@ export default function BlogEditorSection() {
               </div>
               <div className="sticky top-0 z-10 flex flex-wrap gap-2 bg-white py-2">
                 <button type="button" onClick={() => setPreview(true)} className="rounded border px-3 py-2 text-sm">Preview</button>
-                <button disabled={saving} onClick={savePost} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#701CC0] text-white hover:bg-[#4C1D95]">{saving ? "Saving?" : isEditing ? "Publish changes" : "Publish post"}</button>
-                <button onClick={() => { if (canLeave()) { resetForm(); setMode("list") } }} className="px-4 py-2 rounded-lg text-sm font-medium border border-red-200 text-red-600 bg-red-50 hover:bg-red-100">Cancel</button>
+                <button disabled={saving} onClick={savePost} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#701CC0] text-white hover:bg-[#4C1D95]">{saving ? "Saving…" : isEditing ? "Publish changes" : "Publish post"}</button>
+                <button onClick={() => { void (async () => { if (await canLeave()) { resetForm(); setMode("list") } })(); }} className="px-4 py-2 rounded-lg text-sm font-medium border border-red-200 text-red-600 bg-red-50 hover:bg-red-100">Cancel</button>
               </div>
             </div>
-            <p role="status" className="mb-3 text-sm text-gray-600">{saving ? "Saving?" : JSON.stringify(form) !== savedForm ? "Unsaved changes. Publishing updates the public article." : saveMessage}</p>
+            <p role="status" className="mb-3 text-sm text-gray-600">{saving ? "Saving…" : JSON.stringify(form) !== savedForm ? "Unsaved changes. Publishing updates the public article." : saveMessage}</p>
             <RichTextEditor
               value={form.content}
               onChange={(value) => setForm({ ...form, content: value })}

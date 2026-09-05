@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 type ModalProps = {
@@ -44,9 +44,12 @@ export default function Modal({
   const [mounted, setMounted] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   // The portal target only exists in the browser, so the first render has to produce nothing and the
-  // mount has to be recorded afterwards. See the note above for why this portals at all.
+  // mount has to be recorded afterwards. See the note above for why this portals at all. Layout effect
+  // (not a plain effect) so the flip happens before the browser paints — callers that swap one modal
+  // for a differently-typed one (a full unmount + mount, e.g. switching create-account flows) never
+  // show a blank frame in between.
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => setMounted(true), []);
+  useLayoutEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (!isOpen || !closeOnEscape) return;

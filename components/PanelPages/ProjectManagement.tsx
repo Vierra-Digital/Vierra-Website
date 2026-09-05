@@ -499,7 +499,7 @@ export default function ProjectManagement() {
             <div>
               <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Project Tasks</h1>
               {actionError && <p role="alert" className="text-sm text-red-700">{actionError} <button type="button" onClick={() => void fetchTasks()} className="underline">Refresh board</button></p>}
-              <p role="status" className="text-sm text-gray-600">{taskBusy ? "Saving?" : ""}</p>
+              <p role="status" className="text-sm text-gray-600">{taskBusy ? "Saving…" : ""}</p>
               <div className="mb-3 flex flex-wrap gap-2">
                 <input aria-label="Search tasks" placeholder="Search tasks" value={taskSearch} onChange={e => setTaskSearch(e.target.value)} className="rounded border px-3 py-2 text-sm" />
                 <select aria-label="Task view" value={taskFilter} onChange={e => setTaskFilter(e.target.value)} className="rounded border px-3 py-2 text-sm"><option value="all">All tasks</option><option value="mine">My tasks</option><option value="review">Needs review</option></select>
@@ -510,7 +510,11 @@ export default function ProjectManagement() {
               {boards.map((board) => (
                 <button
                   key={board.id}
-                  onClick={() => { if (!canLeave()) return; setTasks([]); setSelectedBoard(board); void router.replace({ pathname: router.pathname, query: { ...router.query, board: board.id } }, undefined, { shallow: true, scroll: false }).catch(() => {}); }}
+                  onClick={() => { void (async () => {
+                    if (!(await canLeave())) return;
+                    setTasks([]); setSelectedBoard(board);
+                    void router.replace({ pathname: router.pathname, query: { ...router.query, board: board.id } }, undefined, { shallow: true, scroll: false }).catch(() => {});
+                  })(); }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                     selectedBoard?.id === board.id
                       ? "bg-[#701CC0] text-white shadow-sm"
@@ -757,12 +761,12 @@ export default function ProjectManagement() {
           setStep={setAddStep}
           boardMembers={boardMembers}
           onSubmit={handleAddTask}
-          onClose={() => {
-            if (!canLeave()) return;
+          onClose={() => { void (async () => {
+            if (!(await canLeave())) return;
             setShowAddModal(false);
             setAddForm({ name: "", description: "", checklistText: "", assignedTo: [], deadline: "" });
             setAddStep(1);
-          }}
+          })(); }}
         />
       )}
     </div>
@@ -857,7 +861,7 @@ function AddTaskModal({
       cardClassName="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-[#E5E7EB]"
       closeOnBackdrop={!busy}
     >
-      <div role="status" className="px-6 pt-3 text-sm text-red-700">{busy ? "Saving?" : feedback}</div>
+      <div role="status" className="px-6 pt-3 text-sm text-red-700">{busy ? "Saving…" : feedback}</div>
         <div className="flex items-center gap-3 px-6 py-5 border-b border-[#E5E7EB]">
           <div className="w-10 h-10 rounded-xl bg-[#701CC0]/10 flex items-center justify-center">
             <FiPlus className="w-5 h-5 text-[#701CC0]" />
@@ -1082,7 +1086,7 @@ function TaskDetailModal({
       cardClassName="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-[#E5E7EB] max-h-[90vh] overflow-hidden flex flex-col"
       closeOnBackdrop={!busy}
     >
-      <div role="status" className="px-6 pt-3 text-sm text-red-700">{busy ? "Saving?" : feedback}</div>
+      <div role="status" className="px-6 pt-3 text-sm text-red-700">{busy ? "Saving…" : feedback}</div>
 
         <div className="flex-shrink-0 flex items-center gap-3 px-6 py-5 border-b border-[#E5E7EB]">
           <div className="min-w-0 flex-1">
@@ -1329,7 +1333,10 @@ function EditTaskModal({
 
   const [initial] = useState(() => JSON.stringify({ name, description, checklistText, status, assignedTo, deadline }));
   const canClose = useDraftGuard(JSON.stringify({ name, description, checklistText, status, assignedTo, deadline }) !== initial, "Edit task", "6", busy);
-  const closeEditor = () => { if (!busy && canClose()) onClose(); };
+  const closeEditor = () => {
+    if (busy) return;
+    void (async () => { if (await canClose()) onClose(); })();
+  };
   const steps = [
     { number: 1, title: "Basic Info" },
     { number: 2, title: "Team & Timeline" },
@@ -1370,7 +1377,7 @@ function EditTaskModal({
       cardClassName="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-[#E5E7EB]"
       closeOnBackdrop={!busy}
     >
-      <div role="status" className="px-6 pt-3 text-sm text-red-700">{busy ? "Saving?" : feedback}</div>
+      <div role="status" className="px-6 pt-3 text-sm text-red-700">{busy ? "Saving…" : feedback}</div>
         <div className="flex items-center gap-3 px-6 py-5 border-b border-[#E5E7EB]">
           <div className="w-10 h-10 rounded-xl bg-[#701CC0]/10 flex items-center justify-center">
             <FiEdit3 className="w-5 h-5 text-[#701CC0]" />

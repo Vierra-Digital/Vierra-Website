@@ -127,7 +127,6 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   const [sectionEpoch, setSectionEpoch] = useState<Record<number, number>>({})
   const [pendingRefresh, setPendingRefresh] = useState<number[]>([])
   const [navigationNotice, setNavigationNotice] = useState("")
-  const [copyNotice, setCopyNotice] = useState("")
   const lastSectionVersionsRef = useRef<Record<string, string>>({})
   const visitedSectionsRef = useRef<Set<number>>(new Set([0]))
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -287,8 +286,8 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
 
 
 
-  const enterClientViewMode = (client: { id: string; name: string; email: string }) => {
-    if (!confirmDiscardDrafts()) return
+  const enterClientViewMode = async (client: { id: string; name: string; email: string }) => {
+    if (!(await confirmDiscardDrafts())) return
     clientListScrollRef.current = document.getElementById("right-side-body")?.scrollTop ?? 0
     clientListReturnIdRef.current = `open-client-${client.id}`
     setViewClient(client)
@@ -300,8 +299,8 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
     requestAnimationFrame(() => document.getElementById("client-workspace-title")?.focus())
   }
 
-  const exitClientViewMode = () => {
-    if (!confirmDiscardDrafts("client")) return
+  const exitClientViewMode = async () => {
+    if (!(await confirmDiscardDrafts("client"))) return
     setIsClientViewMode(false)
     setViewClient(null)
     setViewModeSection(0)
@@ -337,25 +336,25 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
           <nav id="panel-nav" aria-label={isClientViewMode ? "Client workspace" : "Admin panel"} className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-y-[14px] items-center text-[#EDF1F5] pt-0 pb-5">
             {isClientViewMode ? (
               <>
-                <button type="button" aria-current={viewModeSection === 0 && !showSettings ? "page" : undefined} onClick={() => { if (!confirmDiscardDrafts("client")) return; setViewModeSection(0); setShowSettings(false); setIsSidebarOpen(false) }} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 0 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                <button type="button" aria-current={viewModeSection === 0 && !showSettings ? "page" : undefined} onClick={() => { void (async () => { if (!(await confirmDiscardDrafts("client"))) return; setViewModeSection(0); setShowSettings(false); setIsSidebarOpen(false) })(); }} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 0 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiGrid className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Dashboard
                   </span>
                 </button>
-                <button type="button" aria-current={viewModeSection === 2 && !showSettings ? "page" : undefined} onClick={() => { if (!confirmDiscardDrafts("client")) return; setViewModeSection(2); setShowSettings(false); setIsSidebarOpen(false) }} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 2 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                <button type="button" aria-current={viewModeSection === 2 && !showSettings ? "page" : undefined} onClick={() => { void (async () => { if (!(await confirmDiscardDrafts("client"))) return; setViewModeSection(2); setShowSettings(false); setIsSidebarOpen(false) })(); }} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 2 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiGlobe className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Outreach
                   </span>
                 </button>
-                <button type="button" aria-current={viewModeSection === 3 && !showSettings ? "page" : undefined} onClick={() => { if (!confirmDiscardDrafts("client")) return; setViewModeSection(3); setShowSettings(false); setIsSidebarOpen(false) }} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 3 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                <button type="button" aria-current={viewModeSection === 3 && !showSettings ? "page" : undefined} onClick={() => { void (async () => { if (!(await confirmDiscardDrafts("client"))) return; setViewModeSection(3); setShowSettings(false); setIsSidebarOpen(false) })(); }} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 3 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiFileText className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Context
                   </span>
                 </button>
-                <button type="button" aria-current={viewModeSection === 1 && !showSettings ? "page" : undefined} onClick={() => { if (!confirmDiscardDrafts("client")) return; setViewModeSection(1); setShowSettings(false); setIsSidebarOpen(false) }} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 1 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                <button type="button" aria-current={viewModeSection === 1 && !showSettings ? "page" : undefined} onClick={() => { void (async () => { if (!(await confirmDiscardDrafts("client"))) return; setViewModeSection(1); setShowSettings(false); setIsSidebarOpen(false) })(); }} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 1 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiFolder className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Files
@@ -383,10 +382,15 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                   </span>
                 </button>
                 {canAccessEmailPanel && (
-                  <Link href="/panel/email" onClick={() => setIsSidebarOpen(false)} className="w-[calc(100%-16px)] shrink-0 flex min-h-[36px] flex-row items-center rounded-lg gap-x-3 px-3 py-1 transition-colors duration-150 hover:bg-white hover:text-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" aria-label="Email Panel">
+                  <button
+                    type="button"
+                    onClick={() => { window.open('/panel/email', '_blank', 'noopener,noreferrer'); setIsSidebarOpen(false); }}
+                    className="w-[calc(100%-16px)] shrink-0 flex min-h-[36px] flex-row items-center rounded-lg gap-x-3 px-3 py-1 text-left transition-colors duration-150 hover:bg-white hover:text-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                    aria-label="Email Panel (opens in a new tab)"
+                  >
                     <FiMail className="w-4 h-4 shrink-0" />
                     <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>Email Panel</span>
-                  </Link>
+                  </button>
                 )}
                 <button type="button" aria-current={currentSection === 5 && !showSettings ? "page" : undefined} onClick={() => navigateSection(5)} className={`w-[calc(100%-16px)] shrink-0 flex min-h-[36px] py-1 flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 5 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiGlobe className="w-4 h-4 shrink-0" />
@@ -511,18 +515,14 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
         </div>
         <div id="right-side" className="flex flex-col flex-1 min-w-0 h-full relative overflow-x-hidden">
           <div className="shrink-0 flex flex-wrap items-center gap-3 border-b border-gray-100 py-2 pl-16 pr-4 md:px-6 text-sm">
-            <button type="button" className="rounded text-[#701CC0] underline" onClick={async () => {
-              try { await navigator.clipboard.writeText(window.location.href); setCopyNotice("Page link copied"); }
-              catch { setCopyNotice("Could not copy. Copy the address from your browser."); }
-            }}>Copy page link</button>
-            <span role="status">{copyNotice || navigationNotice}</span>
+            <span role="status">{navigationNotice}</span>
             {pendingRefresh.includes(currentSection) && <div role="status" className="flex flex-wrap items-center gap-2 text-amber-800">
               New data available. Your edits have been kept.
-              <button type="button" className="rounded underline" onClick={() => {
-                if (!confirmDiscardDrafts(String(currentSection))) return;
+              <button type="button" className="rounded underline" onClick={() => { void (async () => {
+                if (!(await confirmDiscardDrafts(String(currentSection)))) return;
                 setSectionEpoch(prev => ({ ...prev, [currentSection]: (prev[currentSection] || 0) + 1 }));
                 setPendingRefresh(prev => prev.filter(section => section !== currentSection));
-              }}>Reload this page</button>
+              })(); }}>Reload this page</button>
             </div>}
           </div>
           {/* Section wrappers are plain block divs, so as flex items with no grow they

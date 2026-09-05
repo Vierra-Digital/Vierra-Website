@@ -154,10 +154,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
         return () => window.clearTimeout(timer)
     }, [searchQuery, statusFilter, nameSort, retainerSort, currentPage, router])
 
-    const saveView = () => {
-        void router.replace({ pathname: router.pathname, query: { ...router.query, q: searchQuery, status: statusFilter, nameSort, retainerSort, page: currentPage } }, undefined, { shallow: true, scroll: false }).catch(() => {})
-    }
-
     const fetchClients = async () => {
         if (fetchPending.current) return false
         fetchPending.current = true
@@ -479,7 +475,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                     }
                 />
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                    <button type="button" onClick={saveView} className="rounded text-sm text-[#701CC0] underline">Save filters to page link</button>
                     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter clients by status">
                         {(["all", "active", "pending", "inactive"] as const).map(status => (
                             <button key={status} type="button" aria-pressed={statusFilter === status} onClick={() => { setStatusFilter(status); setCurrentPage(0); }} className={`rounded-full border px-3 py-1.5 text-sm capitalize focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#701CC0] ${statusFilter === status ? "border-[#701CC0] bg-purple-50 text-[#701CC0]" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>

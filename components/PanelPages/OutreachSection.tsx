@@ -698,13 +698,6 @@ const OutreachSection = () => {
                         </div>
                     </div>
 
-                    <div className="mb-4 rounded-lg border border-gray-200 p-3 text-sm">
-                        <p>{scope === "company" ? "My activity ? Manual entries" : scope === "client" ? (clients.find(c => c.id === selectedClientId)?.name || "Select a client") + " ? Sent/replies are automatic; meetings, closed clients and revenue are manual" : "All clients"} ? {selectedMonth}/{selectedYear}</p>
-                        {!isEditable && <p>This period is read-only. Only the current month can be edited.</p>}
-                        <p role="status">{isUpdating ? "Saving?" : hasUnsavedChanges || clientDirty ? "Unsaved changes" : savedNotice}</p>
-                        {saveError && <p role="alert" className="text-red-700">{saveError} <button type="button" disabled={isUpdating} onClick={() => void (clientDirty ? persistClientData() : persistMonthlyData())} className="underline">Retry save</button></p>}
-                        <button type="button" onClick={() => void changeView(() => { setSelectedMonth(currentMonth); setSelectedYear(currentYear); })} className="mt-2 rounded text-[#701CC0] underline">This month</button>
-                    </div>
                     {loadError ? <p role="alert" className="p-4 text-red-700">{loadError} <button type="button" onClick={() => void (scope === "company" ? viewMode === "monthly" ? fetchMonthlyData() : fetchYearlySummary() : fetchClientData())} className="underline">Retry</button></p> : isLoading ? (
                         <div className="flex items-center justify-center py-12">
                             <LoadingSpinner label="Loading Marketing Data..." />

@@ -730,7 +730,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const handleSelectAccount = async (email: string) => {
     const normalized = (email || "").toLowerCase();
     if (!normalized || normalized === activeAccountEmail) return;
-    if (switchingAccount || !canChangeAccount()) return;
+    if (switchingAccount || !(await canChangeAccount())) return;
     setSwitchingAccount(true);
     setStatus("");
     try {
@@ -752,7 +752,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const createProviderAccount = async () => {
     if (providerPending.current) return;
     providerPending.current = true;
-    setStatus("Saving domain mailbox?");
+    setStatus("Saving domain mailbox…");
     try {
       const response = await panelFetch("/api/email/accounts", {
         method: "POST",
@@ -962,7 +962,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const claimSlot = async (id: string) => {
     if (claimingId) return;
     setClaimingId(id);
-    setBookingMessages(prev => ({ ...prev, [id]: "Working?" }));
+    setBookingMessages(prev => ({ ...prev, [id]: "Working…" }));
     try {
       const r = await fetch(`/api/booking/${id}/claim`, { method: "POST" });
       const d = await r.json().catch(() => ({}));
@@ -1073,7 +1073,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const importAttendanceCsv = async (bookingId: string, file: File) => {
     if (attendanceBusyId) return;
     setAttendanceBusyId(bookingId);
-    setBookingMessages(prev => ({ ...prev, [bookingId]: "Working?" }));
+    setBookingMessages(prev => ({ ...prev, [bookingId]: "Working…" }));
     try {
       const csv = await file.text();
       const r = await fetch(`/api/booking/${bookingId}/attendance-import`, {
@@ -1097,11 +1097,17 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   };
 
-  const cancelHostBooking = async (bookingId: string) => {
+  const [bookingToCancel, setBookingToCancel] = useState<string | null>(null);
+  const cancelHostBooking = (bookingId: string) => {
     if (attendanceBusyId) return;
-    if (typeof window !== "undefined" && !window.confirm("Cancel this meeting?")) return;
+    setBookingToCancel(bookingId);
+  };
+  const confirmCancelHostBooking = async () => {
+    const bookingId = bookingToCancel;
+    if (!bookingId || attendanceBusyId) return;
+    setBookingToCancel(null);
     setAttendanceBusyId(bookingId);
-    setBookingMessages(prev => ({ ...prev, [bookingId]: "Working?" }));
+    setBookingMessages(prev => ({ ...prev, [bookingId]: "Working…" }));
     try {
       const r = await fetch(`/api/booking/${bookingId}/cancel`, { method: "POST" });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || "Could not cancel this booking.");
@@ -1117,7 +1123,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const setBookingAttendance = async (bookingId: string, status: "held" | "not_held") => {
     if (attendanceBusyId) return;
     setAttendanceBusyId(bookingId);
-    setBookingMessages(prev => ({ ...prev, [bookingId]: "Working?" }));
+    setBookingMessages(prev => ({ ...prev, [bookingId]: "Working…" }));
     try {
       const r = await fetch(`/api/booking/${bookingId}/attendance`, {
         method: "PATCH",
@@ -1164,6 +1170,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     }
   };
 
+  const [attendanceWarning, setAttendanceWarning] = useState<{ message: string } | null>(null);
   const createBookingLink = async (acknowledgeNoAttendanceAnalytics = false) => {
     if (savingBooking || !newBooking.title.trim() || !newBooking.accountEmail) return;
     setSavingBooking(true);
@@ -1189,14 +1196,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       if (r.status === 409) {
         const d = await r.json().catch(() => ({}));
         if (d?.code === "personal_gmail_no_attendance" || d?.code === "provider_no_attendance") {
-          const confirmed =
-            typeof window !== "undefined" &&
-            window.confirm(
-              `${d.message} Create it anyway?`
-            );
-          if (confirmed) {
-            await createBookingLink(true);
-          }
+          setAttendanceWarning({ message: d.message });
           return;
         }
         if (d?.code === "provider_not_connected") {
@@ -1896,13 +1896,13 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                       No settings match “{settingsFilter.trim()}”.
                     </p>
                   ) : null}
-              <div role="status" className="sticky top-16 z-10 rounded-lg border border-purple-100 bg-white p-3 text-sm">
-                <p>Selected inbox: {activeAccountEmail || "None"} {switchingAccount ? "? Loading?" : ""}</p>
-                <p>{saving ? "Saving?" : hasUnsavedSettingsChanges ? "Unsaved changes" : status}</p>
-                {saveFailed && <button type="button" onClick={() => void saveSettings()} className="underline">Retry save</button>}
-                {accountLoadError && <p role="alert">{accountLoadError} <button type="button" onClick={() => void loadAccountData(activeAccountEmail)} className="underline">Retry inbox load</button></p>}
-                {actionError && <p role="alert">{actionError}</p>}
-              </div>
+              {(saveFailed || accountLoadError || actionError) && (
+                <div role="status" className="sticky top-16 z-10 rounded-lg border border-purple-100 bg-white p-3 text-sm">
+                  {saveFailed && <p role="alert">Could not save settings. <button type="button" onClick={() => void saveSettings()} className="underline">Retry save</button></p>}
+                  {accountLoadError && <p role="alert">{accountLoadError} <button type="button" onClick={() => void loadAccountData(activeAccountEmail)} className="underline">Retry inbox load</button></p>}
+                  {actionError && <p role="alert">{actionError}</p>}
+                </div>
+              )}
               <SettingsSection
                 title="Inbox layout"
                 description="Choose which items show in the email panel's left sidebar, and use the arrows to put them in the order you want. Inbox is always shown. Syncs across your devices."
@@ -3316,6 +3316,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                     className={fieldClass}
                   />
                   <input
+                    name="smtp-account-username"
+                    autoComplete="off"
                     value={newProvider.smtpUsername}
                     onChange={(event) => setNewProvider((prev) => ({ ...prev, smtpUsername: event.target.value }))}
                     placeholder="SMTP username"
@@ -3323,6 +3325,8 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
                   />
                   <input
                     type="password"
+                    name="smtp-account-password"
+                    autoComplete="new-password"
                     value={newProvider.smtpPassword}
                     onChange={(event) => setNewProvider((prev) => ({ ...prev, smtpPassword: event.target.value }))}
                     placeholder="SMTP password"
@@ -3453,6 +3457,30 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
           }
         }}
         onConfirm={() => void confirmDeleteLink()}
+      />
+      <ConfirmActionModal
+        isOpen={Boolean(bookingToCancel)}
+        title="Cancel meeting"
+        message="Cancel this meeting?"
+        confirmLabel="Cancel meeting"
+        onCancel={() => setBookingToCancel(null)}
+        onConfirm={() => void confirmCancelHostBooking()}
+      />
+      <ConfirmActionModal
+        isOpen={Boolean(attendanceWarning)}
+        title="Create booking link"
+        message={
+          <>
+            {attendanceWarning?.message} Create it anyway?
+          </>
+        }
+        confirmLabel="Create anyway"
+        danger={false}
+        onCancel={() => setAttendanceWarning(null)}
+        onConfirm={() => {
+          setAttendanceWarning(null);
+          void createBookingLink(true);
+        }}
       />
     </>
   );

@@ -398,7 +398,10 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
   const [enrolledCount, setEnrolledCount] = useState<number | null>(null);
 
   const canClose = useDraftGuard(Boolean(name || campaignId), "campaign wizard", "email", saving);
-  const closeWizard = () => { if (!mutationPending.current && canClose()) onClose(); };
+  const closeWizard = () => {
+    if (mutationPending.current) return;
+    void (async () => { if (await canClose()) onClose(); })();
+  };
 
   // Lazy: only fetch Brevo's sender list once someone actually picks that provider, so a
   // BREVO_API_KEY-less setup never surfaces an error for reps who only use internal campaigns.
