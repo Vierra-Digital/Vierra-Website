@@ -1,52 +1,45 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react"
-import { Users, FileText, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, X, Trash2, RotateCw, Link as LinkIcon } from "lucide-react"
-import { FiCheck } from "react-icons/fi"
-import { FiSearch, FiFilter, FiPlus, FiTrash2 } from "react-icons/fi"
+import {
+    ChevronDown,
+    Filter,
+    KeyRound,
+    Link as LinkIcon,
+    Plus,
+    RefreshCw,
+    RotateCw,
+    Trash2,
+    UserCog,
+    X,
+    XCircle,
+} from "lucide-react"
+import { FiCheck, FiPlus, FiTrash2 } from "react-icons/fi"
 import { inter } from "@/lib/fonts";
 import Image from "next/image"
-import { m as motion } from "framer-motion"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import Modal from "@/components/ui/Modal"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
-
-/**
- * Sort direction indicator for the session table headers.
- *
- * Declared at module scope, not inside the component. A component created during render is a new
- * type on every render, so React unmounts and remounts it — losing any state and defeating
- * memoisation. It reads nothing but its props, so hoisting it changes nothing about its behaviour.
- */
-const SortIcon = ({ active, dir }: { active: boolean; dir: "asc" | "desc" }) => {
-    if (!active) return <ArrowUpDown size={14} className="text-gray-400" />
-    return dir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-}
-
-
-
-type ViewType = "users" | "sessions"
-
-const AdminEditorSection = () => {
-    const [currentView, setCurrentView] = useState<ViewType>("users")
-
-    return (
-        <div className="w-full h-full bg-white text-[#111014] flex flex-col">
-            <div className="flex-1 px-8 lg:px-14 pt-1 overflow-y-auto overflow-x-hidden">
-                <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full pb-16">
-                    {currentView === "users" ? (
-                        <UsersPanel onManageSessions={() => setCurrentView("sessions")} />
-                    ) : (
-                        <SessionsPanel onBackToUsers={() => setCurrentView("users")} />
-                    )}
-                </div>
-            </div>
-        </div>
-    )
-}
-
-export default AdminEditorSection
+import {
+    PanelBadge,
+    PanelButton,
+    PanelCard,
+    PanelEmptyCell,
+    PanelEmptyState,
+    PanelHeader,
+    PanelPage,
+    PanelPagination,
+    PanelPopover,
+    PanelSearch,
+    PanelSelect,
+    PanelTable,
+    PanelTbody,
+    PanelTd,
+    PanelTh,
+    PanelThead,
+    PanelTr,
+} from "@/components/panel/PanelTable"
 
 type ListedUser = {
     id: string
@@ -58,48 +51,173 @@ type ListedUser = {
     companyName: string | null
     isPlatformAdmin?: boolean
     isSelf?: boolean
+    hasAccount?: boolean
 }
 
-function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
+type SessionStatus = "pending" | "in_progress" | "completed" | "expired" | "canceled"
+
+type SessionRow = {
+    token: string
+    clientName: string
+    clientEmail: string
+    businessName: string
+    createdAt: number
+    submittedAt: number | null
+    lastUpdatedAt: number | null
+    status: SessionStatus
+    hasAnswers: boolean
+    platforms?: string[]
+}
+
+/** A user with the session that belongs to them, if any. See UsersPanel's `rows` for the join. */
+type MergedRow = ListedUser & { session: SessionRow | null; isSessionOnly: boolean }
+
+const SESSION_LABELS: Record<SessionStatus, string> = {
+    pending: "Not Started",
+    in_progress: "In Progress",
+    completed: "Completed",
+    expired: "Expired",
+    canceled: "Canceled",
+}
+
+const SESSION_TONES: Record<SessionStatus, "warning" | "info" | "positive" | "danger" | "neutral"> = {
+    pending: "warning",
+    in_progress: "info",
+    completed: "positive",
+    expired: "danger",
+    canceled: "neutral",
+}
+
+/** Sort order for the Session column: earliest in the funnel first, dead sessions last. */
+const SESSION_ORDER: Record<SessionStatus, number> = {
+    pending: 1,
+    in_progress: 2,
+    completed: 3,
+    expired: 4,
+    canceled: 5,
+}
+
+type RoleKey = "admin" | "staff" | "client"
+
+/** The API stores a client's role as either "user" or "client"; the table only ever shows one. */
+const normalizeRole = (role: string): RoleKey =>
+    role === "admin" ? "admin" : role === "staff" ? "staff" : "client"
+
+const ROLE_LABELS: Record<RoleKey, string> = { admin: "Admin", staff: "Staff", client: "Client" }
+const ROLE_TONES: Record<RoleKey, "accent" | "info" | "neutral"> = {
+    admin: "accent",
+    staff: "info",
+    client: "neutral",
+}
+const ROLE_CHOICES: Array<{ value: RoleKey; label: string }> = [
+    { value: "admin", label: "Admin" },
+    { value: "staff", label: "Staff" },
+    { value: "client", label: "Client" },
+]
+
+const formatSessionDate = (ts?: number | null) => {
+    if (!ts) return "N/A"
+    return new Date(ts).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+}
+
+const AdminEditorSection = () => <UsersPanel />
+
+export default AdminEditorSection
+
+/**
+ * One page, not two.
+ *
+ * Sessions used to be a second full-screen view behind a "Manage Sessions" button, with its own
+ * search, its own filter, its own table and its own pagination — a duplicate of this page listing
+ * the same people by a different key. A session belongs to a client, and a client is a row here,
+ * so the session is now a column and its actions live in that row's menu. The sweep that expires
+ * stale sessions moves to the toolbar, where the rest of the page-level actions already are.
+ */
+function UsersPanel() {
     const [users, setUsers] = useState<ListedUser[]>([])
+    const [sessions, setSessions] = useState<SessionRow[]>([])
     const [loading, setLoading] = useState<boolean>(false)
     const [error, setError] = useState<string>("")
     const [showCreate, setShowCreate] = useState<boolean>(false)
-    const [resetSent, setResetSent] = useState<Record<string, boolean>>({})
     const [resetSending, setResetSending] = useState<Record<string, boolean>>({})
     const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
     const [userToDelete, setUserToDelete] = useState<{ id: string; name: string | null; email: string | null } | null>(null)
     const [searchQuery, setSearchQuery] = useState<string>("")
     const [currentPage, setCurrentPage] = useState<number>(0)
-    const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'staff' | 'user'>('all')
-    const [sortBy, setSortBy] = useState<'id' | 'name' | 'email' | 'role'>('role')
-    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+    const [roleFilter, setRoleFilter] = useState<"all" | "admin" | "staff" | "user">("all")
+    const [sessionFilter, setSessionFilter] = useState<"all" | "none" | SessionStatus>("all")
+    const [sortBy, setSortBy] = useState<"name" | "email" | "role" | "session">("role")
+    const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
     const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
+    const [notice, setNotice] = useState<string>("")
+
+    // Session-side state, carried over wholesale from the view this page absorbed.
+    const [expiring, setExpiring] = useState<boolean>(false)
+    const [showUpdateSessionsModal, setShowUpdateSessionsModal] = useState<boolean>(false)
+    const [updateSessionsSuccess, setUpdateSessionsSuccess] = useState<boolean>(false)
+    const [updatedCount, setUpdatedCount] = useState<number>(0)
+    const [sessionToDelete, setSessionToDelete] = useState<{ token: string; clientName: string } | null>(null)
+    const [deleteSessionModalOpen, setDeleteSessionModalOpen] = useState<boolean>(false)
+    const [deletingSession, setDeletingSession] = useState<string | null>(null)
+    const [renewingSession, setRenewingSession] = useState<string | null>(null)
+    const [loadingLink, setLoadingLink] = useState<string | null>(null)
+    const [getLinkModalOpen, setGetLinkModalOpen] = useState<boolean>(false)
+    const [copiedLink, setCopiedLink] = useState<string | null>(null)
+    const [renewModalOpen, setRenewModalOpen] = useState<boolean>(false)
+    const [renewSuccess, setRenewSuccess] = useState<boolean>(false)
+
     const pageSize = 10
     const filterRef = useRef<HTMLDivElement>(null)
 
-    const load = async () => {
+    useEffect(() => {
+        if (!isFilterOpen) return
+        const onClickOutside = (event: MouseEvent) => {
+            if (filterRef.current && !filterRef.current.contains(event.target as Node)) setIsFilterOpen(false)
+        }
+        document.addEventListener("mousedown", onClickOutside)
+        return () => document.removeEventListener("mousedown", onClickOutside)
+    }, [isFilterOpen])
+
+    /**
+     * Both lists in one pass. They are independent requests, so they go out together rather than
+     * one after the other — and a failing session list must not blank the user list, which is the
+     * reason this page exists.
+     */
+    const load = useCallback(async () => {
         setLoading(true)
         setError("")
-        try {
-            const r = await fetch("/api/admin/users")
-            if (!r.ok) throw new Error("Failed to fetch users")
-            setUsers(await r.json())
-        } catch (e: any) {
-            setError(e?.message || "Failed to load users")
-        } finally {
-            setLoading(false)
+        const [userResult, sessionResult] = await Promise.allSettled([
+            fetch("/api/admin/users").then(async (r) => {
+                if (!r.ok) throw new Error(`Failed to fetch users (${r.status})`)
+                return (await r.json()) as ListedUser[]
+            }),
+            fetch("/api/session/listClientSessions").then(async (r) => {
+                if (!r.ok) throw new Error(`Failed to fetch sessions (${r.status})`)
+                return (await r.json()) as SessionRow[]
+            }),
+        ])
+        if (userResult.status === "fulfilled") {
+            setUsers(Array.isArray(userResult.value) ? userResult.value : [])
+        } else {
+            setError(userResult.reason?.message || "Failed to load users")
         }
-    }
+        if (sessionResult.status === "fulfilled") {
+            setSessions(Array.isArray(sessionResult.value) ? sessionResult.value : [])
+        } else {
+            setNotice("Sessions could not be loaded, so the session column is empty.")
+        }
+        setLoading(false)
+    }, [])
 
     useEffect(() => {
-        // Loading the user list on mount; the loader flips its own loading and error state after awaiting.
+        // Loading both lists on mount; the loader flips its own loading and error state after awaiting.
         // eslint-disable-next-line react-hooks/set-state-in-effect
         load()
-    }, [])
+    }, [load])
 
     const sendPasswordReset = async (userId: string) => {
         setResetSending((prev) => ({ ...prev, [userId]: true }))
+        setError("")
         try {
             const r = await fetch("/api/admin/userPassword", {
                 method: "POST",
@@ -107,7 +225,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                 body: JSON.stringify({ id: userId }),
             })
             if (r.ok) {
-                setResetSent((prev) => ({ ...prev, [userId]: true }))
+                setNotice("Password reset link sent.")
             } else {
                 // A non-ok response used to fall through silently, so a failed send looked identical
                 // to a successful one — the admin had no way to know the email never went out.
@@ -143,371 +261,480 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
         }
     }
 
-
-
-    const deleteUser = async (userId: string) => {
-        const user = users.find(u => u.id === userId)
+    const deleteUser = (userId: string) => {
+        const user = users.find((u) => u.id === userId)
         if (!user) return
-        if (user.email?.toLowerCase() === "business@alexshick.com") {
-            alert("This user cannot be removed.")
-            return
-        }
-        
         setUserToDelete({ id: userId, name: user.name, email: user.email })
         setDeleteModalOpen(true)
     }
 
     const confirmDeleteUser = async () => {
         if (!userToDelete) return
-        
         try {
-            await fetch(`/api/admin/users?id=${userToDelete.id}`, { method: "DELETE" })
+            const r = await fetch(`/api/admin/users?id=${encodeURIComponent(userToDelete.id)}`, { method: "DELETE" })
+            if (!r.ok) {
+                const body = await r.json().catch(() => ({}))
+                setError(body?.message || `Could not remove the user (HTTP ${r.status}).`)
+                return
+            }
             setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id))
+        } catch {
+            setError("Could not remove the user — the request failed.")
+        } finally {
             setDeleteModalOpen(false)
             setUserToDelete(null)
-        } catch {}
+        }
     }
 
-    const filteredUsers = useMemo(() => {
-        let filtered = users
-        if (roleFilter !== 'all') {
-            filtered = filtered.filter(u => u.role === roleFilter || (roleFilter === 'user' && u.role === 'client'))
+    const expireSessions = useCallback(async () => {
+        try {
+            setExpiring(true)
+            const r = await fetch("/api/admin/expireSessions", { method: "POST" })
+            if (!r.ok) throw new Error("Failed to update sessions")
+            const j = await r.json()
+            setUpdatedCount(j.updated ?? 0)
+            setUpdateSessionsSuccess(true)
+            setShowUpdateSessionsModal(true)
+            await load()
+        } catch {
+            setUpdateSessionsSuccess(false)
+            setShowUpdateSessionsModal(true)
+        } finally {
+            setExpiring(false)
+        }
+    }, [load])
+
+    const handleGetLink = async (token: string, clientEmail: string) => {
+        if (!token || !clientEmail) return
+        setLoadingLink(token)
+        try {
+            const r = await fetch(`/api/admin/getClientSessionLink?clientEmail=${encodeURIComponent(clientEmail)}`)
+            if (!r.ok) throw new Error("Failed to get session link")
+            const data = await r.json()
+            const fullLink = data.link.startsWith("http") ? data.link : `${window.location.origin}${data.link}`
+            // Copying can fail on its own (a browser that withholds clipboard permission); the modal
+            // shows the link either way, so a refused clipboard is not a failure to get the link.
+            await navigator.clipboard.writeText(fullLink).catch(() => {})
+            setCopiedLink(fullLink)
+        } catch {
+            setCopiedLink(null)
+        } finally {
+            setLoadingLink(null)
+            setGetLinkModalOpen(true)
+        }
+    }
+
+    const handleRenewSession = async (token: string) => {
+        setRenewingSession(token)
+        try {
+            const r = await fetch("/api/admin/renewSession", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ token }),
+            })
+            if (!r.ok) throw new Error("Failed to renew session")
+            setRenewSuccess(true)
+            await load()
+        } catch {
+            setRenewSuccess(false)
+        } finally {
+            setRenewingSession(null)
+            setRenewModalOpen(true)
+        }
+    }
+
+    const handleDeleteSession = async () => {
+        if (!sessionToDelete) return
+        setDeletingSession(sessionToDelete.token)
+        try {
+            const r = await fetch(`/api/admin/deleteSession?token=${encodeURIComponent(sessionToDelete.token)}`, {
+                method: "DELETE",
+            })
+            if (!r.ok) {
+                const body = await r.json().catch(() => ({}))
+                throw new Error(body?.message || "Failed to delete session")
+            }
+            await load()
+        } catch (e: any) {
+            setError(e?.message || "Could not delete the session.")
+        } finally {
+            setDeleteSessionModalOpen(false)
+            setSessionToDelete(null)
+            setDeletingSession(null)
+        }
+    }
+
+    /**
+     * Users and sessions joined on email — the only key the two lists share.
+     *
+     * A session whose email matches nobody is kept as a row of its own rather than dropped: those
+     * are clients who were sent an onboarding link and never finished, and losing them was the one
+     * way merging the two views could have cost information.
+     */
+    const rows = useMemo<MergedRow[]>(() => {
+        const byEmail = new Map<string, SessionRow>()
+        for (const s of sessions) {
+            const key = s.clientEmail?.toLowerCase()
+            if (!key) continue
+            const existing = byEmail.get(key)
+            // Keep the most recently touched session when a client has more than one.
+            if (!existing || (s.lastUpdatedAt ?? s.createdAt) > (existing.lastUpdatedAt ?? existing.createdAt)) {
+                byEmail.set(key, s)
+            }
+        }
+        const claimed = new Set<string>()
+        const merged: MergedRow[] = users.map((u) => {
+            const key = u.email?.toLowerCase()
+            const session = key ? byEmail.get(key) : undefined
+            if (key && session) claimed.add(key)
+            return { ...u, session: session ?? null, isSessionOnly: false }
+        })
+        for (const [key, s] of byEmail) {
+            if (claimed.has(key)) continue
+            merged.push({
+                id: `session:${s.token}`,
+                name: s.clientName || s.clientEmail,
+                email: s.clientEmail,
+                image: false,
+                role: "client",
+                clientName: s.clientName,
+                companyName: null,
+                isPlatformAdmin: false,
+                isSelf: false,
+                hasAccount: false,
+                session: s,
+                isSessionOnly: true,
+            })
+        }
+        return merged
+    }, [users, sessions])
+
+    const filteredRows = useMemo(() => {
+        let filtered = rows
+        if (roleFilter !== "all") {
+            filtered = filtered.filter(
+                (u) => u.role === roleFilter || (roleFilter === "user" && (u.role === "client" || u.role === "user"))
+            )
+        }
+        if (sessionFilter !== "all") {
+            filtered = filtered.filter((u) =>
+                sessionFilter === "none" ? !u.session : u.session?.status === sessionFilter
+            )
         }
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase()
-            filtered = filtered.filter(u => 
-                (u.name?.toLowerCase().includes(q)) ||
-                (u.email?.toLowerCase().includes(q)) ||
-                (u.clientName?.toLowerCase().includes(q)) ||
-                (u.companyName?.toLowerCase().includes(q)) ||
-                (u.role?.toLowerCase().includes(q))
+            filtered = filtered.filter(
+                (u) =>
+                    u.name?.toLowerCase().includes(q) ||
+                    u.email?.toLowerCase().includes(q) ||
+                    u.clientName?.toLowerCase().includes(q) ||
+                    u.companyName?.toLowerCase().includes(q) ||
+                    u.role?.toLowerCase().includes(q) ||
+                    u.session?.businessName?.toLowerCase().includes(q) ||
+                    (u.session ? SESSION_LABELS[u.session.status].toLowerCase().includes(q) : false)
             )
         }
         const sorted = [...filtered].sort((a, b) => {
             let comparison = 0
-            if (sortBy === 'id') {
-                comparison = a.id.localeCompare(b.id)
-            } else if (sortBy === 'name') {
-                comparison = (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
-            } else if (sortBy === 'email') {
-                comparison = (a.email || '').localeCompare(b.email || '', undefined, { sensitivity: 'base' })
-            } else if (sortBy === 'role') {
-                comparison = (a.role || '').localeCompare(b.role || '', undefined, { sensitivity: 'base' })
+            if (sortBy === "name") {
+                comparison = (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" })
+            } else if (sortBy === "email") {
+                comparison = (a.email || "").localeCompare(b.email || "", undefined, { sensitivity: "base" })
+            } else if (sortBy === "role") {
+                comparison = (a.role || "").localeCompare(b.role || "", undefined, { sensitivity: "base" })
+            } else {
+                // No session sorts last in either direction — "most advanced session" is the point
+                // of the sort, and rows without one have no place on that scale.
+                comparison = (a.session ? SESSION_ORDER[a.session.status] : 99) - (b.session ? SESSION_ORDER[b.session.status] : 99)
             }
-            return sortDir === 'asc' ? comparison : -comparison
+            return sortDir === "asc" ? comparison : -comparison
         })
-        
         return sorted
-    }, [users, searchQuery, roleFilter, sortBy, sortDir])
+    }, [rows, searchQuery, roleFilter, sessionFilter, sortBy, sortDir])
 
-    const paginatedUsers = filteredUsers.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
-    const totalPages = Math.ceil(filteredUsers.length / pageSize)
+    const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
+    const page = Math.min(currentPage, totalPages - 1)
+    const paginatedRows = filteredRows.slice(page * pageSize, (page + 1) * pageSize)
     // Only platform admins get companyName back from the API — show the column just for them,
     // so everyone else's table (scoped to their own company) looks the same as before.
-    const showCompanyColumn = users.some((u) => u.companyName)
+    const showCompanyColumn = rows.some((u) => u.companyName)
 
-                            return (
-        <>
-            <div className="w-full flex justify-between items-center mb-2">
-                <div>
-                    <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em] text-[#111827] mt-8 mb-6">User Management</h1>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
-                        <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
-                        <label htmlFor="users-search" className="sr-only">Search Users</label>
-                                                    <input
-                            id="users-search"
-                            type="search"
-                            value={searchQuery}
-                            onChange={(e) => {
-                                setSearchQuery(e.target.value)
-                                setCurrentPage(0)
-                            }}
-                            placeholder="Search Users"
-                            className="w-64 md:w-80 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none"
-                        />
-                    </div>
-                    <div className="relative" ref={filterRef} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsFilterOpen(false) }} tabIndex={-1}>
-                                                    <button
-                            type="button"
-                            onClick={() => setIsFilterOpen((v) => !v)}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
-                        >
-                            <FiFilter className="w-4 h-4" />
-                            <span className="text-sm font-medium">Filter</span>
-                            <svg 
-                                className={`w-4 h-4 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`}
-                                fill="none" 
-                                stroke="currentColor" 
-                                viewBox="0 0 24 24"
-                            >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                                                    </button>
-                        {isFilterOpen && (
-                            <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#E5E7EB] py-4 z-50">
-                                <div className="px-5">
-                                    <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
-                                    
-                                    
-                                    <div className="mb-5">
-                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By</label>
-                                        <div className="relative">
-                                            <select
-                                                value={sortBy}
-                                                onChange={(e) => {
-                                                    setSortBy(e.target.value as 'id' | 'name' | 'email' | 'role')
-                                                    setCurrentPage(0)
-                                                }}
-                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
-                                            >
-                                                <option value="name">Name</option>
-                                                <option value="email">Email</option>
-                                                <option value="role">Role</option>
-                                            </select>
-                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    
-                                    <div className="mb-5">
-                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Role</label>
-                                        <div className="relative">
-                                            <select
-                                                value={roleFilter}
-                                                onChange={(e) => {
-                                                    setRoleFilter(e.target.value as 'all' | 'admin' | 'staff' | 'user')
-                                                    setCurrentPage(0)
-                                                }}
-                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
-                                            >
-                                                <option value="all">All Roles</option>
-                                                <option value="admin">Admin</option>
-                                                <option value="staff">Staff</option>
-                                                <option value="user">Client</option>
-                                            </select>
-                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    
-                                    <div className="mb-4">
-                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Order</label>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => {
-                                                    setSortDir("asc")
-                                                    setCurrentPage(0)
-                                                }}
-                                                className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                    sortDir === "asc" 
-                                                        ? "bg-[#701CC0] text-white shadow-sm" 
-                                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                                }`}
-                                            >
-                                                Ascending
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setSortDir("desc")
-                                                    setCurrentPage(0)
-                                                }}
-                                                className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                    sortDir === "desc" 
-                                                        ? "bg-[#701CC0] text-white shadow-sm" 
-                                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                                }`}
-                                            >
-                                                Descending
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    
-                                    <div className="pt-3 border-t border-[#E5E7EB]">
+    return (
+        <PanelPage>
+            <PanelHeader title="User Management">
+                <PanelSearch
+                    id="users-search"
+                    label="Search Users"
+                    placeholder="Search users"
+                    value={searchQuery}
+                    onChange={(value) => {
+                        setSearchQuery(value)
+                        setCurrentPage(0)
+                    }}
+                />
+                <div className="relative" ref={filterRef}>
+                    <PanelButton onClick={() => setIsFilterOpen((v) => !v)} icon={<Filter className="h-4 w-4" />}>
+                        Filter
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isFilterOpen ? "rotate-180" : ""}`} />
+                    </PanelButton>
+                    {isFilterOpen && (
+                        <PanelPopover>
+                            <h3 className="mb-3 text-[13px] font-semibold text-[#111827]">Sort &amp; Filter</h3>
+                            <PanelSelect
+                                label="Sort By"
+                                value={sortBy}
+                                onChange={(value) => {
+                                    setSortBy(value as typeof sortBy)
+                                    setCurrentPage(0)
+                                }}
+                                options={[
+                                    { value: "name", label: "Name" },
+                                    { value: "email", label: "Email" },
+                                    { value: "role", label: "Role" },
+                                    { value: "session", label: "Session" },
+                                ]}
+                            />
+                            <PanelSelect
+                                label="Role"
+                                value={roleFilter}
+                                onChange={(value) => {
+                                    setRoleFilter(value as typeof roleFilter)
+                                    setCurrentPage(0)
+                                }}
+                                options={[
+                                    { value: "all", label: "All Roles" },
+                                    { value: "admin", label: "Admin" },
+                                    { value: "staff", label: "Staff" },
+                                    { value: "user", label: "Client" },
+                                ]}
+                            />
+                            <PanelSelect
+                                label="Session"
+                                value={sessionFilter}
+                                onChange={(value) => {
+                                    setSessionFilter(value as typeof sessionFilter)
+                                    setCurrentPage(0)
+                                }}
+                                options={[
+                                    { value: "all", label: "All Sessions" },
+                                    { value: "pending", label: "Not Started" },
+                                    { value: "in_progress", label: "In Progress" },
+                                    { value: "completed", label: "Completed" },
+                                    { value: "expired", label: "Expired" },
+                                    { value: "canceled", label: "Canceled" },
+                                    { value: "none", label: "No Session" },
+                                ]}
+                            />
+                            <div className="mb-4">
+                                <span className="mb-1.5 block text-[11px] font-medium text-[#6B7280]">Order</span>
+                                <div className="flex gap-2">
+                                    {(["asc", "desc"] as const).map((dir) => (
                                         <button
+                                            key={dir}
+                                            type="button"
                                             onClick={() => {
-                                                setSearchQuery("")
-                                                setRoleFilter("all")
-                                                setSortBy("role")
-                                                setSortDir("asc")
+                                                setSortDir(dir)
                                                 setCurrentPage(0)
-                                                setIsFilterOpen(false)
                                             }}
-                                            className="w-full text-xs py-2 px-3 rounded-lg font-medium text-[#6B7280] bg-gray-50 hover:bg-gray-100 hover:text-[#374151] transition-colors duration-200"
+                                            className={`h-8 flex-1 rounded-lg text-[12px] font-medium transition-colors ${
+                                                sortDir === dir
+                                                    ? "bg-[#701CC0] text-white"
+                                                    : "bg-[#F3F1F8] text-[#5B5468] hover:bg-[#EAE6F3]"
+                                            }`}
                                         >
-                                            Clear All Filters
+                                            {dir === "asc" ? "Ascending" : "Descending"}
                                         </button>
-                                    </div>
+                                    ))}
                                 </div>
                             </div>
-                        )}
-                    </div>
-                                                    <button
-                        onClick={onManageSessions}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
-                    >
-                        <FileText size={16} />
-                        Manage Sessions
-                    </button>
-                    <button
-                        onClick={() => setShowCreate(true)}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium"
-                    >
-                        <FiPlus className="w-4 h-4" />
-                        Create User
-                                                    </button>
-                                                </div>
-            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setSearchQuery("")
+                                    setRoleFilter("all")
+                                    setSessionFilter("all")
+                                    setSortBy("role")
+                                    setSortDir("asc")
+                                    setCurrentPage(0)
+                                    setIsFilterOpen(false)
+                                }}
+                                className="h-8 w-full rounded-lg border-t border-[#EFECF4] text-[12px] font-medium text-[#6B7280] transition-colors hover:bg-[#FAF9FD] hover:text-[#374151]"
+                            >
+                                Clear All Filters
+                            </button>
+                        </PanelPopover>
+                    )}
+                </div>
+                <PanelButton
+                    onClick={expireSessions}
+                    disabled={expiring}
+                    icon={<RefreshCw className={`h-4 w-4 ${expiring ? "animate-spin" : ""}`} />}
+                    title="Expire sessions that have passed their deadline"
+                >
+                    Update Sessions
+                </PanelButton>
+                <PanelButton variant="primary" onClick={() => setShowCreate(true)} icon={<Plus className="h-4 w-4" />}>
+                    Create User
+                </PanelButton>
+            </PanelHeader>
 
             {loading ? (
                 <div className="flex items-center justify-center py-12">
                     <LoadingSpinner label="Loading User Data..." />
                 </div>
             ) : (
-                <>
-                    {!loading && filteredUsers.length === 0 && (
-                        <div className="text-center py-12">
-                            <div className="w-full h-full flex flex-col items-center justify-center text-center">
-                                <motion.div
-                                    initial={{ opacity: 0, scale: 0.8 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ duration: 0.5, ease: "easeOut" }}
-                                >
-                                    <Image 
-                                        src="/assets/no-client.png" 
-                                        alt="No users" 
-                                        width={224} 
-                                        height={224} 
-                                        className="w-56 h-auto mb-3" 
-                                    />
-                                </motion.div>
-                                <p className="text-sm text-gray-500 mb-3">
-                                    {searchQuery ? "No users match your search." : "No users found."}
-                                </p>
-                                                    <button
-                                    onClick={() => setShowCreate(true)}
-                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm font-medium hover:bg-[#5f17a5] transition-colors duration-200 shadow-sm"
-                                                    >
-                                    <FiPlus className="w-4 h-4" />
+                <PanelCard>
+                    {filteredRows.length === 0 ? (
+                        <PanelEmptyState
+                            message={searchQuery ? "No users match your search." : "No users found."}
+                            image={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" />}
+                        >
+                            {!searchQuery && (
+                                <PanelButton variant="primary" onClick={() => setShowCreate(true)} icon={<Plus className="h-4 w-4" />}>
                                     Create User
-                                                    </button>
-                                                </div>
-                                        </div>
-                    )}
-
-                    {!loading && filteredUsers.length > 0 && (
-                        <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                                        <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Name</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Email</th>
-                                            {showCompanyColumn && (
-                                                <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Company</th>
-                                            )}
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Password Reset</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Role</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Manage</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-[#E5E7EB]">
-                                        {paginatedUsers.map((u) => {
-                            return (
-                                                <tr key={u.id} className="hover:bg-purple-50">
-                                                    <td className="px-4 py-4 text-sm font-medium text-[#111827]">{u.name ?? "-"}</td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{u.email ?? "-"}</td>
-                                                    {showCompanyColumn && (
-                                                        <td className="px-4 py-4 text-sm text-[#111827]">{u.companyName ?? "-"}</td>
+                                </PanelButton>
+                            )}
+                        </PanelEmptyState>
+                    ) : (
+                        <>
+                            <PanelTable>
+                                <PanelThead>
+                                    <PanelTh>User</PanelTh>
+                                    <PanelTh>Role</PanelTh>
+                                    {showCompanyColumn && <PanelTh>Company</PanelTh>}
+                                    <PanelTh>Session</PanelTh>
+                                    <PanelTh>Manage</PanelTh>
+                                </PanelThead>
+                                <PanelTbody>
+                                    {paginatedRows.map((u) => {
+                                        const session = u.session
+                                        const canManageAccount = !u.isSessionOnly && u.hasAccount !== false
+                                        return (
+                                            <PanelTr key={u.id}>
+                                                <PanelTd>
+                                                    <div className="min-w-0">
+                                                        <div className="truncate font-medium text-[#111827]">{u.name || "—"}</div>
+                                                        <div className="truncate text-[12px] text-[#6B7280]">{u.email || "—"}</div>
+                                                    </div>
+                                                </PanelTd>
+                                                <PanelTd>
+                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                        <PanelBadge tone={ROLE_TONES[normalizeRole(u.role)]}>
+                                                            {ROLE_LABELS[normalizeRole(u.role)]}
+                                                        </PanelBadge>
+                                                        {u.isPlatformAdmin && <PanelBadge tone="accent">Superadmin</PanelBadge>}
+                                                        {!canManageAccount && <PanelBadge tone="neutral">No account</PanelBadge>}
+                                                    </div>
+                                                </PanelTd>
+                                                {showCompanyColumn && <PanelTd>{u.companyName || <PanelEmptyCell />}</PanelTd>}
+                                                <PanelTd>
+                                                    {session ? (
+                                                        <div className="flex flex-col items-start gap-1">
+                                                            <PanelBadge tone={SESSION_TONES[session.status]}>
+                                                                {SESSION_LABELS[session.status]}
+                                                            </PanelBadge>
+                                                            <span className="text-[11.5px] text-[#9CA3AF]">
+                                                                {session.lastUpdatedAt
+                                                                    ? `Updated ${formatSessionDate(session.lastUpdatedAt)}`
+                                                                    : `Created ${formatSessionDate(session.createdAt)}`}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <PanelEmptyCell />
                                                     )}
-                                                    <td className="px-4 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <button
-                                                onClick={() => sendPasswordReset(u.id)}
-                                                disabled={resetSending[u.id]}
-                                                className="px-2 py-1 rounded-md text-xs bg-gray-100 hover:bg-gray-200 text-[#374151] disabled:opacity-50"
-                                            >
-                                                {resetSending[u.id] ? "Sending…" : "Send reset email"}
-                                            </button>
-                                            {resetSent[u.id] && <span className="text-xs text-green-600">Sent</span>}
-                                        </div>
-                                    </td>
-                                                    <td className="px-4 py-4">
-                                                        <select
-                                                            value={u.role === "user" || u.role === "client" ? "user" : (u.role || "admin")}
-                                                            onChange={(e) => updateRole(u.id, e.target.value)}
-                                                            disabled={u.isPlatformAdmin}
-                                                            title={u.isPlatformAdmin ? "Superadmin role can't be changed here" : undefined}
-                                                            className="text-sm border border-[#E5E7EB] rounded-md pl-2 pr-[5px] mr-10 py-0.5 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        >
-                                                            <option value="admin">Admin</option>
-                                                            <option value="staff">Staff</option>
-                                                            <option value="user">Client</option>
-                                        </select>
-                                    </td>
-                                                    <td className="px-4 py-4">
-                                        <div className="flex items-center gap-2">
-                                                            {!u.isSelf && !u.isPlatformAdmin && (
-                                                                <button
-                                                                    onClick={() => deleteUser(u.id)}
-                                                                    disabled={u.email?.toLowerCase() === "business@alexshick.com"}
-                                                                    className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                </PanelTd>
+                                                <PanelTd className="relative">
+                                                    <RowActionMenu label={`Manage ${u.name || u.email || "user"}`} menuWidthClassName="w-56">
+                                                        {canManageAccount && (
+                                                            <RowActionMenuItem
+                                                                onClick={() => sendPasswordReset(u.id)}
+                                                                disabled={resetSending[u.id]}
+                                                                icon={<KeyRound className="w-4 h-4" />}
+                                                                tone="accent"
+                                                            >
+                                                                {resetSending[u.id] ? "Sending…" : "Send reset email"}
+                                                            </RowActionMenuItem>
+                                                        )}
+                                                        {canManageAccount &&
+                                                            !u.isPlatformAdmin &&
+                                                            ROLE_CHOICES.filter((choice) => choice.value !== normalizeRole(u.role)).map((choice) => (
+                                                                <RowActionMenuItem
+                                                                    key={choice.value}
+                                                                    onClick={() => updateRole(u.id, choice.value === "client" ? "user" : choice.value)}
+                                                                    icon={<UserCog className="w-4 h-4" />}
                                                                 >
-                                                                    Remove
-                                                                </button>
-                                                            )}
-                                        </div>
-                                    </td>
-                                </tr>
-                            )
-                        })}
-                    </tbody>
-                </table>
-            </div>
-                        </div>
+                                                                    Make {choice.label}
+                                                                </RowActionMenuItem>
+                                                            ))}
+                                                        {session && session.status !== "expired" && (
+                                                            <RowActionMenuItem
+                                                                onClick={() => handleGetLink(session.token, session.clientEmail)}
+                                                                disabled={loadingLink === session.token}
+                                                                icon={<LinkIcon className="w-4 h-4" />}
+                                                            >
+                                                                {loadingLink === session.token ? "Loading…" : "Get session link"}
+                                                            </RowActionMenuItem>
+                                                        )}
+                                                        {session && (
+                                                            <RowActionMenuItem
+                                                                onClick={() => handleRenewSession(session.token)}
+                                                                disabled={renewingSession === session.token}
+                                                                icon={<RotateCw className={`w-4 h-4 ${renewingSession === session.token ? "animate-spin" : ""}`} />}
+                                                            >
+                                                                Renew session
+                                                            </RowActionMenuItem>
+                                                        )}
+                                                        {session && (
+                                                            <RowActionMenuItem
+                                                                onClick={() => {
+                                                                    setSessionToDelete({ token: session.token, clientName: session.clientName })
+                                                                    setDeleteSessionModalOpen(true)
+                                                                }}
+                                                                icon={<Trash2 className="w-4 h-4" />}
+                                                                tone="danger"
+                                                            >
+                                                                Delete session
+                                                            </RowActionMenuItem>
+                                                        )}
+                                                        {canManageAccount && !u.isSelf && !u.isPlatformAdmin && (
+                                                            <RowActionMenuItem
+                                                                onClick={() => deleteUser(u.id)}
+                                                                icon={<Trash2 className="w-4 h-4" />}
+                                                                tone="danger"
+                                                            >
+                                                                Remove user
+                                                            </RowActionMenuItem>
+                                                        )}
+                                                    </RowActionMenu>
+                                                </PanelTd>
+                                            </PanelTr>
+                                        )
+                                    })}
+                                </PanelTbody>
+                            </PanelTable>
+                            <PanelPagination
+                                page={page}
+                                pageSize={pageSize}
+                                total={filteredRows.length}
+                                onPageChange={setCurrentPage}
+                            />
+                        </>
                     )}
-
-                    {!loading && filteredUsers.length > 0 && (
-                        <div className="mt-4 pt-4 text-xs text-[#677489]">
-                            <div className="w-full flex items-center justify-center">
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
-                                        disabled={currentPage === 0}
-                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Previous
-                                    </button>
-                                    <span className="text-xs text-[#6B7280]">
-                                        Page {currentPage + 1} of {totalPages}
-                                    </span>
-                                    <button
-                                        onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
-                                        disabled={currentPage >= totalPages - 1}
-                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Next
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </>
+                </PanelCard>
             )}
 
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
+            {notice && !error && <div className="mt-3 text-sm text-[#6B7280]">{notice}</div>}
 
-            {showCreate && <CreateUserModal onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); load(); }} />}
+            {showCreate && (
+                <CreateUserModal
+                    onClose={() => setShowCreate(false)}
+                    onCreated={() => {
+                        setShowCreate(false)
+                        load()
+                    }}
+                />
+            )}
 
             <ConfirmActionModal
                 isOpen={deleteModalOpen}
@@ -526,7 +753,42 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                 }}
             />
 
-        </>
+            <UpdateSessionsModal
+                isOpen={showUpdateSessionsModal}
+                success={updateSessionsSuccess}
+                updatedCount={updatedCount}
+                onClose={() => setShowUpdateSessionsModal(false)}
+            />
+
+            <ConfirmDeleteSessionModal
+                isOpen={deleteSessionModalOpen}
+                clientName={sessionToDelete?.clientName || ""}
+                onConfirm={handleDeleteSession}
+                onCancel={() => {
+                    setDeleteSessionModalOpen(false)
+                    setSessionToDelete(null)
+                }}
+                isDeleting={deletingSession !== null}
+            />
+
+            <GetLinkModal
+                isOpen={getLinkModalOpen}
+                link={copiedLink}
+                onClose={() => {
+                    setGetLinkModalOpen(false)
+                    setCopiedLink(null)
+                }}
+            />
+
+            <RenewSessionModal
+                isOpen={renewModalOpen}
+                success={renewSuccess}
+                onClose={() => {
+                    setRenewModalOpen(false)
+                    setRenewSuccess(false)
+                }}
+            />
+        </PanelPage>
     )
 }
 
@@ -780,696 +1042,69 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
     )
 }
 
-type SessionStatus = "pending" | "in_progress" | "completed" | "expired" | "canceled"
-
-type SessionRow = {
-    token: string
-    clientName: string
-    clientEmail: string
-    businessName: string
-    createdAt: number
-    submittedAt: number | null
-    lastUpdatedAt: number | null
-    status: SessionStatus
-    hasAnswers: boolean
-    platforms?: string[]
-}
-
-function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
-    const [sessions, setSessions] = useState<SessionRow[]>([])
-    const [loading, setLoading] = useState<boolean>(false)
-    const [error, setError] = useState<string>("")
-    const [searchQuery, setSearchQuery] = useState<string>("")
-    const [currentPage, setCurrentPage] = useState<number>(0)
-    const [expiring, setExpiring] = useState<boolean>(false)
-    const [showUpdateSessionsModal, setShowUpdateSessionsModal] = useState<boolean>(false)
-    const [updateSessionsSuccess, setUpdateSessionsSuccess] = useState<boolean>(false)
-    const [updatedCount, setUpdatedCount] = useState<number>(0)
-    const [statusFilter, setStatusFilter] = useState<'all' | SessionStatus>('all')
-    const [isStatusFilterOpen, setIsStatusFilterOpen] = useState<boolean>(false)
-    const [deletingSession, setDeletingSession] = useState<string | null>(null)
-    const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
-    const [sessionToDelete, setSessionToDelete] = useState<{ token: string; clientName: string } | null>(null)
-    const [renewingSession, setRenewingSession] = useState<string | null>(null)
-    const [getLinkModalOpen, setGetLinkModalOpen] = useState<boolean>(false)
-    const [copiedLink, setCopiedLink] = useState<string | null>(null)
-    const [renewModalOpen, setRenewModalOpen] = useState<boolean>(false)
-    const [renewSuccess, setRenewSuccess] = useState<boolean>(false)
-    const statusFilterRef = useRef<HTMLDivElement>(null)
-    const updateSessionsModalRef = useRef<HTMLDivElement>(null)
-    const [sessionLinks, setSessionLinks] = useState<Record<string, { link: string; loading: boolean }>>({})
-    const pageSize = 10
-    const [sortKey, setSortKey] = useState<"client" | "business" | "status" | "created" | "updated">("client")
-    const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
-
-    const load = useCallback(async () => {
-        setLoading(true)
-        setError("")
-        try {
-            const r = await fetch("/api/session/listClientSessions")
-            if (!r.ok) throw new Error(`Failed to fetch (${r.status})`)
-            const data = await r.json()
-            setSessions(Array.isArray(data) ? data : [])
-        } catch (e: any) {
-            setError(e?.message || "Failed to load sessions")
-        } finally {
-            setLoading(false)
-        }
-    }, [])
-
-    useEffect(() => {
-        // Loading the session list on mount; the loader flips its own loading and error state after awaiting.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        load()
-    }, [load])
-
-    const statusOrder = useMemo<Record<SessionStatus, number>>(() => ({
-        pending: 1,
-        in_progress: 2,
-        completed: 3,
-        expired: 4,
-        canceled: 5,
-    }), [])
-
-    const sorted = useMemo(() => {
-        const arr = [...sessions]
-        const cmp = (a: SessionRow, b: SessionRow) => {
-            let v = 0
-            if (sortKey === "client") {
-                v = a.clientName.localeCompare(b.clientName, undefined, { sensitivity: "base" })
-            } else if (sortKey === "business") {
-                v = a.businessName.localeCompare(b.businessName, undefined, { sensitivity: "base" })
-            } else if (sortKey === "status") {
-                v = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99)
-            } else if (sortKey === "created") {
-                v = a.createdAt - b.createdAt
-            } else if (sortKey === "updated") {
-                const av = a.lastUpdatedAt ?? -Infinity
-                const bv = b.lastUpdatedAt ?? -Infinity
-                v = av - bv
-            }
-            return sortDir === "asc" ? v : -v
-        }
-        arr.sort(cmp)
-        return arr
-    }, [sessions, sortKey, sortDir, statusOrder])
-
-    const toggleSort = (key: typeof sortKey) => {
-        if (key === sortKey) {
-            setSortDir((d) => (d === "asc" ? "desc" : "asc"))
-        } else {
-            setSortKey(key)
-            setSortDir(key === "created" || key === "updated" ? "desc" : "asc")
-        }
-    }
-
-
-
-    const formatDate = (ts?: number | null) => {
-        if (!ts) return "N/A"
-        const d = new Date(ts)
-        return d.toLocaleDateString(undefined, { year: "numeric", month: "2-digit", day: "2-digit" })
-    }
-
-    const statusBadge = (status: SessionStatus) => {
-        const common = "inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium"
-        switch (status) {
-            case "pending":
-                return (
-                    <span className={`${common} bg-yellow-50 text-yellow-700 border border-yellow-200`}>
-                        <AlertCircle size={14} /> Not Started
-                    </span>
-                )
-            case "in_progress":
-                return (
-                    <span className={`${common} bg-blue-50 text-blue-700 border border-blue-200`}>
-                        <Timer size={14} /> In Progress
-                    </span>
-                )
-            case "completed":
-                return (
-                    <span className={`${common} bg-green-50 text-green-700 border border-green-200`}>
-                        <CheckCircle2 size={14} /> Completed
-                    </span>
-                )
-            case "expired":
-                return (
-                    <span className={`${common} bg-red-50 text-red-700 border border-red-200`}>
-                        <XCircle size={14} /> Expired
-                    </span>
-                )
-            default:
-                return <span className={`${common} bg-gray-100 text-gray-600 border border-gray-200`}>Canceled</span>
-        }
-    }
-
-    const expireSessions = useCallback(async () => {
-        try {
-            setExpiring(true)
-            const r = await fetch("/api/admin/expireSessions", { method: "POST" })
-            if (!r.ok) throw new Error("Failed to update sessions")
-            const j = await r.json()
-            setUpdatedCount(j.updated ?? 0)
-            setUpdateSessionsSuccess(true)
-            setShowUpdateSessionsModal(true)
-            await load()
-        } catch {
-            setUpdateSessionsSuccess(false)
-            setShowUpdateSessionsModal(true)
-        } finally {
-            setExpiring(false)
-        }
-    }, [load])
-
-    const getSessionLink = async (token: string, clientEmail: string): Promise<string | null> => {
-        if (!token || !clientEmail) return null
-        const key = `${token}-${clientEmail}`
-        setSessionLinks(prev => ({ ...prev, [key]: { link: "", loading: true } }))
-        try {
-            const r = await fetch(`/api/admin/getClientSessionLink?clientEmail=${encodeURIComponent(clientEmail)}`)
-            if (!r.ok) throw new Error("Failed to get session link")
-            const data = await r.json()
-            const fullLink = data.link.startsWith('http') ? data.link : `${window.location.origin}${data.link}`
-            setSessionLinks(prev => ({ ...prev, [key]: { link: fullLink, loading: false } }))
-            return fullLink
-        } catch (e: any) {
-            setSessionLinks(prev => ({ ...prev, [key]: { link: "", loading: false } }))
-            alert("Failed to get session link: " + (e?.message || "Unknown error"))
-            return null
-        }
-    }
-
-    const handleGetLink = async (token: string, clientEmail: string) => {
-        const link = await getSessionLink(token, clientEmail)
-        if (link) {
-            try {
-                await navigator.clipboard.writeText(link)
-                setCopiedLink(link)
-                setGetLinkModalOpen(true)
-            } catch {
-                setCopiedLink(link)
-                setGetLinkModalOpen(true)
-            }
-        } else {
-            setCopiedLink(null)
-            setGetLinkModalOpen(true)
-        }
-    }
-
-    const handleRenewSession = async (token: string) => {
-        setRenewingSession(token)
-        try {
-            const r = await fetch("/api/admin/renewSession", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ token }),
-            })
-            if (!r.ok) {
-                const data = await r.json()
-                throw new Error(data.message || "Failed to renew session")
-            }
-            setRenewSuccess(true)
-            setRenewModalOpen(true)
-            await load()
-        } catch {
-            setRenewSuccess(false)
-            setRenewModalOpen(true)
-        } finally {
-            setRenewingSession(null)
-        }
-    }
-
-    const handleDeleteSession = async () => {
-        if (!sessionToDelete) return
-        
-        setDeletingSession(sessionToDelete.token)
-        try {
-            const r = await fetch(`/api/admin/deleteSession?token=${encodeURIComponent(sessionToDelete.token)}`, {
-                method: "DELETE",
-            })
-            if (!r.ok) {
-                const data = await r.json()
-                throw new Error(data.message || "Failed to delete session")
-            }
-            setDeleteModalOpen(false)
-            setSessionToDelete(null)
-            await load()
-        } catch (e: any) {
-            console.error("Failed to delete session:", e?.message || "Unknown Error")
-        } finally {
-            setDeletingSession(null)
-        }
-    }
-
-    const openDeleteModal = (token: string, clientName: string) => {
-        setSessionToDelete({ token, clientName })
-        setDeleteModalOpen(true)
-    }
-
-    const filteredSessions = useMemo(() => {
-        let filtered = sorted
-        if (statusFilter !== 'all') {
-            filtered = filtered.filter(s => s.status === statusFilter)
-        }
-        if (searchQuery.trim()) {
-            const q = searchQuery.toLowerCase()
-            filtered = filtered.filter(s => {
-                const statusDisplay = s.status === "pending" ? "not started" : s.status === "in_progress" ? "in progress" : s.status
-                return s.clientName.toLowerCase().includes(q) ||
-                    s.clientEmail.toLowerCase().includes(q) ||
-                    s.businessName.toLowerCase().includes(q) ||
-                    statusDisplay.toLowerCase().includes(q)
-            })
-        }
-        
-        return filtered
-    }, [sorted, searchQuery, statusFilter])
-
-    const paginatedSessions = filteredSessions.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
-    const totalPages = Math.ceil(filteredSessions.length / pageSize)
+/**
+ * Result of the expiry sweep. Lifted out of the panel's JSX, where it was a hand-rolled backdrop
+ * with its own click-outside handling rather than the shared Modal every other dialog here uses.
+ */
+const UpdateSessionsModal: React.FC<{
+    isOpen: boolean
+    success: boolean
+    updatedCount: number
+    onClose: () => void
+}> = ({ isOpen, success, updatedCount, onClose }) => {
+    if (!isOpen) return null
 
     return (
-        <>
-            <div className="w-full flex justify-between items-center mb-2">
-                <div>
-                    <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em] text-[#111827] mt-8 mb-6">Client Sessions</h1>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
-                        <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
-                        <label htmlFor="sessions-search" className="sr-only">Search Sessions</label>
-                        <input
-                            id="sessions-search"
-                            type="search"
-                            value={searchQuery}
-                            onChange={(e) => {
-                                setSearchQuery(e.target.value)
-                                setCurrentPage(0)
-                            }}
-                            placeholder="Search Sessions"
-                            className="w-64 md:w-80 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none"
-                        />
-                    </div>
-                    <div className="relative" ref={statusFilterRef} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsStatusFilterOpen(false) }} tabIndex={-1}>
+        <Modal
+            zIndexClass="z-50"
+            backdropClassName="bg-black/50 backdrop-blur-sm"
+            cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+            label="Update Sessions"
+            onClose={onClose}
+        >
+            <div className="flex flex-col items-center text-center">
+                {success ? (
+                    <>
+                        <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
+                            <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
+                                    <FiCheck className="h-6 w-6" />
+                                </span>
+                            </span>
+                        </div>
+                        <h3 className="text-xl font-semibold text-[#111827] mb-2">Sessions Updated Successfully!</h3>
+                        <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
+                            {updatedCount > 0
+                                ? `Successfully updated ${updatedCount} session${updatedCount === 1 ? "" : "s"}.`
+                                : "No sessions needed updating."}
+                        </p>
+                    </>
+                ) : (
+                    <>
+                        <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
+                            <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white">
+                                    <XCircle className="h-6 w-6" />
+                                </span>
+                            </span>
+                        </div>
+                        <h3 className="text-xl font-semibold text-[#111827] mb-2">Failed To Update Sessions</h3>
+                        <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
+                            An error occurred while updating sessions. Please try again.
+                        </p>
+                    </>
+                )}
                 <button
-                            type="button"
-                            onClick={() => setIsStatusFilterOpen((v) => !v)}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
-                        >
-                            <FiFilter className="w-4 h-4" />
-                            <span className="text-sm font-medium">Filter</span>
-                            <svg 
-                                className={`w-4 h-4 transition-transform duration-200 ${isStatusFilterOpen ? 'rotate-180' : ''}`}
-                                fill="none" 
-                                stroke="currentColor" 
-                                viewBox="0 0 24 24"
-                            >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                </button>
-                        {isStatusFilterOpen && (
-                            <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#E5E7EB] py-4 z-50">
-                                <div className="px-5">
-                                    <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
-                                    
-                                    
-                                    <div className="mb-5">
-                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By</label>
-                                        <div className="relative">
-                                            <select
-                                                value={sortKey}
-                                                onChange={(e) => {
-                                                    setSortKey(e.target.value as "client" | "business" | "status" | "created" | "updated")
-                                                    setCurrentPage(0)
-                                                    if (e.target.value === "created" || e.target.value === "updated") {
-                                                        setSortDir("desc")
-                                                    } else {
-                                                        setSortDir("asc")
-                                                    }
-                                                }}
-                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
-                                            >
-                                                <option value="client">Client</option>
-                                                <option value="business">Business</option>
-                                                <option value="status">Status</option>
-                                                <option value="created">Created Date</option>
-                                                <option value="updated">Last Updated</option>
-                                            </select>
-                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    
-                                    <div className="mb-5">
-                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Status</label>
-                                        <div className="relative">
-                                            <select
-                                                value={statusFilter}
-                                                onChange={(e) => {
-                                                    setStatusFilter(e.target.value as 'all' | SessionStatus)
-                                                    setCurrentPage(0)
-                                                }}
-                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
-                                            >
-                                                <option value="all">All Statuses</option>
-                                                <option value="pending">Not Started</option>
-                                                <option value="in_progress">In Progress</option>
-                                                <option value="completed">Completed</option>
-                                                <option value="expired">Expired</option>
-                                            </select>
-                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    
-                                    <div className="mb-4">
-                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Order</label>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => {
-                                                    setSortDir("asc")
-                                                    setCurrentPage(0)
-                                                }}
-                                                className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                    sortDir === "asc" 
-                                                        ? "bg-[#701CC0] text-white shadow-sm" 
-                                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                                }`}
-                                            >
-                                                Ascending
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setSortDir("desc")
-                                                    setCurrentPage(0)
-                                                }}
-                                                className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                    sortDir === "desc" 
-                                                        ? "bg-[#701CC0] text-white shadow-sm" 
-                                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                                }`}
-                                            >
-                                                Descending
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    
-                                    <div className="pt-3 border-t border-[#E5E7EB]">
-                                        <button
-                                            onClick={() => {
-                                                    setSearchQuery("")
-                                                setStatusFilter("all")
-                                                setSortKey("client")
-                                                setSortDir("asc")
-                                                setCurrentPage(0)
-                                                setIsStatusFilterOpen(false)
-                                            }}
-                                            className="w-full text-xs py-2 px-3 rounded-lg font-medium text-[#6B7280] bg-gray-50 hover:bg-gray-100 hover:text-[#374151] transition-colors duration-200"
-                                        >
-                                            Clear All Filters
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                    <button
-                        onClick={expireSessions}
-                        disabled={expiring}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm disabled:opacity-60"
-                    >
-                        <RefreshCw size={16} className={expiring ? "animate-spin" : ""} />
-                        <span>Update Sessions</span>
-                    </button>
-                    <button
-                        onClick={onBackToUsers}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
-                    >
-                        <Users size={16} />
-                        <span>Manage Users</span>
-                    </button>
-                </div>
-            </div>
-
-
-            {loading ? (
-                <div className="flex items-center justify-center py-12">
-                    <LoadingSpinner label="Loading Sessions..." />
-                </div>
-            ) : (
-                <>
-                    {!loading && filteredSessions.length === 0 && (
-                        <div className="text-center py-12">
-                            <div className="w-full h-full flex flex-col items-center justify-center text-center">
-                                <motion.div
-                                    initial={{ opacity: 0, scale: 0.8 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ duration: 0.5, ease: "easeOut" }}
-                                >
-                                    <Image 
-                                        src="/assets/no-client.png" 
-                                        alt="No sessions" 
-                                        width={224} 
-                                        height={224} 
-                                        className="w-56 h-auto mb-3" 
-                                    />
-                                </motion.div>
-                                <p className="text-sm text-gray-500 mb-3">
-                                    {searchQuery ? "No sessions match your search." : "No sessions found."}
-                                </p>
-                            </div>
-                        </div>
-                    )}
-
-                    {!loading && filteredSessions.length > 0 && (
-                        <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                                        <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                                <button onClick={() => toggleSort("client")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Client</span>
-                                    <SortIcon active={sortKey === "client"} dir={sortDir} />
-                                </button>
-                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                                <button onClick={() => toggleSort("business")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Business</span>
-                                    <SortIcon active={sortKey === "business"} dir={sortDir} />
-                                </button>
-                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                                <button onClick={() => toggleSort("status")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Status</span>
-                                    <SortIcon active={sortKey === "status"} dir={sortDir} />
-                                </button>
-                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                                <button onClick={() => toggleSort("created")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Created</span>
-                                    <SortIcon active={sortKey === "created"} dir={sortDir} />
-                                </button>
-                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                                <button onClick={() => toggleSort("updated")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Last Updated</span>
-                                    <SortIcon active={sortKey === "updated"} dir={sortDir} />
-                                </button>
-                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Manage</th>
-                        </tr>
-                    </thead>
-                                    <tbody className="bg-white divide-y divide-[#E5E7EB]">
-                                        {paginatedSessions.map((s) => {
-                                            const linkKey = `${s.token}-${s.clientEmail}`
-                                            const sessionLink = sessionLinks[linkKey]
-                                            return (
-                                                <tr key={s.token} className="hover:bg-purple-50">
-                                                    <td className="px-4 py-4">
-                                                        <div className="flex flex-col">
-                                                            <div className="text-sm font-medium text-[#111827]">{s.clientName}</div>
-                                                            <div className="text-sm text-[#6B7280]">{s.clientEmail}</div>
-                                                        </div>
-                                </td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{s.businessName}</td>
-                                                    <td className="px-4 py-4">
-                                                        {statusBadge(s.status)}
-                                                    </td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{formatDate(s.createdAt)}</td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{formatDate(s.lastUpdatedAt)}</td>
-                                                    <td className="px-4 py-4">
-                                                        <div className="flex items-center gap-2">
-                                                            <RowActionMenu label="Session actions">
-                                                                {s.status !== "expired" && (
-                                                                    <RowActionMenuItem
-                                                                        onClick={() => handleGetLink(s.token, s.clientEmail)}
-                                                                        disabled={sessionLink?.loading}
-                                                                        icon={<LinkIcon className="w-4 h-4" />}
-                                                                        tone="accent"
-                                                                    >
-                                                                        {sessionLink?.loading ? "Loading..." : "Get Link"}
-                                                                    </RowActionMenuItem>
-                                                                )}
-                                                                <RowActionMenuItem
-                                                                    onClick={() => handleRenewSession(s.token)}
-                                                                    disabled={renewingSession === s.token}
-                                                                    icon={<RotateCw className={`w-4 h-4 ${renewingSession === s.token ? "animate-spin" : ""}`} />}
-                                                                >
-                                                                    Renew Session
-                                                                </RowActionMenuItem>
-                                                                <RowActionMenuItem
-                                                                    onClick={() => openDeleteModal(s.token, s.clientName)}
-                                                                    icon={<Trash2 className="w-4 h-4" />}
-                                                                    tone="danger"
-                                                                >
-                                                                    Delete Session
-                                                                </RowActionMenuItem>
-                                                            </RowActionMenu>
-                                                        </div>
-                                </td>
-                            </tr>
-                                            )
-                                        })}
-                    </tbody>
-                </table>
-            </div>
-                        </div>
-                    )}
-
-                    {!loading && filteredSessions.length > 0 && (
-                        <div className="mt-4 pt-4 text-xs text-[#677489]">
-                            <div className="w-full flex items-center justify-center">
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
-                                        disabled={currentPage === 0}
-                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Previous
-                                    </button>
-                                    <span className="text-xs text-[#6B7280]">
-                                        Page {currentPage + 1} of {totalPages}
-                                    </span>
-                                    <button
-                                        onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
-                                        disabled={currentPage >= totalPages - 1}
-                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Next
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </>
-            )}
-
-            {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
-
-            {showUpdateSessionsModal && (
-                <div 
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" 
-                    onClick={(e) => {
-                        if (updateSessionsModalRef.current && !updateSessionsModalRef.current.contains(e.target as Node)) {
-                            setShowUpdateSessionsModal(false)
-                        }
-                    }}
+                    className={`w-full rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                        success ? "bg-[#701CC0] text-white hover:bg-[#5f17a5]" : "bg-red-600 text-white hover:bg-red-700"
+                    }`}
+                    onClick={onClose}
                 >
-                    <div
-                        ref={updateSessionsModalRef}
-                        className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
-                        onClick={(e) => e.stopPropagation()}
-                        role="dialog"
-                        aria-modal="true"
-                    >
-                        <div className="flex flex-col items-center text-center">
-                            {updateSessionsSuccess ? (
-                                <>
-                                    <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
-                                        <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
-                                        <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                                            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
-                                                <FiCheck className="h-6 w-6" />
-                                            </span>
-                                        </span>
-                                    </div>
-                                    <h3 className="text-xl font-semibold text-[#111827] mb-2">Sessions Updated Successfully!</h3>
-                                    <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
-                                        {updatedCount > 0 
-                                            ? `Successfully updated ${updatedCount} session${updatedCount === 1 ? '' : 's'}.`
-                                            : "No sessions needed updating."
-                                        }
-                                    </p>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
-                                        <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
-                                            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white">
-                                                <XCircle className="h-6 w-6" />
-                                            </span>
-                                        </span>
-                                    </div>
-                                    <h3 className="text-xl font-semibold text-[#111827] mb-2">Failed To Update Sessions</h3>
-                                    <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
-                                        An error occurred while updating sessions. Please try again.
-                                    </p>
-                                </>
-                            )}
-                            <button
-                                className={`w-full rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                                    updateSessionsSuccess
-                                        ? 'bg-[#701CC0] text-white hover:bg-[#5f17a5]'
-                                        : 'bg-red-600 text-white hover:bg-red-700'
-                                }`}
-                                onClick={() => setShowUpdateSessionsModal(false)}
-                            >
-                                Done
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <ConfirmDeleteSessionModal
-                isOpen={deleteModalOpen}
-                clientName={sessionToDelete?.clientName || ""}
-                onConfirm={handleDeleteSession}
-                onCancel={() => {
-                    setDeleteModalOpen(false)
-                    setSessionToDelete(null)
-                }}
-                isDeleting={deletingSession !== null}
-            />
-
-            <GetLinkModal
-                isOpen={getLinkModalOpen}
-                link={copiedLink}
-                onClose={() => {
-                    setGetLinkModalOpen(false)
-                    setCopiedLink(null)
-                }}
-            />
-
-            <RenewSessionModal
-                isOpen={renewModalOpen}
-                success={renewSuccess}
-                onClose={() => {
-                    setRenewModalOpen(false)
-                    setRenewSuccess(false)
-                }}
-            />
-        </>
+                    Done
+                </button>
+            </div>
+        </Modal>
     )
 }
 
