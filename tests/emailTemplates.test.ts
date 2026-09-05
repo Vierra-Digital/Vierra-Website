@@ -1,13 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Force the Brevo path (isBrevoConfigured -> true) and capture what deliver() sends,
-// so we can assert on the rendered HTML without any network or SMTP transport.
-vi.mock("@/lib/email/brevo", () => ({
-  isBrevoConfigured: () => true,
-  sendBrevoEmail: vi.fn(async () => {}),
+// Stub the Google Workspace system sender and capture what deliver() sends, so we can assert on
+// the rendered HTML without any network, Prisma, or Gmail API calls.
+vi.mock("@/lib/email/systemSender", () => ({
+  sendSystemEmail: vi.fn(async () => {}),
 }));
 
-import { sendBrevoEmail } from "@/lib/email/brevo";
+import { sendSystemEmail } from "@/lib/email/systemSender";
 import {
   sendEmail,
   sendAuditConfirmationEmail,
@@ -17,7 +16,7 @@ import {
   sendClientOnboardingCompletedEmail,
 } from "@/lib/emailSender";
 
-const mockSend = sendBrevoEmail as unknown as ReturnType<typeof vi.fn>;
+const mockSend = sendSystemEmail as unknown as ReturnType<typeof vi.fn>;
 const lastHtml = (): string => mockSend.mock.calls.at(-1)![0].html as string;
 
 beforeEach(() => mockSend.mockClear());

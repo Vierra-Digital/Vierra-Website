@@ -1,5 +1,4 @@
-import nodemailer from "nodemailer";
-import { isBrevoConfigured, sendBrevoEmail } from "@/lib/email/brevo";
+import { sendSystemEmail } from "@/lib/email/systemSender";
 import { escapeHtml } from "@/lib/utils";
 
 export interface EmailData {
@@ -10,15 +9,6 @@ export interface EmailData {
   monthlyRevenue: string;
   desiredRevenue: string;
 }
-
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  pool: false,
-} as nodemailer.TransportOptions);
 
 const recipients = ["alex@vierradev.com"];
 const fromEmail = process.env.FROM_EMAIL || "alex@vierradev.com";
@@ -32,23 +22,14 @@ interface DeliverOptions {
   attachments?: { filename: string; content: Buffer; contentType?: string; cid?: string }[];
 }
 
-/**
- * Send through Brevo (authenticated for vierradev.com) when configured;
- * otherwise fall back to Gmail SMTP. Gmail-sent mail as an @vierradev.com
- * From address fails the domain's DMARC (p=reject) and lands in spam, so
- * Brevo is the correct path whenever BREVO_API_KEY is set.
- */
+/** Sends through the authenticated Google Workspace mailbox — see lib/email/systemSender.ts. */
 async function deliver(options: DeliverOptions): Promise<void> {
-  if (isBrevoConfigured()) {
-    await sendBrevoEmail({
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      attachments: options.attachments?.map((a) => ({ filename: a.filename, content: a.content })),
-    });
-    return;
-  }
-  await transporter.sendMail({ from: fromAddress, ...options });
+  await sendSystemEmail({
+    to: options.to,
+    subject: options.subject,
+    html: options.html,
+    attachments: options.attachments?.map((a) => ({ filename: a.filename, content: a.content, contentType: a.contentType })),
+  });
 }
 
 function ensurePdfExtension(name: string): string {
@@ -294,7 +275,7 @@ export async function sendSignerCopyEmail(email: string, documentName: string, a
   }
 }
 
-export async function sendPasswordResetEmail(email: string, name: string, resetLink: string): Promise<void> {
+export async function sendPasswordResetEmail(email: string, name: string, resetLink: string, selfRequested = false): Promise<void> {
   const mailOptions = {
     from: fromAddress,
     to: email,
@@ -302,7 +283,7 @@ export async function sendPasswordResetEmail(email: string, name: string, resetL
     html: renderEmailShell(`
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">Reset Your Password</h2>
               <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 24px;">
-                Hi ${name || "there"}, an admin requested a password reset for your Vierra account. Click the button below to set a new password. This link expires in 7 days.
+                Hi ${name || "there"}, ${selfRequested ? "we received a request to reset the password for your Vierra account" : "an admin requested a password reset for your Vierra account"}. Click the button below to set a new password. This link expires in 7 days.
               </p>
               ${ctaButton(resetLink, "Reset Password")}
               <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">If you didn't request this, you can safely ignore this email.<br/>- The Vierra Team</p>`),
@@ -313,6 +294,36 @@ export async function sendPasswordResetEmail(email: string, name: string, resetL
     console.log(`Password reset email sent to ${email}`);
   } catch (error) {
     console.error(`Error sending password reset email to ${email}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Sent for both invite flows — a Vierra admin inviting staff (pages/api/admin/invitations) and a
+ * client representative inviting a teammate (pages/api/client/team) — the wording is generic
+ * enough to cover either. `inviteLink` is a Supabase `generateLink({ type: "invite" })` action
+ * link, minted by the caller; this function only renders and sends, same division of
+ * responsibility as sendPasswordResetEmail.
+ */
+export async function sendInviteEmail(email: string, inviteLink: string): Promise<void> {
+  const mailOptions = {
+    from: fromAddress,
+    to: email,
+    subject: "Vierra | You've Been Invited",
+    html: renderEmailShell(`
+              <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">You've Been Invited</h2>
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 24px;">
+                You've been invited to join a team on Vierra. Click below to accept and set up your account.
+              </p>
+              ${ctaButton(inviteLink, "Accept Invite")}
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">If you weren't expecting this, you can safely ignore this email.<br/>- The Vierra Team</p>`),
+  };
+
+  try {
+    await deliver(mailOptions);
+    console.log(`Invite email sent to ${email}`);
+  } catch (error) {
+    console.error(`Error sending invite email to ${email}:`, error);
     throw error;
   }
 }
