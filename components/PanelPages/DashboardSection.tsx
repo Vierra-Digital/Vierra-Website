@@ -132,34 +132,59 @@ const DashboardSection = () => {
 
     // Staff presence and the latest posts are independent of each other and of the stats, so they
     // load in parallel and each panel fills in on its own rather than gating the page.
+    /**
+     * Staff presence goes stale within a minute or two — someone closes a tab and the panel
+     * keeps showing them as active until the page is reloaded. Poll it instead.
+     *
+     * Blog posts change on the order of days, so they are fetched once and left alone rather
+     * than re-requested on every tick.
+     */
+    const STAFF_POLL_MS = 60_000
     useEffect(() => {
         let cancelled = false
-        const load = async () => {
+
+        const loadStaff = async () => {
             try {
-                const [staffRes, postsRes] = await Promise.all([
-                    fetch("/api/dashboard/staff-activity"),
-                    fetch("/api/dashboard/recent-posts"),
-                ])
-                if (staffRes.ok) {
-                    const data = await staffRes.json()
-                    if (!cancelled && Array.isArray(data?.staff)) setStaffActivity(data.staff)
-                }
-                if (postsRes.ok) {
-                    const data = await postsRes.json()
-                    if (!cancelled && Array.isArray(data?.posts)) setRecentPosts(data.posts)
-                }
+                const res = await fetch("/api/dashboard/staff-activity")
+                if (!res.ok) return
+                const data = await res.json()
+                if (!cancelled && Array.isArray(data?.staff)) setStaffActivity(data.staff)
             } catch {
-                /* leave the panels empty; their empty states explain themselves */
+                /* a failed poll just leaves the previous list up */
             } finally {
-                if (!cancelled) {
-                    setStaffLoading(false)
-                    setPostsLoading(false)
-                }
+                if (!cancelled) setStaffLoading(false)
             }
         }
-        void load()
+
+        const loadPosts = async () => {
+            try {
+                const res = await fetch("/api/dashboard/recent-posts")
+                if (!res.ok) return
+                const data = await res.json()
+                if (!cancelled && Array.isArray(data?.posts)) setRecentPosts(data.posts)
+            } catch {
+                /* empty state explains itself */
+            } finally {
+                if (!cancelled) setPostsLoading(false)
+            }
+        }
+
+        void loadStaff()
+        void loadPosts()
+
+        // Only poll while the tab is visible. A backgrounded dashboard hitting the API every
+        // minute is pure waste, and the value is stale the moment you look away anyway.
+        const tick = () => {
+            if (document.visibilityState === "visible") void loadStaff()
+        }
+        const timer = window.setInterval(tick, STAFF_POLL_MS)
+        // Refresh immediately on return, rather than waiting out the rest of the interval.
+        document.addEventListener("visibilitychange", tick)
+
         return () => {
             cancelled = true
+            window.clearInterval(timer)
+            document.removeEventListener("visibilitychange", tick)
         }
     }, [])
 

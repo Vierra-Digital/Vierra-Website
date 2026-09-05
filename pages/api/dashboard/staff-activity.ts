@@ -27,6 +27,8 @@ export default withAuth(
     });
 
     const now = Date.now();
+    // presence is polled every 60s client-side, so a 30s cache never hides a tick.
+    res.setHeader("Cache-Control", "private, max-age=30")
     res.status(200).json({
       staff: rows.map((row) => {
         const lastActive = row.last_active_at ? row.last_active_at.toISOString() : null;

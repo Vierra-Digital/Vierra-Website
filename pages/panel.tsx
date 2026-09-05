@@ -22,7 +22,6 @@ import {
   FiPercent,
   FiFile,
   FiUserCheck,
-  FiCpu,
 } from "react-icons/fi"
 import { RiArrowDropDownLine } from "react-icons/ri";
 import { useSession } from "@/lib/session-client"
@@ -70,10 +69,6 @@ const AdminEditorSection = dynamic(
 )
 const FilesSection = dynamic(
   () => import("@/components/PanelPages/FilesSection"),
-  { ssr: false }
-)
-const ArtemisSection = dynamic(
-  () => import("@/components/PanelPages/ArtemisSection"),
   { ssr: false }
 )
 const ClientViewOutreachSection = dynamic(
@@ -404,18 +399,6 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                 {!isStaff && (
                   <div
                     id="panel-nav-item"
-                    onClick={() => { setCurrentSection(11); setShowSettings(false); setIsSidebarOpen(false)}}
-                    className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 11 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
-                  >
-                    <FiCpu className="w-4 h-4 shrink-0" />
-                    <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
-                      Artemis
-                    </span>
-                  </div>
-                )}
-                {!isStaff && (
-                  <div
-                    id="panel-nav-item"
                     onClick={() => { setCurrentSection(8); setShowSettings(false); setIsSidebarOpen(false)}}
                     className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 8 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
                   >
@@ -582,11 +565,6 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                       {visitedSections.has(10) && (
                         <div key={`section-10-${sectionEpoch[10] || 0}`} style={{ display: currentSection === 10 ? undefined : "none" }}>
                           <FilesSection />
-                        </div>
-                      )}
-                      {visitedSections.has(11) && !isStaff && (
-                        <div key={`section-11-${sectionEpoch[11] || 0}`} style={{ display: currentSection === 11 ? undefined : "none" }}>
-                          <ArtemisSection />
                         </div>
                       )}
                     </>

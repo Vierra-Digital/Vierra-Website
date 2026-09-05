@@ -53,6 +53,15 @@ export default withAuth(async (req, res, session) => {
     const { start: currentMonthStart, end: currentMonthEnd } = getUtcMonthRange(now)
     const { start: previousMonthStart, end: previousMonthEnd } = getPreviousUtcMonthRange(now)
 
+    // Money is stored in integer cents on finance_entries; sum per kind per month window.
+    const sumFinance = async (kind: "revenue" | "expense", start: Date, end: Date) => {
+      const agg = await prisma.financeEntry.aggregate({
+        where: { company_id: companyId, kind, occurred_at: { gte: start, lt: end } },
+        _sum: { amount_cents: true },
+      })
+      return (agg._sum.amount_cents ?? 0) / 100
+    }
+
     const [
       clientsLifetime,
       currentMonthClients,
@@ -64,6 +73,10 @@ export default withAuth(async (req, res, session) => {
       leadsLifetime,
       currentMonthLeads,
       previousMonthLeads,
+      revenueThisMonth,
+      revenueLastMonth,
+      expensesThisMonth,
+      expensesLastMonth,
     ] = await Promise.all([
       prisma.client.count({ where: { company_id: companyId } }),
       prisma.client.count({
@@ -127,27 +140,12 @@ export default withAuth(async (req, res, session) => {
           },
         },
       }),
-    ])
-
-    // Money is stored in integer cents on finance_entries; sum per kind per month window.
-    const sumFinance = async (kind: "revenue" | "expense", start: Date, end: Date) => {
-      const agg = await prisma.financeEntry.aggregate({
-        where: { company_id: companyId, kind, occurred_at: { gte: start, lt: end } },
-        _sum: { amount_cents: true },
-      })
-      return (agg._sum.amount_cents ?? 0) / 100
-    }
-    const [
-      revenueThisMonth,
-      revenueLastMonth,
-      expensesThisMonth,
-      expensesLastMonth,
-    ] = await Promise.all([
       sumFinance("revenue", currentMonthStart, currentMonthEnd),
       sumFinance("revenue", previousMonthStart, previousMonthEnd),
       sumFinance("expense", currentMonthStart, currentMonthEnd),
       sumFinance("expense", previousMonthStart, previousMonthEnd),
     ])
+
     const profitThisMonth = revenueThisMonth - expensesThisMonth
     const profitLastMonth = revenueLastMonth - expensesLastMonth
 
