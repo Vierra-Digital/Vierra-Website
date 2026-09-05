@@ -615,9 +615,9 @@ const DashboardSection = () => {
                     <div className="mb-4 grid w-full max-w-[820px] grid-cols-1 items-start gap-4 sm:grid-cols-[minmax(0,1fr)_224px]">
                         <div className="bg-[#F1EFF6] rounded-xl p-4">
                             <h3 className="text-lg font-semibold text-[#111827] mb-3">Staff Activity</h3>
-                            {/* Reserves four rows, so the card keeps its shape as people come and
-                                go without leaving dead space under a small team. A fifth row grows
-                                it; the tile beside it is items-start and does not follow. */}
+                            {/* Reserves two rows only. Anything more padded the card out below a
+                                small team; it grows with the list instead. The tile beside it is
+                                items-start and does not follow this height. */}
                             {staffLoading ? (
                                 <div className="space-y-2">
                                     {[...Array(3)].map((_, i) => (
@@ -627,9 +627,9 @@ const DashboardSection = () => {
                             ) : staffActivity.length === 0 ? (
                                 <p className="text-xs text-[#6B7280]">No teammates yet.</p>
                             ) : (
-                                <ul className="min-h-[148px] divide-y divide-[#F1EFF5]">
+                                <ul className="min-h-[74px] divide-y divide-[#F1EFF5]">
                                     {staffActivity.map((row) => (
-                                        <li key={row.userId} className="flex items-center gap-2.5 py-2">
+                                        <li key={row.userId} className="flex items-center gap-2.5 py-1.5">
                                             <span
                                                 className={`h-2 w-2 shrink-0 rounded-full ${
                                                     row.isLive
