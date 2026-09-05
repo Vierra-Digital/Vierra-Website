@@ -29,6 +29,9 @@ type Row = {
 
 const MAX_RESULTS = 50;
 
+// Discovery is shared by authenticated company members. company_id records the contributor;
+// source edits retain ownership checks, while imports belong to the requesting user.
+
 /**
  * Cartography's Search-mode backend (see docs/CARTOGRAPHY_DESIGN.md Rollout M3). Queries the
  * real cartography_companies/cartography_contacts tables — replaces
@@ -47,7 +50,7 @@ const MAX_RESULTS = 50;
  * just avoids building a second, riskier code path for "only some filters are present."
  */
 export default withAuth(
-  async (req, res, session) => {
+  async (req, res) => {
     const q = asQueryStr(req.query.q) || null;
     const centerLat = req.query.centerLat ? Number(asQueryStr(req.query.centerLat)) : null;
     const centerLng = req.query.centerLng ? Number(asQueryStr(req.query.centerLng)) : null;
@@ -92,8 +95,7 @@ export default withAuth(
           END AS distance_miles
         FROM cartography_contacts cc
         JOIN cartography_companies co ON co.id = cc.cartography_company_id
-        WHERE cc.company_id = ${session.companyId}::uuid
-          AND cc.status NOT IN ('rejected', 'duplicate')
+        WHERE cc.status NOT IN ('rejected', 'duplicate')
           AND (
             ${q}::text IS NULL
             OR co.search_vector @@ plainto_tsquery('english', ${q})

@@ -38,7 +38,7 @@ const CartographySection: React.FC = () => {
   const [radiusMiles, setRadiusMiles] = useState(50);
   const [submittedQuery, setSubmittedQuery] = useState<string | null>(null);
 
-  // Populated from what's actually in this tenant's pool (see pages/api/cartography/locations.ts)
+  // Populated from the shared pool (see pages/api/cartography/locations.ts)
   // rather than a fixed list — a hardcoded set of cities would almost certainly not overlap
   // with any real leads once the pool is real data instead of the 8-row seed fixture.
   const [referenceLocations, setReferenceLocations] = useState<CartographyLocation[]>([]);
@@ -124,6 +124,12 @@ const CartographySection: React.FC = () => {
       }
       setAgentCandidates(Array.isArray(data?.candidates) ? data.candidates : []);
       setAgentTasks(Array.isArray(data?.tasks) ? data.tasks : []);
+      const attemptedTasks = Array.isArray(data?.tasks)
+        ? (data.tasks as SubAgentTaskResult[]).filter((task) => task.status !== "not_implemented")
+        : [];
+      if (attemptedTasks.length > 0 && attemptedTasks.every((task) => task.status === "failed")) {
+        setAgentError(attemptedTasks.map((task) => task.status === "failed" ? task.error : "").join(" "));
+      }
     } catch {
       setAgentError("Couldn't reach the agent endpoint.");
     } finally {

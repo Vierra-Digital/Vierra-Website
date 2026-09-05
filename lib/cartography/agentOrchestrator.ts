@@ -88,6 +88,8 @@ async function runGeneralDiscovery(
       },
     ],
     maxTokens: 1200,
+    // This response is parsed as JSON; prose cleanup can introduce unescaped quotes.
+    humanize: false,
   });
 
   if (!result.ok) return { error: result.error };

@@ -22,7 +22,7 @@ const MAX_LOCATIONS = 200;
  * Cartography's location picker backend. The Discover screen's "center city" dropdown used to
  * be a hardcoded list of 8 cities lifted from the seed-test-data script — meaningless once a
  * real 16k-row lead pool exists, since none of those cities necessarily have any real
- * companies in them. This derives the picker from what's actually in the tenant's pool: every
+ * companies in them. This derives the picker from the shared pool across all companies: every
  * distinct city/state that has at least one geocoded company, centered on the average
  * lat/lng of that city's companies (addresses within a city vary by a few blocks at most, so
  * an average is a fine stand-in for a true city centroid without a separate geocoding step).
@@ -35,7 +35,7 @@ const MAX_LOCATIONS = 200;
  * without a schema change or a backfill of every existing row.
  */
 export default withAuth(
-  async (req, res, session) => {
+  async (req, res) => {
     try {
       const rows = await prisma.$queryRaw<Row[]>`
         WITH parsed AS (
@@ -47,8 +47,7 @@ export default withAuth(
           FROM (
             SELECT lat, lng, regexp_split_to_array(address, ',\s*') AS parts
             FROM cartography_companies
-            WHERE company_id = ${session.companyId}::uuid
-              AND address IS NOT NULL
+            WHERE address IS NOT NULL
               AND lat IS NOT NULL
               AND lng IS NOT NULL
           ) split

@@ -28,8 +28,11 @@ describe("computeRunStatus", () => {
     expect(computeRunStatus([failed(), failed()], 0)).toBe("failed");
   });
 
-  it("is not failed if at least one task succeeded or is merely unimplemented", () => {
-    expect(computeRunStatus([failed(), notImplemented()], 0)).toBe("completed");
+  it("is failed when discovery fails and the other methods are unimplemented", () => {
+    expect(computeRunStatus([failed(), notImplemented(), notImplemented("linkedin_sales_nav")], 0)).toBe("failed");
+  });
+
+  it("preserves candidates when at least one task succeeded", () => {
     expect(computeRunStatus([failed(), completed(2)], 2)).toBe("review_pending");
   });
 

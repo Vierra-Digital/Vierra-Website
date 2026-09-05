@@ -1,5 +1,16 @@
 # Cartography: agentic lead sourcing
 
+## Shared discovery access (09/05/2026)
+
+Search and the city picker read the Cartography directory across all contributing companies.
+Both endpoints still require an authenticated company member. A row's `company_id` records
+its contributor, rather than restricting discovery access. Existing data needs no ownership
+change or migration. The Review Queue also lists shared candidates. Import copies into the
+current user's Contacts, deduplicates by that user and email, and leaves the shared source
+available for others. Legacy promoted rows remain importable. Editing and rejection remain
+restricted to the contributing company; other companies see read-only source fields.
+This supersedes tenant-scoped search references in the original design below.
+
 ## Problem
 
 Cartography is the only unbuilt stage of the outreach pipeline (Cartography ->

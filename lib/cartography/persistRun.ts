@@ -19,7 +19,8 @@ export type CartographyRunStatus = "completed" | "failed" | "review_pending";
  * makes it verifiable at all.
  */
 export function computeRunStatus(tasks: SubAgentTaskResult[], candidateCount: number): CartographyRunStatus {
-  const allFailed = tasks.length > 0 && tasks.every((t) => t.status === "failed");
+  const attempted = tasks.filter((t) => t.status !== "not_implemented");
+  const allFailed = attempted.length > 0 && attempted.every((t) => t.status === "failed");
   if (allFailed) return "failed";
   return candidateCount > 0 ? "review_pending" : "completed";
 }
