@@ -612,11 +612,12 @@ const DashboardSection = () => {
                     </div>
 
                     {/* Staff Activity and the LTV launcher share the row under the chart. */}
-                    <div className="mb-4 grid w-full max-w-[820px] grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_224px]">
+                    <div className="mb-4 grid w-full max-w-[820px] grid-cols-1 items-start gap-4 sm:grid-cols-[minmax(0,1fr)_224px]">
                         <div className="bg-[#F1EFF6] rounded-xl p-4">
                             <h3 className="text-lg font-semibold text-[#111827] mb-3">Staff Activity</h3>
-                            {/* Five rows at 37px plus dividers — the capacity the endpoint serves,
-                                held whether or not that many teammates exist yet. */}
+                            {/* Reserves four rows, so the card keeps its shape as people come and
+                                go without leaving dead space under a small team. A fifth row grows
+                                it; the tile beside it is items-start and does not follow. */}
                             {staffLoading ? (
                                 <div className="space-y-2">
                                     {[...Array(3)].map((_, i) => (
@@ -626,7 +627,7 @@ const DashboardSection = () => {
                             ) : staffActivity.length === 0 ? (
                                 <p className="text-xs text-[#6B7280]">No teammates yet.</p>
                             ) : (
-                                <ul className="min-h-[185px] divide-y divide-[#F1EFF5]">
+                                <ul className="min-h-[148px] divide-y divide-[#F1EFF5]">
                                     {staffActivity.map((row) => (
                                         <li key={row.userId} className="flex items-center gap-2.5 py-2">
                                             <span
