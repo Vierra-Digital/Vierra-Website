@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx"
 import { getFileBuffer, STORAGE_BUCKETS } from "@/lib/storage"
 import { getSessionData } from "@/lib/sessionStore"
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany"
 import * as XLSX from "xlsx"
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib"
 
@@ -229,19 +230,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const uid = session.user.id
-  if (session.kind === "member" && tokenId.startsWith(`contacts-xlsx:${uid}`)) {
-    await syncContactsSpreadsheetForUser({ userId: uid, companyId: session.companyId })
+  // Contacts spreadsheets are one shared file per client company now, keyed
+  // `contacts-xlsx:${companyId}` (see lib/contacts/xlsx.ts) — a representative's own companyId
+  // is already known; a staff member must name the target client explicitly.
+  const companyId = session.kind === "client" ? session.companyId : resolveTargetCompanyId(session, req)
+  if (!companyId) {
+    return res.status(400).json({ message: "companyId is required" })
+  }
+  if (session.kind === "member" && tokenId.startsWith(`contacts-xlsx:${companyId}`)) {
+    await syncContactsSpreadsheetForUser({ userId: uid, companyId })
   }
 
   const where: { signing_token_id: string; company_id: string; user_id?: string; client_id?: string } = {
     signing_token_id: tokenId,
-    company_id: session.companyId,
+    company_id: companyId,
   }
 
   if (session.kind === "client") {
     where.client_id = session.clientId
-  } else {
-    where.user_id = uid
   }
 
   const stored = await prisma.storedFile.findFirst({

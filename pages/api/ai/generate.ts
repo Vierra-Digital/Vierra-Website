@@ -4,6 +4,7 @@ import { boxGenerate } from "@/lib/ai/artemisBox";
 import { resolveBrain } from "@/lib/ai/brains";
 import { logArtemisRun } from "@/lib/ai/artemisRuns";
 import { prisma } from "@/lib/prisma";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 const PLATFORMS = ["linkedin", "instagram", "x", "blog", "email"] as const;
 
@@ -26,6 +27,11 @@ export default withAuth(
       res.status(400).json({ message: "Give Artemis a topic to write about." });
       return;
     }
+    const companyId = resolveTargetCompanyId(session, req);
+    if (!companyId) {
+      res.status(400).json({ message: "companyId is required" });
+      return;
+    }
 
     const startedAt = Date.now();
     const result = await boxGenerate({ topic, platform, brain });
@@ -34,7 +40,7 @@ export default withAuth(
     if (!result.ok) {
       await logArtemisRun({
         endpoint: "generate",
-        companyId: session.companyId,
+        companyId,
         userId: session.user.id,
         brainId: brain,
         latencyMs,
@@ -50,7 +56,7 @@ export default withAuth(
     if (saveToReview && drafts) {
       const item = await prisma.artemisReviewItem.create({
         data: {
-          company_id: session.companyId,
+          company_id: companyId,
           brain_id: brain,
           kind: platform === "blog" ? "blog" : platform === "email" ? "email" : "social",
           title: topic.slice(0, 200),
@@ -64,7 +70,7 @@ export default withAuth(
 
     await logArtemisRun({
       endpoint: "generate",
-      companyId: session.companyId,
+      companyId,
       userId: session.user.id,
       brainId: brain,
       latencyMs,

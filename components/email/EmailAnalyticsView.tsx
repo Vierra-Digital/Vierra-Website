@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { FiClock, FiEye, FiMousePointer, FiSend, FiShield } from "react-icons/fi";
+import { panelFetch } from "@/lib/panelFetch";
 
 type StatMessage = {
   messageId: string | null;
@@ -95,6 +96,25 @@ const STATUS_STYLES: Record<RecordStatus, string> = {
 };
 
 const pct = (num: number, den: number) => (den > 0 ? Math.round((num / den) * 100) : 0);
+
+/**
+ * Background + text color for one send-time heatmap cell. A fixed "sent/max > 0.5 ⇒ white text"
+ * cutoff (the previous approach) doesn't track how dark the tint actually is — plenty of
+ * medium-purple cells fell below it and got gray (#5B5670) text, which is low-contrast on
+ * anything but the very lightest tint. Deciding from the blended background's own brightness
+ * (the standard YIQ luminance formula) tracks the real cell color instead of a guessed cutoff.
+ */
+function heatCellColors(alpha: number): { background: string; color: string } {
+  if (alpha <= 0) return { background: "#F6F4FA", color: "#3C3752" };
+  const r = 255 * (1 - alpha) + 112 * alpha;
+  const g = 255 * (1 - alpha) + 28 * alpha;
+  const b = 255 * (1 - alpha) + 192 * alpha;
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return {
+    background: `rgba(112,28,192,${alpha})`,
+    color: yiq >= 150 ? "#3C3752" : "#fff",
+  };
+}
 
 const dayKey = (iso: string) => {
   const d = new Date(iso);
@@ -221,7 +241,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
     // nullable, so filtering by it silently drops every message that isn't attributed to an
     // account row — which reads as "analytics is broken". Report on all of the user's sent mail.
     const qs = params.toString();
-    fetch(`/api/gmail/tracking/stats${qs ? `?${qs}` : ""}`, { cache: "no-store" })
+    panelFetch(`/api/gmail/tracking/stats${qs ? `?${qs}` : ""}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((payload) => {
         if (cancelled) return;
@@ -309,7 +329,7 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/reporting/summary", { cache: "no-store" })
+    panelFetch("/api/reporting/summary", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!cancelled && d) setReport(d);
@@ -420,7 +440,9 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
 
   const hasOutreach = Boolean(report && (report.campaigns > 0 || report.totalContacts > 0 || report.bookings > 0));
   return (
-    <div className="h-full overflow-y-auto bg-white">
+    // email-analytics-view opts this whole self-contained light "report" surface out of the
+    // email panel's dark-theme remap (app/globals.css) — see that file's header comment.
+    <div className="email-analytics-view h-full overflow-y-auto bg-white">
       {/* Sticky header — the only chrome on the page. */}
       <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-[#EDEAF3] bg-white/90 px-6 py-3.5 backdrop-blur-md">
         <div className="min-w-0">
@@ -667,15 +689,14 @@ const EmailAnalyticsView: React.FC<{ accounts: string[] }> = ({ accounts }) => {
                           const bucket = behaviour.sendTimes.find((b) => b.day === day && b.hour === hour);
                           const sent = bucket?.sent ?? 0;
                           const rate = bucket ? pct(bucket.opened, bucket.sent) : 0;
+                          const alpha = sent ? 0.1 + (sent / maxBucketSent) * 0.75 : 0;
+                          const cellColors = heatCellColors(alpha);
                           return (
                             <td
                               key={hour}
                               title={sent ? `${label} ${hour}:00 — ${sent} sent, ${rate}% opened` : `${label} ${hour}:00 — no sends`}
                               className="h-6 w-6 rounded text-center text-[10px] font-semibold leading-6"
-                              style={{
-                                background: sent ? `rgba(112,28,192,${0.1 + (sent / maxBucketSent) * 0.75})` : "#F6F4FA",
-                                color: sent && sent / maxBucketSent > 0.5 ? "#fff" : "#5B5670",
-                              }}
+                              style={cellColors}
                             >
                               {sent && rate > 0 ? rate : ""}
                             </td>

@@ -11,8 +11,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * Act on one review item: approve, reject, or save an edited version.
  *
  * Approval is the gate the whole design hangs on — it is the only thing that marks a draft fit to
- * be used — so it is admin-only, and the update is scoped by company_id so one company can never
- * approve another's drafts by guessing an id.
+ * be used — so it is admin-only. Any Vierra admin may act on any client's drafts (see
+ * docs/ROLE_MODEL_REDESIGN.md's "v2" section) — looked up by id alone.
  */
 export default withAuth(
   async (req, res, session) => {
@@ -36,10 +36,11 @@ export default withAuth(
       return;
     }
 
-    // updateMany, not update: it takes the company_id in the same WHERE, so a mismatched id
-    // updates nothing instead of throwing after the row has already been found.
+    // Any Vierra admin may act on any client's review item (see
+    // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — updateMany still guards against a bad id
+    // updating nothing instead of throwing after the row has already been found.
     const { count } = await prisma.artemisReviewItem.updateMany({
-      where: { id, company_id: session.companyId },
+      where: { id },
       data: {
         status: action === "approve" ? "approved" : action === "reject" ? "rejected" : "edited",
         // The original draft is never overwritten — the feedback loop compares the two.
@@ -57,7 +58,7 @@ export default withAuth(
     }
 
     const item = await prisma.artemisReviewItem.findFirst({
-      where: { id, company_id: session.companyId },
+      where: { id },
       select: {
         id: true,
         status: true,

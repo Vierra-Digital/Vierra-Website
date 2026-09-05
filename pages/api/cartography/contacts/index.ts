@@ -1,6 +1,7 @@
 import { withAuth } from "@/lib/api/withAuth";
 import { prisma } from "@/lib/prisma";
 import { asQueryStr } from "@/lib/api/parsing";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 export type CartographyReviewRow = {
   id: string;
@@ -34,6 +35,7 @@ export default withAuth(
   async (req, res, session) => {
     const statusParam = asQueryStr(req.query.status);
     const statuses = statusParam ? [statusParam] : REVIEWABLE_STATUSES;
+    const companyId = resolveTargetCompanyId(session, req);
 
     try {
       const rows = await prisma.cartographyContact.findMany({
@@ -45,7 +47,7 @@ export default withAuth(
 
       const results: CartographyReviewRow[] = rows.map((r) => ({
         id: r.id,
-        canEdit: r.company_id === session.companyId && r.status !== "promoted",
+        canEdit: r.company_id === companyId && r.status !== "promoted",
         company: r.cartography_companies.name,
         domain: r.cartography_companies.domain,
         industry: r.cartography_companies.industry,

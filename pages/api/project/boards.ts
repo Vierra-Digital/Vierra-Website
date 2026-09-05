@@ -1,11 +1,17 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 export default withAuth(async (req, res, session) => {
+  const companyId = resolveTargetCompanyId(session, req);
+  if (!companyId) {
+    return res.status(400).json({ message: "companyId is required" });
+  }
+
   if (req.method === "GET") {
     try {
       const boards = await prisma.projectBoard.findMany({
-        where: { company_id: session.companyId },
+        where: { company_id: companyId },
         orderBy: { created_at: "asc" },
         select: { id: true, name: true },
       });
@@ -26,7 +32,7 @@ export default withAuth(async (req, res, session) => {
     }
     try {
       const board = await prisma.projectBoard.create({
-        data: { company_id: session.companyId, name: name.trim() },
+        data: { company_id: companyId, name: name.trim() },
         select: { id: true, name: true },
       });
       return res.status(201).json(board);

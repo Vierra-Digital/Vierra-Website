@@ -1,6 +1,7 @@
 import { withAuth } from "@/lib/api/withAuth";
 import { prisma } from "@/lib/prisma";
 import { EMAIL_REGEX } from "@/lib/utils";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 export type PromoteResult = { id: string; ok: boolean; contactId?: string; reason?: string };
 
@@ -20,6 +21,11 @@ export default withAuth(
     const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((id: unknown): id is string => typeof id === "string") : [];
     if (ids.length === 0) {
       res.status(400).json({ message: "ids must be a non-empty array." });
+      return;
+    }
+    const companyId = resolveTargetCompanyId(session, req);
+    if (!companyId) {
+      res.status(400).json({ message: "companyId is required" });
       return;
     }
 
@@ -46,12 +52,12 @@ export default withAuth(
           continue;
         }
 
-        // Dedupe against an existing Contact for this staff member (matches the "dedupe
-        // against existing contacts" goal in the design doc) rather than relying on the
+        // Dedupe against an existing Contact for this client company (contacts are client-scoped
+        // — see docs/ROLE_MODEL_REDESIGN.md's "v2" section) rather than relying on the
         // account_id-scoped unique index, which never fires here since account_id stays
         // null for a cartography-sourced contact.
         const existingContact = await prisma.contact.findFirst({
-          where: { user_id: session.user.id, email },
+          where: { company_id: companyId, email },
         });
 
         const [firstName, ...rest] = (candidate.name || "").trim().split(/\s+/).filter(Boolean);
@@ -61,6 +67,7 @@ export default withAuth(
           existingContact ||
           (await prisma.contact.create({
             data: {
+              company_id: companyId,
               user_id: session.user.id,
               source: "cartography",
               email,

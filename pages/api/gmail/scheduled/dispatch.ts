@@ -6,7 +6,7 @@ import { resolveCronBaseUrl } from "@/lib/api/url";
 /**
  * Cron dispatch endpoint for scheduled email sends. NOT session-authenticated —
  * it runs on behalf of many users, so it's protected by a shared CRON_SECRET.
- * Invoked by the Netlify Scheduled Function (netlify/functions/dispatch-scheduled-email).
+ * Invoked by the `dispatch-scheduled-email` pg_cron job (prisma/manual/20260901_migrate_cron_to_pg_cron.sql).
  */
 
 

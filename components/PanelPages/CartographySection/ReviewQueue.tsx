@@ -3,6 +3,7 @@ import { FiCheck, FiX, FiRefreshCw, FiExternalLink } from "react-icons/fi";
 import type { CartographyReviewRow } from "@/pages/api/cartography/contacts";
 import type { PromoteResult } from "@/pages/api/cartography/contacts/promote";
 import { companyUrl } from "@/lib/cartography/companyUrl";
+import { panelFetch } from "@/lib/panelFetch";
 
 /**
  * Cartography's review queue (see docs/CARTOGRAPHY_DESIGN.md Rollout M4) — the screen that
@@ -23,7 +24,7 @@ const ReviewQueue: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/cartography/contacts");
+      const res = await panelFetch("/api/cartography/contacts");
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data?.message || "Failed to load the review queue.");
@@ -62,7 +63,7 @@ const ReviewQueue: React.FC = () => {
     const value = fieldValue(row, field);
     if (value === (row[field] || "")) return true; // unchanged — nothing to save
     try {
-      const res = await fetch(`/api/cartography/contacts/${row.id}`, {
+      const res = await panelFetch(`/api/cartography/contacts/${row.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ [field]: value }),
@@ -83,7 +84,7 @@ const ReviewQueue: React.FC = () => {
   const reject = async (row: CartographyReviewRow) => {
     if (!row.canEdit || promoting) return;
     try {
-      const res = await fetch(`/api/cartography/contacts/${row.id}`, {
+      const res = await panelFetch(`/api/cartography/contacts/${row.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ status: "rejected" }),
@@ -132,7 +133,7 @@ const ReviewQueue: React.FC = () => {
         if (saved) readyIds.push(id);
       }
       if (readyIds.length === 0) return;
-      const res = await fetch("/api/cartography/contacts/promote", {
+      const res = await panelFetch("/api/cartography/contacts/promote", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ ids: readyIds }),

@@ -1,6 +1,7 @@
 import { withAuth } from "@/lib/api/withAuth";
 import { artemisBoxConfigured, boxHealth } from "@/lib/ai/artemisBox";
 import { prisma } from "@/lib/prisma";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 /** Is the box reachable, and what has it been doing lately — the Artemis section's header. */
 export default withAuth(
@@ -9,13 +10,18 @@ export default withAuth(
       res.status(200).json({ online: false, message: "Artemis isn't configured yet.", model: null, usage: null });
       return;
     }
+    const companyId = resolveTargetCompanyId(session, req);
+    if (!companyId) {
+      res.status(400).json({ message: "companyId is required" });
+      return;
+    }
 
     const [health, runs] = await Promise.all([
       boxHealth(),
       prisma.artemisRun.groupBy({
         by: ["status"],
         where: {
-          company_id: session.companyId,
+          company_id: companyId,
           created_at: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
         },
         _count: { _all: true },

@@ -7,20 +7,33 @@ out-of-band (Supabase); the build only runs `prisma generate`.
 | Var | Status | Powers |
 |-----|--------|--------|
 | `NEXT_PUBLIC_SITE_URL` | ✅ set (`https://vierradev.com`) | tracking/click links, cron targets, deep links |
-| `CRON_SECRET` | ✅ set | **all 4 crons** — without it they 401/no-op |
+| `CRON_SECRET` | ✅ set | **all cron dispatch routes** — without it they 401/no-op. Also stored in Supabase Vault as the `cron_secret` secret so `pg_cron` can call them |
 | `DISCORD_WEBHOOK_URL` | ✅ set | reply alerts + high-intent signal alerts (+ deep link) |
 | `ENCRYPTION_SECRET` | required | AES-256-GCM for domain-SMTP passwords (module throws at import if unset) |
 | `ARTEMIS_PROVIDER` / `_BASE_URL` / `_MODEL` / `_API_KEY` | set | Artemis AI (compose/reply/rewrite/summarize/auto-draft/reply-classify) |
 | `ARTEMIS_DISABLE_THINKING` | **required for the Qwen model** | The self-hosted model reasons before answering and will otherwise spend the entire completion budget doing it — compose/reply/rewrite/classify all come back empty. Set to `1`. |
 | `GMAIL_PUBSUB_TOPIC` | not set | Gmail push (near-real-time inbound); polling covers it until set |
 
-## 2. Scheduled functions (`netlify/functions/`, auto-registered via `config.schedule`)
-- `poll-inbound.ts` — every 5 min → `/api/gmail/inbound/dispatch` → inbound processing, filters, vacation auto-reply, Artemis auto-draft, MDN read-receipts, snooze resurfacing, **reply Discord alerts**, **signal detection + auto-enrollment**.
-- `dispatch-scheduled-email.ts` — every 1 min → `/api/gmail/scheduled/dispatch` → sends due scheduled mail.
-- `dispatch-campaign-queue.ts` — every 5 min → `/api/campaigns/send-queue/dispatch` → advances active campaign sequences.
-- `gmail-watch-renew.ts` — daily → `/api/gmail/watch` → re-registers Gmail push (no-op unless `GMAIL_PUBSUB_TOPIC` set).
+## 2. Scheduled jobs (Supabase `pg_cron`, see `prisma/manual/20260901_migrate_cron_to_pg_cron.sql`)
+Used to be Netlify Scheduled Functions in `netlify/functions/`; moved to `pg_cron` + `pg_net`
+after Netlify's scheduled-function invocation limit started rejecting runs (`dispatch-scheduled-email`
+alone fires every minute). Each job is just a `net.http_post` — the dispatch routes and their
+logic are unchanged.
+- `poll-inbound` — every 5 min → `/api/gmail/inbound/dispatch` → inbound processing, filters, vacation auto-reply, Artemis auto-draft, MDN read-receipts, snooze resurfacing, **reply Discord alerts**, **signal detection + auto-enrollment**.
+- `dispatch-scheduled-email` — every 1 min → `/api/gmail/scheduled/dispatch` → sends due scheduled mail.
+- `dispatch-campaign-queue` — every 5 min → `/api/campaigns/send-queue/dispatch` → advances active campaign sequences.
+- `gmail-watch-renew` — daily → `/api/gmail/watch` → re-registers Gmail push (no-op unless `GMAIL_PUBSUB_TOPIC` set).
+- `sync-upcoming-meetings` — every 5 min → `/api/dashboard/meetings-sync/dispatch`.
+- `sync-meeting-attendance` — hourly → `/api/booking/sync-attendance/dispatch`.
+- `send-meeting-reminders` — hourly → `/api/booking/reminders/dispatch`.
+- `purge-meeting-pii` — daily 03:00 UTC → `/api/booking/retention/dispatch`.
+- `auto-assign-meetings` — every 5 min → `/api/booking/auto-assign/dispatch`.
 
-All are gated on `CRON_SECRET` + `NEXT_PUBLIC_SITE_URL`.
+All are gated on `CRON_SECRET`, read by the SQL side from Supabase Vault (`cron_secret` /
+`cron_base_url` secrets) rather than an env var — Postgres has no env vars, and the secret must
+never land in a file committed to the repo. Check job status with
+`select * from cron.job order by jobname;` / `select * from cron.job_run_details order by start_time desc limit 20;`
+in the Supabase SQL editor.
 
 ## 3. Gmail push activation (optional — GCP console)
 1. Enable Pub/Sub API in the Google Cloud project behind the Gmail OAuth app; create a topic `gmail-push`.

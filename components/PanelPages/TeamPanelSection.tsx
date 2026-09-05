@@ -7,6 +7,7 @@ import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import Modal from "@/components/ui/Modal";
+import { computePresenceStatus } from "@/lib/presence";
 
 /** Strict email-shape check shared by the team invite/edit modals below. */
 const isValidEmail = (value: string) => /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(value);
@@ -72,18 +73,7 @@ const StatusBadge: React.FC<{ lastActiveAt: string | null; isPending?: boolean }
         )
     }
 
-    const getActualStatus = () => {
-        if (!lastActiveAt) return "offline"
-
-        const lastActive = new Date(lastActiveAt)
-        const now = new Date()
-        const diffMinutes = (now.getTime() - lastActive.getTime()) / (1000 * 60)
-        if (diffMinutes > 30) return "offline"
-        if (diffMinutes > 10) return "away"
-        return "online"
-    }
-
-    const actualStatus = getActualStatus()
+    const actualStatus = computePresenceStatus(lastActiveAt)
 
     const getStatusColor = () => {
         if (actualStatus === "online") return "bg-green-100 text-green-800"
@@ -737,11 +727,12 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 }
 const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void }> = ({ onClose, onCreated }) => {
     const [email, setEmail] = useState("")
-    const [role, setRole] = useState<"admin" | "staff">("staff")
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState("")
     const [showSuccess, setShowSuccess] = useState(false)
 
+    // role model v2: every invite here is a Vierra staff hire — there is no admin-via-invite path
+    // ("admin" is set only via direct database access, see docs/ROLE_MODEL_REDESIGN.md).
     const submit = async () => {
         setSubmitting(true)
         setError("")
@@ -749,7 +740,7 @@ const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void
             const response = await fetch("/api/admin/invitations", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, role }),
+                body: JSON.stringify({ email }),
             })
             if (!response.ok) {
                 const errorData = await response.json()
@@ -835,17 +826,6 @@ const InviteTeammateModal: React.FC<{ onClose: () => void; onCreated: () => void
                             placeholder="teammate@company.com"
                             required
                         />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-2">Role</label>
-                        <select
-                            value={role}
-                            onChange={(e) => setRole(e.target.value as "admin" | "staff")}
-                            className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent bg-white"
-                        >
-                            <option value="staff">Staff</option>
-                            <option value="admin">Admin</option>
-                        </select>
                     </div>
                 </div>
 

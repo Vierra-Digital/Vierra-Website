@@ -14,7 +14,7 @@ export { escapeHtml };
 /**
  * Reusable email send core — extracted from pages/api/gmail/send.ts so it can be
  * called both by the authenticated send endpoint AND by the session-less scheduled
- * dispatcher (Netlify Scheduled Function). No req/res/session coupling: the caller
+ * dispatcher (Supabase pg_cron job). No req/res/session coupling: the caller
  * passes userId + payload + baseUrl and gets a plain result back.
  */
 

@@ -25,11 +25,11 @@ export default withAuth(
       if (file.is_deletion_protected) {
         return res.status(403).json({ message: "This file is protected and cannot be deleted." })
       }
-      // Company-scope the admin/staff path so they can't delete another company's file by id; the
-      // owner path (own file) is inherently safe.
-      const inCompany = file.company_id === session.companyId
+      // Any Vierra admin/staff may delete any client's file (see
+      // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — role is already gated to admin/staff by
+      // withAuth's `roles` option, so this is just the owner-or-staff check.
       const isOwner = file.user_id != null && uid != null && file.user_id === uid
-      const canManage = (role === "admin" || role === "staff") && inCompany
+      const canManage = role === "admin" || role === "staff"
       const canDelete = isOwner || canManage
       if (!canDelete) {
         return res.status(403).json({ message: "You can only delete files saved to you." })

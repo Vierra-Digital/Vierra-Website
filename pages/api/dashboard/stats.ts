@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { withAuth } from "@/lib/api/withAuth"
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany"
 
 type GrowthDirection = "up" | "flat" | "down"
 
@@ -48,7 +49,11 @@ function getGrowthDirection(current: number, previous: number): GrowthDirection 
 export default withAuth(async (req, res, session) => {
   try {
     const userId = session.user.id
-    const companyId = session.companyId
+    const companyId = resolveTargetCompanyId(session, req)
+    if (!companyId) {
+      res.status(400).json({ message: "companyId is required" })
+      return
+    }
     const now = new Date()
     const { start: currentMonthStart, end: currentMonthEnd } = getUtcMonthRange(now)
     const { start: previousMonthStart, end: previousMonthEnd } = getPreviousUtcMonthRange(now)

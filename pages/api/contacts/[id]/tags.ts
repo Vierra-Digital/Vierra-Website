@@ -21,8 +21,11 @@ export default withAuth(async (req, res, session) => {
     return;
   }
 
+  // Contacts are client-scoped now (see docs/ROLE_MODEL_REDESIGN.md's "v2" section) — looked up
+  // by id alone, not user_id. Tags themselves stay personal to the tagging user for now (out of
+  // the client-scoping ask).
   const contact = await prisma.contact.findFirst({
-    where: { id: contactId, user_id: userId },
+    where: { id: contactId },
   });
   if (!contact) {
     res.status(404).json({ message: "Contact not found." });

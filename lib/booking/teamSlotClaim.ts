@@ -12,7 +12,8 @@ const CLAIM_WINDOW_MS = 12 * 60 * 60 * 1000;
  * A prospect claims a time slot on a team (round-robin) booking link. No specific host is
  * assigned yet — the booking lands as status='slot_claimed' on the org's open-slots queue
  * (GET /api/booking/org-queue) for any member to claim, or gets auto-assigned after 12h
- * (netlify/functions/auto-assign-meetings.ts). See MEETING_TRACKING_QUESTIONS.md §15/§25/§29/§32.
+ * (the `auto-assign-meetings` pg_cron job, prisma/manual/20260901_migrate_cron_to_pg_cron.sql).
+ * See MEETING_TRACKING_QUESTIONS.md §15/§25/§29/§32.
  *
  * Simplification for v1: once claimed by one prospect, a time slot is considered taken for
  * that link even if multiple members would have been free at that time (same one-booking-per-

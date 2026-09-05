@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { inter } from "@/lib/fonts";
 import ArtemisGenerateWidget from "@/components/artemis/ArtemisGenerateWidget";
+import { panelFetch } from "@/lib/panelFetch";
 
 type Tab = "generate" | "review";
 
@@ -51,7 +52,7 @@ const ArtemisSection = () => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/ai/status");
+        const res = await panelFetch("/api/ai/status");
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
         // A non-2xx here is the panel refusing us (401/403), not the box being down — read the
@@ -79,7 +80,7 @@ const ArtemisSection = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/ai/review?status=${encodeURIComponent(status)}`);
+      const res = await panelFetch(`/api/ai/review?status=${encodeURIComponent(status)}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data?.message || `Could not load the queue (${res.status}).`);

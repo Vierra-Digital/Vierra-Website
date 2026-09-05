@@ -19,7 +19,7 @@ const candidate = {
 function session(userId: string) {
   vi.mocked(requireRole).mockResolvedValue({
     kind: "member", companyId: userId,
-    user: { id: userId, role: "staff", email: "staff@example.com", name: null, isPlatformAdmin: false },
+    user: { id: userId, role: "staff", email: "staff@example.com", name: null },
   });
 }
 async function call(handler: typeof list, method: string, body = {}, query = {}) {
@@ -44,37 +44,45 @@ it("lists shared candidates with read-only fields for other companies", async ()
 it("allows the contributor to edit its candidates", async () => {
   session("contributor");
   db.cartographyContact.findMany.mockResolvedValue([candidate]);
-  const res = await call(list, "GET");
+  const res = await call(list, "GET", {}, { companyId: "contributor" });
   expect(res.json).toHaveBeenCalledWith({ results: [expect.objectContaining({ canEdit: true })] });
 });
 
 it("imports the same shared candidate for two users without consuming the source", async () => {
   for (const userId of ["reader-a", "reader-b"]) {
     session(userId);
-    const res = await call(promote, "POST", { ids: [candidate.id] });
+    const res = await call(promote, "POST", { ids: [candidate.id], companyId: "target-company" });
     expect(res.json).toHaveBeenCalledWith({ results: [{ id: candidate.id, ok: true, contactId: "imported" }] });
-    expect(db.contact.create).toHaveBeenLastCalledWith({ data: expect.objectContaining({ user_id: userId, email: "lead@example.com" }) });
+    expect(db.contact.create).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({ company_id: "target-company", user_id: userId, email: "lead@example.com" }),
+    });
   }
   expect(db.cartographyContact.update).not.toHaveBeenCalled();
 });
 
 it("reuses the caller's existing contact on repeated import", async () => {
   db.contact.findFirst.mockResolvedValue({ id: "existing" });
-  const res = await call(promote, "POST", { ids: [candidate.id] });
-  expect(db.contact.findFirst).toHaveBeenCalledWith({ where: { user_id: "reader", email: "lead@example.com" } });
+  const res = await call(promote, "POST", { ids: [candidate.id], companyId: "target-company" });
+  expect(db.contact.findFirst).toHaveBeenCalledWith({ where: { company_id: "target-company", email: "lead@example.com" } });
   expect(db.contact.create).not.toHaveBeenCalled();
   expect(res.json).toHaveBeenCalledWith({ results: [{ id: candidate.id, ok: true, contactId: "existing" }] });
 });
 
 it("allows importing a candidate promoted by the legacy workflow", async () => {
   db.cartographyContact.findUnique.mockResolvedValue({ ...candidate, status: "promoted" });
-  await call(promote, "POST", { ids: [candidate.id] });
+  await call(promote, "POST", { ids: [candidate.id], companyId: "target-company" });
   expect(db.contact.create).toHaveBeenCalledOnce();
 });
 
 it.each(["rejected", "duplicate"])("does not import a %s candidate", async (status) => {
   db.cartographyContact.findUnique.mockResolvedValue({ ...candidate, status });
-  await call(promote, "POST", { ids: [candidate.id] });
+  await call(promote, "POST", { ids: [candidate.id], companyId: "target-company" });
+  expect(db.contact.create).not.toHaveBeenCalled();
+});
+
+it("requires companyId to promote a candidate", async () => {
+  const res = await call(promote, "POST", { ids: [candidate.id] });
+  expect(res.status).toHaveBeenCalledWith(400);
   expect(db.contact.create).not.toHaveBeenCalled();
 });
 

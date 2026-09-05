@@ -24,7 +24,7 @@ describe.each([
     for (const companyId of ["company-a", "company-b"]) {
       vi.mocked(requireRole).mockResolvedValue({
         kind: "member", companyId,
-        user: { id: "user", email: "staff@example.com", name: null, role: "staff", isPlatformAdmin: false },
+        user: { id: "user", email: "staff@example.com", name: null, role: "staff" },
       });
       const res = response();
       await handler({ method: "GET", query: {} } as NextApiRequest, res as unknown as NextApiResponse);

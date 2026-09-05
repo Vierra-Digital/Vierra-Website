@@ -1,6 +1,7 @@
 import { withAuth } from "@/lib/api/withAuth";
 import { prisma } from "@/lib/prisma";
 import { pct } from "@/lib/api/marketing";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 /**
  * Per-client outreach analytics for the panel (System 2).
@@ -13,7 +14,11 @@ import { pct } from "@/lib/api/marketing";
  */
 export default withAuth(
   async (req, res, session) => {
-    const companyId = session.companyId;
+    const companyId = resolveTargetCompanyId(session, req);
+    if (!companyId) {
+      res.status(400).json({ message: "companyId is required" });
+      return;
+    }
 
     if (req.method === "GET") {
       const year = Number(req.query.year);
