@@ -1789,6 +1789,13 @@ model Invitation {
   token       String        @unique
   invited_by  String?       @db.Uuid
   expires_at  DateTime      @db.Timestamptz(6)
+  /// Staff detail collected by Staff Orbital's invite dialog and copied onto the
+  /// company_memberships row when the invite is accepted (lib/auth/resolveUser.ts).
+  /// Added by prisma/manual/20260905_invitation_staff_details.sql.
+  position    String?
+  mentor_id   String?  @db.Uuid
+  time_zone   String?
+  strikes     Int      @default(0)
   accepted_at DateTime?     @db.Timestamptz(6)
   created_at  DateTime      @default(now()) @db.Timestamptz(6)
   companies   Company     @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)

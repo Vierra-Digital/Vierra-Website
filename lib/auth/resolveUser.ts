@@ -82,7 +82,7 @@ export async function resolveUser(supabase: SupabaseClient, authUser: SupabaseUs
   // Auto-accept a pending company invitation matching this email, if any.
   const { data: invitation } = await admin
     .from("invitations")
-    .select("id, company_id, role")
+    .select("id, company_id, role, position, mentor_id, time_zone, strikes")
     .eq("email", normalizedEmail)
     .is("accepted_at", null)
     .gt("expires_at", new Date().toISOString())
@@ -90,10 +90,32 @@ export async function resolveUser(supabase: SupabaseClient, authUser: SupabaseUs
     .limit(1)
     .maybeSingle();
   if (invitation) {
-    const inv = invitation as { id: string; company_id: string; role: string };
-    const { error: membershipError } = await admin
-      .from("company_memberships")
-      .insert({ company_id: inv.company_id, user_id: authUser.id, role: inv.role, status: "active" });
+    const inv = invitation as {
+      id: string;
+      company_id: string;
+      role: string;
+      position: string | null;
+      mentor_id: string | null;
+      time_zone: string | null;
+      strikes: number | null;
+    };
+    // Whatever the inviter filled in on the invite dialog lands on the membership here — this is
+    // the first moment there is a membership row to put it on.
+    const { error: membershipError } = await admin.from("company_memberships").insert({
+      company_id: inv.company_id,
+      user_id: authUser.id,
+      role: inv.role,
+      status: "active",
+      position: inv.position,
+      mentor_id: inv.mentor_id,
+      strikes: inv.strikes ?? 0,
+    });
+    if (!membershipError && inv.time_zone) {
+      // Time zone lives on user_preferences, not the membership.
+      await admin
+        .from("user_preferences")
+        .upsert({ user_id: authUser.id, time_zone: inv.time_zone }, { onConflict: "user_id" });
+    }
     if (!membershipError) {
       await admin.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", inv.id);
       return {

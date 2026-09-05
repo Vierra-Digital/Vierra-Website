@@ -11,7 +11,7 @@ export default withAuth(
     if (req.method === "GET") {
       const { data, error } = await admin
         .from("invitations")
-        .select("id, email, role, expires_at, accepted_at, created_at")
+        .select("id, email, role, expires_at, accepted_at, created_at, position, mentor_id, time_zone, strikes")
         .eq("company_id", session.companyId)
         .is("accepted_at", null)
         .order("created_at", { ascending: false });
@@ -19,7 +19,7 @@ export default withAuth(
       return res.status(200).json(data);
     }
 
-    const { email, role } = req.body ?? {};
+    const { email, role, position, mentorId, timeZone, strikes } = req.body ?? {};
     if (!email || typeof email !== "string") {
       return res.status(400).json({ message: "email is required" });
     }
@@ -27,6 +27,11 @@ export default withAuth(
       return res.status(400).json({ message: "role must be 'admin' or 'staff'" });
     }
     const normalizedEmail = email.trim().toLowerCase();
+    // Optional staff detail. Carried on the invitation and applied to the membership when it is
+    // accepted, since there is no user row to hang it on until then.
+    const strikeCount = Number.isFinite(Number(strikes)) ? Math.min(3, Math.max(0, Math.trunc(Number(strikes)))) : 0;
+    const asText = (value: unknown) =>
+      typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 
     const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(normalizedEmail, {
       redirectTo: `${resolveBaseUrl(req)}/onboarding/accept-invite`,
@@ -46,8 +51,12 @@ export default withAuth(
         token,
         invited_by: session.user.id,
         expires_at: expiresAt,
+        position: asText(position),
+        mentor_id: asText(mentorId),
+        time_zone: asText(timeZone),
+        strikes: strikeCount,
       })
-      .select("id, email, role, expires_at, accepted_at, created_at")
+      .select("id, email, role, expires_at, accepted_at, created_at, position, mentor_id, time_zone, strikes")
       .single();
     if (error) return res.status(500).json({ message: "Failed to record invitation" });
 
