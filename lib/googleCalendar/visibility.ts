@@ -8,6 +8,49 @@ export type CalendarVisibilityPreference = {
 
 const PLATFORM_PREFIX = "gcalvis:"
 const DISABLED_MARKER = "__disabled__"
+const ENABLED_MARKER = "__enabled__"
+
+/**
+ * Google's own generated calendars, which are never a source of meetings.
+ *
+ * Holiday calendars come back with ids like "en.usa#holiday@group.v.calendar.google.com" — one
+ * per connected account, all called "Holidays in United States", none of them anything a person
+ * booked. They are dropped entirely rather than merely defaulted off, so they neither clutter the
+ * settings list nor reach the dashboard through an old stored preference.
+ */
+export function isGeneratedGoogleCalendar(calendarId: string) {
+  return /#(holiday|holidays)@group\.v\.calendar\.google\.com$/i.test(calendarId.trim())
+}
+
+/**
+ * Whether a calendar is on when the user has never said either way.
+ *
+ * Google hands every account a pile of calendars it generated or the user once subscribed to —
+ * "Holidays in United States", birthdays, shared team calendars — and every one of them used to
+ * default to visible. Upcoming meetings filled with public holidays as a result.
+ *
+ * Only the account's own primary calendar is on by default. Everything else is opt-in, which also
+ * gives the right answer when several Gmail accounts are connected: each contributes its own
+ * calendar rather than the first account's holidays being the loudest thing on the dashboard.
+ */
+export function isCalendarEnabledByDefault(params: {
+  accountEmail: string
+  calendarId: string
+  primary?: boolean
+}) {
+  if (params.primary === true) return true
+  // Google gives the primary calendar the account's own address as its id.
+  return params.calendarId.trim().toLowerCase() === params.accountEmail.trim().toLowerCase()
+}
+
+/** Stored preference if there is one, otherwise the default above. */
+export function resolveCalendarVisibility(
+  visibilityMap: Map<string, boolean>,
+  params: { accountEmail: string; calendarId: string; primary?: boolean }
+) {
+  const key = `${params.accountEmail.trim().toLowerCase()}::${params.calendarId}`
+  return visibilityMap.get(key) ?? isCalendarEnabledByDefault(params)
+}
 
 function makePlatformKey(accountEmail: string, calendarId: string) {
   return `${PLATFORM_PREFIX}${encodeURIComponent(accountEmail.trim().toLowerCase())}::${encodeURIComponent(calendarId)}`
@@ -55,13 +98,7 @@ export async function upsertCalendarVisibilityPreference(params: {
   const normalizedEmail = params.accountEmail.trim().toLowerCase()
   const platform = makePlatformKey(normalizedEmail, params.calendarId)
 
-  if (params.isEnabled) {
-    await prisma.platformToken.deleteMany({
-      where: { user_id: params.userId, platform },
-    })
-    return
-  }
-
+  const marker = params.isEnabled ? ENABLED_MARKER : DISABLED_MARKER
   await prisma.platformToken.upsert({
     where: {
       user_id_platform: {
@@ -69,13 +106,11 @@ export async function upsertCalendarVisibilityPreference(params: {
         platform,
       },
     },
-    update: {
-      access_token: DISABLED_MARKER,
-    },
+    update: { access_token: marker },
     create: {
       user_id: params.userId,
       platform,
-      access_token: DISABLED_MARKER,
+      access_token: marker,
     },
   })
 }

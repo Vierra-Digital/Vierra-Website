@@ -2,9 +2,21 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { inter } from "@/lib/fonts";
+import {
+  PanelButton,
+  PanelCard,
+  PanelClearFilters,
+  PanelHeader,
+  PanelPage,
+  PanelPopover,
+  PanelSearch,
+  PanelSelect,
+} from "@/components/panel/PanelTable";
 import { useSession } from "@/lib/session-client";
 import {
   FiPlus,
+  FiFilter,
+  FiChevronDown,
   FiTrash2,
   FiCheck,
   FiX,
@@ -146,6 +158,20 @@ export default function ProjectManagement() {
   const [taskFilter, setTaskFilter] = useState("all");
   const [assigneeFilter, setAssigneeFilter] = useState("");
   const [taskBusy, setTaskBusy] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    };
+    if (isFilterOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [isFilterOpen]);
   const busyRef = useRef(false);
   const canLeave = useDraftGuard(showAddModal && Boolean(addForm.name || addForm.description || addForm.checklistText || addForm.deadline || addForm.assignedTo.length), "New task", "6", taskBusy);
   const isAdmin = (session?.user as { role?: string })?.role === "admin";
@@ -453,9 +479,11 @@ export default function ProjectManagement() {
 
   if (boards.length === 0) {
     return (
-      <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
-        <div className="flex-1 flex justify-center items-center px-6">
-          <div className="text-center max-w-md">
+      <div className={inter.className}>
+        <PanelPage>
+          <PanelHeader title="Project Tasks" />
+          <PanelCard>
+          <div className="mx-auto max-w-md px-6 py-14 text-center">
             <div className="w-16 h-16 rounded-2xl bg-[#F8F0FF] flex items-center justify-center mx-auto mb-4">
               <FiLayers className="w-8 h-8 text-[#701CC0]" />
             </div>
@@ -486,39 +514,89 @@ export default function ProjectManagement() {
               </p>
             )}
           </div>
-        </div>
+          </PanelCard>
+        </PanelPage>
       </div>
     );
   }
 
   return (
-    <div className={`w-full h-full bg-[#FAFAFA] text-[#111014] flex flex-col ${inter.className}`}>
-      <div className="flex-1 flex justify-center px-6 pt-2">
-        <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
-          <div className="w-full flex justify-between items-center mb-2">
-            <div>
-              <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Project Tasks</h1>
-              {actionError && <p role="alert" className="text-sm text-red-700">{actionError} <button type="button" onClick={() => void fetchTasks()} className="underline">Refresh board</button></p>}
-              <p role="status" className="text-sm text-gray-600">{taskBusy ? "Saving…" : ""}</p>
-              <div className="mb-3 flex flex-wrap gap-2">
-                <input aria-label="Search tasks" placeholder="Search tasks" value={taskSearch} onChange={e => setTaskSearch(e.target.value)} className="rounded border px-3 py-2 text-sm" />
-                <select aria-label="Task view" value={taskFilter} onChange={e => setTaskFilter(e.target.value)} className="rounded border px-3 py-2 text-sm"><option value="all">All tasks</option><option value="mine">My tasks</option><option value="review">Needs review</option></select>
-                <select aria-label="Assignee" value={assigneeFilter} onChange={e => setAssigneeFilter(e.target.value)} className="rounded border px-3 py-2 text-sm"><option value="">All assignees</option>{boardMembers.map(member => <option key={member.id} value={member.id}>{member.name || member.email}</option>)}</select>
+    <div className={inter.className}>
+      <PanelPage>
+          <PanelHeader title="Project Tasks">
+            <>
+              <PanelSearch
+                id="task-search"
+                label="Search Tasks"
+                placeholder="Search tasks"
+                value={taskSearch}
+                onChange={setTaskSearch}
+              />
+              <div className="relative" ref={filterRef}>
+                <PanelButton
+                  onClick={() => setIsFilterOpen(!isFilterOpen)}
+                  icon={<FiFilter className="h-4 w-4" />}
+                >
+                  Filter
+                  <FiChevronDown className={`h-3.5 w-3.5 transition-transform ${isFilterOpen ? "rotate-180" : ""}`} />
+                </PanelButton>
+                {isFilterOpen && (
+                  <PanelPopover>
+                    <h3 className="mb-3 text-[13px] font-semibold text-[#111827]">Filter</h3>
+                    <PanelSelect
+                      label="Tasks"
+                      value={taskFilter}
+                      onChange={setTaskFilter}
+                      options={[
+                        { value: "all", label: "All Tasks" },
+                        { value: "mine", label: "My Tasks" },
+                        { value: "review", label: "Needs Review" },
+                      ]}
+                    />
+                    <PanelSelect
+                      label="Assignee"
+                      value={assigneeFilter}
+                      onChange={setAssigneeFilter}
+                      options={[
+                        { value: "", label: "All Assignees" },
+                        ...boardMembers.map((member) => ({
+                          value: member.id,
+                          label: member.name || member.email || "Unnamed",
+                        })),
+                      ]}
+                    />
+                    <PanelClearFilters
+                      onClick={() => {
+                        setTaskSearch("");
+                        setTaskFilter("all");
+                        setAssigneeFilter("");
+                        setIsFilterOpen(false);
+                      }}
+                    />
+                  </PanelPopover>
+                )}
               </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               {boards.map((board) => (
                 <button
                   key={board.id}
-                  onClick={() => { void (async () => {
-                    if (!(await canLeave())) return;
-                    setTasks([]); setSelectedBoard(board);
-                    void router.replace({ pathname: router.pathname, query: { ...router.query, board: board.id } }, undefined, { shallow: true, scroll: false }).catch(() => {});
-                  })(); }}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+                  onClick={() => {
+                    void (async () => {
+                      if (!(await canLeave())) return;
+                      setTasks([]);
+                      setSelectedBoard(board);
+                      void router
+                        .replace(
+                          { pathname: router.pathname, query: { ...router.query, board: board.id } },
+                          undefined,
+                          { shallow: true, scroll: false }
+                        )
+                        .catch(() => {});
+                    })();
+                  }}
+                  className={`inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg px-3.5 text-[13px] font-medium transition-colors ${
                     selectedBoard?.id === board.id
                       ? "bg-[#701CC0] text-white shadow-sm"
-                      : "bg-white text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0]"
+                      : "border border-[#E4E0EC] bg-white text-[#374151] hover:border-[#D6CFE4] hover:bg-[#FAF9FD]"
                   }`}
                 >
                   {boardIcon(board.name)}
@@ -536,13 +614,13 @@ export default function ProjectManagement() {
                     value={newBoardName}
                     onChange={(e) => setNewBoardName(e.target.value)}
                     placeholder="New board"
-                    className="w-28 border border-[#E5E7EB] rounded-lg px-2.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                    className="h-9 w-28 rounded-lg border border-[#E4E0EC] px-2.5 text-[13px] focus:border-[#701CC0] focus:outline-none focus:ring-2 focus:ring-[#701CC0]/20"
                   />
                   <button
                     type="submit"
                     disabled={creatingBoard || !newBoardName.trim()}
                     aria-label="Create board"
-                    className="p-2 rounded-lg bg-gray-100 text-[#374151] hover:bg-gray-200 disabled:opacity-50"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E4E0EC] bg-white text-[#374151] transition-colors hover:bg-[#FAF9FD] disabled:opacity-50"
                   >
                     <FiPlus className="w-4 h-4" />
                   </button>
@@ -551,17 +629,34 @@ export default function ProjectManagement() {
               {isAdmin && (
                 <button
                   onClick={() => setShowAddModal(true)}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium transition-colors shadow-sm"
+                  className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#701CC0] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#5f17a5]"
                 >
                   <FiPlus className="w-4 h-4" />
                   New Task
                 </button>
               )}
-            </div>
-          </div>
+            </>
+          </PanelHeader>
 
-          
-          <div className="flex-1 overflow-auto pb-6 min-h-0">
+          {/* Board actions used to fail silently — a rejected status move or a save that lost a
+              concurrency check left the card where it was with no explanation. */}
+          {actionError && (
+            <p role="alert" className="mb-3 flex flex-wrap items-center gap-2 text-[13px] text-[#B42318]">
+              {actionError}
+              <button
+                type="button"
+                onClick={() => void fetchTasks()}
+                className="rounded font-medium underline underline-offset-2 hover:text-[#8f1c12]"
+              >
+                Refresh board
+              </button>
+            </p>
+          )}
+          <p role="status" className="sr-only">
+            {taskBusy ? "Saving" : ""}
+          </p>
+
+          <div className="flex-1 min-h-0">
             <div className="w-full">
               {loading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -584,7 +679,7 @@ export default function ProjectManagement() {
                   return (
                     <div
                       key={status}
-                      className={`rounded-xl border ${style.border} ${style.bg} shadow-sm min-h-[280px] flex flex-col overflow-hidden`}
+                      className={`rounded-2xl border ${style.border} ${style.bg} min-h-[280px] flex flex-col overflow-hidden`}
                     >
                       <div className={`flex items-center gap-2 px-4 py-3 border-b ${style.border} ${style.headerBg}`}>
                         <div className={`w-1 h-4 rounded-full ${style.accent}`} />
@@ -617,7 +712,7 @@ export default function ProjectManagement() {
                           return (
                             <div
                               key={task.id}
-                              className={`group relative bg-white rounded-xl overflow-hidden transition-all duration-200 cursor-pointer border border-[#E5E7EB] hover:border-[#701CC0] hover:shadow-md ${
+                              className={`group relative cursor-pointer overflow-hidden rounded-xl border border-[#E4E0EC] bg-white transition-colors hover:border-[#C7B8E0] ${
                                 isPastDeadline ? "border-l-4 border-l-red-500 bg-red-50/30" : ""
                               }`}
                               onClick={() => setSelectedTask(task)}
@@ -710,8 +805,7 @@ export default function ProjectManagement() {
               )}
             </div>
           </div>
-        </div>
-      </div>
+      </PanelPage>
 
       
       {selectedTask && (

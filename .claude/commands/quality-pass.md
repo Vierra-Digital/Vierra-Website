@@ -157,6 +157,18 @@ npm run test:coverage
   escape was a silent no-op.
 - Add new `lib/` modules to the coverage `include` in `vitest.config.mts`, or the gate doesn't cover
   them.
+
+  The `include` list takes whole files, so a module that mixes pure logic with IO cannot be added
+  without either testing the IO or splitting the file. Measured, not guessed: adding
+  `lib/gmail/sendCore.ts` drops the project to 74.92 / 69.17 / 83.63 / 74.42, and
+  `lib/gmail/scheduledSend.ts` + `lib/email/confidential.ts` together to 86 / 82.57 / 91.27 / 86 —
+  both under the thresholds.
+
+  Split the file when the split earns its keep on its own: `lib/gmail/clickTracking.ts` exists
+  because two regexes have to stay in step and were 40 lines apart, `lib/email/htmlSafety.ts`
+  because the DOM sanitizer around it cannot be unit tested at all. Do not split a file only to
+  move a coverage number — an exported, tested function is protected by its tests whether or not
+  the gate counts it. Leaving it out is the honest answer, and saying so beats a thin module.
 - There is no React testing library — component behaviour isn't unit-testable today. Verify it by
   running the app, and say which parts you couldn't cover.
 

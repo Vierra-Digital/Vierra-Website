@@ -1,90 +1,36 @@
 "use client"
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from "react"
-import { Users, FileText, RefreshCw, AlertCircle, CheckCircle2, Timer, XCircle, ArrowUpDown, ChevronUp, ChevronDown, X, Trash2, RotateCw, Link as LinkIcon } from "lucide-react"
-import { FiCheck } from "react-icons/fi"
-import { FiSearch, FiFilter, FiPlus, FiTrash2 } from "react-icons/fi"
+import {
+    ChevronDown,
+    Filter,
+    KeyRound,
+    Link as LinkIcon,
+    RefreshCw,
+    RotateCw,
+    Trash2,
+    XCircle,
+} from "lucide-react"
+import { FiCheck, FiTrash2 } from "react-icons/fi"
 import { inter } from "@/lib/fonts";
 import Image from "next/image"
-import { m as motion } from "framer-motion"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
-import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
+import RowActionMenu, { RowActionMenuDivider, RowActionMenuItem, RowActionMenuLabel } from "@/components/ui/RowActionMenu"
 import Modal from "@/components/ui/Modal"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
-import AddClientModal from "@/components/ui/AddClientModal"
-
-/**
- * Sort direction indicator for the session table headers.
- *
- * Declared at module scope, not inside the component. A component created during render is a new
- * type on every render, so React unmounts and remounts it — losing any state and defeating
- * memoisation. It reads nothing but its props, so hoisting it changes nothing about its behaviour.
- */
-const SortIcon = ({ active, dir }: { active: boolean; dir: "asc" | "desc" }) => {
-    if (!active) return <ArrowUpDown size={14} className="text-gray-400" />
-    return dir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />
-}
-
-/**
- * Segmented control letting the combined create-account modal switch between the staff form
- * (CreateUserModal) and the client wizard (AddClientModal) without either of those components
- * knowing about the other — each just renders whatever is passed as its `modeSwitcher` prop.
- */
-const CreateAccountModeSwitcher = ({ mode, onChange, onClose }: { mode: 'staff' | 'client'; onChange: (mode: 'staff' | 'client') => void; onClose: () => void }) => {
-    return (
-        <div className="mb-5 flex items-center justify-between">
-            <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close modal"
-                className="p-1.5 rounded-md text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#374151]"
-            >
-                <X className="w-4 h-4" />
-            </button>
-            <div role="tablist" aria-label="Account type" className="inline-flex rounded-lg bg-gray-100 p-1">
-                {(['staff', 'client'] as const).map((option) => (
-                    <button
-                        key={option}
-                        type="button"
-                        role="tab"
-                        aria-selected={mode === option}
-                        onClick={() => onChange(option)}
-                        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors duration-150 ${
-                            mode === option ? "bg-white text-[#701CC0] shadow-sm" : "text-[#6B7280] hover:text-[#374151]"
-                        }`}
-                    >
-                        {option === 'staff' ? 'Staff User' : 'Client'}
-                    </button>
-                ))}
-            </div>
-            <div className="w-7" aria-hidden="true" />
-        </div>
-    )
-}
-
-
-
-type ViewType = "users" | "sessions"
-
-const AdminEditorSection = () => {
-    const [currentView, setCurrentView] = useState<ViewType>("users")
-
-    return (
-        <div className="w-full h-full bg-white text-[#111014] flex flex-col">
-            <div className="flex-1 flex justify-center px-6 pt-2">
-                <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
-                    {currentView === "users" ? (
-                        <UsersPanel onManageSessions={() => setCurrentView("sessions")} />
-                    ) : (
-                        <SessionsPanel onBackToUsers={() => setCurrentView("users")} />
-                    )}
-                </div>
-            </div>
-        </div>
-    )
-}
-
-export default AdminEditorSection
+import ProfileImage from "@/components/ProfileImage"
+import {
+    PanelBadge,
+    PanelButton,
+    PanelClearFilters,
+    PanelDataTable,
+    PanelEmptyCell,
+    PanelHeader,
+    PanelPage,
+    PanelPopover,
+    PanelSearch,
+    PanelSelect,
+} from "@/components/panel/PanelTable"
 
 type ListedUser = {
     id: string
@@ -93,724 +39,19 @@ type ListedUser = {
     image: boolean
     role: string
     clientName: string | null
+    companyName: string | null
+    imageVersion?: number | string
+    isPlatformAdmin?: boolean
     isSelf?: boolean
-    kind: "member" | "client"
-}
-
-function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
-    const [users, setUsers] = useState<ListedUser[]>([])
-    const [loading, setLoading] = useState<boolean>(false)
-    const [error, setError] = useState<string>("")
-    const [showCreate, setShowCreate] = useState<boolean>(false)
-    const [createMode, setCreateMode] = useState<'staff' | 'client'>('staff')
-    const deletePending = useRef(false)
-    const resetPending = useRef(new Set<string>())
-    const [deleteBusy, setDeleteBusy] = useState(false)
-    const [deleteError, setDeleteError] = useState("")
-    const [resetSent, setResetSent] = useState<Record<string, boolean>>({})
-    const [resetSending, setResetSending] = useState<Record<string, boolean>>({})
-    const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
-    const [userToDelete, setUserToDelete] = useState<{ id: string; name: string | null; email: string | null; kind: "member" | "client" } | null>(null)
-    const [searchQuery, setSearchQuery] = useState<string>("")
-    const [currentPage, setCurrentPage] = useState<number>(0)
-    const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'staff' | 'client'>('all')
-    const [sortBy, setSortBy] = useState<'id' | 'name' | 'email' | 'role'>('role')
-    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
-    const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
-    const pageSize = 10
-    const filterRef = useRef<HTMLDivElement>(null)
-
-    const load = async () => {
-        setLoading(true)
-        setError("")
-        try {
-            const [membersRes, clientsRes] = await Promise.all([
-                fetch("/api/admin/users"),
-                fetch("/api/admin/clients"),
-            ])
-            if (!membersRes.ok) throw new Error("Failed to fetch users")
-            if (!clientsRes.ok) throw new Error("Failed to fetch clients")
-            const members: ListedUser[] = (await membersRes.json()).map((m: any) => ({ ...m, kind: "member" as const }))
-            const clients: ListedUser[] = (await clientsRes.json()).map((c: any) => ({
-                id: c.id,
-                name: c.name,
-                email: c.email,
-                image: c.image,
-                role: "client",
-                clientName: c.businessName ?? null,
-                isSelf: false,
-                kind: "client" as const,
-            }))
-            setUsers([...members, ...clients])
-        } catch (e: any) {
-            setError(e?.message || "Failed to load users")
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    useEffect(() => {
-        // Loading the user list on mount; the loader flips its own loading and error state after awaiting.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        load()
-    }, [])
-
-    const sendPasswordReset = async (userId: string) => {
-        if (resetPending.current.has(userId)) return
-        resetPending.current.add(userId)
-        setResetSent(prev => ({ ...prev, [userId]: false }))
-        setResetSending((prev) => ({ ...prev, [userId]: true }))
-        try {
-            const r = await fetch("/api/admin/userPassword", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id: userId }),
-            })
-            if (r.ok) {
-                setResetSent((prev) => ({ ...prev, [userId]: true }))
-            } else {
-                // A non-ok response used to fall through silently, so a failed send looked identical
-                // to a successful one — the admin had no way to know the email never went out.
-                const body = await r.json().catch(() => ({}))
-                setError(body?.message || `Could not send the reset link (HTTP ${r.status}).`)
-            }
-        } catch {
-            setError("Could not send the reset link — the request failed.")
-        } finally {
-            resetPending.current.delete(userId)
-            setResetSending((prev) => ({ ...prev, [userId]: false }))
-        }
-    }
-
-
-
-
-    const deleteUser = async (userId: string) => {
-        const user = users.find(u => u.id === userId)
-        if (!user) return
-        if (user.email?.toLowerCase() === "business@alexshick.com") {
-            alert("This user cannot be removed.")
-            return
-        }
-
-        setUserToDelete({ id: userId, name: user.name, email: user.email, kind: user.kind })
-        setDeleteModalOpen(true)
-    }
-
-    const confirmDeleteUser = async () => {
-        if (!userToDelete || deletePending.current) return
-        deletePending.current = true
-        setDeleteBusy(true)
-        setDeleteError("")
-
-        try {
-            const endpoint = userToDelete.kind === "client"
-                ? `/api/admin/deleteClient?clientId=${encodeURIComponent(userToDelete.id)}`
-                : `/api/admin/users?id=${encodeURIComponent(userToDelete.id)}`
-            const response = await fetch(endpoint, { method: "DELETE" })
-            if (!response.ok) {
-                const body = await response.json().catch(() => ({}))
-                throw new Error(body.message || "Could not delete this user.")
-            }
-            setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id))
-            setDeleteModalOpen(false)
-            setUserToDelete(null)
-        } catch (e) {
-            setDeleteError(e instanceof Error ? e.message : "Deletion could not be confirmed. Refresh before retrying.")
-        } finally { deletePending.current = false; setDeleteBusy(false) }
-    }
-
-    const filteredUsers = useMemo(() => {
-        let filtered = users
-        if (roleFilter !== 'all') {
-            filtered = filtered.filter(u => u.role === roleFilter)
-        }
-        if (searchQuery.trim()) {
-            const q = searchQuery.toLowerCase()
-            filtered = filtered.filter(u => 
-                (u.name?.toLowerCase().includes(q)) ||
-                (u.email?.toLowerCase().includes(q)) ||
-                (u.clientName?.toLowerCase().includes(q)) ||
-                (u.role?.toLowerCase().includes(q))
-            )
-        }
-        const sorted = [...filtered].sort((a, b) => {
-            let comparison = 0
-            if (sortBy === 'id') {
-                comparison = a.id.localeCompare(b.id)
-            } else if (sortBy === 'name') {
-                comparison = (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
-            } else if (sortBy === 'email') {
-                comparison = (a.email || '').localeCompare(b.email || '', undefined, { sensitivity: 'base' })
-            } else if (sortBy === 'role') {
-                comparison = (a.role || '').localeCompare(b.role || '', undefined, { sensitivity: 'base' })
-            }
-            return sortDir === 'asc' ? comparison : -comparison
-        })
-        
-        return sorted
-    }, [users, searchQuery, roleFilter, sortBy, sortDir])
-
-    const paginatedUsers = filteredUsers.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
-    const totalPages = Math.ceil(filteredUsers.length / pageSize)
-
-                            return (
-        <>
-            <div className="w-full flex justify-between items-center mb-2">
-                <div>
-                    <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">User Management</h1>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
-                        <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
-                        <label htmlFor="users-search" className="sr-only">Search Users</label>
-                                                    <input
-                            id="users-search"
-                            type="search"
-                            value={searchQuery}
-                            onChange={(e) => {
-                                setSearchQuery(e.target.value)
-                                setCurrentPage(0)
-                            }}
-                            placeholder="Search Users"
-                            className="w-64 md:w-80 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none"
-                        />
-                    </div>
-                    <div className="relative" ref={filterRef} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsFilterOpen(false) }} tabIndex={-1}>
-                                                    <button
-                            type="button"
-                            onClick={() => setIsFilterOpen((v) => !v)}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
-                        >
-                            <FiFilter className="w-4 h-4" />
-                            <span className="text-sm font-medium">Filter</span>
-                            <svg 
-                                className={`w-4 h-4 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`}
-                                fill="none" 
-                                stroke="currentColor" 
-                                viewBox="0 0 24 24"
-                            >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                                                    </button>
-                        {isFilterOpen && (
-                            <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#E5E7EB] py-4 z-50">
-                                <div className="px-5">
-                                    <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
-                                    
-                                    
-                                    <div className="mb-5">
-                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By</label>
-                                        <div className="relative">
-                                            <select
-                                                value={sortBy}
-                                                onChange={(e) => {
-                                                    setSortBy(e.target.value as 'id' | 'name' | 'email' | 'role')
-                                                    setCurrentPage(0)
-                                                }}
-                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
-                                            >
-                                                <option value="name">Name</option>
-                                                <option value="email">Email</option>
-                                                <option value="role">Role</option>
-                                            </select>
-                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    
-                                    <div className="mb-5">
-                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Role</label>
-                                        <div className="relative">
-                                            <select
-                                                value={roleFilter}
-                                                onChange={(e) => {
-                                                    setRoleFilter(e.target.value as 'all' | 'admin' | 'staff' | 'client')
-                                                    setCurrentPage(0)
-                                                }}
-                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
-                                            >
-                                                <option value="all">All Roles</option>
-                                                <option value="admin">Admin</option>
-                                                <option value="staff">Staff</option>
-                                                <option value="client">Client</option>
-                                            </select>
-                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    
-                                    <div className="mb-4">
-                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Order</label>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => {
-                                                    setSortDir("asc")
-                                                    setCurrentPage(0)
-                                                }}
-                                                className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                    sortDir === "asc" 
-                                                        ? "bg-[#701CC0] text-white shadow-sm" 
-                                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                                }`}
-                                            >
-                                                Ascending
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setSortDir("desc")
-                                                    setCurrentPage(0)
-                                                }}
-                                                className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                    sortDir === "desc" 
-                                                        ? "bg-[#701CC0] text-white shadow-sm" 
-                                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                                }`}
-                                            >
-                                                Descending
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    
-                                    <div className="pt-3 border-t border-[#E5E7EB]">
-                                        <button
-                                            onClick={() => {
-                                                setSearchQuery("")
-                                                setRoleFilter("all")
-                                                setSortBy("role")
-                                                setSortDir("asc")
-                                                setCurrentPage(0)
-                                                setIsFilterOpen(false)
-                                            }}
-                                            className="w-full text-xs py-2 px-3 rounded-lg font-medium text-[#6B7280] bg-gray-50 hover:bg-gray-100 hover:text-[#374151] transition-colors duration-200"
-                                        >
-                                            Clear All Filters
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                                                    <button
-                        onClick={onManageSessions}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
-                    >
-                        <FileText size={16} />
-                        Manage Sessions
-                    </button>
-                    <button
-                        onClick={() => { setCreateMode('staff'); setShowCreate(true) }}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium"
-                    >
-                        <FiPlus className="w-4 h-4" />
-                        Create Account
-                                                    </button>
-                                                </div>
-            </div>
-
-            {loading ? (
-                <div className="flex items-center justify-center py-12">
-                    <LoadingSpinner label="Loading User Data..." />
-                </div>
-            ) : (
-                <>
-                    {!loading && filteredUsers.length === 0 && (
-                        <div className="text-center py-12">
-                            <div className="w-full h-full flex flex-col items-center justify-center text-center">
-                                <motion.div
-                                    initial={{ opacity: 0, scale: 0.8 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ duration: 0.5, ease: "easeOut" }}
-                                >
-                                    <Image 
-                                        src="/assets/no-client.png" 
-                                        alt="No users" 
-                                        width={224} 
-                                        height={224} 
-                                        className="w-56 h-auto mb-3" 
-                                    />
-                                </motion.div>
-                                <p className="text-sm text-gray-500 mb-3">
-                                    {searchQuery ? "No users match your search." : "No users found."}
-                                </p>
-                                    <button
-                                    onClick={() => { setCreateMode('staff'); setShowCreate(true) }}
-                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm font-medium hover:bg-[#5f17a5] transition-colors duration-200 shadow-sm"
-                                                    >
-                                    <FiPlus className="w-4 h-4" />
-                                    Create Account
-                                                    </button>
-                                                </div>
-                                        </div>
-                    )}
-
-                    {!loading && filteredUsers.length > 0 && (
-                        <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                                        <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Name</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Email</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Password Reset</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Role</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Manage</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-[#E5E7EB]">
-                                        {paginatedUsers.map((u) => {
-                            return (
-                                                <tr key={u.id} className="hover:bg-purple-50">
-                                                    <td className="px-4 py-4 text-sm font-medium text-[#111827]">{u.name ?? "-"}</td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{u.email ?? "-"}</td>
-                                                    <td className="px-4 py-4">
-                                        {u.kind === "member" ? (
-                                            <div className="flex items-center gap-3">
-                                                <button
-                                                    onClick={() => sendPasswordReset(u.id)}
-                                                    disabled={resetSending[u.id]}
-                                                    className="px-2 py-1 rounded-md text-xs bg-gray-100 hover:bg-gray-200 text-[#374151] disabled:opacity-50"
-                                                >
-                                                    {resetSending[u.id] ? "Sending…" : "Send reset email"}
-                                                </button>
-                                                {resetSent[u.id] && <span className="text-xs text-green-600">Sent</span>}
-                                            </div>
-                                        ) : (
-                                            <span className="text-xs text-[#9CA3AF]">—</span>
-                                        )}
-                                    </td>
-                                                    <td className="px-4 py-4">
-                                                        {/* role is not editable here — "admin" is set only via direct database
-                                                            access (see docs/ROLE_MODEL_REDESIGN.md), and every other Vierra
-                                                            teammate is always "staff"; client rows come from the clients table,
-                                                            not company_memberships. */}
-                                                        <span
-                                                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                                                                u.role === "admin" ? "bg-purple-100 text-purple-700" : u.role === "client" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-700"
-                                                            }`}
-                                                        >
-                                                            {u.role === "admin" ? "Admin" : u.role === "client" ? "Client" : "Staff"}
-                                                        </span>
-                                    </td>
-                                                    <td className="px-4 py-4">
-                                        <div className="flex items-center gap-2">
-                                                            {!u.isSelf && u.role !== "admin" && (
-                                                                <button
-                                                                    onClick={() => deleteUser(u.id)}
-                                                                    disabled={u.email?.toLowerCase() === "business@alexshick.com"}
-                                                                    className="inline-flex items-center gap-1 px-3 py-1 rounded-md text-xs bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                                >
-                                                                    Remove
-                                                                </button>
-                                                            )}
-                                        </div>
-                                    </td>
-                                </tr>
-                            )
-                        })}
-                    </tbody>
-                </table>
-            </div>
-                        </div>
-                    )}
-
-                    {!loading && filteredUsers.length > 0 && (
-                        <div className="mt-4 pt-4 text-xs text-[#677489]">
-                            <div className="w-full flex items-center justify-center">
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
-                                        disabled={currentPage === 0}
-                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Previous
-                                    </button>
-                                    <span className="text-xs text-[#6B7280]">
-                                        Page {currentPage + 1} of {totalPages}
-                                    </span>
-                                    <button
-                                        onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
-                                        disabled={currentPage >= totalPages - 1}
-                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Next
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </>
-            )}
-
-            {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
-
-            {showCreate && createMode === 'staff' && (
-                <CreateUserModal
-                    modeSwitcher={<CreateAccountModeSwitcher mode={createMode} onChange={setCreateMode} onClose={() => setShowCreate(false)} />}
-                    onClose={() => setShowCreate(false)}
-                    onCreated={() => { setShowCreate(false); load(); }}
-                />
-            )}
-
-            {showCreate && createMode === 'client' && (
-                <AddClientModal
-                    isOpen={showCreate}
-                    modeSwitcher={<CreateAccountModeSwitcher mode={createMode} onChange={setCreateMode} onClose={() => setShowCreate(false)} />}
-                    onClose={() => setShowCreate(false)}
-                    onCreated={() => load()}
-                />
-            )}
-
-            <ConfirmActionModal
-                isOpen={deleteModalOpen}
-                title={userToDelete?.kind === "client" ? "Remove Client" : "Remove User"}
-                message={
-                    <>
-                        Are you sure you want to remove{" "}
-                        <span className="font-semibold text-[#111827]">{userToDelete?.name || userToDelete?.email || ""}</span>? This action is permanent and cannot be undone. All associated data will be removed.
-                    </>
-                }
-                confirmLabel={userToDelete?.kind === "client" ? "Remove Client" : "Remove User"}
-                busy={deleteBusy}
-                error={deleteError}
-                onConfirm={confirmDeleteUser}
-                onCancel={() => {
-                    setDeleteModalOpen(false)
-                    setUserToDelete(null)
-                }}
-            />
-
-        </>
-    )
-}
-
-function CreateUserModal({ onClose, onCreated, modeSwitcher }: { onClose: () => void; onCreated: () => void; modeSwitcher?: React.ReactNode }) {
-    const [name, setName] = useState<string>("")
-    const [email, setEmail] = useState<string>("")
-    const [password, setPassword] = useState<string>("")
-    const [submitting, setSubmitting] = useState<boolean>(false)
-    const [error, setError] = useState<string>("")
-    const [showSuccess, setShowSuccess] = useState<boolean>(false)
-    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-
-    const isValidEmail = (email: string) => {
-        const emailRegex = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i
-        return emailRegex.test(email)
-    }
-
-    const validateForm = () => {
-        const errors: Record<string, string> = {}
-
-        if (!name.trim()) {
-            errors.name = "Name is required"
-        }
-
-        if (!email.trim()) {
-            errors.email = "Email is required"
-        } else if (!isValidEmail(email)) {
-            errors.email = "Please enter a valid email address."
-        }
-
-        if (!password.trim()) {
-            errors.password = "Password is required"
-        }
-
-        setFieldErrors(errors)
-        return Object.keys(errors).length === 0
-    }
-
-    const submit = async () => {
-        if (!validateForm()) {
-            return
-        }
-
-        setSubmitting(true)
-        setError("")
-        try {
-            const r = await fetch("/api/admin/users", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, email, password }),
-            })
-            if (!r.ok) throw new Error((await r.json())?.message || "Failed to create user")
-            setShowSuccess(true)
-        } catch (e: any) {
-            setError(e?.message || "Failed to create user")
-        } finally {
-            setSubmitting(false)
-        }
-    }
-
-    const handleFieldChange = (field: string, value: string) => {
-        setFieldErrors((prev) => ({ ...prev, [field]: "" }))
-        setError("")
-        if (field === "name") setName(value)
-        else if (field === "email") setEmail(value)
-        else if (field === "password") setPassword(value)
-    }
-
-    if (showSuccess) {
-    return (
-            <Modal
-                zIndexClass="z-[200]"
-                backdropClassName="bg-black/50 backdrop-blur-sm"
-                cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
-                label="User Created"
-                onClose={() => {
-                    setShowSuccess(false)
-                    onCreated()
-                    onClose()
-                }}
-            >
-                    <div className="flex flex-col items-center text-center">
-                        <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
-                            <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
-                            <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
-                                    <FiCheck className="h-6 w-6" />
-                                </span>
-                            </span>
-                </div>
-                        <h3 className="text-xl font-semibold text-[#111827] mb-2">User Created Successfully!</h3>
-                        <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
-                            The user has been created successfully and can now access the system.
-                        </p>
-                        <button
-                            className="w-full rounded-lg px-4 py-2 bg-[#701CC0] text-white hover:bg-[#5f17a5] text-sm font-medium transition-colors"
-                            onClick={() => {
-                                setShowSuccess(false)
-                                onCreated()
-                                onClose()
-                            }}
-                        >
-                            Done
-                    </button>
-                </div>
-            </Modal>
-    )
-    }
-
-    return (
-        <Modal
-            zIndexClass="z-[200]"
-            backdropClassName="bg-black/50 backdrop-blur-sm"
-            cardClassName="w-full max-w-2xl rounded-lg bg-white shadow-xl border border-[#E5E7EB] p-6"
-            label="Create User"
-            onClose={onClose}
-        >
-                {modeSwitcher}
-                <div className="flex items-center gap-3 mb-5">
-                    <div className="w-10 h-10 rounded-full bg-[#701CC0]/10 text-[#701CC0] inline-flex items-center justify-center">
-                        <FiPlus className="w-5 h-5" />
-                    </div>
-                    <div>
-                        <h2 className="text-xl font-semibold text-[#111827]">Create User</h2>
-                        <p className="text-sm text-[#6B7280] mt-0.5">Add a new user to the system</p>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                        <label htmlFor="create-user-name" className="block text-sm font-medium text-[#374151] mb-1">
-                            Name <span className="text-red-500">*</span>
-                        </label>
-                        <input 
-                            id="create-user-name"
-                            type="text" 
-                            value={name} 
-                            onChange={(e) => handleFieldChange("name", e.target.value)} 
-                            placeholder="Enter Name"
-                            className={`w-full rounded-lg border px-3 py-2 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0] ${
-                                fieldErrors.name ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB]'
-                            }`}
-                        />
-                        {fieldErrors.name ? <p className="mt-1 text-xs text-red-600">{fieldErrors.name}</p> : null}
-                    </div>
-
-                    {/* Every new user created here is staff — "admin" is set only via direct
-                        database access (see docs/ROLE_MODEL_REDESIGN.md), never through this form. */}
-
-                    <div className="md:col-span-2">
-                        <label htmlFor="create-user-email" className="block text-sm font-medium text-[#374151] mb-1">
-                            Email <span className="text-red-500">*</span>
-                        </label>
-                        <input 
-                            id="create-user-email"
-                            type="email" 
-                            value={email} 
-                            onChange={(e) => handleFieldChange("email", e.target.value)} 
-                            placeholder="Enter Email"
-                            className={`w-full rounded-lg border px-3 py-2 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0] ${
-                                fieldErrors.email || (email && !isValidEmail(email))
-                                    ? 'border-red-500 bg-red-50' 
-                                    : 'border-[#E5E7EB]'
-                            }`}
-                        />
-                        {fieldErrors.email ? <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p> : null}
-                        {email && !fieldErrors.email && !isValidEmail(email) ? (
-                            <p className="mt-1 text-xs text-red-600">Please enter a valid email address.</p>
-                        ) : null}
-                    </div>
-
-                    <div className="md:col-span-2">
-                        <label htmlFor="create-user-password" className="block text-sm font-medium text-[#374151] mb-1">
-                            Password <span className="text-red-500">*</span>
-                        </label>
-                        <input 
-                            id="create-user-password"
-                            type="password" 
-                            value={password} 
-                            onChange={(e) => handleFieldChange("password", e.target.value)} 
-                            placeholder="Enter Password"
-                            className={`w-full rounded-lg border px-3 py-2 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0] ${
-                                fieldErrors.password ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB]'
-                            }`}
-                        />
-                        {fieldErrors.password ? <p className="mt-1 text-xs text-red-600">{fieldErrors.password}</p> : null}
-                    </div>
-                </div>
-
-                {error ? (
-                    <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
-                ) : null}
-
-                <div className="flex items-center justify-between mt-5">
-                    <button 
-                        onClick={onClose}
-                        disabled={submitting}
-                        className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        Cancel
-                    </button>
-                    <button 
-                        disabled={submitting || !name.trim() || !email.trim() || !password.trim() || (email ? !isValidEmail(email) : false)} 
-                        onClick={submit} 
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm font-medium hover:bg-[#5f17a5] disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {submitting ? (
-                            <>
-                                <RefreshCw className="w-4 h-4 animate-spin" />
-                                Creating...
-                            </>
-                        ) : (
-                            <>
-                                <FiPlus className="w-4 h-4" />
-                                Create User
-                            </>
-                        )}
-                    </button>
-                </div>
-        </Modal>
-    )
+    hasAccount?: boolean
+    lastLoginAt?: string | null
+    lastLoginIp?: string | null
+    pendingInvite?: {
+        id: string
+        invitedAt: string
+        expiresAt: string
+        expired: boolean
+    } | null
 }
 
 type SessionStatus = "pending" | "in_progress" | "completed" | "expired" | "canceled"
@@ -821,7 +62,6 @@ type SessionRow = {
     clientEmail: string
     businessName: string
     createdAt: number
-    expiresAt?: number | null
     submittedAt: number | null
     lastUpdatedAt: number | null
     status: SessionStatus
@@ -829,134 +69,274 @@ type SessionRow = {
     platforms?: string[]
 }
 
-function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
+/** A user with the session that belongs to them, if any. See UsersPanel's `rows` for the join. */
+type MergedRow = ListedUser & { session: SessionRow | null; isSessionOnly: boolean }
+
+const SESSION_LABELS: Record<SessionStatus, string> = {
+    pending: "Not Started",
+    in_progress: "In Progress",
+    completed: "Completed",
+    expired: "Expired",
+    canceled: "Canceled",
+}
+
+const SESSION_TONES: Record<SessionStatus, "warning" | "info" | "positive" | "danger" | "neutral"> = {
+    pending: "warning",
+    in_progress: "info",
+    completed: "positive",
+    expired: "danger",
+    canceled: "neutral",
+}
+
+/** Sort order for the Session column: earliest in the funnel first, dead sessions last. */
+const SESSION_ORDER: Record<SessionStatus, number> = {
+    pending: 1,
+    in_progress: 2,
+    completed: 3,
+    expired: 4,
+    canceled: 5,
+}
+
+type RoleKey = "admin" | "staff" | "client"
+
+/** The API stores a client's role as either "user" or "client"; the table only ever shows one. */
+const normalizeRole = (role: string): RoleKey =>
+    role === "admin" ? "admin" : role === "staff" ? "staff" : "client"
+
+const ROLE_LABELS: Record<RoleKey, string> = { admin: "Admin", staff: "Staff", client: "Client" }
+const ROLE_TONES: Record<RoleKey, "accent" | "info" | "neutral"> = {
+    admin: "accent",
+    staff: "info",
+    client: "neutral",
+}
+/** Loopback addresses say "localhost" — "::1" is not an address anyone needs to read as one. */
+const formatIp = (ip?: string | null) => {
+    if (!ip) return null
+    const trimmed = ip.trim()
+    if (trimmed === "::1" || trimmed === "127.0.0.1" || trimmed.startsWith("::ffff:127.")) return "localhost"
+    return trimmed
+}
+
+/**
+ * "3m Ago" up to a week, then a date.
+ *
+ * `now` is passed in rather than read from the clock inside, so the ticking state below is what
+ * re-renders these labels. Reading Date.now() here would make the function correct and the screen
+ * still wrong — React has no reason to re-render just because time passed.
+ */
+const formatRelative = (iso: string | null | undefined, now: number) => {
+    if (!iso) return null
+    const then = new Date(iso).getTime()
+    if (!Number.isFinite(then)) return null
+    const minutes = Math.floor((now - then) / 60000)
+    if (minutes < 1) return "Just Now"
+    if (minutes < 60) return `${minutes}m Ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h Ago`
+    const days = Math.floor(hours / 24)
+    if (days < 7) return `${days}d Ago`
+    return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+}
+
+const AdminEditorSection = () => <UsersPanel />
+
+export default AdminEditorSection
+
+/**
+ * One page, not two.
+ *
+ * Sessions used to be a second full-screen view behind a "Manage Sessions" button, with its own
+ * search, its own filter, its own table and its own pagination — a duplicate of this page listing
+ * the same people by a different key. A session belongs to a client, and a client is a row here,
+ * so the session is now a column and its actions live in that row's menu. The sweep that expires
+ * stale sessions moves to the toolbar, where the rest of the page-level actions already are.
+ */
+function UsersPanel() {
+    const [users, setUsers] = useState<ListedUser[]>([])
     const [sessions, setSessions] = useState<SessionRow[]>([])
     const [loading, setLoading] = useState<boolean>(false)
     const [error, setError] = useState<string>("")
+    const [resetSending, setResetSending] = useState<Record<string, boolean>>({})
+    const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
+    const [userToDelete, setUserToDelete] = useState<{ id: string; name: string | null; email: string | null } | null>(null)
+    const [rescindingInvite, setRescindingInvite] = useState<string | null>(null)
+    // Drives the relative-time labels. Seeded at 0 so the server and the first client render agree
+    // — reading the clock during render is what produces a hydration mismatch — and set for real
+    // in the effect below.
+    const [now, setNow] = useState(0)
+    const [deleteError, setDeleteError] = useState<string>("")
+    const [deletingUser, setDeletingUser] = useState<boolean>(false)
     const [searchQuery, setSearchQuery] = useState<string>("")
     const [currentPage, setCurrentPage] = useState<number>(0)
+    const [roleFilter, setRoleFilter] = useState<"all" | "admin" | "staff" | "user">("all")
+    const [sessionFilter, setSessionFilter] = useState<"all" | "none" | SessionStatus>("all")
+    const [sortBy, setSortBy] = useState<"name" | "email" | "role" | "session">("role")
+    const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
+    const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
+    const [resetResult, setResetResult] = useState<{ success: boolean; email: string | null } | null>(null)
+
+    // Session-side state, carried over wholesale from the view this page absorbed.
     const [expiring, setExpiring] = useState<boolean>(false)
     const [showUpdateSessionsModal, setShowUpdateSessionsModal] = useState<boolean>(false)
     const [updateSessionsSuccess, setUpdateSessionsSuccess] = useState<boolean>(false)
     const [updatedCount, setUpdatedCount] = useState<number>(0)
-    const [statusFilter, setStatusFilter] = useState<'all' | SessionStatus>('all')
-    const [isStatusFilterOpen, setIsStatusFilterOpen] = useState<boolean>(false)
-    const sessionMutation = useRef(false)
-    const [sessionDeleteError, setSessionDeleteError] = useState("")
-    const [deletingSession, setDeletingSession] = useState<string | null>(null)
-    const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
     const [sessionToDelete, setSessionToDelete] = useState<{ token: string; clientName: string } | null>(null)
+    const [deleteSessionModalOpen, setDeleteSessionModalOpen] = useState<boolean>(false)
+    const [deletingSession, setDeletingSession] = useState<string | null>(null)
     const [renewingSession, setRenewingSession] = useState<string | null>(null)
+    const [loadingLink, setLoadingLink] = useState<string | null>(null)
     const [getLinkModalOpen, setGetLinkModalOpen] = useState<boolean>(false)
     const [copiedLink, setCopiedLink] = useState<string | null>(null)
     const [renewModalOpen, setRenewModalOpen] = useState<boolean>(false)
     const [renewSuccess, setRenewSuccess] = useState<boolean>(false)
-    const statusFilterRef = useRef<HTMLDivElement>(null)
-    const updateSessionsModalRef = useRef<HTMLDivElement>(null)
-    const [sessionLinks, setSessionLinks] = useState<Record<string, { link: string; loading: boolean }>>({})
-    const pageSize = 10
-    const [sortKey, setSortKey] = useState<"client" | "business" | "status" | "created" | "updated">("client")
-    const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
 
+    // Twenty-five rows a page: this list holds staff, clients and pending invites together, so ten
+    // meant paging through a company that fits on one screen.
+    const pageSize = 25
+    const filterRef = useRef<HTMLDivElement>(null)
+
+    useEffect(() => {
+        if (!isFilterOpen) return
+        const onClickOutside = (event: MouseEvent) => {
+            if (filterRef.current && !filterRef.current.contains(event.target as Node)) setIsFilterOpen(false)
+        }
+        document.addEventListener("mousedown", onClickOutside)
+        return () => document.removeEventListener("mousedown", onClickOutside)
+    }, [isFilterOpen])
+
+    /**
+     * Both lists in one pass. They are independent requests, so they go out together rather than
+     * one after the other — and a failing session list must not blank the user list, which is the
+     * reason this page exists.
+     */
     const load = useCallback(async () => {
         setLoading(true)
         setError("")
-        try {
-            const r = await fetch("/api/session/listClientSessions")
-            if (!r.ok) throw new Error(`Failed to fetch (${r.status})`)
-            const data = await r.json()
-            if (!Array.isArray(data)) throw new Error("Session list response was incomplete. Try again.")
-            setSessions(data)
-        } catch (e: any) {
-            setError(e?.message || "Failed to load sessions")
-        } finally {
-            setLoading(false)
+        const [userResult, sessionResult] = await Promise.allSettled([
+            fetch("/api/admin/users").then(async (r) => {
+                if (!r.ok) throw new Error(`Failed to fetch users (${r.status})`)
+                return (await r.json()) as ListedUser[]
+            }),
+            fetch("/api/session/listClientSessions").then(async (r) => {
+                if (!r.ok) throw new Error(`Failed to fetch sessions (${r.status})`)
+                return (await r.json()) as SessionRow[]
+            }),
+        ])
+        if (userResult.status === "fulfilled") {
+            setUsers(Array.isArray(userResult.value) ? userResult.value : [])
+        } else {
+            setError(userResult.reason?.message || "Failed to load users")
         }
+        if (sessionResult.status === "fulfilled") {
+            setSessions(Array.isArray(sessionResult.value) ? sessionResult.value : [])
+        } else {
+            setError("Sessions could not be loaded, so the session column is empty.")
+        }
+        setLoading(false)
     }, [])
 
     useEffect(() => {
-        // Loading the session list on mount; the loader flips its own loading and error state after awaiting.
+        // Loading both lists on mount; the loader flips its own loading and error state after awaiting.
         // eslint-disable-next-line react-hooks/set-state-in-effect
         load()
     }, [load])
 
-    const statusOrder = useMemo<Record<SessionStatus, number>>(() => ({
-        pending: 1,
-        in_progress: 2,
-        completed: 3,
-        expired: 4,
-        canceled: 5,
-    }), [])
+    /**
+     * Keeps Last Login live, the same way the dashboard's staff panel keeps presence live: tick the
+     * clock so "5m Ago" becomes "6m Ago" without a reload, and re-read the list on the same beat so
+     * a sign-in that happened while this page was open turns up.
+     *
+     * Only while the tab is visible — a backgrounded admin page polling every minute is waste, and
+     * it refreshes on return rather than waiting out the rest of the interval.
+     */
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setNow(Date.now())
+        const tick = () => {
+            if (document.visibilityState !== "visible") return
+            setNow(Date.now())
+            void load()
+        }
+        const timer = window.setInterval(tick, 60_000)
+        document.addEventListener("visibilitychange", tick)
+        return () => {
+            window.clearInterval(timer)
+            document.removeEventListener("visibilitychange", tick)
+        }
+    }, [load])
 
-    const sorted = useMemo(() => {
-        const arr = [...sessions]
-        const cmp = (a: SessionRow, b: SessionRow) => {
-            let v = 0
-            if (sortKey === "client") {
-                v = a.clientName.localeCompare(b.clientName, undefined, { sensitivity: "base" })
-            } else if (sortKey === "business") {
-                v = a.businessName.localeCompare(b.businessName, undefined, { sensitivity: "base" })
-            } else if (sortKey === "status") {
-                v = (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99)
-            } else if (sortKey === "created") {
-                v = a.createdAt - b.createdAt
-            } else if (sortKey === "updated") {
-                const av = a.lastUpdatedAt ?? -Infinity
-                const bv = b.lastUpdatedAt ?? -Infinity
-                v = av - bv
+    const sendPasswordReset = async (userId: string, email: string | null) => {
+        setResetSending((prev) => ({ ...prev, [userId]: true }))
+        setError("")
+        try {
+            const r = await fetch("/api/admin/userPassword", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: userId }),
+            })
+            if (r.ok) {
+                setResetResult({ success: true, email })
+            } else {
+                // A non-ok response used to fall through silently, so a failed send looked identical
+                // to a successful one — the admin had no way to know the email never went out.
+                const body = await r.json().catch(() => ({}))
+                setError(body?.message || `Could not send the reset link (HTTP ${r.status}).`)
+                setResetResult({ success: false, email })
             }
-            return sortDir === "asc" ? v : -v
-        }
-        arr.sort(cmp)
-        return arr
-    }, [sessions, sortKey, sortDir, statusOrder])
-
-    const toggleSort = (key: typeof sortKey) => {
-        if (key === sortKey) {
-            setSortDir((d) => (d === "asc" ? "desc" : "asc"))
-        } else {
-            setSortKey(key)
-            setSortDir(key === "created" || key === "updated" ? "desc" : "asc")
+        } catch {
+            setResetResult({ success: false, email })
+        } finally {
+            setResetSending((prev) => ({ ...prev, [userId]: false }))
         }
     }
 
-
-
-    const formatDate = (ts?: number | null) => {
-        if (!ts) return "N/A"
-        const d = new Date(ts)
-        return d.toLocaleDateString(undefined, { year: "numeric", month: "2-digit", day: "2-digit" })
+    const deleteUser = (userId: string) => {
+        const user = users.find((u) => u.id === userId)
+        if (!user) return
+        setUserToDelete({ id: userId, name: user.name, email: user.email })
+        setDeleteError("")
+        setDeleteModalOpen(true)
     }
 
-    const statusBadge = (status: SessionStatus) => {
-        const common = "inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium"
-        switch (status) {
-            case "pending":
-                return (
-                    <span className={`${common} bg-yellow-50 text-yellow-700 border border-yellow-200`}>
-                        <AlertCircle size={14} /> Not Started
-                    </span>
-                )
-            case "in_progress":
-                return (
-                    <span className={`${common} bg-blue-50 text-blue-700 border border-blue-200`}>
-                        <Timer size={14} /> In Progress
-                    </span>
-                )
-            case "completed":
-                return (
-                    <span className={`${common} bg-green-50 text-green-700 border border-green-200`}>
-                        <CheckCircle2 size={14} /> Completed
-                    </span>
-                )
-            case "expired":
-                return (
-                    <span className={`${common} bg-red-50 text-red-700 border border-red-200`}>
-                        <XCircle size={14} /> Expired
-                    </span>
-                )
-            default:
-                return <span className={`${common} bg-gray-100 text-gray-600 border border-gray-200`}>Canceled</span>
+    const confirmDeleteUser = async () => {
+        if (!userToDelete) return
+        setDeletingUser(true)
+        setDeleteError("")
+        try {
+            const r = await fetch(`/api/admin/users?id=${encodeURIComponent(userToDelete.id)}`, { method: "DELETE" })
+            if (!r.ok) {
+                // Shown in the dialog rather than as a line at the foot of the page: the dialog
+                // used to close on failure, so the only sign that nothing had happened was the row
+                // still being there.
+                const body = await r.json().catch(() => ({}))
+                setDeleteError(body?.message || `Could not remove the user (HTTP ${r.status}).`)
+                return
+            }
+            setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id))
+            setDeleteModalOpen(false)
+            setUserToDelete(null)
+        } catch {
+            setDeleteError("Could not remove the user — the request failed.")
+        } finally {
+            setDeletingUser(false)
+        }
+    }
+
+    const rescindInvite = async (inviteId: string) => {
+        setRescindingInvite(inviteId)
+        setError("")
+        try {
+            const r = await fetch(`/api/admin/invitations/${encodeURIComponent(inviteId)}`, { method: "DELETE" })
+            if (!r.ok) {
+                const body = await r.json().catch(() => ({}))
+                setError(body?.message || `Could not rescind the invite (HTTP ${r.status}).`)
+                return
+            }
+            await load()
+        } catch {
+            setError("Could not rescind the invite — the request failed.")
+        } finally {
+            setRescindingInvite(null)
         }
     }
 
@@ -978,44 +358,27 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
         }
     }, [load])
 
-    const getSessionLink = async (token: string, clientEmail: string): Promise<string | null> => {
-        if (!token || !clientEmail) return null
-        const key = `${token}-${clientEmail}`
-        setSessionLinks(prev => ({ ...prev, [key]: { link: "", loading: true } }))
+    const handleGetLink = async (token: string, clientEmail: string) => {
+        if (!token || !clientEmail) return
+        setLoadingLink(token)
         try {
             const r = await fetch(`/api/admin/getClientSessionLink?clientEmail=${encodeURIComponent(clientEmail)}`)
             if (!r.ok) throw new Error("Failed to get session link")
             const data = await r.json()
-            const fullLink = data.link.startsWith('http') ? data.link : `${window.location.origin}${data.link}`
-            setSessionLinks(prev => ({ ...prev, [key]: { link: fullLink, loading: false } }))
-            return fullLink
-        } catch (e: any) {
-            setSessionLinks(prev => ({ ...prev, [key]: { link: "", loading: false } }))
-            alert("Failed to get session link: " + (e?.message || "Unknown error"))
-            return null
-        }
-    }
-
-    const handleGetLink = async (token: string, clientEmail: string) => {
-        const link = await getSessionLink(token, clientEmail)
-        if (link) {
-            try {
-                await navigator.clipboard.writeText(link)
-                setCopiedLink(link)
-                setGetLinkModalOpen(true)
-            } catch {
-                setCopiedLink(link)
-                setGetLinkModalOpen(true)
-            }
-        } else {
+            const fullLink = data.link.startsWith("http") ? data.link : `${window.location.origin}${data.link}`
+            // Copying can fail on its own (a browser that withholds clipboard permission); the modal
+            // shows the link either way, so a refused clipboard is not a failure to get the link.
+            await navigator.clipboard.writeText(fullLink).catch(() => {})
+            setCopiedLink(fullLink)
+        } catch {
             setCopiedLink(null)
+        } finally {
+            setLoadingLink(null)
             setGetLinkModalOpen(true)
         }
     }
 
     const handleRenewSession = async (token: string) => {
-        if (sessionMutation.current) return
-        sessionMutation.current = true
         setRenewingSession(token)
         try {
             const r = await fetch("/api/admin/renewSession", {
@@ -1023,476 +386,450 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ token }),
             })
-            if (!r.ok) {
-                const data = await r.json()
-                throw new Error(data.message || "Failed to renew session")
-            }
+            if (!r.ok) throw new Error("Failed to renew session")
             setRenewSuccess(true)
-            setRenewModalOpen(true)
             await load()
         } catch {
             setRenewSuccess(false)
-            setRenewModalOpen(true)
         } finally {
-            sessionMutation.current = false
             setRenewingSession(null)
+            setRenewModalOpen(true)
         }
     }
 
     const handleDeleteSession = async () => {
-        if (!sessionToDelete || sessionMutation.current) return
-        sessionMutation.current = true
-        setSessionDeleteError("")
-        
+        if (!sessionToDelete) return
         setDeletingSession(sessionToDelete.token)
         try {
             const r = await fetch(`/api/admin/deleteSession?token=${encodeURIComponent(sessionToDelete.token)}`, {
                 method: "DELETE",
             })
             if (!r.ok) {
-                const data = await r.json()
-                throw new Error(data.message || "Failed to delete session")
+                const body = await r.json().catch(() => ({}))
+                throw new Error(body?.message || "Failed to delete session")
             }
-            setDeleteModalOpen(false)
-            setSessionToDelete(null)
             await load()
         } catch (e: any) {
-            setSessionDeleteError(e?.message || "Deletion could not be confirmed. Refresh before retrying.")
+            setError(e?.message || "Could not delete the session.")
         } finally {
-            sessionMutation.current = false
+            setDeleteSessionModalOpen(false)
+            setSessionToDelete(null)
             setDeletingSession(null)
         }
     }
 
-    const openDeleteModal = (token: string, clientName: string) => {
-        setSessionToDelete({ token, clientName })
-        setDeleteModalOpen(true)
-    }
+    /**
+     * Users and sessions joined on email — the only key the two lists share.
+     *
+     * A session whose email matches nobody is kept as a row of its own rather than dropped: those
+     * are clients who were sent an onboarding link and never finished, and losing them was the one
+     * way merging the two views could have cost information.
+     */
+    const rows = useMemo<MergedRow[]>(() => {
+        const byEmail = new Map<string, SessionRow>()
+        for (const s of sessions) {
+            const key = s.clientEmail?.toLowerCase()
+            if (!key) continue
+            const existing = byEmail.get(key)
+            // Keep the most recently touched session when a client has more than one.
+            if (!existing || (s.lastUpdatedAt ?? s.createdAt) > (existing.lastUpdatedAt ?? existing.createdAt)) {
+                byEmail.set(key, s)
+            }
+        }
+        const claimed = new Set<string>()
+        const merged: MergedRow[] = users.map((u) => {
+            const key = u.email?.toLowerCase()
+            const session = key ? byEmail.get(key) : undefined
+            if (key && session) claimed.add(key)
+            return { ...u, session: session ?? null, isSessionOnly: false }
+        })
+        for (const [key, s] of byEmail) {
+            if (claimed.has(key)) continue
+            merged.push({
+                id: `session:${s.token}`,
+                pendingInvite: null,
+                name: s.clientName || s.clientEmail,
+                email: s.clientEmail,
+                image: false,
+                role: "client",
+                clientName: s.clientName,
+                companyName: null,
+                isPlatformAdmin: false,
+                isSelf: false,
+                hasAccount: false,
+                session: s,
+                isSessionOnly: true,
+            })
+        }
+        return merged
+    }, [users, sessions])
 
-    const filteredSessions = useMemo(() => {
-        let filtered = sorted
-        if (statusFilter !== 'all') {
-            filtered = filtered.filter(s => s.status === statusFilter)
+    const filteredRows = useMemo(() => {
+        let filtered = rows
+        if (roleFilter !== "all") {
+            filtered = filtered.filter(
+                (u) => u.role === roleFilter || (roleFilter === "user" && (u.role === "client" || u.role === "user"))
+            )
+        }
+        if (sessionFilter !== "all") {
+            filtered = filtered.filter((u) =>
+                sessionFilter === "none" ? !u.session : u.session?.status === sessionFilter
+            )
         }
         if (searchQuery.trim()) {
             const q = searchQuery.toLowerCase()
-            filtered = filtered.filter(s => {
-                const statusDisplay = s.status === "pending" ? "not started" : s.status === "in_progress" ? "in progress" : s.status
-                return s.clientName.toLowerCase().includes(q) ||
-                    s.clientEmail.toLowerCase().includes(q) ||
-                    s.businessName.toLowerCase().includes(q) ||
-                    statusDisplay.toLowerCase().includes(q)
-            })
+            filtered = filtered.filter(
+                (u) =>
+                    u.name?.toLowerCase().includes(q) ||
+                    u.email?.toLowerCase().includes(q) ||
+                    u.clientName?.toLowerCase().includes(q) ||
+                    u.companyName?.toLowerCase().includes(q) ||
+                    u.role?.toLowerCase().includes(q) ||
+                    u.session?.businessName?.toLowerCase().includes(q) ||
+                    (u.session ? SESSION_LABELS[u.session.status].toLowerCase().includes(q) : false)
+            )
         }
-        
-        return filtered
-    }, [sorted, searchQuery, statusFilter])
+        const sorted = [...filtered].sort((a, b) => {
+            let comparison = 0
+            if (sortBy === "name") {
+                comparison = (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" })
+            } else if (sortBy === "email") {
+                comparison = (a.email || "").localeCompare(b.email || "", undefined, { sensitivity: "base" })
+            } else if (sortBy === "role") {
+                comparison = (a.role || "").localeCompare(b.role || "", undefined, { sensitivity: "base" })
+            } else {
+                // No session sorts last in either direction — "most advanced session" is the point
+                // of the sort, and rows without one have no place on that scale.
+                comparison = (a.session ? SESSION_ORDER[a.session.status] : 99) - (b.session ? SESSION_ORDER[b.session.status] : 99)
+            }
+            return sortDir === "asc" ? comparison : -comparison
+        })
+        return sorted
+    }, [rows, searchQuery, roleFilter, sessionFilter, sortBy, sortDir])
 
-    const safePage = Math.min(currentPage, Math.max(0, Math.ceil(filteredSessions.length / pageSize) - 1))
-    const paginatedSessions = filteredSessions.slice(safePage * pageSize, (safePage + 1) * pageSize)
-    const totalPages = Math.ceil(filteredSessions.length / pageSize)
+    const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
+    const page = Math.min(currentPage, totalPages - 1)
+    // Only platform admins get companyName back from the API — show the column just for them,
+    // so everyone else's table (scoped to their own company) looks the same as before.
+    const showCompanyColumn = rows.some((u) => u.companyName)
 
     return (
-        <>
-            <div className="w-full flex justify-between items-center mb-2">
-                <div>
-                    <h1 className="text-2xl font-semibold text-[#111827] mt-6 mb-6">Client Sessions</h1>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-transparent focus-within:ring-2 focus-within:ring-[#701CC0] transition">
-                        <FiSearch className="w-4 h-4 text-[#701CC0] flex-shrink-0" />
-                        <label htmlFor="sessions-search" className="sr-only">Search Sessions</label>
-                        <input
-                            id="sessions-search"
-                            type="search"
-                            value={searchQuery}
-                            onChange={(e) => {
-                                setSearchQuery(e.target.value)
-                                setCurrentPage(0)
-                            }}
-                            placeholder="Search Sessions"
-                            className="w-64 md:w-80 text-sm text-[#111827] placeholder:text-[#9CA3AF] bg-transparent outline-none"
-                        />
-                    </div>
-                    <div className="relative" ref={statusFilterRef} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsStatusFilterOpen(false) }} tabIndex={-1}>
-                <button
-                            type="button"
-                            onClick={() => setIsStatusFilterOpen((v) => !v)}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
-                        >
-                            <FiFilter className="w-4 h-4" />
-                            <span className="text-sm font-medium">Filter</span>
-                            <svg 
-                                className={`w-4 h-4 transition-transform duration-200 ${isStatusFilterOpen ? 'rotate-180' : ''}`}
-                                fill="none" 
-                                stroke="currentColor" 
-                                viewBox="0 0 24 24"
-                            >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                </button>
-                        {isStatusFilterOpen && (
-                            <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#E5E7EB] py-4 z-50">
-                                <div className="px-5">
-                                    <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
-                                    
-                                    
-                                    <div className="mb-5">
-                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By</label>
-                                        <div className="relative">
-                                            <select
-                                                value={sortKey}
-                                                onChange={(e) => {
-                                                    setSortKey(e.target.value as "client" | "business" | "status" | "created" | "updated")
-                                                    setCurrentPage(0)
-                                                    if (e.target.value === "created" || e.target.value === "updated") {
-                                                        setSortDir("desc")
-                                                    } else {
-                                                        setSortDir("asc")
-                                                    }
-                                                }}
-                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
-                                            >
-                                                <option value="client">Client</option>
-                                                <option value="business">Business</option>
-                                                <option value="status">Status</option>
-                                                <option value="created">Created Date</option>
-                                                <option value="updated">Last Updated</option>
-                                            </select>
-                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    
-                                    <div className="mb-5">
-                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Status</label>
-                                        <div className="relative">
-                                            <select
-                                                value={statusFilter}
-                                                onChange={(e) => {
-                                                    setStatusFilter(e.target.value as 'all' | SessionStatus)
-                                                    setCurrentPage(0)
-                                                }}
-                                                className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
-                                            >
-                                                <option value="all">All Statuses</option>
-                                                <option value="pending">Not Started</option>
-                                                <option value="in_progress">In Progress</option>
-                                                <option value="completed">Completed</option>
-                                                <option value="expired">Expired</option>
-                                            </select>
-                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    
-                                    <div className="mb-4">
-                                        <label className="block text-xs font-medium text-[#6B7280] mb-2">Order</label>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => {
-                                                    setSortDir("asc")
-                                                    setCurrentPage(0)
-                                                }}
-                                                className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                    sortDir === "asc" 
-                                                        ? "bg-[#701CC0] text-white shadow-sm" 
-                                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                                }`}
-                                            >
-                                                Ascending
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setSortDir("desc")
-                                                    setCurrentPage(0)
-                                                }}
-                                                className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                    sortDir === "desc" 
-                                                        ? "bg-[#701CC0] text-white shadow-sm" 
-                                                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                                                }`}
-                                            >
-                                                Descending
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    
-                                    <div className="pt-3 border-t border-[#E5E7EB]">
+        <PanelPage>
+            <PanelHeader title="User Management">
+                <PanelSearch
+                    id="users-search"
+                    label="Search Users"
+                    placeholder="Search users"
+                    value={searchQuery}
+                    onChange={(value) => {
+                        setSearchQuery(value)
+                        setCurrentPage(0)
+                    }}
+                />
+                <div className="relative" ref={filterRef}>
+                    <PanelButton onClick={() => setIsFilterOpen((v) => !v)} icon={<Filter className="h-4 w-4" />}>
+                        Filter
+                        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isFilterOpen ? "rotate-180" : ""}`} />
+                    </PanelButton>
+                    {isFilterOpen && (
+                        <PanelPopover>
+                            <h3 className="mb-3 text-[13px] font-semibold text-[#111827]">Sort &amp; Filter</h3>
+                            <PanelSelect
+                                label="Sort By"
+                                value={sortBy}
+                                onChange={(value) => {
+                                    setSortBy(value as typeof sortBy)
+                                    setCurrentPage(0)
+                                }}
+                                options={[
+                                    { value: "name", label: "Name" },
+                                    { value: "email", label: "Email" },
+                                    { value: "role", label: "Role" },
+                                    { value: "session", label: "Session" },
+                                ]}
+                            />
+                            <PanelSelect
+                                label="Role"
+                                value={roleFilter}
+                                onChange={(value) => {
+                                    setRoleFilter(value as typeof roleFilter)
+                                    setCurrentPage(0)
+                                }}
+                                options={[
+                                    { value: "all", label: "All Roles" },
+                                    { value: "admin", label: "Admin" },
+                                    { value: "staff", label: "Staff" },
+                                    { value: "user", label: "Client" },
+                                ]}
+                            />
+                            <PanelSelect
+                                label="Session"
+                                value={sessionFilter}
+                                onChange={(value) => {
+                                    setSessionFilter(value as typeof sessionFilter)
+                                    setCurrentPage(0)
+                                }}
+                                options={[
+                                    { value: "all", label: "All Sessions" },
+                                    { value: "pending", label: "Not Started" },
+                                    { value: "in_progress", label: "In Progress" },
+                                    { value: "completed", label: "Completed" },
+                                    { value: "expired", label: "Expired" },
+                                    { value: "canceled", label: "Canceled" },
+                                    { value: "none", label: "No Session" },
+                                ]}
+                            />
+                            <div className="mb-4">
+                                <span className="mb-1.5 block text-[11px] font-medium text-[#6B7280]">Order</span>
+                                <div className="flex gap-2">
+                                    {(["asc", "desc"] as const).map((dir) => (
                                         <button
+                                            key={dir}
+                                            type="button"
                                             onClick={() => {
-                                                    setSearchQuery("")
-                                                setStatusFilter("all")
-                                                setSortKey("client")
-                                                setSortDir("asc")
+                                                setSortDir(dir)
                                                 setCurrentPage(0)
-                                                setIsStatusFilterOpen(false)
                                             }}
-                                            className="w-full text-xs py-2 px-3 rounded-lg font-medium text-[#6B7280] bg-gray-50 hover:bg-gray-100 hover:text-[#374151] transition-colors duration-200"
+                                            className={`h-8 flex-1 rounded-lg text-[12px] font-medium transition-colors ${
+                                                sortDir === dir
+                                                    ? "bg-[#701CC0] text-white"
+                                                    : "bg-[#F3F1F8] text-[#5B5468] hover:bg-[#EAE6F3]"
+                                            }`}
                                         >
-                                            Clear All Filters
+                                            {dir === "asc" ? "Ascending" : "Descending"}
                                         </button>
-                                    </div>
+                                    ))}
                                 </div>
                             </div>
-                        )}
-                    </div>
-                    <button
-                        onClick={expireSessions}
-                        disabled={expiring}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm disabled:opacity-60"
-                    >
-                        <RefreshCw size={16} className={expiring ? "animate-spin" : ""} />
-                        <span>Update Sessions</span>
-                    </button>
-                    <button
-                        onClick={onBackToUsers}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
-                    >
-                        <Users size={16} />
-                        <span>Manage Users</span>
-                    </button>
+                            <PanelClearFilters
+                                onClick={() => {
+                                    setSearchQuery("")
+                                    setRoleFilter("all")
+                                    setSessionFilter("all")
+                                    setSortBy("role")
+                                    setSortDir("asc")
+                                    setCurrentPage(0)
+                                    setIsFilterOpen(false)
+                                }}
+                            />
+                        </PanelPopover>
+                    )}
                 </div>
-            </div>
+                <PanelButton
+                    variant="primary"
+                    onClick={expireSessions}
+                    disabled={expiring}
+                    icon={<RefreshCw className={`h-4 w-4 ${expiring ? "animate-spin" : ""}`} />}
+                    title="Expire sessions that have passed their deadline"
+                >
+                    Update Sessions
+                </PanelButton>
+            </PanelHeader>
 
-
-            {loading ? (
-                <div className="flex items-center justify-center py-12">
-                    <LoadingSpinner label="Loading Sessions..." />
-                </div>
-            ) : (
-                <>
-                    {!loading && filteredSessions.length === 0 && (
-                        <div className="text-center py-12">
-                            <div className="w-full h-full flex flex-col items-center justify-center text-center">
-                                <motion.div
-                                    initial={{ opacity: 0, scale: 0.8 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ duration: 0.5, ease: "easeOut" }}
-                                >
-                                    <Image 
-                                        src="/assets/no-client.png" 
-                                        alt="No sessions" 
-                                        width={224} 
-                                        height={224} 
-                                        className="w-56 h-auto mb-3" 
-                                    />
-                                </motion.div>
-                                <p className="text-sm text-gray-500 mb-3">
-                                    {searchQuery ? "No sessions match your search." : "No sessions found."}
-                                </p>
+            <PanelDataTable<MergedRow>
+                rows={filteredRows}
+                getRowKey={(u) => u.id}
+                loading={loading}
+                loadingLabel={<LoadingSpinner label="Loading User Data..." />}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                emptyTitle="No Users Found"
+                emptyMessage="No users match your search."
+                emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" priority />}
+                columns={[
+                    {
+                        key: "user",
+                        header: "User",
+                        cell: (u) => (
+                            <div className="flex items-center gap-3">
+                                <ProfileImage
+                                    src={u.image ? `/api/admin/getUserImage?userId=${u.id}&v=${u.imageVersion ?? 0}` : null}
+                                    name={u.name || u.email || "User"}
+                                    size={32}
+                                    alt={`${u.name || u.email || "User"}'s profile`}
+                                />
+                                <div className="min-w-0">
+                                    {/* An invitation has no name yet, and rendering an em-dash above the
+                                        address left the row's main line blank. The address becomes the
+                                        line when there is nothing else to put there. */}
+                                    <div className="truncate font-medium text-[#111827]">{u.name || u.email || "—"}</div>
+                                    {u.name && u.email ? (
+                                        <div className="truncate text-[12px] text-[#6B7280]">{u.email}</div>
+                                    ) : null}
+                                </div>
                             </div>
-                        </div>
-                    )}
-
-                    {!loading && filteredSessions.length > 0 && (
-                        <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                                        <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                                <button onClick={() => toggleSort("client")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Client</span>
-                                    <SortIcon active={sortKey === "client"} dir={sortDir} />
-                                </button>
-                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                                <button onClick={() => toggleSort("business")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Business</span>
-                                    <SortIcon active={sortKey === "business"} dir={sortDir} />
-                                </button>
-                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                                <button onClick={() => toggleSort("status")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Status</span>
-                                    <SortIcon active={sortKey === "status"} dir={sortDir} />
-                                </button>
-                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                                <button onClick={() => toggleSort("created")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Created</span>
-                                    <SortIcon active={sortKey === "created"} dir={sortDir} />
-                                </button>
-                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                                <button onClick={() => toggleSort("updated")} className="inline-flex items-center gap-1 hover:text-black">
-                                    <span>Last Updated</span>
-                                    <SortIcon active={sortKey === "updated"} dir={sortDir} />
-                                </button>
-                            </th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">Manage</th>
-                        </tr>
-                    </thead>
-                                    <tbody className="bg-white divide-y divide-[#E5E7EB]">
-                                        {paginatedSessions.map((s) => {
-                                            const linkKey = `${s.token}-${s.clientEmail}`
-                                            const sessionLink = sessionLinks[linkKey]
-                                            return (
-                                                <tr key={s.token} className="hover:bg-purple-50">
-                                                    <td className="px-4 py-4">
-                                                        <div className="flex flex-col">
-                                                            <div className="text-sm font-medium text-[#111827]">{s.clientName}</div>
-                                                            <div className="text-sm text-[#6B7280]">{s.clientEmail}</div>
-                                                        </div>
-                                </td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{s.businessName}</td>
-                                                    <td className="px-4 py-4">
-                                                        {statusBadge(s.status)}
-                                                        <p className="mt-1 text-xs text-[#6B7280]">{s.expiresAt ? `Link expires ${new Date(s.expiresAt).toLocaleString()}` : "Expiry unavailable"} (local time)</p>
-                                                    </td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{formatDate(s.createdAt)}</td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{formatDate(s.lastUpdatedAt)}</td>
-                                                    <td className="px-4 py-4">
-                                                        <div className="flex items-center gap-2">
-                                                            <RowActionMenu label="Session actions">
-                                                                {s.status !== "expired" && (
-                                                                    <RowActionMenuItem
-                                                                        onClick={() => handleGetLink(s.token, s.clientEmail)}
-                                                                        disabled={sessionLink?.loading}
-                                                                        icon={<LinkIcon className="w-4 h-4" />}
-                                                                        tone="accent"
-                                                                    >
-                                                                        {sessionLink?.loading ? "Loading..." : "Get Link"}
-                                                                    </RowActionMenuItem>
-                                                                )}
-                                                                <RowActionMenuItem
-                                                                    onClick={() => handleRenewSession(s.token)}
-                                                                    disabled={renewingSession === s.token}
-                                                                    icon={<RotateCw className={`w-4 h-4 ${renewingSession === s.token ? "animate-spin" : ""}`} />}
-                                                                >
-                                                                    Renew Session
-                                                                </RowActionMenuItem>
-                                                                <RowActionMenuItem
-                                                                    onClick={() => openDeleteModal(s.token, s.clientName)}
-                                                                    icon={<Trash2 className="w-4 h-4" />}
-                                                                    tone="danger"
-                                                                >
-                                                                    Delete Session
-                                                                </RowActionMenuItem>
-                                                            </RowActionMenu>
-                                                        </div>
-                                </td>
-                            </tr>
-                                            )
-                                        })}
-                    </tbody>
-                </table>
-            </div>
-                        </div>
-                    )}
-
-                    {!loading && filteredSessions.length > 0 && (
-                        <div className="mt-4 pt-4 text-xs text-[#677489]">
-                            <div className="w-full flex items-center justify-center">
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => setCurrentPage(Math.max(0, currentPage - 1))}
-                                        disabled={currentPage === 0}
-                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Previous
-                                    </button>
-                                    <span className="text-xs text-[#6B7280]">
-                                        Page {currentPage + 1} of {totalPages}
+                        ),
+                    },
+                    {
+                        key: "role",
+                        header: "Role",
+                        cell: (u) => (
+                            <PanelBadge tone={ROLE_TONES[normalizeRole(u.role)]}>{ROLE_LABELS[normalizeRole(u.role)]}</PanelBadge>
+                        ),
+                    },
+                    ...(showCompanyColumn
+                        ? [{ key: "company", header: "Company", cell: (u: MergedRow) => u.companyName || <PanelEmptyCell /> }]
+                        : []),
+                    {
+                        key: "lastLogin",
+                        header: "Last Login",
+                        cell: (u) =>
+                            u.pendingInvite ? (
+                                <span className={`text-[12px] ${u.pendingInvite.expired ? "text-[#B42318]" : "text-[#9CA3AF]"}`}>
+                                    {u.pendingInvite.expired ? "Invite Expired" : `Invited ${formatRelative(u.pendingInvite.invitedAt, now)}`}
+                                </span>
+                            ) : u.lastLoginAt ? (
+                                /* Time first, address underneath and muted: the address is why the column
+                                   is worth a join, but it is reference detail, and `whitespace-nowrap`
+                                   keeps an IPv6 address on one line instead of wrapping mid-address. */
+                                <div className="flex flex-col items-start gap-0.5">
+                                    <span className="whitespace-nowrap" title={new Date(u.lastLoginAt).toLocaleString()}>
+                                        {formatRelative(u.lastLoginAt, now)}
                                     </span>
-                                    <button
-                                        onClick={() => setCurrentPage(Math.min(totalPages - 1, currentPage + 1))}
-                                        disabled={currentPage >= totalPages - 1}
-                                        className="px-2 py-1 text-xs rounded border border-[#E5E7EB] hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    <span
+                                        className="whitespace-nowrap text-[11.5px] text-[#9CA3AF]"
+                                        title={u.lastLoginIp ? `IP ${u.lastLoginIp}` : undefined}
                                     >
-                                        Next
-                                    </button>
+                                        {formatIp(u.lastLoginIp) || "IP unknown"}
+                                    </span>
                                 </div>
-                            </div>
-                        </div>
-                    )}
-                </>
-            )}
+                            ) : (
+                                <span className="text-[12px] text-[#9CA3AF]">Never</span>
+                            ),
+                    },
+                    {
+                        key: "session",
+                        header: "Session",
+                        cell: (u) =>
+                            u.session ? (
+                                <PanelBadge tone={SESSION_TONES[u.session.status]}>{SESSION_LABELS[u.session.status]}</PanelBadge>
+                            ) : (
+                                <PanelEmptyCell />
+                            ),
+                    },
+                    {
+                        key: "manage",
+                        header: "Manage",
+                        className: "relative",
+                        cell: (u) => {
+                            const session = u.session
+                            const canManageAccount = !u.isSessionOnly && u.hasAccount !== false && !u.pendingInvite
+                            return (
+                                <RowActionMenu label={`Manage ${u.name || u.email || "user"}`}>
+                                    {canManageAccount && (
+                                        <RowActionMenuItem
+                                            onClick={() => sendPasswordReset(u.id, u.email)}
+                                            disabled={resetSending[u.id]}
+                                            icon={<KeyRound className="w-4 h-4" />}
+                                        >
+                                            {resetSending[u.id] ? "Sending…" : "Send Email Reset"}
+                                        </RowActionMenuItem>
+                                    )}
+                                    {session && <RowActionMenuLabel>Session</RowActionMenuLabel>}
+                                    {session && session.status !== "expired" && (
+                                        <RowActionMenuItem
+                                            onClick={() => handleGetLink(session.token, session.clientEmail)}
+                                            disabled={loadingLink === session.token}
+                                            icon={<LinkIcon className="w-4 h-4" />}
+                                        >
+                                            {loadingLink === session.token ? "Loading…" : "Get Session Link"}
+                                        </RowActionMenuItem>
+                                    )}
+                                    {session && (
+                                        <RowActionMenuItem
+                                            onClick={() => handleRenewSession(session.token)}
+                                            disabled={renewingSession === session.token}
+                                            icon={<RotateCw className={`w-4 h-4 ${renewingSession === session.token ? "animate-spin" : ""}`} />}
+                                        >
+                                            Renew Session
+                                        </RowActionMenuItem>
+                                    )}
+                                    {(session || u.pendingInvite || (canManageAccount && !u.isSelf && !u.isPlatformAdmin)) && (
+                                        <RowActionMenuDivider />
+                                    )}
+                                    {session && (
+                                        <RowActionMenuItem
+                                            onClick={() => {
+                                                setSessionToDelete({ token: session.token, clientName: session.clientName })
+                                                setDeleteSessionModalOpen(true)
+                                            }}
+                                            icon={<Trash2 className="w-4 h-4" />}
+                                            tone="danger"
+                                        >
+                                            Delete Session
+                                        </RowActionMenuItem>
+                                    )}
+                                    {u.pendingInvite && (
+                                        <RowActionMenuItem
+                                            onClick={() => rescindInvite(u.pendingInvite!.id)}
+                                            disabled={rescindingInvite === u.pendingInvite.id}
+                                            icon={<Trash2 className="w-4 h-4" />}
+                                        >
+                                            Rescind Invite
+                                        </RowActionMenuItem>
+                                    )}
+                                    {canManageAccount && !u.isSelf && !u.isPlatformAdmin && (
+                                        <RowActionMenuItem onClick={() => deleteUser(u.id)} icon={<Trash2 className="w-4 h-4" />} tone="danger">
+                                            Remove User
+                                        </RowActionMenuItem>
+                                    )}
+                                </RowActionMenu>
+                            )
+                        },
+                    },
+                ]}
+            />
 
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
 
-            {showUpdateSessionsModal && (
-                <div 
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" 
-                    onClick={(e) => {
-                        if (updateSessionsModalRef.current && !updateSessionsModalRef.current.contains(e.target as Node)) {
-                            setShowUpdateSessionsModal(false)
-                        }
-                    }}
-                >
-                    <div
-                        ref={updateSessionsModalRef}
-                        className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
-                        onClick={(e) => e.stopPropagation()}
-                        role="dialog"
-                        aria-modal="true"
-                    >
-                        <div className="flex flex-col items-center text-center">
-                            {updateSessionsSuccess ? (
-                                <>
-                                    <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
-                                        <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
-                                        <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                                            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
-                                                <FiCheck className="h-6 w-6" />
-                                            </span>
-                                        </span>
-                                    </div>
-                                    <h3 className="text-xl font-semibold text-[#111827] mb-2">Sessions Updated Successfully!</h3>
-                                    <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
-                                        {updatedCount > 0 
-                                            ? `Successfully updated ${updatedCount} session${updatedCount === 1 ? '' : 's'}.`
-                                            : "No sessions needed updating."
-                                        }
-                                    </p>
-                                </>
-                            ) : (
-                                <>
-                                    <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
-                                        <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
-                                            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white">
-                                                <XCircle className="h-6 w-6" />
-                                            </span>
-                                        </span>
-                                    </div>
-                                    <h3 className="text-xl font-semibold text-[#111827] mb-2">Failed To Update Sessions</h3>
-                                    <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
-                                        An error occurred while updating sessions. Please try again.
-                                    </p>
-                                </>
-                            )}
-                            <button
-                                className={`w-full rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                                    updateSessionsSuccess
-                                        ? 'bg-[#701CC0] text-white hover:bg-[#5f17a5]'
-                                        : 'bg-red-600 text-white hover:bg-red-700'
-                                }`}
-                                onClick={() => setShowUpdateSessionsModal(false)}
-                            >
-                                Done
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <ConfirmDeleteSessionModal
+            <ConfirmActionModal
                 isOpen={deleteModalOpen}
-                clientName={sessionToDelete?.clientName || ""}
-                error={sessionDeleteError}
-                onConfirm={handleDeleteSession}
+                title="Remove User"
+                message={
+                    <>
+                        Are you sure you want to remove{" "}
+                        <span className="font-semibold text-[#111827]">{userToDelete?.name || userToDelete?.email || ""}</span>? This action is permanent and cannot be undone. All associated data will be removed.
+                        {deleteError && (
+                            <span className="mt-3 block rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
+                                {deleteError}
+                            </span>
+                        )}
+                    </>
+                }
+                confirmLabel="Remove User"
+                // Without this the confirm button stayed live through the request: a second click
+                // sent a second DELETE, and the backdrop could dismiss the dialog mid-delete.
+                busy={deletingUser}
+                busyLabel="Removing…"
+                onConfirm={confirmDeleteUser}
                 onCancel={() => {
                     setDeleteModalOpen(false)
+                    setUserToDelete(null)
+                    setDeleteError("")
+                }}
+            />
+
+            <PasswordResetModal
+                isOpen={resetResult !== null}
+                success={resetResult?.success ?? false}
+                email={resetResult?.email ?? null}
+                onClose={() => setResetResult(null)}
+            />
+
+            <UpdateSessionsModal
+                isOpen={showUpdateSessionsModal}
+                success={updateSessionsSuccess}
+                updatedCount={updatedCount}
+                onClose={() => setShowUpdateSessionsModal(false)}
+            />
+
+            <ConfirmDeleteSessionModal
+                isOpen={deleteSessionModalOpen}
+                clientName={sessionToDelete?.clientName || ""}
+                onConfirm={handleDeleteSession}
+                onCancel={() => {
+                    setDeleteSessionModalOpen(false)
                     setSessionToDelete(null)
                 }}
                 isDeleting={deletingSession !== null}
@@ -1515,7 +852,138 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                     setRenewSuccess(false)
                 }}
             />
-        </>
+        </PanelPage>
+    )
+}
+
+/** Result of sending a reset link — the same success/failure sheet the other one-shot actions use. */
+const PasswordResetModal: React.FC<{
+    isOpen: boolean
+    success: boolean
+    email: string | null
+    onClose: () => void
+}> = ({ isOpen, success, email, onClose }) => {
+    if (!isOpen) return null
+
+    return (
+        <Modal
+            zIndexClass="z-50"
+            backdropClassName="bg-black/50 backdrop-blur-sm"
+            cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+            label="Password Reset"
+            onClose={onClose}
+        >
+            <div className="flex flex-col items-center text-center">
+                {success ? (
+                    <>
+                        <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
+                            <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
+                                    <FiCheck className="h-6 w-6" />
+                                </span>
+                            </span>
+                        </div>
+                        <h3 className="text-xl font-semibold text-[#111827] mb-2">Reset Email Sent!</h3>
+                        <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
+                            {email ? (
+                                <>A password reset link is on its way to {email}.</>
+                            ) : (
+                                "A password reset link has been sent."
+                            )}
+                        </p>
+                    </>
+                ) : (
+                    <>
+                        <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
+                            <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white">
+                                    <XCircle className="h-6 w-6" />
+                                </span>
+                            </span>
+                        </div>
+                        <h3 className="text-xl font-semibold text-[#111827] mb-2">Failed To Send Reset Email</h3>
+                        <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
+                            The reset link could not be sent. Please try again.
+                        </p>
+                    </>
+                )}
+                <button
+                    className={`w-full rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                        success ? "bg-[#701CC0] text-white hover:bg-[#5f17a5]" : "bg-red-600 text-white hover:bg-red-700"
+                    }`}
+                    onClick={onClose}
+                >
+                    Done
+                </button>
+            </div>
+        </Modal>
+    )
+}
+
+/**
+ * Result of the expiry sweep. Lifted out of the panel's JSX, where it was a hand-rolled backdrop
+ * with its own click-outside handling rather than the shared Modal every other dialog here uses.
+ */
+const UpdateSessionsModal: React.FC<{
+    isOpen: boolean
+    success: boolean
+    updatedCount: number
+    onClose: () => void
+}> = ({ isOpen, success, updatedCount, onClose }) => {
+    if (!isOpen) return null
+
+    return (
+        <Modal
+            zIndexClass="z-50"
+            backdropClassName="bg-black/50 backdrop-blur-sm"
+            cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+            label="Update Sessions"
+            onClose={onClose}
+        >
+            <div className="flex flex-col items-center text-center">
+                {success ? (
+                    <>
+                        <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
+                            <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
+                                    <FiCheck className="h-6 w-6" />
+                                </span>
+                            </span>
+                        </div>
+                        <h3 className="text-xl font-semibold text-[#111827] mb-2">Sessions Updated Successfully!</h3>
+                        <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
+                            {updatedCount > 0
+                                ? `Successfully updated ${updatedCount} session${updatedCount === 1 ? "" : "s"}.`
+                                : "No sessions needed updating."}
+                        </p>
+                    </>
+                ) : (
+                    <>
+                        <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
+                            <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white">
+                                    <XCircle className="h-6 w-6" />
+                                </span>
+                            </span>
+                        </div>
+                        <h3 className="text-xl font-semibold text-[#111827] mb-2">Failed To Update Sessions</h3>
+                        <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
+                            An error occurred while updating sessions. Please try again.
+                        </p>
+                    </>
+                )}
+                <button
+                    className={`w-full rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                        success ? "bg-[#701CC0] text-white hover:bg-[#5f17a5]" : "bg-red-600 text-white hover:bg-red-700"
+                    }`}
+                    onClick={onClose}
+                >
+                    Done
+                </button>
+            </div>
+        </Modal>
     )
 }
 
@@ -1525,8 +993,7 @@ const ConfirmDeleteSessionModal: React.FC<{
     onConfirm: () => void
     onCancel: () => void
     isDeleting: boolean
-    error?: string
-}> = ({ isOpen, clientName, onConfirm, onCancel, isDeleting, error }) => {
+}> = ({ isOpen, clientName, onConfirm, onCancel, isDeleting }) => {
     if (!isOpen) return null
 
     return (
@@ -1535,7 +1002,7 @@ const ConfirmDeleteSessionModal: React.FC<{
             backdropClassName="bg-black/50 backdrop-blur-sm"
             cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
             label="Delete Session"
-            onClose={() => { if (!isDeleting) onCancel() }}
+            onClose={onCancel}
         >
                 <div className="flex items-center gap-3 mb-4">
                     <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
@@ -1547,7 +1014,6 @@ const ConfirmDeleteSessionModal: React.FC<{
                     Are you sure you want to delete the session for <span className="font-semibold text-[#111827]">{clientName}</span>? 
                     This action is permanent and cannot be undone. All associated data will be removed.
                 </p>
-                {error && <p role="alert" className="mb-3 text-sm text-red-600">{error}</p>}
                 <div className="flex gap-3 justify-end">
                     <button
                         onClick={onCancel}
@@ -1609,7 +1075,7 @@ const GetLinkModal: React.FC<{
                 {link ? (
                     <>
                         <div className="mb-4">
-                            <label className="block text-sm font-medium text-[#374151] mb-2">Session Link</label>
+                            <label className="block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598] mb-1.5">Session Link</label>
                             <div className="flex items-center gap-2">
                                 <input
                                     type="text"

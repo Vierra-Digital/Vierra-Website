@@ -124,6 +124,9 @@ const LoginPage = () => {
       });
 
       if (!signInError) {
+        // Audit row for the Last Login column. Deliberately not awaited into the redirect path:
+        // the sign-in has already succeeded and must not be held up, or failed, by an audit write.
+        void fetch("/api/auth/recordLogin", { method: "POST" }).catch(() => {});
         const meResponse = await fetch("/api/auth/me");
         const me = meResponse.ok ? await meResponse.json() : null;
         if (me?.kind === "client") {

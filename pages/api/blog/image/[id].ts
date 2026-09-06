@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { sendImageAsset } from "@/lib/api/image";
 import { STORAGE_BUCKETS } from "@/lib/storage";
+import { isUuid } from "@/lib/api/parsing";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
@@ -12,6 +13,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { id } = req.query;
     if (!id || typeof id !== "string") {
       return res.status(400).json({ message: "Image ID is required" });
+    }
+    // Not a uuid cannot be a row; answering 404 here keeps it off the error log.
+    if (!isUuid(id)) {
+      return res.status(404).json({ message: "Image not found" });
     }
 
     const image = await prisma.blogImage.findUnique({

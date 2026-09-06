@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma"
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens"
-import { getCalendarVisibilityPreferences } from "@/lib/googleCalendar/visibility"
+import {
+  getCalendarVisibilityPreferences,
+  isGeneratedGoogleCalendar,
+  resolveCalendarVisibility,
+} from "@/lib/googleCalendar/visibility"
 
 /** How many meetings the dashboard panel shows. */
 export const UPCOMING_MEETINGS_LIMIT = 5;
@@ -23,6 +27,7 @@ type GoogleCalendarListResponse = {
     hidden?: boolean
     accessRole?: string
     timeZone?: string
+    primary?: boolean
   }>
 }
 
@@ -193,8 +198,14 @@ export async function fetchUpcomingMeetingsFromGoogle(userId: string): Promise<U
       const visibleCalendars = (calendarListJson.items || []).filter(
         (calendar) => {
           if (!calendar.id || calendar.hidden || !canReadCalendar(calendar.accessRole)) return false
-          const key = `${connection.email}::${calendar.id}`
-          return visibilityMap.get(key) ?? true
+          if (isGeneratedGoogleCalendar(calendar.id)) return false
+          // Same rule the settings toggles show, so what the dashboard syncs can never disagree
+          // with what the settings page says is on.
+          return resolveCalendarVisibility(visibilityMap, {
+            accountEmail: connection.email,
+            calendarId: calendar.id,
+            primary: calendar.primary,
+          })
         }
       )
       if (!visibleCalendars.length) {

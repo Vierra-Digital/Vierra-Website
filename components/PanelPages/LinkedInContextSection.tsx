@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { inter } from "@/lib/fonts";
-import PanelSectionHeader from "@/components/ui/PanelSectionHeader";
+import { PanelHeader } from "@/components/panel/PanelTable";
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useDraftGuard } from "@/hooks/useDraftGuard";
@@ -145,7 +145,7 @@ const LinkedInContextSection: React.FC<Props> = ({
       <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
         <div className="flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
           <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
-            {!embedded && <PanelSectionHeader title={title} />}
+            {!embedded && <PanelHeader title={title} />}
             <div className="py-12 flex items-center justify-center">
               <LoadingSpinner label="Loading Context Data..." />
             </div>
@@ -159,7 +159,7 @@ const LinkedInContextSection: React.FC<Props> = ({
     <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
       <div className="flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
         <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full pb-16 lg:pb-24">
-          {!embedded && <PanelSectionHeader title={title} />}
+          {!embedded && <PanelHeader title={title} />}
 
           <p role="status" className="mb-3 text-sm text-gray-600">{saving ? "Saving…" : JSON.stringify(editableAnswers) !== savedAnswers ? "Unsaved changes" : "Saved"}</p>
           {!context && error && <button type="button" onClick={() => setRetry(value => value + 1)} className="mb-3 rounded text-sm text-[#701CC0] underline">Retry loading context</button>}

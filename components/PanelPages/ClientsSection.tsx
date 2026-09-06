@@ -1,11 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from "react"
 import Image from "next/image"
 import ProfileImage from "../ProfileImage"
-import { FiPlus, FiFilter, FiTrash2, FiCheckCircle, FiXCircle, FiEye, FiBriefcase } from 'react-icons/fi'
-import PanelSearchInput from "@/components/ui/PanelSearchInput"
+import { FiPlus, FiFilter, FiChevronDown, FiTrash2, FiCheckCircle, FiXCircle, FiEye, FiBriefcase } from 'react-icons/fi'
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
-import PanelSectionHeader from "@/components/ui/PanelSectionHeader"
-import PaginationControls from "@/components/ui/PaginationControls"
+import {
+    PanelButton,
+    PanelClearFilters,
+    PanelDataTable,
+    PanelEmptyCell,
+    PanelHeader,
+    PanelPage,
+    PanelPopover,
+    PanelSearch,
+    PanelSelect,
+} from "@/components/panel/PanelTable"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import { useRouter } from "next/router"
@@ -59,17 +67,18 @@ const ClientActionsMenu: React.FC<{
     isAdmin: boolean
     busy: boolean
     onView: () => void
+    triggerId?: string
     onSetActive: () => void
     onDelete: () => void
     onToggleStatus: (isActive: boolean) => void
-}> = ({ clientName, isActive, isAdmin, busy, onView, onSetActive, onDelete, onToggleStatus }) => {
+}> = ({ clientName, isActive, isAdmin, busy, onView, onSetActive, onDelete, onToggleStatus, triggerId }) => {
     return (
-        <RowActionMenu label={`Manage ${clientName}`}>
-          <RowActionMenuItem onClick={onSetActive} icon={<FiBriefcase className="w-4 h-4" />} tone="accent">
+        <RowActionMenu label={`Manage ${clientName}`} triggerId={triggerId}>
+          <RowActionMenuItem onClick={onSetActive} icon={<FiBriefcase className="w-4 h-4" />}>
             Work On This Client
           </RowActionMenuItem>
           <RowActionMenuItem onClick={onView} icon={<FiEye className="w-4 h-4" />}>
-            Open client workspace
+            Open Client Workspace
           </RowActionMenuItem>
           {isAdmin && (
             <RowActionMenuItem
@@ -111,7 +120,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
      */
     const [imageStamp, setImageStamp] = useState(() => Date.now())
     const [loading, setLoading] = useState(true)
-    const [hasLoaded, setHasLoaded] = useState(false)
     const fetchPending = useRef(false)
     const mutationPending = useRef(false)
     const [updatingClient, setUpdatingClient] = useState<string | null>(null)
@@ -165,7 +173,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
             const data: ClientRow[] = await r.json()
             if (!Array.isArray(data)) throw new Error("Could not load clients. Try again.")
             setRows(data)
-            setHasLoaded(true)
             setStatusNeedsRefresh(null)
             setRowErrors({})
             setImageStamp(Date.now())
@@ -263,18 +270,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
         }
     }
 
-    const columns = useMemo(
-        () => [
-            { key: "name", header: "Client Name" },
-            { key: "businessName", header: "Business Name" },
-            { key: "industry", header: "Industry" },
-            { key: "monthlyRetainer", header: "Monthly Retainer ($)" },
-            { key: "clientGoal", header: "Client Goal" },
-            { key: "status", header: "Status" },
-            { key: "manage", header: "Manage" },
-        ],
-        []
-    )
 
     const filteredRows = useMemo(() => {
         const query = searchQuery.trim().toLowerCase()
@@ -335,279 +330,196 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
 
     return (
         <>
-        <div className="flex-1 flex justify-center px-6 pt-2">
-            <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full">
-                <PanelSectionHeader
-                    title="Clients"
-                    actions={
-                      <>
-                        <PanelSearchInput
-                          id="clients-search"
-                          value={searchQuery}
-                          onChange={setSearchQuery}
-                          placeholder="Search Clients"
-                          label="Search Clients"
-                        />
-                        <div className="relative" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsFilterOpen(false) }} tabIndex={-1}>
-                            <button
-                                type="button"
-                                onClick={() => setIsFilterOpen((v) => !v)}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-sm text-[#374151] border border-[#E5E7EB] hover:bg-gray-50 hover:border-[#701CC0] transition-colors duration-200 shadow-sm"
-                            >
-                                <FiFilter className="w-4 h-4" />
-                                <span className="text-sm font-medium">Filter</span>
-                                <svg 
-                                    className={`w-4 h-4 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`}
-                                    fill="none" 
-                                    stroke="currentColor" 
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </button>
-                            {isFilterOpen && (
-                                <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-[#E5E7EB] py-4 z-50">
-                                    <div className="px-5">
-                                        <h3 className="text-sm font-semibold text-[#111827] mb-4">Sort & Filter</h3>
-                                        
-                                        
-                                        <div className="mb-5">
-                                            <label className="block text-xs font-medium text-[#6B7280] mb-2">Sort By</label>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => { setNameSort('asc'); setRetainerSort('none'); }}
-                                                    className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                        nameSort === 'asc' 
-                                                            ? 'bg-[#701CC0] text-white shadow-sm' 
-                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                    }`}
-                                                >
-                                                    Name A-Z
-                                                </button>
-                                                <button
-                                                    onClick={() => { setNameSort('desc'); setRetainerSort('none'); }}
-                                                    className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                        nameSort === 'desc' 
-                                                            ? 'bg-[#701CC0] text-white shadow-sm' 
-                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                    }`}
-                                                >
-                                                    Name Z-A
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        
-                                        <div className="mb-5">
-                                            <label className="block text-xs font-medium text-[#6B7280] mb-2">Monthly Retainer</label>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => { setRetainerSort('asc'); setNameSort('none'); }}
-                                                    className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                        retainerSort === 'asc' 
-                                                            ? 'bg-[#701CC0] text-white shadow-sm' 
-                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                    }`}
-                                                >
-                                                    Low → High
-                                                </button>
-                                                <button
-                                                    onClick={() => { setRetainerSort('desc'); setNameSort('none'); }}
-                                                    className={`flex-1 text-xs py-2 px-3 rounded-lg font-medium transition-colors duration-200 ${
-                                                        retainerSort === 'desc' 
-                                                            ? 'bg-[#701CC0] text-white shadow-sm' 
-                                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                                    }`}
-                                                >
-                                                    High → Low
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        
-                                        <div className="mb-4">
-                                            <label className="block text-xs font-medium text-[#6B7280] mb-2">Status</label>
-                                            <div className="relative">
-                                                <select
-                                                    value={statusFilter}
-                                                    onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive' | 'pending')}
-                                                    className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
-                                                >
-                                                    <option value="all">All Status</option>
-                                                    <option value="active">Active</option>
-                                                    <option value="inactive">Inactive</option>
-                                                    <option value="pending">Pending</option>
-                                                </select>
-                                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                                    <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                    </svg>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        
-                                        <div className="pt-3 border-t border-[#E5E7EB]">
-                                            <button
-                                                onClick={() => {
-                                                    setNameSort('none')
-                                                    setRetainerSort('none')
-                                                    setStatusFilter('all')
-                                                    setIsFilterOpen(false)
-                                                }}
-                                                className="w-full text-xs py-2 px-3 rounded-lg font-medium text-[#6B7280] bg-gray-50 hover:bg-gray-100 hover:text-[#374151] transition-colors duration-200"
-                                            >
-                                                Clear All Filters
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        <button
-                            onClick={onAddClient}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium"
-                        >
-                            <FiPlus className="w-4 h-4" />
-                            Add Client
-                        </button>
-                      </>
-                    }
+        <PanelPage>
+            <PanelHeader title="Clients">
+                <PanelSearch
+                    id="clients-search"
+                    label="Search Clients"
+                    placeholder="Search clients"
+                    value={searchQuery}
+                    onChange={setSearchQuery}
                 />
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter clients by status">
-                        {(["all", "active", "pending", "inactive"] as const).map(status => (
-                            <button key={status} type="button" aria-pressed={statusFilter === status} onClick={() => { setStatusFilter(status); setCurrentPage(0); }} className={`rounded-full border px-3 py-1.5 text-sm capitalize focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#701CC0] ${statusFilter === status ? "border-[#701CC0] bg-purple-50 text-[#701CC0]" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
-                                {status === "all" ? "All clients" : status}
-                            </button>
-                        ))}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
-                        {hasLoaded && <span>{filteredRows.length} of {rows.length} clients</span>}
-                        {hasFilters && <button type="button" onClick={clearFilters} className="rounded font-medium text-[#701CC0] underline">Clear filters</button>}
-                        <button ref={refreshButtonRef} type="button" disabled={loading || Boolean(updatingClient) || deleting} onClick={() => void fetchClients()} className="rounded border border-gray-200 px-3 py-2 disabled:opacity-50">{loading ? "Refreshing…" : "Refresh clients"}</button>
-                    </div>
+                <div
+                    className="relative"
+                    onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsFilterOpen(false) }}
+                    tabIndex={-1}
+                >
+                    <PanelButton onClick={() => setIsFilterOpen((v) => !v)} icon={<FiFilter className="h-4 w-4" />}>
+                        Filter
+                        <FiChevronDown className={`h-3.5 w-3.5 transition-transform ${isFilterOpen ? "rotate-180" : ""}`} />
+                    </PanelButton>
+                    {isFilterOpen && (
+                        <PanelPopover>
+                            <h3 className="mb-3 text-[13px] font-semibold text-[#111827]">Sort &amp; Filter</h3>
+                            <div className="mb-4">
+                                <span className="mb-1.5 block text-[11px] font-medium text-[#6B7280]">Name</span>
+                                <div className="flex gap-2">
+                                    {([["asc", "A–Z"], ["desc", "Z–A"]] as const).map(([dir, label]) => (
+                                        <button
+                                            key={dir}
+                                            type="button"
+                                            onClick={() => { setNameSort(dir); setRetainerSort("none") }}
+                                            className={`h-8 flex-1 rounded-lg text-[12px] font-medium transition-colors ${
+                                                nameSort === dir ? "bg-[#701CC0] text-white" : "bg-[#F3F1F8] text-[#5B5468] hover:bg-[#EAE6F3]"
+                                            }`}
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="mb-4">
+                                <span className="mb-1.5 block text-[11px] font-medium text-[#6B7280]">Monthly Retainer</span>
+                                <div className="flex gap-2">
+                                    {([["asc", "Low → High"], ["desc", "High → Low"]] as const).map(([dir, label]) => (
+                                        <button
+                                            key={dir}
+                                            type="button"
+                                            onClick={() => { setRetainerSort(dir); setNameSort("none") }}
+                                            className={`h-8 flex-1 rounded-lg text-[12px] font-medium transition-colors ${
+                                                retainerSort === dir ? "bg-[#701CC0] text-white" : "bg-[#F3F1F8] text-[#5B5468] hover:bg-[#EAE6F3]"
+                                            }`}
+                                        >
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <PanelSelect
+                                label="Status"
+                                value={statusFilter}
+                                onChange={(value) => setStatusFilter(value as typeof statusFilter)}
+                                options={[
+                                    { value: "all", label: "All Status" },
+                                    { value: "active", label: "Active" },
+                                    { value: "inactive", label: "Inactive" },
+                                    { value: "pending", label: "Pending" },
+                                ]}
+                            />
+                            <PanelClearFilters
+                                onClick={() => {
+                                    setNameSort("none")
+                                    setRetainerSort("none")
+                                    setStatusFilter("all")
+                                    setIsFilterOpen(false)
+                                }}
+                            />
+                        </PanelPopover>
+                    )}
                 </div>
-                {(searchQuery.trim() || nameSort !== "none" || retainerSort !== "none") && <p className="mb-3 text-sm text-gray-600">
-                    {searchQuery.trim() && <>Search: “{searchQuery.trim()}”. </>}
-                    {retainerSort !== "none" ? `Retainer: ${retainerSort === "asc" ? "low to high" : "high to low"}.` : nameSort !== "none" ? `Name: ${nameSort === "asc" ? "A–Z" : "Z–A"}.` : ""}
-                </p>}
-                {notice && <p role="status" className="mb-3 text-sm text-green-700">{notice}</p>}
-                {error && <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                    <p>{error} {hasLoaded ? "Showing previously loaded clients." : ""}</p>
-                    <button type="button" disabled={loading || Boolean(updatingClient) || deleting} onClick={() => void fetchClients()} className="mt-2 rounded font-medium underline disabled:opacity-50">Retry loading clients</button>
-                </div>}
-                {loading && !hasLoaded ? (
-                    <div className="flex items-center justify-center py-12">
-                        <LoadingSpinner label="Loading Client Data..." />
-                    </div>
-                ) : (
-                    <>
-                        {hasLoaded && filteredRows.length === 0 && (
-                            <div className="text-center py-12">
-                                <div className="w-full h-full flex flex-col items-center justify-center text-center">
-                                    <Image src="/assets/no-client.png" alt="No clients" width={224} height={224} className="w-56 h-auto mb-3" />
-                                    <p className="text-sm text-gray-500 mb-3">{hasFilters ? "No clients match your filters." : "You have no clients added."}</p>
-                                    {hasFilters ? <button type="button" onClick={clearFilters} className="rounded text-sm font-medium text-[#701CC0] underline">Clear filters</button> : <button
-                                        onClick={onAddClient}
-                                        className="inline-flex items-center px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm hover:bg-[#5f17a5]"
+                <PanelButton variant="primary" onClick={onAddClient} icon={<FiPlus className="h-4 w-4" />}>
+                    Add Client
+                </PanelButton>
+            </PanelHeader>
+
+            <PanelDataTable<ClientRow>
+                rows={filteredRows}
+                getRowKey={(r) => r.id}
+                loading={loading}
+                loadingLabel={<LoadingSpinner label="Loading Client Data..." />}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                emptyTitle={hasFilters ? "No Clients Found" : "No Clients Yet"}
+                emptyMessage={
+                    hasFilters ? "No clients match your search." : "Clients you add will appear here."
+                }
+                emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" priority />}
+                emptyAction={
+                    hasFilters ? (
+                        <PanelButton onClick={clearFilters}>Clear All Filters</PanelButton>
+                    ) : (
+                        <PanelButton variant="primary" onClick={onAddClient} icon={<FiPlus className="h-4 w-4" />}>
+                            Add Client
+                        </PanelButton>
+                    )
+                }
+                columns={[
+                    {
+                        key: "name",
+                        header: "Client Name",
+                        cell: (r) => (
+                            <div className="flex items-center gap-3">
+                                <ProfileImage
+                                    src={r.image ? `/api/admin/getClientImage?clientId=${r.id}&t=${imageStamp}` : null}
+                                    name={r.name}
+                                    size={32}
+                                    alt={`${r.name}'s profile`}
+                                />
+                                <div className="min-w-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
+                                        className="block max-w-full truncate text-left font-medium text-[#111827] transition-colors hover:text-[#701CC0]"
                                     >
-                                        <FiPlus className="w-4 h-4 mr-2" />
-                                        Add Client
-                                    </button>}
+                                        {r.name || "—"}
+                                    </button>
+                                    <div className="truncate text-[12px] text-[#6B7280]">{r.email || ""}</div>
                                 </div>
                             </div>
-                        )}
+                        ),
+                    },
+                    { key: "business", header: "Business Name", cell: (r) => r.businessName || <PanelEmptyCell /> },
+                    { key: "industry", header: "Industry", cell: (r) => r.industry || r.targetAudience || <PanelEmptyCell /> },
+                    {
+                        key: "retainer",
+                        header: "Monthly Retainer ($)",
+                        className: "tabular-nums",
+                        cell: (r) =>
+                            typeof r.monthlyRetainer === "number" ? `$${r.monthlyRetainer.toLocaleString()}` : <PanelEmptyCell />,
+                    },
+                    {
+                        key: "goal",
+                        header: "Client Goal",
+                        className: "tabular-nums",
+                        cell: (r) =>
+                            typeof r.clientGoal === "number"
+                                ? `${r.clientGoal.toLocaleString()} ${r.clientGoal === 1 ? "Lead" : "Leads"}`
+                                : <PanelEmptyCell />,
+                    },
+                    {
+                        key: "status",
+                        header: "Status",
+                        cell: (r) =>
+                            updatingClient === r.id ? (
+                                <span role="status" className="text-[12px] text-[#6B7280]">Updating…</span>
+                            ) : statusNeedsRefresh === r.id ? (
+                                <span className="text-[12px] text-amber-700">Refresh required</span>
+                            ) : (
+                                <StatusBadge status={r.status} />
+                            ),
+                    },
+                    {
+                        key: "manage",
+                        header: "Manage",
+                        className: "relative",
+                        cell: (r) => (
+                            <ClientActionsMenu
+                                clientId={r.id}
+                                clientName={r.name}
+                                isActive={r.isActive}
+                                hasImage={r.image}
+                                isAdmin={isAdmin}
+                                busy={updatingClient === r.id || deleting}
+                                triggerId={`open-client-${r.id}`}
+                                onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
+                                onSetActive={() => onSetActiveClient?.({ companyId: r.companyId, businessName: r.businessName })}
+                                onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
+                                onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
+                            />
+                        ),
+                    },
+                ]}
+            />
 
-                        {hasLoaded && filteredRows.length > 0 && (
-                            <div className="bg-white rounded-lg shadow-sm border border-[#E5E7EB] overflow-hidden">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full">
-                                        <thead className="bg-[#F9FAFB] border-b border-[#E5E7EB]">
-                                            <tr>
-                                                {columns.map((c) => (
-                                                    <th key={c.key} className="px-4 py-3 text-left text-xs font-medium text-[#6B7280] uppercase tracking-wider">
-                                                        {c.header}
-                                                    </th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody className="bg-white divide-y divide-[#E5E7EB]">
-                                            {filteredRows.slice(page * pageSize, (page + 1) * pageSize).map((r) => (
-                                                <tr key={r.id} className="hover:bg-purple-50">
-                                                    <td className="px-4 py-4">
-                                                        <div className="flex items-center gap-3">
-                                                            <ProfileImage
-                                                                src={r.image ? `/api/admin/getClientImage?clientId=${r.id}&t=${imageStamp}` : null}
-                                                                name={r.name}
-                                                                size={32}
-                                                                alt={`${r.name}'s profile`}
-                                                            />
-                                                            <div className="flex flex-col">
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
-                                                                    aria-label={`Open client workspace for ${r.name || r.email}`}
-                                                                    id={`open-client-${r.id}`}
-                                                                    className="text-sm font-medium text-[#111827] hover:text-[#701CC0] hover:underline text-left"
-                                                                >
-                                                                    {r.name || "—"}
-                                                                </button>
-                                                                <div className="text-sm text-[#6B7280]">{r.email || ""}</div>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{r.businessName || "—"}</td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{r.industry || r.targetAudience || "—"}</td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">{typeof r.monthlyRetainer === 'number' ? `$${r.monthlyRetainer.toLocaleString()}` : "—"}</td>
-                                                    <td className="px-4 py-4 text-sm text-[#111827]">
-                                                        {typeof r.clientGoal === "number"
-                                                            ? `${r.clientGoal.toLocaleString()} ${r.clientGoal === 1 ? "Lead" : "leads"}`
-                                                            : "N/A"}
-                                                    </td>
-                                                    <td className="px-4 py-4 text-sm">
-                                                        {updatingClient === r.id ? <span role="status">Updating…</span> : statusNeedsRefresh === r.id ? <span className="text-amber-700">Refresh required</span> : <StatusBadge status={r.status} />}
-                                                        {rowErrors[r.id] && <div role="alert" className="mt-2 max-w-xs text-xs text-red-700">
-                                                            {rowErrors[r.id]}
-                                                            <button type="button" disabled={loading || Boolean(updatingClient)} onClick={() => void fetchClients()} className="mt-1 block rounded font-medium underline disabled:opacity-50">Refresh status</button>
-                                                        </div>}
-                                                    </td>
-                                                    <td className="px-4 py-4 text-sm text-[#6B7280]">
-                                                        <ClientActionsMenu
-                                                            clientId={r.id}
-                                                            clientName={r.name}
-                                                            isActive={r.isActive}
-                                                            hasImage={r.image}
-                                                            isAdmin={isAdmin}
-                                                            busy={loading || Boolean(updatingClient) || deleting || Boolean(statusNeedsRefresh)}
-                                                            onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
-                                                            onSetActive={() => onSetActiveClient?.({ companyId: r.companyId, businessName: r.businessName })}
-                                                            onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
-                                                            onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
-                                                        />
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        )}
-                    </>
-                )}
-
-                {hasLoaded && filteredRows.length > 0 && (
-                    <PaginationControls
-                      currentPage={page}
-                      totalPages={totalPages}
-                      onPrevious={() => setCurrentPage(Math.max(0, page - 1))}
-                      onNext={() =>
-                        setCurrentPage(Math.min(totalPages - 1, page + 1))
-                      }
-                    />
-                )}
-            </div>
-        </div>
+            {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
+            {notice && !error && (
+                <p role="status" className="mt-3 text-sm text-[#6B7280]">{notice}</p>
+            )}
+            {Object.entries(rowErrors).map(([id, message]) => (
+                <p key={id} role="alert" className="mt-2 text-sm text-red-600">{message}</p>
+            ))}
+        </PanelPage>
 
         <ConfirmActionModal
           isOpen={deleteModalOpen}

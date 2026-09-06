@@ -49,14 +49,32 @@ function getGrowthDirection(current: number, previous: number): GrowthDirection 
 export default withAuth(async (req, res, session) => {
   try {
     const userId = session.user.id
+    /**
+     * A staff member who has not picked a client yet sees the whole company, not an error.
+     *
+     * resolveTargetCompanyId returns null for a member session with no client selected, and this
+     * used to answer 400 — which meant the dashboard was entirely dead on load (every tile zero,
+     * every panel empty) until someone happened to choose a client in Clients. Role model v2 lets
+     * any Vierra staff member target any client, so the honest reading of "no target" is "all of
+     * them" rather than "refuse". Picking a client narrows it, exactly as before.
+     *
+     * A client session always resolves to its own company, so it can never reach the wider view.
+     */
     const companyId = resolveTargetCompanyId(session, req)
-    if (!companyId) {
-      res.status(400).json({ message: "companyId is required" })
-      return
-    }
+    const scope = companyId ? { company_id: companyId } : {}
+    const campaignScope = companyId ? { campaigns: { company_id: companyId } } : {}
     const now = new Date()
     const { start: currentMonthStart, end: currentMonthEnd } = getUtcMonthRange(now)
     const { start: previousMonthStart, end: previousMonthEnd } = getPreviousUtcMonthRange(now)
+
+    // Money is stored in integer cents on finance_entries; sum per kind per month window.
+    const sumFinance = async (kind: "revenue" | "expense", start: Date, end: Date) => {
+      const agg = await prisma.financeEntry.aggregate({
+        where: { ...scope, kind, occurred_at: { gte: start, lt: end } },
+        _sum: { amount_cents: true },
+      })
+      return (agg._sum.amount_cents ?? 0) / 100
+    }
 
     const [
       clientsLifetime,
@@ -69,35 +87,38 @@ export default withAuth(async (req, res, session) => {
       leadsLifetime,
       currentMonthLeads,
       previousMonthLeads,
+      revenueThisMonth,
+      revenueLastMonth,
+      expensesThisMonth,
+      expensesLastMonth,
     ] = await Promise.all([
-      prisma.client.count({ where: { company_id: companyId } }),
+      /**
+       * Clients are counted across every company, not within the target one.
+       *
+       * A client belongs to its own company, so filtering by company_id counts the clients
+       * *inside* whichever company is selected — which is always none, and why this tile read 0
+       * with clients plainly in the list. The Clients page is unscoped for the same reason (role
+       * model v2: every Vierra staff member sees every client), and these two must agree.
+       *
+       * Everything below stays on companyId: campaigns, leads and money belong to the selected
+       * client, so they are scoped to it.
+       */
+      prisma.client.count(),
       prisma.client.count({
-        where: {
-          company_id: companyId,
-          created_at: {
-            gte: currentMonthStart,
-            lt: currentMonthEnd,
-          },
-        },
+        where: { created_at: { gte: currentMonthStart, lt: currentMonthEnd } },
       }),
       prisma.client.count({
-        where: {
-          company_id: companyId,
-          created_at: {
-            gte: previousMonthStart,
-            lt: previousMonthEnd,
-          },
-        },
+        where: { created_at: { gte: previousMonthStart, lt: previousMonthEnd } },
       }),
       prisma.marketingTracker.groupBy({
         by: ["year", "month"],
         where: { user_id: userId },
         _sum: { meetings_set: true },
       }),
-      prisma.campaign.count({ where: { company_id: companyId } }),
+      prisma.campaign.count({ where: scope }),
       prisma.campaign.count({
         where: {
-          company_id: companyId,
+          ...scope,
           created_at: {
             gte: currentMonthStart,
             lt: currentMonthEnd,
@@ -106,17 +127,17 @@ export default withAuth(async (req, res, session) => {
       }),
       prisma.campaign.count({
         where: {
-          company_id: companyId,
+          ...scope,
           created_at: {
             gte: previousMonthStart,
             lt: previousMonthEnd,
           },
         },
       }),
-      prisma.campaignContact.count({ where: { campaigns: { company_id: companyId } } }),
+      prisma.campaignContact.count({ where: campaignScope }),
       prisma.campaignContact.count({
         where: {
-          campaigns: { company_id: companyId },
+          ...campaignScope,
           enrolled_at: {
             gte: currentMonthStart,
             lt: currentMonthEnd,
@@ -125,34 +146,19 @@ export default withAuth(async (req, res, session) => {
       }),
       prisma.campaignContact.count({
         where: {
-          campaigns: { company_id: companyId },
+          ...campaignScope,
           enrolled_at: {
             gte: previousMonthStart,
             lt: previousMonthEnd,
           },
         },
       }),
-    ])
-
-    // Money is stored in integer cents on finance_entries; sum per kind per month window.
-    const sumFinance = async (kind: "revenue" | "expense", start: Date, end: Date) => {
-      const agg = await prisma.financeEntry.aggregate({
-        where: { company_id: companyId, kind, occurred_at: { gte: start, lt: end } },
-        _sum: { amount_cents: true },
-      })
-      return (agg._sum.amount_cents ?? 0) / 100
-    }
-    const [
-      revenueThisMonth,
-      revenueLastMonth,
-      expensesThisMonth,
-      expensesLastMonth,
-    ] = await Promise.all([
       sumFinance("revenue", currentMonthStart, currentMonthEnd),
       sumFinance("revenue", previousMonthStart, previousMonthEnd),
       sumFinance("expense", currentMonthStart, currentMonthEnd),
       sumFinance("expense", previousMonthStart, previousMonthEnd),
     ])
+
     const profitThisMonth = revenueThisMonth - expensesThisMonth
     const profitLastMonth = revenueLastMonth - expensesLastMonth
 

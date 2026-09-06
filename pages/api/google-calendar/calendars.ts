@@ -3,6 +3,8 @@ import { withAuth } from "@/lib/api/withAuth"
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens"
 import {
   getCalendarVisibilityPreferences,
+  isGeneratedGoogleCalendar,
+  resolveCalendarVisibility,
   upsertCalendarVisibilityPreference,
 } from "@/lib/googleCalendar/visibility"
 
@@ -13,6 +15,7 @@ type GoogleCalendarListResponse = {
     hidden?: boolean
     accessRole?: string
     timeZone?: string
+    primary?: boolean
   }>
 }
 
@@ -62,15 +65,25 @@ export default withAuth(async (req, res, session) => {
 
           const calendarListJson = (await calendarListRes.json()) as GoogleCalendarListResponse
           const calendars = (calendarListJson.items || [])
-            .filter((calendar) => calendar.id && !calendar.hidden && canReadCalendar(calendar.accessRole))
+            .filter(
+              (calendar) =>
+                calendar.id &&
+                !calendar.hidden &&
+                canReadCalendar(calendar.accessRole) &&
+                !isGeneratedGoogleCalendar(calendar.id)
+            )
             .map((calendar) => {
               const id = calendar.id as string
-              const key = `${accountEmail}::${id}`
               return {
                 id,
                 summary: calendar.summary || id,
                 timeZone: calendar.timeZone || "UTC",
-                enabled: visibilityMap.get(key) ?? true,
+                primary: calendar.primary === true || id.toLowerCase() === accountEmail,
+                enabled: resolveCalendarVisibility(visibilityMap, {
+                  accountEmail,
+                  calendarId: id,
+                  primary: calendar.primary,
+                }),
               }
             })
             .sort((a, b) => a.summary.localeCompare(b.summary))

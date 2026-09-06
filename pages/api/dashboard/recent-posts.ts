@@ -24,6 +24,8 @@ export default withAuth(
       take: 5,
     });
 
+    // published posts change on the order of days.
+    res.setHeader("Cache-Control", "private, max-age=300")
     res.status(200).json({
       posts: posts.map((post) => ({
         id: post.id,

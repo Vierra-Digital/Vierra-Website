@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { asStr } from "@/lib/api/parsing";
+import { asStr, isUuid } from "@/lib/api/parsing";
 
 /**
  * Public booking lookup for the self-service manage page (pages/manage/[id].tsx). The booking
@@ -14,6 +14,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return;
   }
   const id = asStr(req.query.id).trim();
+  // A malformed id is indistinguishable from an absent one to a caller, and Postgres would
+  // reject it before the lookup, surfacing as a 500.
+  if (id && !isUuid(id)) {
+    res.status(404).json({ message: "Not found." });
+    return;
+  }
   const booking = await prisma.booking.findUnique({
     where: { id },
     select: {

@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo } from "react"
+import Link from "next/link"
 import { RiArrowDropDownLine } from "react-icons/ri"
+import { FiArrowRight } from "react-icons/fi"
+import LTVCalculatorModal from "@/components/panel/LTVCalculatorModal"
 import { FiTrendingUp, FiTrendingDown, FiMinus, FiCalendar, FiClock } from "react-icons/fi"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { panelFetch } from "@/lib/panelFetch"
@@ -73,6 +76,7 @@ type WebsiteVisitsPoint = { week: string; visits: number }
 
 const DashboardSection = () => {
     const [clientNow, setClientNow] = useState<Date | null>(null)
+    const [ltvOpen, setLtvOpen] = useState(false)
     useEffect(() => {
         // Deliberately after mount. Reading the clock during render is impure and would make the
         // server's HTML disagree with the client's first render, since everything below keys off
@@ -133,34 +137,68 @@ const DashboardSection = () => {
 
     // Staff presence and the latest posts are independent of each other and of the stats, so they
     // load in parallel and each panel fills in on its own rather than gating the page.
+    /**
+     * Staff presence goes stale within a minute or two — someone closes a tab and the panel
+     * keeps showing them as active until the page is reloaded. Poll it instead.
+     *
+     * Blog posts change on the order of days, so they are fetched once and left alone rather
+     * than re-requested on every tick.
+     */
+    const STAFF_POLL_MS = 60_000
     useEffect(() => {
         let cancelled = false
-        const load = async () => {
+
+        const loadStaff = async () => {
             try {
-                const [staffRes, postsRes] = await Promise.all([
-                    fetch("/api/dashboard/staff-activity"),
-                    fetch("/api/dashboard/recent-posts"),
-                ])
-                if (staffRes.ok) {
-                    const data = await staffRes.json()
-                    if (!cancelled && Array.isArray(data?.staff)) setStaffActivity(data.staff)
-                }
-                if (postsRes.ok) {
-                    const data = await postsRes.json()
-                    if (!cancelled && Array.isArray(data?.posts)) setRecentPosts(data.posts)
-                }
+                const res = await fetch("/api/dashboard/staff-activity", { cache: "no-store" })
+                if (!res.ok) return
+                const data = await res.json()
+                if (!cancelled && Array.isArray(data?.staff)) setStaffActivity(data.staff)
             } catch {
-                /* leave the panels empty; their empty states explain themselves */
+                /* a failed poll just leaves the previous list up */
             } finally {
-                if (!cancelled) {
-                    setStaffLoading(false)
-                    setPostsLoading(false)
-                }
+                if (!cancelled) setStaffLoading(false)
             }
         }
-        void load()
+
+        const loadPosts = async () => {
+            try {
+                const res = await fetch("/api/dashboard/recent-posts")
+                if (!res.ok) return
+                const data = await res.json()
+                if (!cancelled && Array.isArray(data?.posts)) setRecentPosts(data.posts)
+            } catch {
+                /* empty state explains itself */
+            } finally {
+                if (!cancelled) setPostsLoading(false)
+            }
+        }
+
+        void loadStaff()
+        void loadPosts()
+
+        // The presence heartbeat (useActivityHeartbeat) also fires on mount, so the first staff
+        // fetch can race it and read the PREVIOUS session's timestamp — which is why you could
+        // be sitting on the dashboard and see yourself listed as offline. Re-read shortly after,
+        // once that heartbeat has landed, instead of waiting a full poll interval.
+        const settleTimer = window.setTimeout(() => {
+            void loadStaff()
+        }, 4000)
+
+        // Only poll while the tab is visible. A backgrounded dashboard hitting the API every
+        // minute is pure waste, and the value is stale the moment you look away anyway.
+        const tick = () => {
+            if (document.visibilityState === "visible") void loadStaff()
+        }
+        const timer = window.setInterval(tick, STAFF_POLL_MS)
+        // Refresh immediately on return, rather than waiting out the rest of the interval.
+        document.addEventListener("visibilitychange", tick)
+
         return () => {
             cancelled = true
+            window.clearTimeout(settleTimer)
+            window.clearInterval(timer)
+            document.removeEventListener("visibilitychange", tick)
         }
     }, [])
 
@@ -465,7 +503,11 @@ const DashboardSection = () => {
                     
                     {/* Chart and Recent Posts share a row: the chart alone left its right side empty
                         on wide screens. */}
-                    <div className="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                    <div className="mb-4 grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                    {/* Left column: the chart with the LTV launcher directly beneath it. They were
+                        in separate rows, and because row one was as tall as the right-hand stack,
+                        that left ~280px of dead space under the chart before the tile began. */}
+                    <div className="flex flex-col gap-4">
                     <div className="bg-[#F1EFF6] rounded-xl p-4">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="text-lg font-semibold text-[#111827]">Website Visits</h3>
@@ -484,7 +526,7 @@ const DashboardSection = () => {
                                 <RiArrowDropDownLine className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#6B7280] pointer-events-none" />
                             </div>
                         </div>
-                        <div className="h-64 rounded-lg p-3">
+                        <div className="h-[242px] rounded-lg p-3">
                             {websiteVisitsLoading ? (
                                 /* Bars rather than a spinner or a line of text: the chart's own
                                    shape, so switching months doesn't collapse the panel's height
@@ -541,7 +583,31 @@ const DashboardSection = () => {
                             )}
                         </div>
                     </div>
-<div className="bg-[#F1EFF6] rounded-xl p-4 flex flex-col">
+                                                    {/* LTV lives here rather than in the rail: it is a scratchpad you open,
+                                try numbers in, and close — not a destination worth a permanent tab. */}
+                            <button
+                                type="button"
+                                onClick={() => setLtvOpen(true)}
+                                className="group flex w-full max-w-[224px] flex-col justify-between rounded-xl bg-gradient-to-br from-[#701CC0] to-[#8F42FF] p-4 text-left text-white transition-[filter] duration-200 hover:brightness-[1.06]"
+                            >
+                                <div>
+                                    <h3 className="text-lg font-semibold text-white">LTV Calculator</h3>
+                                    <p className="mt-1 text-[12.5px] leading-relaxed text-white/75">
+                                        Model lifetime value and retainer pricing.
+                                    </p>
+                                </div>
+                                <span className="mt-4 inline-flex items-center gap-1.5 self-start rounded-full bg-white/15 px-3 py-1.5 text-[12px] font-medium text-white transition-colors group-hover:bg-white/25">
+                                    Open Calculator
+                                    <FiArrowRight
+                                        className="h-3.5 w-3.5 motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out motion-safe:group-hover:translate-x-1"
+                                        aria-hidden
+                                    />
+                                </span>
+                            </button>
+
+                    </div>
+<div className="flex flex-col gap-4">
+                            <div className="bg-[#F1EFF6] rounded-xl p-4 flex flex-col">
                             <h3 className="text-lg font-semibold text-[#111827] mb-3">Recent Blog Posts</h3>
                             {postsLoading ? (
                                 <div className="space-y-2">
@@ -554,7 +620,16 @@ const DashboardSection = () => {
                             ) : (
                                 <ul className="flex-1 divide-y divide-[#F1EFF5] flex flex-col justify-between">
                                     {recentPosts.map((post) => (
-                                        <li key={post.id} className="flex items-center gap-2.5 py-2">
+                                        <li key={post.id}>
+                                            {/* New tab, not this one: the panel would otherwise
+                                                unmount and every dashboard fetch would re-run on
+                                                the way back. */}
+                                            <Link
+                                                href={`/blog/${post.slug}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-start gap-2.5 py-2"
+                                            >
                                             <div className="min-w-0 flex-1">
                                                 <p className="truncate text-[13px] font-medium text-[#111827]">{post.title}</p>
                                                 <p className="text-[11px] text-[#9CA3AF]">
@@ -568,52 +643,59 @@ const DashboardSection = () => {
                                             <span className="shrink-0 rounded-full bg-[#F3EDFB] px-2 py-0.5 text-[11px] font-medium text-[#701CC0]">
                                                 {post.views.toLocaleString()} {post.views === 1 ? "View" : "Views"}
                                             </span>
+                                            </Link>
                                         </li>
                                     ))}
                                 </ul>
                             )}
+                        </div>
+        <div className="bg-[#F1EFF6] rounded-xl p-4">
+                                    <h3 className="text-lg font-semibold text-[#111827] mb-3">Staff Activity</h3>
+                                    {/* Sits under Recent Blog Posts and inherits its 320px track, so
+                                        no width of its own. Height is reserved for five rows — the
+                                        number the endpoint serves — so the card does not resize as
+                                        people come and go. The chart beside it is items-start and
+                                        keeps its own height regardless. */}
+                                    {staffLoading ? (
+                                        <div className="space-y-2">
+                                            {[...Array(3)].map((_, i) => (
+                                                <div key={i} className="dash-skeleton h-9 rounded-lg" style={{ animationDelay: `${i * 70}ms` }} />
+                                            ))}
+                                        </div>
+                                    ) : staffActivity.length === 0 ? (
+                                        <p className="text-xs text-[#6B7280]">No teammates yet.</p>
+                                    ) : (
+                                        <ul className="min-h-[190px] divide-y divide-[#F1EFF5]">
+                                            {staffActivity.map((row) => (
+                                                <li key={row.userId} className="flex items-center gap-2.5 py-2">
+                                                    <span
+                                                        className={`h-2 w-2 shrink-0 rounded-full ${
+                                                            row.isLive
+                                                                ? "bg-emerald-500"
+                                                                : row.status === "away" || row.status === "busy"
+                                                                  ? "bg-amber-400"
+                                                                  : "bg-[#D1D5DB]"
+                                                        }`}
+                                                        aria-hidden
+                                                    />
+                                                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#111827]">
+                                                        {row.name || row.email || "Unknown"}
+                                                    </span>
+                                                    <span className="shrink-0 text-[11px] text-[#6B7280]">
+                                                        {row.isLive
+                                                    ? "Active Now"
+                                                    : row.status === "away" || row.status === "busy"
+                                                      ? `Away · ${formatActiveSince(row.lastActiveAt)}`
+                                                      : `Offline · ${formatActiveSince(row.lastActiveAt)}`}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
                         </div>
                     </div>
 
-                    {/* Staff Activity sits under the chart at the same width as Recent Posts, so
-                        the two read as a matched pair rather than one wide and one narrow. */}
-                    <div className="mb-4 w-full max-w-[320px]">
-                        <div className="bg-[#F1EFF6] rounded-xl p-4">
-                            <h3 className="text-lg font-semibold text-[#111827] mb-3">Staff Activity</h3>
-                            {staffLoading ? (
-                                <div className="space-y-2">
-                                    {[...Array(3)].map((_, i) => (
-                                        <div key={i} className="dash-skeleton h-9 rounded-lg" style={{ animationDelay: `${i * 70}ms` }} />
-                                    ))}
-                                </div>
-                            ) : staffActivity.length === 0 ? (
-                                <p className="text-xs text-[#6B7280]">No teammates yet.</p>
-                            ) : (
-                                <ul className="divide-y divide-[#F1EFF5]">
-                                    {staffActivity.map((row) => (
-                                        <li key={row.userId} className="flex items-center gap-2.5 py-2">
-                                            <span
-                                                className={`h-2 w-2 shrink-0 rounded-full ${
-                                                    row.isLive
-                                                        ? "bg-emerald-500"
-                                                        : row.status === "away" || row.status === "busy"
-                                                          ? "bg-amber-400"
-                                                          : "bg-[#D1D5DB]"
-                                                }`}
-                                                aria-hidden
-                                            />
-                                            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#111827]">
-                                                {row.name || row.email || "Unknown"}
-                                            </span>
-                                            <span className="shrink-0 text-[11px] text-[#6B7280]">
-                                                {row.isLive ? "Active Now" : formatActiveSince(row.lastActiveAt)}
-                                            </span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-                    </div>
 
                 </div>
 
@@ -748,6 +830,8 @@ const DashboardSection = () => {
                 }
             }
         `}</style>
+
+        <LTVCalculatorModal open={ltvOpen} onClose={() => setLtvOpen(false)} />
         </div>
     )
 }
