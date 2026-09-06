@@ -5,6 +5,8 @@ import { FiChevronLeft, FiChevronRight, FiCalendar, FiTrendingUp, FiDollarSign, 
 import { m as motion } from "framer-motion"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import { PanelHeader, PanelPage } from "@/components/panel/PanelTable"
+import { useDraftGuard } from "@/hooks/useDraftGuard";
+import { panelFetch } from "@/lib/panelFetch"
 
 const statFields = [
     { key: "attempts", label: "Attempts", icon: FiTarget },
@@ -130,6 +132,12 @@ const OutreachSection = () => {
     const [clientData, setClientData] = useState<ClientStat[]>([])
     const [clientEdits, setClientEdits] = useState<ClientManualFields>({ meetingsSet: 0, clientsClosed: 0, revenue: 0 })
     const [clientDirty, setClientDirty] = useState(false)
+    const [saveError, setSaveError] = useState("");
+    const [loadError, setLoadError] = useState("");
+    const [savedNotice, setSavedNotice] = useState("");
+    const writePending = useRef(false);
+    const editVersion = useRef(0);
+    useDraftGuard(hasUnsavedChanges || clientDirty, "Marketing Tracker", "5", isUpdating);
     const clientSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const calculatePercentage = useCallback((numerator: number, denominator: number) => {
@@ -138,7 +146,10 @@ const OutreachSection = () => {
     }, [])
 
     function handleStatChange(card: CardKey, field: StatField, value: string) {
-        if (!isEditable) return
+        if (!isEditable || writePending.current) return
+        editVersion.current += 1
+        setSaveError("")
+        setSavedNotice("")
         setStats(prev => ({
             ...prev,
             [card]: {
@@ -150,7 +161,10 @@ const OutreachSection = () => {
     }
 
     function handleClientStatChange(field: keyof ClientManualFields, value: string) {
-        if (!isEditable) return
+        if (!isEditable || writePending.current) return
+        editVersion.current += 1
+        setSaveError("")
+        setSavedNotice("")
         const num = field === "revenue"
             ? Number(value.replace(/,/g, '')) || 0
             : parseInt(value.replace(/,/g, '')) || 0
@@ -182,7 +196,10 @@ const OutreachSection = () => {
     ), [stats]);
 
     const persistMonthlyData = useCallback(async () => {
-        if (!session?.user || !isEditable) return;
+        if (!session?.user || !isEditable || writePending.current) return false;
+        writePending.current = true;
+        const version = editVersion.current;
+        setSaveError("");
         setIsUpdating(true);
         try {
             const outreachMap: Record<CardKey, string> = {
@@ -214,16 +231,22 @@ const OutreachSection = () => {
             if (!response.ok) {
                 throw new Error("Failed to update marketing data");
             }
-            setHasUnsavedChanges(false)
+            if (version === editVersion.current) setHasUnsavedChanges(false)
+            setSavedNotice("Saved");
+            return true;
         } catch (error) {
+            setSaveError("Could not save. Your edits are kept. Retry before changing period or client.");
+            return false;
             console.error("Error updating marketing data:", error);
         } finally {
+            writePending.current = false;
             setIsUpdating(false);
         }
     }, [calculatePercentage, isEditable, selectedMonth, selectedYear, session?.user, stats]);
 
     const fetchMonthlyData = useCallback(async () => {
         setIsLoading(true);
+        setLoadError("");
         try {
             const response = await fetch(`/api/marketing/tracker?year=${selectedYear}&month=${selectedMonth}`);
             if (!response.ok) throw new Error("Failed to fetch stats");
@@ -268,6 +291,7 @@ const OutreachSection = () => {
             // Not surfaced in the UI: this section has no error surface, and adding one is a design
             // change rather than a fix. Logging at least makes a failed load diagnosable instead of
             // silently indistinguishable from a month that genuinely has no data.
+            setLoadError("Could not load this period. Retry to see current data.");
             console.error("outreach: load failed", e);
         } finally {
             setIsLoading(false);
@@ -276,6 +300,7 @@ const OutreachSection = () => {
 
     const fetchYearlySummary = useCallback(async () => {
         setIsLoading(true);
+        setLoadError("");
         try {
             const outreachMap: Record<string, CardKey> = {
                 walkinnetworking: "NetworkingEvents",
@@ -341,6 +366,7 @@ const OutreachSection = () => {
             // Not surfaced in the UI: this section has no error surface, and adding one is a design
             // change rather than a fix. Logging at least makes a failed load diagnosable instead of
             // silently indistinguishable from a month that genuinely has no data.
+            setLoadError("Could not load this period. Retry to see current data.");
             console.error("outreach: load failed", e);
         } finally {
             setIsLoading(false);
@@ -350,7 +376,7 @@ const OutreachSection = () => {
     const fetchClientData = useCallback(async () => {
         setIsLoading(true)
         try {
-            const response = await fetch(`/api/marketing/client-tracker?year=${selectedYear}&month=${selectedMonth}`)
+            const response = await panelFetch(`/api/marketing/client-tracker?year=${selectedYear}&month=${selectedMonth}`)
             if (!response.ok) throw new Error("Failed to fetch client stats")
             const data = await response.json()
             setClients(Array.isArray(data.clients) ? data.clients : [])
@@ -360,6 +386,7 @@ const OutreachSection = () => {
             // Not surfaced in the UI: this section has no error surface, and adding one is a design
             // change rather than a fix. Logging at least makes a failed load diagnosable instead of
             // silently indistinguishable from a month that genuinely has no data.
+            setLoadError("Could not load this period. Retry to see current data.");
             console.error("outreach: load failed", e);
         } finally {
             setIsLoading(false)
@@ -367,10 +394,13 @@ const OutreachSection = () => {
     }, [selectedYear, selectedMonth])
 
     const persistClientData = useCallback(async () => {
-        if (!session?.user || !isEditable || !selectedClientId) return
+        if (!session?.user || !isEditable || !selectedClientId || writePending.current) return false
+        writePending.current = true
+        const version = editVersion.current
+        setSaveError("")
         setIsUpdating(true)
         try {
-            const response = await fetch("/api/marketing/client-tracker", {
+            const response = await panelFetch("/api/marketing/client-tracker", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -384,10 +414,15 @@ const OutreachSection = () => {
                 }),
             })
             if (!response.ok) throw new Error("Failed to update client data")
-            setClientDirty(false)
+            if (version === editVersion.current) setClientDirty(false)
+            setSavedNotice("Saved");
+            return true;
         } catch (error) {
+            setSaveError("Could not save. Your edits are kept. Retry before changing period or client.");
+            return false;
             console.error("Error updating client data:", error)
         } finally {
+            writePending.current = false;
             setIsUpdating(false)
         }
     }, [session?.user, isEditable, selectedClientId, selectedYear, selectedMonth, clientEdits])
@@ -427,7 +462,7 @@ const OutreachSection = () => {
 
     // Debounced auto-save of the manual per-client fields.
     useEffect(() => {
-        if (!clientDirty || scope !== "client" || !isEditable || isLoading) return
+        if (!clientDirty || saveError || scope !== "client" || !isEditable || isLoading) return
         if (clientSaveTimerRef.current) clearTimeout(clientSaveTimerRef.current)
         clientSaveTimerRef.current = setTimeout(() => {
             persistClientData()
@@ -435,10 +470,10 @@ const OutreachSection = () => {
         return () => {
             if (clientSaveTimerRef.current) clearTimeout(clientSaveTimerRef.current)
         }
-    }, [clientDirty, scope, isEditable, isLoading, persistClientData, clientEdits])
+    }, [clientDirty, saveError, scope, isEditable, isLoading, persistClientData, clientEdits])
 
     useEffect(() => {
-        if (!hasUnsavedChanges || viewMode !== "monthly" || !isEditable || isLoading) return
+        if (!hasUnsavedChanges || saveError || viewMode !== "monthly" || !isEditable || isLoading) return
         if (saveTimerRef.current) {
             clearTimeout(saveTimerRef.current)
         }
@@ -448,7 +483,17 @@ const OutreachSection = () => {
         return () => {
             if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
         }
-    }, [hasUnsavedChanges, isEditable, isLoading, persistMonthlyData, stats, viewMode]);
+    }, [hasUnsavedChanges, saveError, isEditable, isLoading, persistMonthlyData, stats, viewMode]);
+
+    const changeView = async (change: () => void) => {
+        if (writePending.current || isLoading) return;
+        if (clientSaveTimerRef.current) clearTimeout(clientSaveTimerRef.current);
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        if (clientDirty && !(await persistClientData())) return;
+        if (hasUnsavedChanges && !(await persistMonthlyData())) return;
+        setSavedNotice("");
+        change();
+    };
 
     const navigateMonth = (direction: "prev" | "next") => {
         if (direction === "prev") {
@@ -544,7 +589,7 @@ const OutreachSection = () => {
 
                             <div className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#E4E0EC] bg-[#F3F1F8] p-1">
                                 <button
-                                    onClick={() => setScope("company")}
+                                    onClick={() => void changeView(() => setScope("company"))}
                                     className={`h-7 rounded-md px-3 text-[12px] font-medium transition-colors ${
                                         scope === "company"
                                             ? "bg-white text-[#5B21B6] shadow-sm"
@@ -554,7 +599,7 @@ const OutreachSection = () => {
                                     Company
                                 </button>
                                 <button
-                                    onClick={() => setScope("client")}
+                                    onClick={() => void changeView(() => setScope("client"))}
                                     className={`h-7 rounded-md px-3 text-[12px] font-medium transition-colors ${
                                         scope === "client"
                                             ? "bg-white text-[#5B21B6] shadow-sm"
@@ -564,7 +609,7 @@ const OutreachSection = () => {
                                     By Client
                                 </button>
                                 <button
-                                    onClick={() => setScope("overview")}
+                                    onClick={() => void changeView(() => setScope("overview"))}
                                     className={`h-7 rounded-md px-3 text-[12px] font-medium transition-colors ${
                                         scope === "overview"
                                             ? "bg-white text-[#5B21B6] shadow-sm"
@@ -578,7 +623,7 @@ const OutreachSection = () => {
                             {scope === "company" && (
                             <div className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#E4E0EC] bg-[#F3F1F8] p-1">
                                 <button
-                                    onClick={() => setViewMode("monthly")}
+                                    onClick={() => void changeView(() => setViewMode("monthly"))}
                                     className={`h-7 rounded-md px-3 text-[12px] font-medium transition-colors ${
                                         viewMode === "monthly"
                                             ? "bg-white text-[#5B21B6] shadow-sm"
@@ -588,7 +633,7 @@ const OutreachSection = () => {
                                     Monthly
                                 </button>
                                 <button
-                                    onClick={() => setViewMode("yearly")}
+                                    onClick={() => void changeView(() => setViewMode("yearly"))}
                                     className={`h-7 rounded-md px-3 text-[12px] font-medium transition-colors ${
                                         viewMode === "yearly"
                                             ? "bg-white text-[#5B21B6] shadow-sm"
@@ -605,7 +650,7 @@ const OutreachSection = () => {
                                     
                                     <div className="inline-flex h-9 items-center rounded-lg bg-[#701CC0] text-white">
                                         <button
-                                            onClick={() => navigateMonth("prev")}
+                                            onClick={() => void changeView(() => navigateMonth("prev"))}
                                             disabled={!canNavigatePrev}
                                             className="p-2 hover:bg-white/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded-l-lg"
                                         >
@@ -615,7 +660,7 @@ const OutreachSection = () => {
                                             {months[selectedMonth - 1]} {selectedYear}
                                         </div>
                                         <button
-                                            onClick={() => navigateMonth("next")}
+                                            onClick={() => void changeView(() => navigateMonth("next"))}
                                             disabled={!canNavigateNext}
                                             className="p-2 hover:bg-white/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded-r-lg"
                                         >
@@ -628,7 +673,7 @@ const OutreachSection = () => {
                             ) : (
                                 <div className="inline-flex h-9 items-center rounded-lg bg-[#701CC0] text-white">
                                     <button
-                                        onClick={() => setSelectedYear(selectedYear - 1)}
+                                        onClick={() => void changeView(() => setSelectedYear(selectedYear - 1))}
                                         disabled={selectedYear <= 2020}
                                         className="p-2 hover:bg-white/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded-l-lg"
                                     >
@@ -638,7 +683,7 @@ const OutreachSection = () => {
                                         {selectedYear}
                                     </div>
                                     <button
-                                        onClick={() => setSelectedYear(selectedYear + 1)}
+                                        onClick={() => void changeView(() => setSelectedYear(selectedYear + 1))}
                                         disabled={selectedYear >= currentYear}
                                         className="p-2 hover:bg-white/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded-r-lg"
                                     >
@@ -648,7 +693,33 @@ const OutreachSection = () => {
                             )}
                     </PanelHeader>
 
-                    {isLoading ? (
+                    {saveError ? (
+                        <p role="alert" className="mb-3 flex flex-wrap items-center gap-2 text-[13px] text-[#B42318]">
+                            {saveError}
+                            <button
+                                type="button"
+                                onClick={() => void (scope === "client" ? persistClientData() : persistMonthlyData())}
+                                className="rounded font-medium underline underline-offset-2 hover:text-[#8f1c12]"
+                            >
+                                Retry
+                            </button>
+                        </p>
+                    ) : (
+                        <p role="status" className="sr-only">{savedNotice}</p>
+                    )}
+
+                    {loadError ? (
+                        <p role="alert" className="flex flex-wrap items-center gap-2 p-4 text-[13px] text-[#B42318]">
+                            {loadError}
+                            <button
+                                type="button"
+                                onClick={() => void (scope === "company" ? viewMode === "monthly" ? fetchMonthlyData() : fetchYearlySummary() : fetchClientData())}
+                                className="rounded font-medium underline underline-offset-2 hover:text-[#8f1c12]"
+                            >
+                                Retry
+                            </button>
+                        </p>
+                    ) : isLoading ? (
                         <div className="flex items-center justify-center py-12">
                             <LoadingSpinner label="Loading Marketing Data..." />
                         </div>
@@ -764,7 +835,7 @@ const OutreachSection = () => {
                                         <label className="text-sm font-medium text-[#6B7280]">Client</label>
                                         <select
                                             value={selectedClientId}
-                                            onChange={(e) => setClientChoice(e.target.value)}
+                                            onChange={(e) => { const value = e.target.value; void changeView(() => setClientChoice(value)); }}
                                             className="text-sm font-semibold text-[#111827] rounded-md border border-[#D7DDED] px-3 py-2 bg-white focus:border-[#701CC0] focus:ring-1 focus:ring-[#701CC0] focus:outline-none"
                                         >
                                             {clients.map((c) => (
