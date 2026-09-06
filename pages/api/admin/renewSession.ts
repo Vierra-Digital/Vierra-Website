@@ -35,6 +35,7 @@ export default withAuth(
         message: "Session renewed successfully",
         token: updated.id,
         status: updated.status,
+        expiresAt: updated.expires_at,
         link: `/onboarding/${updated.id}`,
       });
     } catch (err) {

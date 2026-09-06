@@ -43,33 +43,38 @@ export default withAuth(async (req, res, session) => {
     };
   }
 
-  const contacts = await prisma.contact.findMany({
-    where,
-    include: {
-      contact_tag_assignments: {
-        include: {
-          contact_tags: true,
+  try {
+    const contacts = await prisma.contact.findMany({
+      where,
+      include: {
+        contact_tag_assignments: {
+          include: {
+            contact_tags: true,
+          },
         },
       },
-    },
-    orderBy: [{ last_name: "asc" }, { first_name: "asc" }],
-  });
+      orderBy: [{ last_name: "asc" }, { first_name: "asc" }],
+    });
 
-  const csv = toContactsCsv(
-    contacts.map((contact) => ({
-      firstName: contact.first_name || "",
-      lastName: contact.last_name || "",
-      email: contact.email || "",
-      phone: contact.phone || "",
-      business: contact.business || "",
-      website: contact.website || "",
-      address: contact.address || "",
-      tags: contact.contact_tag_assignments.map((assignment) => assignment.contact_tags.name).join("|"),
-    }))
-  );
+    const csv = toContactsCsv(
+      contacts.map((contact) => ({
+        firstName: contact.first_name || "",
+        lastName: contact.last_name || "",
+        email: contact.email || "",
+        phone: contact.phone || "",
+        business: contact.business || "",
+        website: contact.website || "",
+        address: contact.address || "",
+        tags: contact.contact_tag_assignments.map((assignment) => assignment.contact_tags.name).join("|"),
+      }))
+    );
 
-  const filename = `contacts-${new Date().toISOString().slice(0, 10)}.csv`;
-  res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-  res.status(200).send(csv);
+    const filename = `contacts-${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.status(200).send(csv);
+  } catch (e) {
+    console.error("contacts/export", e);
+    res.status(500).json({ message: "Failed to export contacts." });
+  }
 }, { methods: ["GET"] });

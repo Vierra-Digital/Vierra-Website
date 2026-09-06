@@ -1,5 +1,7 @@
 import type { NextApiRequest } from "next";
 import { prisma } from "@/lib/prisma";
+import { runSendAttempt, type SendReceiptResult } from "@/lib/gmail/sendAttempt";
+import type { MemberSession } from "@/lib/api/withAuth";
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr } from "@/lib/api/parsing";
 import { sendEmailCore, normalizeEmail, escapeHtml, type SendEmailPayload } from "@/lib/gmail/sendCore";
@@ -47,7 +49,7 @@ function getPublicBaseUrl(req: NextApiRequest) {
   return `${proto}://${host}`.replace(/\/$/, "");
 }
 
-export default withAuth(async (req, res, session) => {
+async function performSend(req: NextApiRequest, session: MemberSession): Promise<SendReceiptResult> {
   const userId = session.user.id;
   const baseUrl = getPublicBaseUrl(req);
 
@@ -77,8 +79,7 @@ export default withAuth(async (req, res, session) => {
   if (sendAccount) {
     const access = await resolveMailboxOwner(userId, sendAccount);
     if (!access || !access.canSend) {
-      res.status(403).json({ message: "You don't have permission to send from this mailbox." });
-      return;
+      return { status: 403, body: { message: "You don't have permission to send from this mailbox." } };
     }
     effectiveUserId = access.ownerUserId;
   }
@@ -95,8 +96,7 @@ export default withAuth(async (req, res, session) => {
       ? payload.bodyHtml
       : `<div style="white-space:pre-wrap;font-family:Arial,Helvetica,sans-serif;">${escapeHtml(asStr(payload.body))}</div>`;
     if (!realHtml.trim()) {
-      res.status(400).json({ message: "Email body is required." });
-      return;
+      return { status: 400, body: { message: "Email body is required." } };
     }
     const created = await createConfidentialMessage({
       userId,
@@ -120,36 +120,35 @@ export default withAuth(async (req, res, session) => {
   if (scheduledRaw != null && scheduledRaw !== "") {
     const accountEmail = normalizeEmail(payload.accountEmail);
     if (!accountEmail) {
-      res.status(400).json({ message: "accountEmail is required." });
-      return;
+      return { status: 400, body: { message: "accountEmail is required." } };
     }
     if (!payload.to.trim()) {
-      res.status(400).json({ message: "Recipient email is required." });
-      return;
+      return { status: 400, body: { message: "Recipient email is required." } };
     }
     if (!asStr(payload.body).trim() && !asStr(payload.bodyHtml).trim()) {
-      res.status(400).json({ message: "Email body is required." });
-      return;
+      return { status: 400, body: { message: "Email body is required." } };
     }
     const parsed = parseScheduledAt(scheduledRaw, new Date());
     if (!parsed.ok) {
-      res.status(400).json({ message: parsed.message });
-      return;
+      return { status: 400, body: { message: parsed.message } };
     }
     const queued = await enqueueScheduledSend(effectiveUserId, accountEmail, payload, parsed.date);
     if (payload.draftKey) {
       await prisma.emailComposeDraft.deleteMany({ where: { user_id: userId, draft_key: payload.draftKey } });
     }
-    res.status(200).json({ ok: true, scheduled: true, id: queued.id, scheduledAt: queued.scheduledAt });
-    return;
+    return { status: 200, body: { ok: true, scheduled: true, id: queued.id, scheduledAt: queued.scheduledAt } };
   }
 
   // effectiveUserId owns the mailbox (tokens, provider rows); userId is the staff member sending,
   // whose own settings govern tracking and read receipts.
   const result = await sendEmailCore(effectiveUserId, payload, baseUrl, userId);
   if (!result.ok) {
-    res.status(result.status).json({ message: result.message });
-    return;
+    return { status: result.status, body: { message: result.message } };
   }
-  res.status(200).json({ ok: true, messageId: result.messageId, tracked: result.tracked, provider: result.provider });
+  return { status: 200, body: { ok: true, messageId: result.messageId, tracked: result.tracked, provider: result.provider } };
+}
+
+export default withAuth(async (req, res, session) => {
+  const result = await runSendAttempt(session.user.id, req.body?.requestId, req.body, () => performSend(req, session));
+  return res.status(result.status).json(result.body);
 }, { methods: ["POST"] });

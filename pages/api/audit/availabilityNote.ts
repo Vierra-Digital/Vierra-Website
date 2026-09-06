@@ -8,10 +8,10 @@ const MAX_NOTE_LENGTH = 2000;
 /**
  * Fallback for AuditBookingStep when the audit-call calendar has no open slots: sends the
  * lead's freeform availability to sales instead of leaving them stuck on an empty calendar.
- * No database write — everything here is a plain values-object passed straight to nodemailer/
- * Brevo, and the note is HTML-escaped before it ever reaches an email body (see
- * sendAuditAvailabilityNoteEmail) — there's no SQL (or other query-string building) anywhere
- * in this path for user input to inject into.
+ * No database write — everything here is a plain values-object passed straight to the system
+ * sender (lib/email/systemSender.ts), and the note is HTML-escaped before it ever reaches an
+ * email body (see sendAuditAvailabilityNoteEmail) — there's no SQL (or other query-string
+ * building) anywhere in this path for user input to inject into.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ message: "Method not allowed" });

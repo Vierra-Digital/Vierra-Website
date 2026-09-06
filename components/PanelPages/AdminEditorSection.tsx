@@ -11,6 +11,7 @@ import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import Modal from "@/components/ui/Modal"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
+import AddClientModal from "@/components/ui/AddClientModal"
 
 /**
  * Sort direction indicator for the session table headers.
@@ -22,6 +23,43 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner"
 const SortIcon = ({ active, dir }: { active: boolean; dir: "asc" | "desc" }) => {
     if (!active) return <ArrowUpDown size={14} className="text-gray-400" />
     return dir === "asc" ? <ChevronUp size={14} /> : <ChevronDown size={14} />
+}
+
+/**
+ * Segmented control letting the combined create-account modal switch between the staff form
+ * (CreateUserModal) and the client wizard (AddClientModal) without either of those components
+ * knowing about the other — each just renders whatever is passed as its `modeSwitcher` prop.
+ */
+const CreateAccountModeSwitcher = ({ mode, onChange, onClose }: { mode: 'staff' | 'client'; onChange: (mode: 'staff' | 'client') => void; onClose: () => void }) => {
+    return (
+        <div className="mb-5 flex items-center justify-between">
+            <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close modal"
+                className="p-1.5 rounded-md text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#374151]"
+            >
+                <X className="w-4 h-4" />
+            </button>
+            <div role="tablist" aria-label="Account type" className="inline-flex rounded-lg bg-gray-100 p-1">
+                {(['staff', 'client'] as const).map((option) => (
+                    <button
+                        key={option}
+                        type="button"
+                        role="tab"
+                        aria-selected={mode === option}
+                        onClick={() => onChange(option)}
+                        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors duration-150 ${
+                            mode === option ? "bg-white text-[#701CC0] shadow-sm" : "text-[#6B7280] hover:text-[#374151]"
+                        }`}
+                    >
+                        {option === 'staff' ? 'Staff User' : 'Client'}
+                    </button>
+                ))}
+            </div>
+            <div className="w-7" aria-hidden="true" />
+        </div>
+    )
 }
 
 
@@ -56,6 +94,7 @@ type ListedUser = {
     role: string
     clientName: string | null
     isSelf?: boolean
+    kind: "member" | "client"
 }
 
 function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
@@ -63,13 +102,18 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     const [loading, setLoading] = useState<boolean>(false)
     const [error, setError] = useState<string>("")
     const [showCreate, setShowCreate] = useState<boolean>(false)
+    const [createMode, setCreateMode] = useState<'staff' | 'client'>('staff')
+    const deletePending = useRef(false)
+    const resetPending = useRef(new Set<string>())
+    const [deleteBusy, setDeleteBusy] = useState(false)
+    const [deleteError, setDeleteError] = useState("")
     const [resetSent, setResetSent] = useState<Record<string, boolean>>({})
     const [resetSending, setResetSending] = useState<Record<string, boolean>>({})
     const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
-    const [userToDelete, setUserToDelete] = useState<{ id: string; name: string | null; email: string | null } | null>(null)
+    const [userToDelete, setUserToDelete] = useState<{ id: string; name: string | null; email: string | null; kind: "member" | "client" } | null>(null)
     const [searchQuery, setSearchQuery] = useState<string>("")
     const [currentPage, setCurrentPage] = useState<number>(0)
-    const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'staff'>('all')
+    const [roleFilter, setRoleFilter] = useState<'all' | 'admin' | 'staff' | 'client'>('all')
     const [sortBy, setSortBy] = useState<'id' | 'name' | 'email' | 'role'>('role')
     const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
     const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
@@ -80,9 +124,24 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
         setLoading(true)
         setError("")
         try {
-            const r = await fetch("/api/admin/users")
-            if (!r.ok) throw new Error("Failed to fetch users")
-            setUsers(await r.json())
+            const [membersRes, clientsRes] = await Promise.all([
+                fetch("/api/admin/users"),
+                fetch("/api/admin/clients"),
+            ])
+            if (!membersRes.ok) throw new Error("Failed to fetch users")
+            if (!clientsRes.ok) throw new Error("Failed to fetch clients")
+            const members: ListedUser[] = (await membersRes.json()).map((m: any) => ({ ...m, kind: "member" as const }))
+            const clients: ListedUser[] = (await clientsRes.json()).map((c: any) => ({
+                id: c.id,
+                name: c.name,
+                email: c.email,
+                image: c.image,
+                role: "client",
+                clientName: c.businessName ?? null,
+                isSelf: false,
+                kind: "client" as const,
+            }))
+            setUsers([...members, ...clients])
         } catch (e: any) {
             setError(e?.message || "Failed to load users")
         } finally {
@@ -97,6 +156,9 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     }, [])
 
     const sendPasswordReset = async (userId: string) => {
+        if (resetPending.current.has(userId)) return
+        resetPending.current.add(userId)
+        setResetSent(prev => ({ ...prev, [userId]: false }))
         setResetSending((prev) => ({ ...prev, [userId]: true }))
         try {
             const r = await fetch("/api/admin/userPassword", {
@@ -115,6 +177,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
         } catch {
             setError("Could not send the reset link — the request failed.")
         } finally {
+            resetPending.current.delete(userId)
             setResetSending((prev) => ({ ...prev, [userId]: false }))
         }
     }
@@ -129,20 +192,32 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
             alert("This user cannot be removed.")
             return
         }
-        
-        setUserToDelete({ id: userId, name: user.name, email: user.email })
+
+        setUserToDelete({ id: userId, name: user.name, email: user.email, kind: user.kind })
         setDeleteModalOpen(true)
     }
 
     const confirmDeleteUser = async () => {
-        if (!userToDelete) return
-        
+        if (!userToDelete || deletePending.current) return
+        deletePending.current = true
+        setDeleteBusy(true)
+        setDeleteError("")
+
         try {
-            await fetch(`/api/admin/users?id=${userToDelete.id}`, { method: "DELETE" })
+            const endpoint = userToDelete.kind === "client"
+                ? `/api/admin/deleteClient?clientId=${encodeURIComponent(userToDelete.id)}`
+                : `/api/admin/users?id=${encodeURIComponent(userToDelete.id)}`
+            const response = await fetch(endpoint, { method: "DELETE" })
+            if (!response.ok) {
+                const body = await response.json().catch(() => ({}))
+                throw new Error(body.message || "Could not delete this user.")
+            }
             setUsers((prev) => prev.filter((u) => u.id !== userToDelete.id))
             setDeleteModalOpen(false)
             setUserToDelete(null)
-        } catch {}
+        } catch (e) {
+            setDeleteError(e instanceof Error ? e.message : "Deletion could not be confirmed. Refresh before retrying.")
+        } finally { deletePending.current = false; setDeleteBusy(false) }
     }
 
     const filteredUsers = useMemo(() => {
@@ -254,7 +329,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                             <select
                                                 value={roleFilter}
                                                 onChange={(e) => {
-                                                    setRoleFilter(e.target.value as 'all' | 'admin' | 'staff')
+                                                    setRoleFilter(e.target.value as 'all' | 'admin' | 'staff' | 'client')
                                                     setCurrentPage(0)
                                                 }}
                                                 className="w-full text-sm border border-[#E5E7EB] rounded-lg px-3 py-2 pr-10 bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent appearance-none"
@@ -262,6 +337,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                                 <option value="all">All Roles</option>
                                                 <option value="admin">Admin</option>
                                                 <option value="staff">Staff</option>
+                                                <option value="client">Client</option>
                                             </select>
                                             <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                                                 <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -332,11 +408,11 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                         Manage Sessions
                     </button>
                     <button
-                        onClick={() => setShowCreate(true)}
+                        onClick={() => { setCreateMode('staff'); setShowCreate(true) }}
                         className="inline-flex items-center gap-2 px-4 py-2 bg-[#701CC0] text-white rounded-lg hover:bg-[#5f17a5] text-sm font-medium"
                     >
                         <FiPlus className="w-4 h-4" />
-                        Create User
+                        Create Account
                                                     </button>
                                                 </div>
             </div>
@@ -366,12 +442,12 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                 <p className="text-sm text-gray-500 mb-3">
                                     {searchQuery ? "No users match your search." : "No users found."}
                                 </p>
-                                                    <button
-                                    onClick={() => setShowCreate(true)}
+                                    <button
+                                    onClick={() => { setCreateMode('staff'); setShowCreate(true) }}
                                     className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm font-medium hover:bg-[#5f17a5] transition-colors duration-200 shadow-sm"
                                                     >
                                     <FiPlus className="w-4 h-4" />
-                                    Create User
+                                    Create Account
                                                     </button>
                                                 </div>
                                         </div>
@@ -397,27 +473,32 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
                                                     <td className="px-4 py-4 text-sm font-medium text-[#111827]">{u.name ?? "-"}</td>
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{u.email ?? "-"}</td>
                                                     <td className="px-4 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <button
-                                                onClick={() => sendPasswordReset(u.id)}
-                                                disabled={resetSending[u.id]}
-                                                className="px-2 py-1 rounded-md text-xs bg-gray-100 hover:bg-gray-200 text-[#374151] disabled:opacity-50"
-                                            >
-                                                {resetSending[u.id] ? "Sending…" : "Send reset email"}
-                                            </button>
-                                            {resetSent[u.id] && <span className="text-xs text-green-600">Sent</span>}
-                                        </div>
+                                        {u.kind === "member" ? (
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    onClick={() => sendPasswordReset(u.id)}
+                                                    disabled={resetSending[u.id]}
+                                                    className="px-2 py-1 rounded-md text-xs bg-gray-100 hover:bg-gray-200 text-[#374151] disabled:opacity-50"
+                                                >
+                                                    {resetSending[u.id] ? "Sending…" : "Send reset email"}
+                                                </button>
+                                                {resetSent[u.id] && <span className="text-xs text-green-600">Sent</span>}
+                                            </div>
+                                        ) : (
+                                            <span className="text-xs text-[#9CA3AF]">—</span>
+                                        )}
                                     </td>
                                                     <td className="px-4 py-4">
                                                         {/* role is not editable here — "admin" is set only via direct database
                                                             access (see docs/ROLE_MODEL_REDESIGN.md), and every other Vierra
-                                                            teammate is always "staff". */}
+                                                            teammate is always "staff"; client rows come from the clients table,
+                                                            not company_memberships. */}
                                                         <span
                                                             className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                                                                u.role === "admin" ? "bg-purple-100 text-purple-700" : "bg-gray-100 text-gray-700"
+                                                                u.role === "admin" ? "bg-purple-100 text-purple-700" : u.role === "client" ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-700"
                                                             }`}
                                                         >
-                                                            {u.role === "admin" ? "Admin" : "Staff"}
+                                                            {u.role === "admin" ? "Admin" : u.role === "client" ? "Client" : "Staff"}
                                                         </span>
                                     </td>
                                                     <td className="px-4 py-4">
@@ -472,18 +553,35 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
 
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
 
-            {showCreate && <CreateUserModal onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); load(); }} />}
+            {showCreate && createMode === 'staff' && (
+                <CreateUserModal
+                    modeSwitcher={<CreateAccountModeSwitcher mode={createMode} onChange={setCreateMode} onClose={() => setShowCreate(false)} />}
+                    onClose={() => setShowCreate(false)}
+                    onCreated={() => { setShowCreate(false); load(); }}
+                />
+            )}
+
+            {showCreate && createMode === 'client' && (
+                <AddClientModal
+                    isOpen={showCreate}
+                    modeSwitcher={<CreateAccountModeSwitcher mode={createMode} onChange={setCreateMode} onClose={() => setShowCreate(false)} />}
+                    onClose={() => setShowCreate(false)}
+                    onCreated={() => load()}
+                />
+            )}
 
             <ConfirmActionModal
                 isOpen={deleteModalOpen}
-                title="Remove User"
+                title={userToDelete?.kind === "client" ? "Remove Client" : "Remove User"}
                 message={
                     <>
                         Are you sure you want to remove{" "}
                         <span className="font-semibold text-[#111827]">{userToDelete?.name || userToDelete?.email || ""}</span>? This action is permanent and cannot be undone. All associated data will be removed.
                     </>
                 }
-                confirmLabel="Remove User"
+                confirmLabel={userToDelete?.kind === "client" ? "Remove Client" : "Remove User"}
+                busy={deleteBusy}
+                error={deleteError}
                 onConfirm={confirmDeleteUser}
                 onCancel={() => {
                     setDeleteModalOpen(false)
@@ -495,7 +593,7 @@ function UsersPanel({ onManageSessions }: { onManageSessions: () => void }) {
     )
 }
 
-function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function CreateUserModal({ onClose, onCreated, modeSwitcher }: { onClose: () => void; onCreated: () => void; modeSwitcher?: React.ReactNode }) {
     const [name, setName] = useState<string>("")
     const [email, setEmail] = useState<string>("")
     const [password, setPassword] = useState<string>("")
@@ -609,23 +707,15 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
             label="Create User"
             onClose={onClose}
         >
-                <div className="flex items-center justify-between mb-5">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-[#701CC0]/10 text-[#701CC0] inline-flex items-center justify-center">
-                            <FiPlus className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <h2 className="text-xl font-semibold text-[#111827]">Create User</h2>
-                            <p className="text-sm text-[#6B7280] mt-0.5">Add a new user to the system</p>
-                        </div>
+                {modeSwitcher}
+                <div className="flex items-center gap-3 mb-5">
+                    <div className="w-10 h-10 rounded-full bg-[#701CC0]/10 text-[#701CC0] inline-flex items-center justify-center">
+                        <FiPlus className="w-5 h-5" />
                     </div>
-                    <button 
-                        onClick={onClose} 
-                        className="p-1.5 rounded-md text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#374151]"
-                        aria-label="Close modal"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
+                    <div>
+                        <h2 className="text-xl font-semibold text-[#111827]">Create User</h2>
+                        <p className="text-sm text-[#6B7280] mt-0.5">Add a new user to the system</p>
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -646,13 +736,8 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                         {fieldErrors.name ? <p className="mt-1 text-xs text-red-600">{fieldErrors.name}</p> : null}
                     </div>
 
-                    <div>
-                        {/* Every new user created here is staff — "admin" is set only via direct
-                            database access (see docs/ROLE_MODEL_REDESIGN.md), never through this form. */}
-                        <p className="mt-1 text-xs text-[#6B7280]">
-                            Need a client account? Use <span className="font-medium">Clients &rarr; Add Client</span> instead — clients set their own password via an onboarding link.
-                        </p>
-                    </div>
+                    {/* Every new user created here is staff — "admin" is set only via direct
+                        database access (see docs/ROLE_MODEL_REDESIGN.md), never through this form. */}
 
                     <div className="md:col-span-2">
                         <label htmlFor="create-user-email" className="block text-sm font-medium text-[#374151] mb-1">
@@ -736,6 +821,7 @@ type SessionRow = {
     clientEmail: string
     businessName: string
     createdAt: number
+    expiresAt?: number | null
     submittedAt: number | null
     lastUpdatedAt: number | null
     status: SessionStatus
@@ -755,6 +841,8 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
     const [updatedCount, setUpdatedCount] = useState<number>(0)
     const [statusFilter, setStatusFilter] = useState<'all' | SessionStatus>('all')
     const [isStatusFilterOpen, setIsStatusFilterOpen] = useState<boolean>(false)
+    const sessionMutation = useRef(false)
+    const [sessionDeleteError, setSessionDeleteError] = useState("")
     const [deletingSession, setDeletingSession] = useState<string | null>(null)
     const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
     const [sessionToDelete, setSessionToDelete] = useState<{ token: string; clientName: string } | null>(null)
@@ -777,7 +865,8 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
             const r = await fetch("/api/session/listClientSessions")
             if (!r.ok) throw new Error(`Failed to fetch (${r.status})`)
             const data = await r.json()
-            setSessions(Array.isArray(data) ? data : [])
+            if (!Array.isArray(data)) throw new Error("Session list response was incomplete. Try again.")
+            setSessions(data)
         } catch (e: any) {
             setError(e?.message || "Failed to load sessions")
         } finally {
@@ -925,6 +1014,8 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
     }
 
     const handleRenewSession = async (token: string) => {
+        if (sessionMutation.current) return
+        sessionMutation.current = true
         setRenewingSession(token)
         try {
             const r = await fetch("/api/admin/renewSession", {
@@ -943,12 +1034,15 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
             setRenewSuccess(false)
             setRenewModalOpen(true)
         } finally {
+            sessionMutation.current = false
             setRenewingSession(null)
         }
     }
 
     const handleDeleteSession = async () => {
-        if (!sessionToDelete) return
+        if (!sessionToDelete || sessionMutation.current) return
+        sessionMutation.current = true
+        setSessionDeleteError("")
         
         setDeletingSession(sessionToDelete.token)
         try {
@@ -963,8 +1057,9 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
             setSessionToDelete(null)
             await load()
         } catch (e: any) {
-            console.error("Failed to delete session:", e?.message || "Unknown Error")
+            setSessionDeleteError(e?.message || "Deletion could not be confirmed. Refresh before retrying.")
         } finally {
+            sessionMutation.current = false
             setDeletingSession(null)
         }
     }
@@ -993,7 +1088,8 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
         return filtered
     }, [sorted, searchQuery, statusFilter])
 
-    const paginatedSessions = filteredSessions.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+    const safePage = Math.min(currentPage, Math.max(0, Math.ceil(filteredSessions.length / pageSize) - 1))
+    const paginatedSessions = filteredSessions.slice(safePage * pageSize, (safePage + 1) * pageSize)
     const totalPages = Math.ceil(filteredSessions.length / pageSize)
 
     return (
@@ -1252,6 +1348,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{s.businessName}</td>
                                                     <td className="px-4 py-4">
                                                         {statusBadge(s.status)}
+                                                        <p className="mt-1 text-xs text-[#6B7280]">{s.expiresAt ? `Link expires ${new Date(s.expiresAt).toLocaleString()}` : "Expiry unavailable"} (local time)</p>
                                                     </td>
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{formatDate(s.createdAt)}</td>
                                                     <td className="px-4 py-4 text-sm text-[#111827]">{formatDate(s.lastUpdatedAt)}</td>
@@ -1392,6 +1489,7 @@ function SessionsPanel({ onBackToUsers }: { onBackToUsers: () => void }) {
             <ConfirmDeleteSessionModal
                 isOpen={deleteModalOpen}
                 clientName={sessionToDelete?.clientName || ""}
+                error={sessionDeleteError}
                 onConfirm={handleDeleteSession}
                 onCancel={() => {
                     setDeleteModalOpen(false)
@@ -1427,7 +1525,8 @@ const ConfirmDeleteSessionModal: React.FC<{
     onConfirm: () => void
     onCancel: () => void
     isDeleting: boolean
-}> = ({ isOpen, clientName, onConfirm, onCancel, isDeleting }) => {
+    error?: string
+}> = ({ isOpen, clientName, onConfirm, onCancel, isDeleting, error }) => {
     if (!isOpen) return null
 
     return (
@@ -1436,7 +1535,7 @@ const ConfirmDeleteSessionModal: React.FC<{
             backdropClassName="bg-black/50 backdrop-blur-sm"
             cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
             label="Delete Session"
-            onClose={onCancel}
+            onClose={() => { if (!isDeleting) onCancel() }}
         >
                 <div className="flex items-center gap-3 mb-4">
                     <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
@@ -1448,6 +1547,7 @@ const ConfirmDeleteSessionModal: React.FC<{
                     Are you sure you want to delete the session for <span className="font-semibold text-[#111827]">{clientName}</span>? 
                     This action is permanent and cannot be undone. All associated data will be removed.
                 </p>
+                {error && <p role="alert" className="mb-3 text-sm text-red-600">{error}</p>}
                 <div className="flex gap-3 justify-end">
                     <button
                         onClick={onCancel}

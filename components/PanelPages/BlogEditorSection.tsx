@@ -6,6 +6,8 @@ import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
 import RichTextEditor from "@/components/ui/RichTextEditor"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import { useFetch } from "@/hooks/useFetch"
+import { useDraftGuard } from "@/hooks/useDraftGuard"
+import Modal from "@/components/ui/Modal"
 
 
 type Post = {
@@ -15,6 +17,7 @@ type Post = {
   content: string
   tag?: string | null
   published_date: string
+  updated_date?: string | null
   author: { name: string }
   visits?: number | null
 }
@@ -59,13 +62,34 @@ export default function BlogEditorSection() {
   })
   const [mode, setMode] = useState<"list" | "edit">("list")
   const [search, setSearch] = useState("")
+  const [savedForm, setSavedForm] = useState(JSON.stringify(form))
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
+  const [preview, setPreview] = useState(false)
+  const [revision, setRevision] = useState<string | null>(null)
+  const [saveMessage, setSaveMessage] = useState("")
+  const canLeave = useDraftGuard(mode === "edit" && JSON.stringify(form) !== savedForm, "Blog Editor", "7", saving)
   const isEditing = useMemo(() => form.id !== "", [form.id])
   const postList = useMemo(() => posts ?? [], [posts])
 
-  const resetForm = () =>
-    setForm({ id: "", title: "", description: "", content: "", tag: "", date: "", authorName: "" })
+  const resetForm = () => {
+    const empty = { id: "", title: "", description: "", content: "", tag: "", date: "", authorName: "" }
+    setForm(empty)
+    setSavedForm(JSON.stringify(empty))
+    setRevision(null)
+    setError("")
+    setSaveMessage("")
+  }
 
   const savePost = async () => {
+    if (savingRef.current) return
+    if (!form.title.trim() || !form.authorName.trim() || !form.content.replace(/<[^>]*>/g, "").trim()) {
+      setError("Title, author, and article content are required.")
+      return
+    }
+    savingRef.current = true
+    setSaving(true)
+    setError("")
     try {
       const method = isEditing ? "PUT" : "POST"
       const r = await fetch("/api/blog/admin/post", {
@@ -73,6 +97,7 @@ export default function BlogEditorSection() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...(isEditing ? { id: form.id } : {}),
+          ...(isEditing ? { expectedUpdatedDate: revision } : {}),
           title: form.title,
           description: form.description || null,
           content: form.content,
@@ -81,13 +106,20 @@ export default function BlogEditorSection() {
           authorName: form.authorName || undefined,
         }),
       })
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      resetForm()
+      const result = await r.json()
+      if (!r.ok) throw new Error(result.message || "Could not save. Your edits have been kept.")
+      const saved = { ...form, id: result.id }
+      setForm(current => ({ ...current, id: result.id }))
+      setSavedForm(JSON.stringify(saved))
+      setRevision(result.updated_date ?? null)
+      setSaveMessage("Saved. Changes are live on the public blog.")
       const list = await fetch(`/api/blog/posts?page=1&limit=50`).then((x) => x.json())
-      setPosts(list.posts)
-      setMode("list")
+      if (Array.isArray(list.posts)) setPosts(list.posts)
     } catch (e: any) {
       setError(e?.message ?? "Save failed")
+    } finally {
+      savingRef.current = false
+      setSaving(false)
     }
   }
 
@@ -267,7 +299,7 @@ export default function BlogEditorSection() {
         )}
         {mode === "edit" && (
           <button
-            onClick={() => { resetForm(); setMode("list") }}
+            onClick={() => { void (async () => { if (await canLeave()) { resetForm(); setMode("list") } })(); }}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[#E5E7EB] bg-white text-sm font-medium text-[#374151] hover:bg-gray-50"
           >
             Back To Posts
@@ -410,6 +442,10 @@ export default function BlogEditorSection() {
                                     authorName: p.author?.name ?? "",
                                   })
                                   setMode("edit")
+                                  setSavedForm(JSON.stringify({ id: p.id, title: p.title, description: p.description ?? "", content: p.content, tag: p.tag ?? "", date: p.published_date.slice(0, 10), authorName: p.author?.name ?? "" }))
+                                  setRevision(p.updated_date ?? null)
+                                  setError("")
+                                  setSaveMessage("")
                                 }}
                                 icon={<FiEdit2 className="w-4 h-4" />}
                                 tone="accent"
@@ -492,11 +528,13 @@ export default function BlogEditorSection() {
               <div>
                 <div className="text-base md:text-lg font-semibold text-[#111827]">Content</div>
               </div>
-              <div className="flex gap-2">
-                <button onClick={savePost} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#701CC0] text-white hover:bg-[#4C1D95]">{isEditing ? "Update Blog" : "Create Post"}</button>
-                <button onClick={() => { resetForm(); setMode("list") }} className="px-4 py-2 rounded-lg text-sm font-medium border border-red-200 text-red-600 bg-red-50 hover:bg-red-100">Cancel</button>
+              <div className="sticky top-0 z-10 flex flex-wrap gap-2 bg-white py-2">
+                <button type="button" onClick={() => setPreview(true)} className="rounded border px-3 py-2 text-sm">Preview</button>
+                <button disabled={saving} onClick={savePost} className="px-4 py-2 rounded-lg text-sm font-medium bg-[#701CC0] text-white hover:bg-[#4C1D95]">{saving ? "Saving…" : isEditing ? "Publish changes" : "Publish post"}</button>
+                <button onClick={() => { void (async () => { if (await canLeave()) { resetForm(); setMode("list") } })(); }} className="px-4 py-2 rounded-lg text-sm font-medium border border-red-200 text-red-600 bg-red-50 hover:bg-red-100">Cancel</button>
               </div>
             </div>
+            <p role="status" className="mb-3 text-sm text-gray-600">{saving ? "Saving…" : JSON.stringify(form) !== savedForm ? "Unsaved changes. Publishing updates the public article." : saveMessage}</p>
             <RichTextEditor
               value={form.content}
               onChange={(value) => setForm({ ...form, content: value })}
@@ -508,6 +546,7 @@ export default function BlogEditorSection() {
       </div>
       </div>
 
+      {preview && <Modal onClose={() => setPreview(false)} label="Article preview" cardClassName="w-full max-w-4xl bg-white p-6 rounded-xl"><button type="button" onClick={() => setPreview(false)} className="float-right rounded border px-3 py-2">Close preview</button><h1 className="text-2xl font-semibold">{form.title}</h1><p>{form.authorName} ? {form.date} ? {form.tag}</p><p>{form.description}</p><iframe title="Article content preview" sandbox="" className="mt-4 h-[65vh] w-full border-0" srcDoc={`<!doctype html><html><head><style>body{font:16px/1.7 sans-serif;color:#111827;margin:16px}img{max-width:100%;height:auto}</style></head><body>${form.content}</body></html>`} /></Modal>}
       <ConfirmActionModal
         isOpen={deleteModalOpen}
         title="Delete Blog Post"

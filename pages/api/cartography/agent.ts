@@ -27,17 +27,22 @@ export default withAuth(
     }
     const createdBy = session.user.id;
 
-    const screening = screenCartographyQuery(description);
-    if (!screening.ok) {
-      await persistScreeningRejection({ companyId, createdBy, icpDescription: description, reason: screening.reason });
-      res.status(400).json({ message: screening.reason });
-      return;
+    try {
+      const screening = screenCartographyQuery(description);
+      if (!screening.ok) {
+        await persistScreeningRejection({ companyId, createdBy, icpDescription: description, reason: screening.reason });
+        res.status(400).json({ message: screening.reason });
+        return;
+      }
+
+      const { tasks, candidates } = await runCartographyAgent(description);
+      const persisted = await persistCartographyRun({ companyId, createdBy, icpDescription: description, result: { tasks, candidates } });
+
+      res.status(200).json({ tasks, candidates, runId: persisted?.runId ?? null });
+    } catch (e) {
+      console.error("[cartography] agent run failed:", e);
+      res.status(502).json({ message: "Couldn't complete the Cartography agent run." });
     }
-
-    const { tasks, candidates } = await runCartographyAgent(description);
-    const persisted = await persistCartographyRun({ companyId, createdBy, icpDescription: description, result: { tasks, candidates } });
-
-    res.status(200).json({ tasks, candidates, runId: persisted?.runId ?? null });
   },
   { methods: ["POST"] }
 );

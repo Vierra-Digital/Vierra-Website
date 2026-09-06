@@ -53,33 +53,38 @@ export default withAuth(async (req, res, session) => {
       };
     }
 
-    const [total, contacts] = await Promise.all([
-      prisma.contact.count({ where }),
-      prisma.contact.findMany({
-        where,
-        include: {
-          email_provider_accounts: { select: { account_email: true } },
-          contact_tag_assignments: { include: { contact_tags: true } },
-        },
-        orderBy: [{ last_name: "asc" }, { first_name: "asc" }, { created_at: "desc" }],
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-    ]);
+    try {
+      const [total, contacts] = await Promise.all([
+        prisma.contact.count({ where }),
+        prisma.contact.findMany({
+          where,
+          include: {
+            email_provider_accounts: { select: { account_email: true } },
+            contact_tag_assignments: { include: { contact_tags: true } },
+          },
+          orderBy: [{ last_name: "asc" }, { first_name: "asc" }, { created_at: "desc" }],
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+      ]);
 
-    res.setHeader("Cache-Control", "private, max-age=15");
-    res.status(200).json({
-      contacts: contacts.map((contact) => ({
-        ...serializeContact(contact),
-        tags: contact.contact_tag_assignments.map((assignment) => assignment.contact_tags),
-      })),
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
+      res.setHeader("Cache-Control", "private, max-age=15");
+      res.status(200).json({
+        contacts: contacts.map((contact) => ({
+          ...serializeContact(contact),
+          tags: contact.contact_tag_assignments.map((assignment) => assignment.contact_tags),
+        })),
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
+    } catch (e) {
+      console.error("contacts GET", e);
+      res.status(500).json({ message: "Failed to load contacts." });
+    }
     return;
   }
 
@@ -96,46 +101,52 @@ export default withAuth(async (req, res, session) => {
       res.status(400).json({ message: "Phone must contain exactly 10 digits." });
       return;
     }
-    const accountId = await resolveAccountId(userId, accountEmail);
+    try {
+      const accountId = await resolveAccountId(userId, accountEmail);
 
-    const data = {
-      first_name: asStr(req.body?.firstName) || null,
-      last_name: asStr(req.body?.lastName) || null,
-      phone,
-      business: asStr(req.body?.business) || null,
-      website: asStr(req.body?.website) || null,
-      address: asStr(req.body?.address) || null,
-    };
-    // Same key the CSV import upserts on (company_id, account_id, email) — matching that path here
-    // closes the gap where account_id is null: Postgres doesn't enforce the unique constraint
-    // across NULLs, so a bare create would otherwise silently duplicate an existing contact.
-    const createData = { company_id: companyId, user_id: userId, account_id: accountId, source: "manual" as const, email, ...data };
-    const created = accountId
-      ? await prisma.contact.upsert({
-          where: { company_id_account_id_email: { company_id: companyId, account_id: accountId, email } },
-          create: createData,
-          update: data,
-          include: { email_provider_accounts: { select: { account_email: true } } },
-        })
-      : await (async () => {
-          const existing = await prisma.contact.findFirst({
-            where: { company_id: companyId, account_id: null, email },
-            select: { id: true },
-          });
-          if (existing) {
-            return prisma.contact.update({
-              where: { id: existing.id },
-              data,
+      const data = {
+        first_name: asStr(req.body?.firstName) || null,
+        last_name: asStr(req.body?.lastName) || null,
+        phone,
+        business: asStr(req.body?.business) || null,
+        website: asStr(req.body?.website) || null,
+        address: asStr(req.body?.address) || null,
+      };
+      // Same key the CSV import upserts on (company_id, account_id, email) — matching that path
+      // here closes the gap where account_id is null: Postgres doesn't enforce the unique
+      // constraint across NULLs, so a bare create would otherwise silently duplicate an existing
+      // contact.
+      const createData = { company_id: companyId, user_id: userId, account_id: accountId, source: "manual" as const, email, ...data };
+      const created = accountId
+        ? await prisma.contact.upsert({
+            where: { company_id_account_id_email: { company_id: companyId, account_id: accountId, email } },
+            create: createData,
+            update: data,
+            include: { email_provider_accounts: { select: { account_email: true } } },
+          })
+        : await (async () => {
+            const existing = await prisma.contact.findFirst({
+              where: { company_id: companyId, account_id: null, email },
+              select: { id: true },
+            });
+            if (existing) {
+              return prisma.contact.update({
+                where: { id: existing.id },
+                data,
+                include: { email_provider_accounts: { select: { account_email: true } } },
+              });
+            }
+            return prisma.contact.create({
+              data: createData,
               include: { email_provider_accounts: { select: { account_email: true } } },
             });
-          }
-          return prisma.contact.create({
-            data: createData,
-            include: { email_provider_accounts: { select: { account_email: true } } },
-          });
-        })();
-    await syncContactsSpreadsheetForUser({ userId, companyId });
-    res.status(201).json({ contact: serializeContact(created) });
+          })();
+      await syncContactsSpreadsheetForUser({ userId, companyId });
+      res.status(201).json({ contact: serializeContact(created) });
+    } catch (e) {
+      console.error("contacts POST", e);
+      res.status(500).json({ message: "Failed to create contact." });
+    }
     return;
   }
 }, { methods: ["GET", "POST"] });

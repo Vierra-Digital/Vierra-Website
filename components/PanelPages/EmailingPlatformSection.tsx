@@ -61,6 +61,8 @@ import { MdRefresh } from "react-icons/md";
 import { scoreTrackerImage } from "@/lib/email/trackerDetection";
 import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
 import { printComposeContent } from "@/components/email/printCompose";
+import { useDraftGuard, usePageLeaveGuard } from "@/hooks/useDraftGuard";
+import { prepareSendRequest, sendPanelEmail } from "@/lib/email/sendRequest";
 import { getJson } from "@/lib/email/panelApi";
 import { panelFetch } from "@/lib/panelFetch";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
@@ -485,6 +487,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const pendingSendBodyRef = useRef<string | null>(null);
   const [artemisDrafting, setArtemisDrafting] = useState(false);
   const [artemisRewriteOpen, setArtemisRewriteOpen] = useState(false);
+  const draftSaveQueue = useRef(new Map<string, Promise<boolean>>());
+  const composeClosePending = useRef(false);
+  const composeEditVersion = useRef(0);
+  const [draftSaveState, setDraftSaveState] = useState("");
   const [composeError, setComposeError] = useState("");
   const [composeSuccess, setComposeSuccess] = useState("");
   const [sentToastMessage, setSentToastMessage] = useState<string | null>(null);
@@ -2560,9 +2566,17 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     loadBlockedSenders();
   }, [loadBlockedSenders, selectedMessage?.accountEmail]);
 
+  useEffect(() => { composeEditVersion.current += 1; }, [composeTo, composeCc, composeBcc, composeSubject, composeBody, composeBodyHtml, composeAccountEmail]);
+  usePageLeaveGuard();
+  useDraftGuard((isComposeOpen && Boolean(composeTo || composeSubject || composeBody || composeBodyHtml)) || Boolean(inlineComposeMode && inlineComposeIntroText), "Email draft", "email", sendingCompose || inlineComposeSending);
+
   const saveLocalDraft = useCallback(async (key: string, draft: LocalEmailDraft, options?: { keepalive?: boolean }) => {
-    if (!key) return;
-    await fetch("/api/gmail/drafts", {
+    if (!key) return false;
+    const previous = draftSaveQueue.current.get(key);
+    const operation = (async () => {
+    if (previous) await previous;
+    setDraftSaveState("Saving draft...");
+    const response = await fetch("/api/gmail/drafts", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       keepalive: Boolean(options?.keepalive),
@@ -2583,6 +2597,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         references: draft.references || "",
       }),
     }).catch(() => null);
+    setDraftSaveState(response?.ok ? "Draft saved" : "Could not save draft. Keep this page open and retry.");
+    return Boolean(response?.ok);
+    })();
+    draftSaveQueue.current.set(key, operation);
+    const success = await operation;
+    if (draftSaveQueue.current.get(key) === operation) draftSaveQueue.current.delete(key);
+    return success;
   }, []);
 
   const clearLocalDraft = useCallback(async (key: string, options?: { keepalive?: boolean }) => {
@@ -2599,7 +2620,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     }
   }, []);
 
-  const flushDraftsNow = useCallback(() => {
+  const flushDraftsNow = useCallback(async () => {
+    const writes: Promise<boolean>[] = [];
     if (!sendingCompose && isComposeOpen && effectiveComposeDraftStorageKey) {
       // Recipients or a subject with no body still count — closing after typing only a
       // "To" used to discard it, which reads as the composer losing your work.
@@ -2609,7 +2631,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         composeTo.trim() ||
         composeSubject.trim();
       if (hasComposeContent) {
-        void saveLocalDraft(
+        writes.push(saveLocalDraft(
           effectiveComposeDraftStorageKey,
           {
             to: composeTo,
@@ -2624,14 +2646,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             updatedAt: Date.now(),
           },
           { keepalive: true }
-        );
+        ));
       }
     }
 
     if (!inlineComposeSending && inlineComposeMode && inlineDraftStorageKey) {
       const hasInlineContent = inlineComposeIntroText.trim();
       if (hasInlineContent) {
-        void saveLocalDraft(
+        writes.push(saveLocalDraft(
           inlineDraftStorageKey,
           {
             to: inlineComposeTo,
@@ -2646,9 +2668,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             updatedAt: Date.now(),
           },
           { keepalive: true }
-        );
+        ));
       }
     }
+    return (await Promise.all(writes)).every(Boolean);
   }, [
     composeAccountEmail,
     composeBcc,
@@ -3473,10 +3496,7 @@ ${sourceText}`;
     setInlineComposeError("");
     setInlineComposeSuccess("");
     try {
-      const response = await fetch("/api/gmail/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const response = await sendPanelEmail({
           accountEmail: selectedMessage.accountEmail,
           to: inlineComposeTo.trim(),
           cc: inlineComposeCc.trim() || undefined,
@@ -3490,10 +3510,9 @@ ${sourceText}`;
           draftKey: inlineDraftStorageKey || undefined,
           providerAccountId:
             providerAccounts.find((entry) => entry.accountEmail === selectedMessage.accountEmail.toLowerCase())?.id || undefined,
-        }),
-      });
+        });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
+      if (!response.ok || payload?.ok !== true) {
         throw new Error(payload?.message || "Failed to send email.");
       }
       if (selectedMessage && inlineComposeMode) {
@@ -3880,13 +3899,9 @@ ${sourceText}`;
     setComposeError("");
     setComposeSuccess("");
     try {
-      const response = await fetch("/api/gmail/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildSendPayload()),
-      });
+      const response = await sendPanelEmail(buildSendPayload());
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
+      if (!response.ok || payload?.ok !== true) {
         throw new Error(payload?.message || "Failed to send email.");
       }
       if (composeActiveDraftKey && composeActiveDraftKey !== composeDraftStorageKey) {
@@ -3950,12 +3965,17 @@ ${sourceText}`;
   // Closing/discarding the composer must abort any in-flight undo-send window. The Undo banner
   // lives inside this modal, so once it's closed there's no way to cancel — leaving the timer
   // running would send a message the user just tried to abort (and could clobber a fresh draft).
-  const closeCompose = () => {
+  const closeCompose = async () => {
+    if (sendingCompose || composeClosePending.current) return;
+    composeClosePending.current = true;
+    const version = composeEditVersion.current;
     cancelUndoSend();
     // The autosave is debounced 450ms and its cleanup cancels the pending write, so closing
     // right after a keystroke dropped those edits. Flush synchronously first, then resync the
     // Drafts badge so the count reflects a draft created by this close.
-    flushDraftsNow();
+    const saved = await flushDraftsNow();
+    composeClosePending.current = false;
+    if (!saved || version !== composeEditVersion.current) return;
     setIsComposeOpen(false);
     void loadMailboxCounts();
     // Closing a compose can create, update or empty a draft, so the cached Drafts page is now
@@ -3998,7 +4018,7 @@ ${sourceText}`;
     }
     setComposeError("");
     setUndoCountdown(delay);
-    pendingSendBodyRef.current = JSON.stringify(buildSendPayload());
+    try { pendingSendBodyRef.current = JSON.stringify(prepareSendRequest(buildSendPayload())); } catch (error) { cancelUndoSend(); setComposeError(error instanceof Error ? error.message : "Could not prepare send"); return; }
     undoSendTimeoutRef.current = setTimeout(() => {
       cancelUndoSend();
       void performSendCompose();
@@ -6595,6 +6615,7 @@ ${sourceText}`;
                   onClick={closeCompose}
                   className="rounded-full p-2 text-white/90 hover:bg-white/15"
                   title="Close"
+                  disabled={sendingCompose}
                   aria-label="Close compose"
                 >
                   <FiX className="h-5 w-5" />
@@ -6776,6 +6797,7 @@ ${sourceText}`;
               </div>
 
               <div className="shrink-0 border-t border-[#EAE5F4] bg-white px-3 py-2">
+                {draftSaveState && <p role="status" className="text-sm">{draftSaveState}</p>}
                 {composeError ? (
                   <div className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-800">{composeError}</div>
                 ) : null}
@@ -6810,6 +6832,7 @@ ${sourceText}`;
                     <button
                       type="button"
                       onClick={handleSendCompose}
+                      aria-label={`Send from ${composeFrom || composeAccountEmail}`}
                       disabled={
                         sendingCompose ||
                         undoCountdown !== null ||

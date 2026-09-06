@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { MoreVertical } from "lucide-react";
 
 type RowActionMenuProps = {
@@ -51,6 +51,7 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({
   const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
 
   useEffect(() => {
     const onClickOutside = (event: MouseEvent) => {
@@ -66,11 +67,13 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({
     }
   }, [isOpen]);
 
-  useEffect(() => {
-    if (!isOpen || !buttonRef.current) {
+  const toggleMenu = () => {
+    if (isOpen) {
+      setIsOpen(false);
       setPosition(null);
       return;
     }
+    if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
     const showAbove = rect.top > window.innerHeight / 2;
     const estimatedMenuHeight = 150;
@@ -78,28 +81,54 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({
       top: showAbove ? rect.top - estimatedMenuHeight - 2 : rect.bottom + 2,
       right: window.innerWidth - rect.right,
     });
+    setIsOpen(true);
+  };
+
+  useEffect(() => {
+    if (isOpen) menuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
   }, [isOpen]);
 
   return (
-    <div className="relative">
+    <div className="relative" onKeyDown={(event) => {
+      if (event.key === "Escape" && isOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsOpen(false);
+        setPosition(null);
+        buttonRef.current?.focus();
+      }
+    }} onBlur={(event) => {
+      if (!event.currentTarget.contains(event.relatedTarget)) {
+        setIsOpen(false);
+        setPosition(null);
+      }
+    }}>
       <button
+        type="button"
         ref={buttonRef}
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={toggleMenu}
         className={`p-1.5 rounded-lg border transition-colors ${
           isOpen
             ? "bg-[#F3E8FF] border-[#E9D5FF]"
             : "bg-white border-transparent hover:bg-[#F9F5FF] hover:border-[#E9D5FF]"
         }`}
         aria-label={label}
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? menuId : undefined}
       >
         <MoreVertical className={`w-4 h-4 ${isOpen ? "text-[#701CC0]" : "text-[#6B7280]"}`} />
       </button>
       {isOpen && position && (
         <div
           ref={menuRef}
+          id={menuId}
+          role="group"
+          aria-label={label}
           className={`fixed ${menuWidthClassName} bg-white/95 backdrop-blur-sm rounded-xl border border-[#E9D5FF] shadow-[0_12px_32px_rgba(112,28,192,0.18)] p-1.5 z-[100]`}
           style={{ top: `${position.top}px`, right: `${position.right}px` }}
           onClick={() => {
+            // Restore the trigger before a newly opened dialog captures return focus.
+            buttonRef.current?.focus();
             setIsOpen(false);
             setPosition(null);
           }}

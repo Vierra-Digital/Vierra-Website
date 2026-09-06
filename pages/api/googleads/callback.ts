@@ -9,7 +9,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const code  = asStr(req.query.code);
   const state = asStr(req.query.state);
-  if (!code) { res.status(400).send("Missing code"); return; }
+  const oauthError = asStr(req.query.error) || asStr(req.query.error_description);
+  const cookies = readCookies(req.headers.cookie);
+  const hasStateCookie = !!cookies.ga_oauth_state;
+
+  // Onboarding-context failures land on a small page that tells the opener what happened and
+  // closes itself, instead of leaving the popup on a bare text response. Settings-context
+  // failures (hasStateCookie) are unchanged.
+  const failOnboarding = (reason: string) => {
+    res.redirect(`/social-connect-failed?provider=googleads&reason=${encodeURIComponent(reason)}`);
+  };
+
+  if (!code) {
+    if (!hasStateCookie) { failOnboarding(oauthError || "missing_code"); return; }
+    res.status(400).send("Missing code");
+    return;
+  }
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -22,6 +37,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }),
   });
   if (!tokenRes.ok) {
+    if (!hasStateCookie) { failOnboarding("token_exchange_failed"); return; }
     const text = await tokenRes.text();
     res.status(400).send(`Token exchange failed: ${text}`);
     return;
@@ -32,12 +48,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     refresh_token?: string;
     expires_in?: number;
   };
-  if (!access_token) { res.status(400).send("No access_token in response"); return; }
+  if (!access_token) {
+    if (!hasStateCookie) { failOnboarding("no_access_token"); return; }
+    res.status(400).send("No access_token in response");
+    return;
+  }
 
   const expiresAt  = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
-
-  const cookies = readCookies(req.headers.cookie);
-  const hasStateCookie = !!cookies.ga_oauth_state;
 
   if (hasStateCookie) {
     if (!state || cookies.ga_oauth_state !== state) { res.status(400).send("Invalid state"); return; }
@@ -52,13 +69,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.redirect("/connect?connected=googleads");
     return;
   }
-  if (!state) { res.status(400).send("Missing state"); return; }
+  if (!state) { failOnboarding("missing_code"); return; }
 
   const sess = await prisma.onboardingSession.findUnique({ where: { id: state } });
-  if (!sess) { res.status(400).send("Invalid onboarding session"); return; }
+  if (!sess) { failOnboarding("invalid_session"); return; }
 
   await persistOnboardingPlatformToken(state, { platform: "googleads", accessToken: access_token, refreshToken: refresh_token, expiresAt });
   setOnboardingSessionCookie(res, state);
 
-  res.redirect(`/onboarding/${state}?linked=googleads`);
+  // This is always opened as a popup (window.open, never same-tab) — land on a small page that
+  // posts back to the opener and closes itself, rather than redirecting into the onboarding
+  // wizard itself, which would mount a second full copy of it inside the popup.
+  res.redirect("/googleads/connected");
 }

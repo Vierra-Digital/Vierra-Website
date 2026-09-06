@@ -5,6 +5,7 @@ import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx"
 import { getFileBuffer, STORAGE_BUCKETS } from "@/lib/storage"
 import { getSessionData } from "@/lib/sessionStore"
 import { resolveTargetCompanyId } from "@/lib/api/targetCompany"
+import { contentTypeForExtension } from "@/lib/files/uploadTypes"
 import * as XLSX from "xlsx"
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib"
 
@@ -218,6 +219,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   const tokenId = req.query.tokenId
+  const fileId = req.query.id
   const preview = req.query.preview === "1" || req.query.preview === "true"
   const filenameFromPath = req.query.filename
   const nameParam =
@@ -225,8 +227,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ? decodeURIComponent(filenameFromPath)
       : req.query.name
 
-  if (!tokenId || typeof tokenId !== "string") {
-    return res.status(400).json({ message: "tokenId is required." })
+  const usingTokenId = typeof tokenId === "string" && tokenId
+  const usingFileId = !usingTokenId && typeof fileId === "string" && fileId
+  if (!usingTokenId && !usingFileId) {
+    return res.status(400).json({ message: "tokenId or id is required." })
   }
 
   const uid = session.user.id
@@ -237,13 +241,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!companyId) {
     return res.status(400).json({ message: "companyId is required" })
   }
-  if (session.kind === "member" && tokenId.startsWith(`contacts-xlsx:${companyId}`)) {
+  if (usingTokenId && session.kind === "member" && tokenId.startsWith(`contacts-xlsx:${companyId}`)) {
     await syncContactsSpreadsheetForUser({ userId: uid, companyId })
   }
 
-  const where: { signing_token_id: string; company_id: string; user_id?: string; client_id?: string } = {
-    signing_token_id: tokenId,
+  const where: { signing_token_id?: string; id?: string; company_id: string; user_id?: string; client_id?: string } = {
     company_id: companyId,
+    ...(usingTokenId ? { signing_token_id: tokenId } : { id: fileId as string }),
   }
 
   if (session.kind === "client") {
@@ -260,7 +264,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       typeof nameParam === "string" && nameParam.trim()
         ? nameParam.trim().replace(/["\\]/g, "_")
         : fallback
-    const ext = fileType.toLowerCase() === "xlsx" ? ".xlsx" : ".pdf"
+    const ext = `.${fileType.toLowerCase()}`
     return base.toLowerCase().endsWith(ext) ? base : `${base}${ext}`
   }
 
@@ -268,7 +272,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const contentType =
       fileType.toLowerCase() === "xlsx"
         ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        : "application/pdf"
+        : fileType.toLowerCase() === "pdf"
+          ? "application/pdf"
+          : contentTypeForExtension(fileType)
     res.setHeader("Content-Type", contentType)
     res.setHeader("Content-Length", buffer.length)
     const encoded = encodeURIComponent(safeFilename)
@@ -302,7 +308,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.send(sourceBuffer)
   }
 
-  if (stored && !sourceBuffer) {
+  if (stored && !sourceBuffer && usingTokenId) {
     const signingSession = await getSessionData(tokenId)
     if (signingSession?.pdfBase64) {
       const safeFilename = getSafeFilename(signingSession.originalFilename || stored.name || "document", "pdf")

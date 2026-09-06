@@ -16,6 +16,21 @@ async function linkedinTokenIsValid(token: string) {
   }
 }
 
+async function fetchLiLabel(token: string): Promise<string | null> {
+  try {
+    const r = await fetch("https://api.linkedin.com/v2/userinfo", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    if (typeof j?.name === "string") return j.name;
+    if (typeof j?.email === "string") return j.email;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  return handlePlatformStatus(req, res, "linkedin", linkedinTokenIsValid);
+  return handlePlatformStatus(req, res, "linkedin", linkedinTokenIsValid, fetchLiLabel);
 }

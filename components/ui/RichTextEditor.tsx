@@ -1544,9 +1544,8 @@ const RichTextEditor: React.FC<{
         }}
         onFileUpload={async (file) => {
           const permanentUrl = await uploadBlogImage(file)
-          if (permanentUrl) {
-            insertPlaceholder('image', permanentUrl)
-          }
+          if (!permanentUrl) throw new Error('Could not upload this image. Try again.')
+          insertPlaceholder('image', permanentUrl)
           setImageModalOpen(false)
         }}
         onCancel={() => { setImageModalOpen(false); setImageUrl('') }}
@@ -1644,15 +1643,17 @@ const InsertImageModal: React.FC<{
   imageUrl: string
   onUrlChange: (url: string) => void
   onConfirm: () => void
-  onFileUpload: (file: File) => void
+  onFileUpload: (file: File) => Promise<void>
   onCancel: () => void
 }> = ({ isOpen, imageUrl, onUrlChange, onConfirm, onFileUpload, onCancel }) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const uploadPending = useRef(false)
+  const [uploadError, setUploadError] = useState("")
   const [uploading, setUploading] = useState(false)
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onCancel}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => { if (!uploadPending.current) onCancel() }}>
       <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
@@ -1660,6 +1661,7 @@ const InsertImageModal: React.FC<{
           </div>
           <h3 className="text-xl font-semibold text-[#111827]">Insert Image</h3>
         </div>
+        {uploadError && <p role="alert" className="mb-3 text-sm text-red-600">{uploadError}</p>}
         <div className="mb-4">
           <label className="block text-sm font-medium text-[#374151] mb-2">Upload from device</label>
           <input
@@ -1669,10 +1671,13 @@ const InsertImageModal: React.FC<{
             className="hidden"
             onChange={async (e) => {
               const file = e.target.files?.[0]
-              if (file) {
+              if (file && !uploadPending.current) {
+                uploadPending.current = true
                 setUploading(true)
-                await onFileUpload(file)
-                setUploading(false)
+                setUploadError("")
+                try { await onFileUpload(file) }
+                catch { setUploadError("Could not upload this image. Select the file to retry.") }
+                finally { uploadPending.current = false; setUploading(false); if (fileInputRef.current) fileInputRef.current.value = "" }
               }
             }}
           />
@@ -1712,7 +1717,7 @@ const InsertImageModal: React.FC<{
           </button>
           <button
             onClick={onConfirm}
-            disabled={!imageUrl.trim()}
+            disabled={uploading || !imageUrl.trim()}
             className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
           >
             Insert Image
