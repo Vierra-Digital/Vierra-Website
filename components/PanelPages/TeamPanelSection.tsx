@@ -843,7 +843,7 @@ const InviteTeammateModal: React.FC<{
                             className={`h-9 w-full rounded-[10px] px-3 text-[13px] ring-1 ring-inset transition-shadow focus:outline-none focus:ring-[#701CC0]/35 ${
                                 email && !isValidEmail(email) ? "bg-red-50 ring-red-300" : "bg-[#F4F2F8] ring-transparent focus:bg-white"
                             }`}
-                            placeholder="teammate@company.com"
+                            placeholder="name@vierradev.com"
                             required
                         />
                     </div>
@@ -871,7 +871,7 @@ const InviteTeammateModal: React.FC<{
                         {/* A picker, not the free-text box the edit dialog still uses: the column is a
                             uuid foreign key to a user, so a typed name could never have been stored. */}
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
-                            Mentor <span className="font-normal normal-case tracking-normal text-[#9CA3AF]">(optional)</span>
+                            Mentor <span className="font-normal normal-case tracking-normal text-[#9CA3AF]">(Optional)</span>
                         </label>
                         <FieldSelect value={mentorId} onChange={setMentorId}>
                             <option value="">None</option>
@@ -895,7 +895,7 @@ const InviteTeammateModal: React.FC<{
                             Time Zone <span className="text-[#B42318]">*</span>
                         </label>
                         <FieldSelect value={timeZone} onChange={setTimeZone}>
-                            <option value="">Select a time zone</option>
+                            <option value="">Select A Time Zone</option>
                             {TIME_ZONE_OPTIONS.map((option) => (
                                 <option key={option.value} value={option.value}>{option.label}</option>
                             ))}
@@ -946,7 +946,9 @@ const ManageStaffModal: React.FC<{
     const [strikes, setStrikes] = useState(staff.strikes ?? 0)
     const [isSubmitting, setIsSubmitting] = useState(false)
 
-    const emailValid = email ? isValidEmail(email) : false
+    // Same rule as the invite dialog: everything but the mentor has to be answered. An existing
+    // member with no position or time zone therefore has to be completed before the edit saves.
+    const canSubmit = name.trim() !== "" && isValidEmail(email) && position !== "" && timeZone !== ""
 
     const handleSave = async () => {
         setIsSubmitting(true)
@@ -968,31 +970,42 @@ const ManageStaffModal: React.FC<{
             label="Edit Staff"
             onClose={onClose}
         >
-            <div className="mb-5 flex items-center gap-3">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#701CC0]/10">
-                    <FiEdit3 className="h-4 w-4 text-[#701CC0]" />
-                </span>
-                <h3 className="text-xl font-semibold text-[#111827]">Edit Staff</h3>
-            </div>
+            <header className="mb-5 flex items-center justify-between gap-4">
+                <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-[#111827]">Edit Staff</h2>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    aria-label="Close"
+                    className="rounded-lg p-2 text-[#6B7280] transition-colors hover:bg-red-50 hover:text-red-600"
+                >
+                    <FiX className="h-5 w-5" />
+                </button>
+            </header>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Name</label>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                        Name <span className="text-[#B42318]">*</span>
+                    </label>
                     <input type="text" value={name} onChange={(e) => setName(e.target.value)} className={FIELD} />
                 </div>
                 <div className="sm:col-span-2">
-                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Email</label>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                        Email <span className="text-[#B42318]">*</span>
+                    </label>
                     <input
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         className={`h-9 w-full rounded-[10px] px-3 text-[13px] ring-1 ring-inset transition-shadow focus:outline-none focus:ring-[#701CC0]/35 ${
-                            email && !emailValid ? "bg-red-50 ring-red-300" : "bg-[#F4F2F8] ring-transparent focus:bg-white"
+                            email && !isValidEmail(email) ? "bg-red-50 ring-red-300" : "bg-[#F4F2F8] ring-transparent focus:bg-white"
                         }`}
                     />
                 </div>
                 <div>
-                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Position</label>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                        Position <span className="text-[#B42318]">*</span>
+                    </label>
                     <FieldSelect value={position} onChange={setPosition}>
                         <option value="">Not set</option>
                         {POSITION_OPTIONS.map((option) => (
@@ -1001,7 +1014,9 @@ const ManageStaffModal: React.FC<{
                     </FieldSelect>
                 </div>
                 <div>
-                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Mentor</label>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                        Mentor <span className="font-normal normal-case tracking-normal text-[#9CA3AF]">(Optional)</span>
+                    </label>
                     <FieldSelect value={mentorId} onChange={setMentorId}>
                         <option value="">None</option>
                         {mentorOptions
@@ -1012,7 +1027,9 @@ const ManageStaffModal: React.FC<{
                     </FieldSelect>
                 </div>
                 <div>
-                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Strikes</label>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                        Strikes <span className="text-[#B42318]">*</span>
+                    </label>
                     <FieldSelect value={String(strikes)} onChange={(value) => setStrikes(Number(value))}>
                         {[0, 1, 2, 3].map((n) => (
                             <option key={n} value={n}>{n}/3</option>
@@ -1020,14 +1037,15 @@ const ManageStaffModal: React.FC<{
                     </FieldSelect>
                 </div>
                 <div>
-                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Time Zone</label>
-                    <input
-                        type="text"
-                        value={timeZone}
-                        onChange={(e) => setTimeZone(e.target.value)}
-                        placeholder="America/New_York"
-                        className={FIELD}
-                    />
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                        Time Zone <span className="text-[#B42318]">*</span>
+                    </label>
+                    <FieldSelect value={timeZone} onChange={setTimeZone}>
+                        <option value="">Select A Time Zone</option>
+                        {TIME_ZONE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                    </FieldSelect>
                 </div>
             </div>
 
@@ -1040,7 +1058,7 @@ const ManageStaffModal: React.FC<{
                 </button>
                 <button
                     onClick={handleSave}
-                    disabled={isSubmitting || !emailValid}
+                    disabled={isSubmitting || !canSubmit}
                     className="h-9 rounded-[10px] bg-[#701CC0] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     {isSubmitting ? "Saving…" : "Save Changes"}
