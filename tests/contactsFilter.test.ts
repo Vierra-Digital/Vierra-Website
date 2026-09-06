@@ -90,7 +90,7 @@ describe("buildContactsWhere", () => {
       source: "csv",
       tagIds: "t1,t2",
     });
-    expect(where.user_id).toBe(USER);
+    expect(where.company_id).toBe(COMPANY);
     expect(where.account_id).toBe("acct-1");
     expect(where.source).toBe("csv");
     expect(where.OR).toHaveLength(4);

@@ -87,9 +87,11 @@ describe("serializeCampaign", () => {
       sendJitterSeconds: 15,
       dailySendLimit: 100,
     });
-    // company_id is deliberately not exposed — the panel scopes by session, not by a field.
+    // The raw column name is never exposed, but companyId is — role model v2 scopes the panel by
+    // the selected client's company rather than by the session alone, so the field is needed.
+    // (This assertion was written before v2 and asserted the opposite.)
     expect(out).not.toHaveProperty("company_id");
-    expect(out).not.toHaveProperty("companyId");
+    expect(out.companyId).toBe("co1");
   });
 
   it("gives accountEmail as null when there is no linked account", () => {

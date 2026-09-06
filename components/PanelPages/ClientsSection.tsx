@@ -4,7 +4,6 @@ import ProfileImage from "../ProfileImage"
 import { FiPlus, FiFilter, FiChevronDown, FiTrash2, FiCheckCircle, FiXCircle, FiEye, FiBriefcase } from 'react-icons/fi'
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import {
-    PanelBadge,
     PanelButton,
     PanelClearFilters,
     PanelDataTable,
@@ -120,7 +119,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
      */
     const [imageStamp, setImageStamp] = useState(() => Date.now())
     const [loading, setLoading] = useState(true)
-    const [hasLoaded, setHasLoaded] = useState(false)
     const fetchPending = useRef(false)
     const mutationPending = useRef(false)
     const [updatingClient, setUpdatingClient] = useState<string | null>(null)
@@ -174,7 +172,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
             const data: ClientRow[] = await r.json()
             if (!Array.isArray(data)) throw new Error("Could not load clients. Try again.")
             setRows(data)
-            setHasLoaded(true)
             setStatusNeedsRefresh(null)
             setRowErrors({})
             setImageStamp(Date.now())
@@ -272,18 +269,6 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
         }
     }
 
-    const columns = useMemo(
-        () => [
-            { key: "name", header: "Client Name" },
-            { key: "businessName", header: "Business Name" },
-            { key: "industry", header: "Industry" },
-            { key: "monthlyRetainer", header: "Monthly Retainer ($)" },
-            { key: "clientGoal", header: "Client Goal" },
-            { key: "status", header: "Status" },
-            { key: "manage", header: "Manage" },
-        ],
-        []
-    )
 
     const filteredRows = useMemo(() => {
         const query = searchQuery.trim().toLowerCase()
@@ -434,17 +419,19 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                 page={page}
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
-                emptyTitle={searchQuery ? "No Clients Found" : "No Clients Yet"}
+                emptyTitle={hasFilters ? "No Clients Found" : "No Clients Yet"}
                 emptyMessage={
-                    searchQuery ? "No clients match your search." : "Clients you add will appear here."
+                    hasFilters ? "No clients match your search." : "Clients you add will appear here."
                 }
                 emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" priority />}
                 emptyAction={
-                    !searchQuery ? (
+                    hasFilters ? (
+                        <PanelButton onClick={clearFilters}>Clear All Filters</PanelButton>
+                    ) : (
                         <PanelButton variant="primary" onClick={onAddClient} icon={<FiPlus className="h-4 w-4" />}>
                             Add Client
                         </PanelButton>
-                    ) : null
+                    )
                 }
                 columns={[
                     {
@@ -489,7 +476,18 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                                 ? `${r.clientGoal.toLocaleString()} ${r.clientGoal === 1 ? "Lead" : "Leads"}`
                                 : <PanelEmptyCell />,
                     },
-                    { key: "status", header: "Status", cell: (r) => <StatusBadge status={r.status} /> },
+                    {
+                        key: "status",
+                        header: "Status",
+                        cell: (r) =>
+                            updatingClient === r.id ? (
+                                <span role="status" className="text-[12px] text-[#6B7280]">Updating…</span>
+                            ) : statusNeedsRefresh === r.id ? (
+                                <span className="text-[12px] text-amber-700">Refresh required</span>
+                            ) : (
+                                <StatusBadge status={r.status} />
+                            ),
+                    },
                     {
                         key: "manage",
                         header: "Manage",
@@ -503,7 +501,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                                 isAdmin={isAdmin}
                                 busy={updatingClient === r.id || deleting}
                                 onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
-                                onSetActive={() => handleSetActive(r)}
+                                onSetActive={() => onSetActiveClient?.({ companyId: r.companyId, businessName: r.businessName })}
                                 onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
                                 onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
                             />
@@ -513,6 +511,12 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
             />
 
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
+            {notice && !error && (
+                <p role="status" className="mt-3 text-sm text-[#6B7280]">{notice}</p>
+            )}
+            {Object.entries(rowErrors).map(([id, message]) => (
+                <p key={id} role="alert" className="mt-2 text-sm text-red-600">{message}</p>
+            ))}
         </PanelPage>
 
         <ConfirmActionModal

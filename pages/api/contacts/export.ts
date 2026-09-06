@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { toContactsCsv } from "@/lib/contacts/csv";
 import { buildContactsWhere } from "@/lib/api/contacts";
-import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 export default withAuth(async (req, res, session) => {

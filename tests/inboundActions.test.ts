@@ -32,6 +32,9 @@ vi.mock("@/lib/prisma", () => ({
     leadStatusEvent: { create: vi.fn() },
     campaign: { findUnique: vi.fn() },
     contact: { findFirst: vi.fn() },
+    // buildRagContext resolves the sending account to scope the RAG lookup; the mock needs it or
+    // every maybeAutoDraft case dies on an undefined delegate.
+    emailProviderAccount: { findUnique: vi.fn() },
   },
 }));
 vi.mock("@/lib/gmail/gmailApi", () => ({
@@ -83,6 +86,7 @@ const m = {
   eventCreate: prisma.leadStatusEvent.create as unknown as Mock,
   campaign: prisma.campaign.findUnique as unknown as Mock,
   contact: prisma.contact.findFirst as unknown as Mock,
+  acct: prisma.emailProviderAccount.findUnique as unknown as Mock,
   labels: modifyMessageLabels as unknown as Mock,
   getLabel: getOrCreateLabelId as unknown as Mock,
   draft: createGmailDraft as unknown as Mock,
@@ -167,6 +171,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Sensible "nothing configured, nothing found" baseline; each test opts in to what it needs.
   m.filters.mockResolvedValue([]);
+  // buildRagContext scopes the contact lookup by the sending account's company (role model v2),
+  // so the account has to resolve or the contact half of the RAG context is skipped entirely.
+  m.acct.mockResolvedValue({ company_id: "co1" });
   m.setting.mockResolvedValue(null);
   m.vacLog.mockResolvedValue(null);
   m.aiPref.mockResolvedValue(null);

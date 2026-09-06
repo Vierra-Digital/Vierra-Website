@@ -83,7 +83,6 @@ const FilesContent: React.FC<FilesSectionProps> = ({
   // an empty table with nothing to explain it.
   const totalPages = Math.max(1, Math.ceil(filteredFiles.length / pageSize))
   const page = Math.min(currentPage, totalPages - 1)
-  const paginatedFiles = filteredFiles.slice(page * pageSize, (page + 1) * pageSize)
 
   const handleUploadClick = () => { if (!uploadPending.current) fileInputRef.current?.click() }
 
