@@ -5,6 +5,11 @@ type RowActionMenuProps = {
   label: string;
   children: React.ReactNode;
   menuWidthClassName?: string;
+  /**
+   * Identifies the trigger so a caller can put focus back on this exact row later. The Clients
+   * list uses it to return the reader to the row they opened a workspace from.
+   */
+  triggerId?: string;
 };
 
 type RowActionMenuItemProps = {
@@ -99,7 +104,7 @@ function tidySeparators(children: React.ReactNode): React.ReactNode[] {
   return kept;
 }
 
-const RowActionMenu: React.FC<RowActionMenuProps> = ({ label, children, menuWidthClassName = "w-[188px]" }) => {
+const RowActionMenu: React.FC<RowActionMenuProps> = ({ label, children, menuWidthClassName = "w-[188px]", triggerId }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -186,6 +191,7 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({ label, children, menuWidt
     >
       <button
         ref={buttonRef}
+        id={triggerId}
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         aria-label={label}
@@ -203,13 +209,20 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({ label, children, menuWidt
           ref={menuRef}
           id={menuId}
           role="menu"
+          aria-label={label}
           className={`fixed z-[100] ${menuWidthClassName} rounded-xl border border-[#E4E0EC] bg-white p-1 shadow-[0_10px_28px_-8px_rgba(16,24,40,0.22)]`}
           style={{
             top: position?.top ?? 0,
             left: position?.left ?? 0,
             visibility: position ? "visible" : "hidden",
           }}
-          onClick={close}
+          /**
+           * The item's own handler runs first, so anything it opens is still only queued when this
+           * fires. Putting focus back on the trigger now means a dialog mounting straight after
+           * records the trigger as what to return focus to — closing it used to drop focus to the
+           * body, because the item it came from had been unmounted with the menu.
+           */
+          onClick={closeAndRefocus}
         >
           {tidySeparators(children)}
         </div>

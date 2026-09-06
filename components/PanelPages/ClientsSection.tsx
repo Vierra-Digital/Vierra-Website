@@ -67,12 +67,13 @@ const ClientActionsMenu: React.FC<{
     isAdmin: boolean
     busy: boolean
     onView: () => void
+    triggerId?: string
     onSetActive: () => void
     onDelete: () => void
     onToggleStatus: (isActive: boolean) => void
-}> = ({ clientName, isActive, isAdmin, busy, onView, onSetActive, onDelete, onToggleStatus }) => {
+}> = ({ clientName, isActive, isAdmin, busy, onView, onSetActive, onDelete, onToggleStatus, triggerId }) => {
     return (
-        <RowActionMenu label={`Manage ${clientName}`}>
+        <RowActionMenu label={`Manage ${clientName}`} triggerId={triggerId}>
           <RowActionMenuItem onClick={onSetActive} icon={<FiBriefcase className="w-4 h-4" />}>
             Work On This Client
           </RowActionMenuItem>
@@ -500,6 +501,7 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddC
                                 hasImage={r.image}
                                 isAdmin={isAdmin}
                                 busy={updatingClient === r.id || deleting}
+                                triggerId={`open-client-${r.id}`}
                                 onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
                                 onSetActive={() => onSetActiveClient?.({ companyId: r.companyId, businessName: r.businessName })}
                                 onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
