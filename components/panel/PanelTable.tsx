@@ -167,6 +167,25 @@ export const PanelSelect: React.FC<{
  * The table card. `overflow-hidden` is load-bearing: without it the white table spills over the
  * rounded corners and the radius only shows on the header strip.
  */
+/**
+ * The dashboard's stat tile, shared.
+ *
+ * The dashboard, the Marketing Tracker and Project Tasks all show a headline count above their
+ * detail, and each had drawn its own — a bordered white card, a figure on a purple gradient, a
+ * label-and-value row. One tile, so a number looks the same wherever it is read.
+ */
+export const PanelStat: React.FC<{
+  label: string
+  value: React.ReactNode
+  hint?: React.ReactNode
+}> = ({ label, value, hint }) => (
+  <div className="rounded-xl bg-[#F1EFF6] px-3.5 py-3.5 transition-colors duration-150 hover:bg-[#EBE8F3]">
+    <h3 className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">{label}</h3>
+    <div className="text-[22px] font-semibold leading-none tracking-[-0.02em] text-[#111827]">{value}</div>
+    {hint ? <div className="mt-1.5 text-[12px] font-medium text-[#6B7280]">{hint}</div> : null}
+  </div>
+)
+
 export const PanelCard: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white">{children}</div>
 )

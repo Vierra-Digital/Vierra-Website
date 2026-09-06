@@ -6,8 +6,10 @@ import {
   PanelButton,
   PanelCard,
   PanelClearFilters,
+  PanelBadge,
   PanelHeader,
   PanelPage,
+  PanelStat,
   PanelPopover,
   PanelSearch,
   PanelSelect,
@@ -79,38 +81,19 @@ const STATUS_LABELS: Record<ProjectTaskStatus, string> = {
 
 const STATUS_COLUMNS: ProjectTaskStatus[] = ["not_started", "ongoing", "under_review", "completed"];
 
-const STATUS_STYLES: Record<
-  ProjectTaskStatus,
-  { bg: string; headerBg: string; text: string; border: string; accent: string }
-> = {
-  not_started: {
-    bg: "bg-gray-50",
-    headerBg: "bg-gray-100",
-    text: "text-gray-700",
-    border: "border-gray-200",
-    accent: "bg-gray-500",
-  },
-  ongoing: {
-    bg: "bg-amber-50",
-    headerBg: "bg-amber-100",
-    text: "text-amber-800",
-    border: "border-amber-200",
-    accent: "bg-amber-500",
-  },
-  under_review: {
-    bg: "bg-blue-50",
-    headerBg: "bg-blue-100",
-    text: "text-blue-800",
-    border: "border-blue-200",
-    accent: "bg-blue-500",
-  },
-  completed: {
-    bg: "bg-green-50",
-    headerBg: "bg-green-100",
-    text: "text-green-800",
-    border: "border-green-200",
-    accent: "bg-green-500",
-  },
+/**
+ * A dot per column, not a tint.
+ *
+ * Each column used to be a tub of its own colour — grey, amber, blue, green backgrounds with
+ * matching borders and headers — so the board read as four different surfaces before it read as
+ * four stages of one thing, and none of them matched the cards on any other page. The colour is
+ * now one dot beside the heading, which is all it was ever carrying.
+ */
+const STATUS_DOTS: Record<ProjectTaskStatus, string> = {
+  not_started: "bg-[#9CA3AF]",
+  ongoing: "bg-[#F59E0B]",
+  under_review: "bg-[#3B82F6]",
+  completed: "bg-[#10B981]",
 };
 
 /** Boards are now company-owned, free-form rows — no fixed enum to key icons off of. */
@@ -159,6 +142,12 @@ export default function ProjectManagement() {
   const [assigneeFilter, setAssigneeFilter] = useState("");
   const [taskBusy, setTaskBusy] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const filterRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -283,6 +272,11 @@ export default function ProjectManagement() {
     },
     {} as Record<ProjectTaskStatus, ProjectTask[]>
   );
+
+  const visibleTasks = STATUS_COLUMNS.flatMap((status) => tasksByStatus[status]);
+  const overdueCount = visibleTasks.filter(
+    (t) => t.status !== "completed" && t.deadline && new Date(t.deadline).getTime() < now.getTime()
+  ).length;
 
   const handleStatusChange = async (taskId: string, newStatus: ProjectTaskStatus) => {
     const task = tasks.find((t) => t.id === taskId);
@@ -656,41 +650,50 @@ export default function ProjectManagement() {
             {taskBusy ? "Saving" : ""}
           </p>
 
+          {/* Totals first, then the board — the order the dashboard and the tracker read in. */}
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <PanelStat label="Tasks" value={visibleTasks.length} />
+            <PanelStat label="In Progress" value={tasksByStatus.ongoing.length} />
+            <PanelStat label="Awaiting Review" value={tasksByStatus.under_review.length} />
+            <PanelStat
+              label="Overdue"
+              value={overdueCount}
+              hint={overdueCount === 0 ? "Nothing late" : "Past their deadline"}
+            />
+          </div>
+
           <div className="flex-1 min-h-0">
             <div className="w-full">
               {loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="rounded-xl bg-white border border-[#E5E7EB] shadow-sm overflow-hidden animate-pulse">
-                    <div className="h-12 bg-[#F8F0FF] border-b border-[#E5E7EB]" />
-                    <div className="p-3 space-y-2">
+                  <div key={i} className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white">
+                    <div className="h-[46px] border-b border-[#EEF1F7] bg-[#FBFCFF]" />
+                    <div className="space-y-2 bg-[#FBFAFD] p-3">
                       {[1, 2, 3].map((j) => (
-                        <div key={j} className="h-14 bg-[#F3F4F6] rounded-lg" />
+                        <div key={j} className="h-14 animate-pulse rounded-xl bg-[#F1EFF6]" />
                       ))}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 min-w-0">
+              <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 {STATUS_COLUMNS.map((status) => {
-                  const style = STATUS_STYLES[status];
                   const columnTasks = tasksByStatus[status];
                   return (
                     <div
                       key={status}
-                      className={`rounded-2xl border ${style.border} ${style.bg} min-h-[280px] flex flex-col overflow-hidden`}
+                      className="flex min-h-[280px] flex-col overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white"
                     >
-                      <div className={`flex items-center gap-2 px-4 py-3 border-b ${style.border} ${style.headerBg}`}>
-                        <div className={`w-1 h-4 rounded-full ${style.accent}`} />
-                        <h3 className={`font-semibold text-sm ${style.text}`}>
-                          {STATUS_LABELS[status]}
-                        </h3>
-                        <span className="ml-auto text-xs font-medium text-[#6B7280] bg-white/80 px-2 py-0.5 rounded-md">
+                      <div className="flex items-center gap-2 border-b border-[#EEF1F7] bg-[#FBFCFF] px-4 py-3">
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOTS[status]}`} />
+                        <h3 className="text-[13px] font-semibold text-[#111827]">{STATUS_LABELS[status]}</h3>
+                        <span className="ml-auto rounded-full bg-[#F1EFF6] px-2 py-0.5 text-[11.5px] font-medium tabular-nums text-[#5B5468]">
                           {columnTasks.length}
                         </span>
                       </div>
-                      <div className={`flex-1 p-3 space-y-2 overflow-y-auto min-h-0 ${style.bg}`}>
+                      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-[#FBFAFD] p-3">
                         {columnTasks.map((task) => {
                           const { done, total } = getChecklistProgress(task);
                           const assignees = (task.assignedTo || [])
@@ -703,7 +706,6 @@ export default function ProjectManagement() {
                                 year: "numeric",
                               })
                             : null;
-                          const now = new Date();
                           const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
                           const isPastDeadline =
                             task.status !== "completed" &&
@@ -712,19 +714,15 @@ export default function ProjectManagement() {
                           return (
                             <div
                               key={task.id}
-                              className={`group relative cursor-pointer overflow-hidden rounded-xl border border-[#E4E0EC] bg-white transition-colors hover:border-[#C7B8E0] ${
-                                isPastDeadline ? "border-l-4 border-l-red-500 bg-red-50/30" : ""
-                              }`}
+                              className="group relative cursor-pointer overflow-hidden rounded-xl border border-[#E4E0EC] bg-white transition-colors hover:border-[#D6CFE4]"
                               onClick={() => setSelectedTask(task)}
                             >
-                              {isPastDeadline && (
-                                <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-red-100 text-red-800 text-[10px] font-medium uppercase tracking-wide">
-                                  Overdue
-                                </div>
-                              )}
                               <div className="p-3">
                                 <div className="flex items-start justify-between gap-2">
-                                  <p className={`text-sm font-medium text-[#111827] line-clamp-2 flex-1 pr-8 ${isPastDeadline ? "pt-5" : ""}`}>
+                                  {/* Overdue used to be an absolutely-placed chip in the corner,
+                                      which meant the title had to be padded down out of its way on
+                                      exactly those cards. It sits with the date it refers to now. */}
+                                  <p className="line-clamp-2 flex-1 pr-8 text-[13px] font-medium text-[#111827]">
                                     {task.name}
                                   </p>
                                   {isAdmin && (
@@ -741,9 +739,14 @@ export default function ProjectManagement() {
                                   )}
                                 </div>
                                 {deadlineStr && (
-                                  <div className={`mt-2 flex items-center gap-1.5 text-xs ${isPastDeadline ? "text-red-700" : "text-[#701CC0]"}`}>
-                                    <FiCalendar className="w-3.5 h-3.5 flex-shrink-0" />
+                                  <div className={`mt-2 flex flex-wrap items-center gap-1.5 text-[12px] ${isPastDeadline ? "text-[#B42318]" : "text-[#6B7280]"}`}>
+                                    <FiCalendar className="h-3.5 w-3.5 flex-shrink-0" />
                                     <span className={task.status === "completed" ? "line-through" : ""}>{deadlineStr}</span>
+                                    {isPastDeadline && (
+                                      <span className="rounded-full bg-[#FDECEC] px-2 py-0.5 text-[11px] font-medium text-[#B42318]">
+                                        Overdue
+                                      </span>
+                                    )}
                                   </div>
                                 )}
                                 {assignees.length > 0 && (
@@ -791,10 +794,10 @@ export default function ProjectManagement() {
                         })}
                         {columnTasks.length === 0 && (
                           <div className="flex flex-col items-center justify-center py-10 text-center">
-                            <div className={`w-10 h-10 rounded-lg ${style.headerBg} border ${style.border} flex items-center justify-center mb-2`}>
-                              <FiList className={`w-5 h-5 ${style.text}`} />
+                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-[#F1EFF6]">
+                              <FiList className="h-5 w-5 text-[#8B8598]" />
                             </div>
-                            <p className={`text-xs ${style.text}`}>No Tasks</p>
+                            <p className="text-[12px] text-[#8B8598]">Nothing here</p>
                           </div>
                         )}
                       </div>
@@ -1186,17 +1189,13 @@ function TaskDetailModal({
           <div className="min-w-0 flex-1">
             <h2 className="text-lg font-semibold text-[#111827] leading-snug truncate">{task.name}</h2>
             <div className="flex flex-wrap items-center gap-2 mt-1">
-              <span
-                className={`inline-flex px-2 py-0.5 rounded-md text-xs font-medium ${
-                  STATUS_STYLES[task.status].bg
-                } ${STATUS_STYLES[task.status].text}`}
-              >
+              <PanelBadge icon={<span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOTS[task.status]}`} />}>
                 {STATUS_LABELS[task.status]}
-              </span>
+              </PanelBadge>
               {isPastDeadline && (
-                <span className="inline-flex px-2 py-0.5 rounded-md bg-red-100 text-red-800 text-xs font-medium">
+                <PanelBadge tone="danger">
                   Overdue
-                </span>
+                </PanelBadge>
               )}
               {task.deadline && (
                 <span className="inline-flex items-center gap-1 text-xs text-[#6B7280]">

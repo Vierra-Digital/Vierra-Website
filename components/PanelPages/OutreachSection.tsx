@@ -8,6 +8,7 @@ import {
     PanelCard,
     PanelHeader,
     PanelPage,
+    PanelStat,
     PanelTable,
     PanelTbody,
     PanelTd,
@@ -18,23 +19,6 @@ import {
 import { PANEL_FIELD, PanelFieldLabel, PanelFieldSelect } from "@/components/ui/PanelForm"
 import { useDraftGuard } from "@/hooks/useDraftGuard";
 import { panelFetch } from "@/lib/panelFetch"
-
-/**
- * The dashboard's stat tile. This page had four different ways of showing a number — a bordered
- * white card, a figure on a purple gradient, a label-and-value row — none of which matched the
- * dashboard the numbers are also shown on.
- */
-const TrackerTile: React.FC<{ label: string; value: React.ReactNode; hint?: React.ReactNode }> = ({
-    label,
-    value,
-    hint,
-}) => (
-    <div className="rounded-xl bg-[#F1EFF6] px-3.5 py-3.5 transition-colors duration-150 hover:bg-[#EBE8F3]">
-        <h3 className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">{label}</h3>
-        <div className="text-[22px] font-semibold leading-none tracking-[-0.02em] text-[#111827]">{value}</div>
-        {hint ? <div className="mt-1.5 text-[12px] font-medium text-[#6B7280]">{hint}</div> : null}
-    </div>
-)
 
 /** A titled card in the panel's shape, so every section here is bounded the same way. */
 const TrackerCard: React.FC<{
@@ -813,14 +797,14 @@ const OutreachSection = () => {
                                 return (
                                     <>
                                         <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-                                            <TrackerTile label="Total Attempts" value={formatNumber(totals.sent)} />
-                                            <TrackerTile
+                                            <PanelStat label="Total Attempts" value={formatNumber(totals.sent)} />
+                                            <PanelStat
                                                 label="Total Replies"
                                                 value={formatNumber(totals.replied)}
                                                 hint={`${calculatePercentage(totals.replied, totals.sent)}% reply rate`}
                                             />
-                                            <TrackerTile label="Meetings Set" value={formatNumber(totals.meetings)} />
-                                            <TrackerTile label="Total Revenue" value={formatCurrency(totals.revenue)} />
+                                            <PanelStat label="Meetings Set" value={formatNumber(totals.meetings)} />
+                                            <PanelStat label="Total Revenue" value={formatCurrency(totals.revenue)} />
                                         </div>
 
                                         <TrackerCard title="Conversion Funnel" className="mb-4">
@@ -929,9 +913,9 @@ const OutreachSection = () => {
                                                         }
                                                     >
                                                         <div className="grid grid-cols-3 gap-3">
-                                                            <TrackerTile label="Attempts" value={formatNumber(sent)} />
-                                                            <TrackerTile label="Replies" value={formatNumber(replied)} />
-                                                            <TrackerTile label="Reply Rate" value={`${replyRate}%`} />
+                                                            <PanelStat label="Attempts" value={formatNumber(sent)} />
+                                                            <PanelStat label="Replies" value={formatNumber(replied)} />
+                                                            <PanelStat label="Reply Rate" value={`${replyRate}%`} />
                                                         </div>
                                                         <p className="mt-3 text-[11.5px] text-[#9CA3AF]">
                                                             Auto-synced from the extension.
@@ -977,10 +961,10 @@ const OutreachSection = () => {
                                                     }
                                                 >
                                                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                                                        <TrackerTile label="Attempts" value={formatNumber(sent)} />
-                                                        <TrackerTile label="Reply Rate" value={`${replyRate}%`} />
-                                                        <TrackerTile label="Meetings" value={formatNumber(clientEdits.meetingsSet)} />
-                                                        <TrackerTile label="Revenue" value={formatCurrency(clientEdits.revenue)} />
+                                                        <PanelStat label="Attempts" value={formatNumber(sent)} />
+                                                        <PanelStat label="Reply Rate" value={`${replyRate}%`} />
+                                                        <PanelStat label="Meetings" value={formatNumber(clientEdits.meetingsSet)} />
+                                                        <PanelStat label="Revenue" value={formatCurrency(clientEdits.revenue)} />
                                                     </div>
                                                 </TrackerCard>
 
@@ -997,10 +981,10 @@ const OutreachSection = () => {
                         <div className="pb-32">
                             {yearlySummary ? (
                                 <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-                                    <TrackerTile label="Total Attempts" value={formatNumber(yearlySummary.totalAttempt)} />
-                                    <TrackerTile label="Total Meetings" value={formatNumber(yearlySummary.totalMeetingsSet)} />
-                                    <TrackerTile label="Clients Closed" value={formatNumber(yearlySummary.totalClientsLosed)} />
-                                    <TrackerTile label="Total Revenue" value={formatCurrency(yearlySummary.totalRevenue)} />
+                                    <PanelStat label="Total Attempts" value={formatNumber(yearlySummary.totalAttempt)} />
+                                    <PanelStat label="Total Meetings" value={formatNumber(yearlySummary.totalMeetingsSet)} />
+                                    <PanelStat label="Clients Closed" value={formatNumber(yearlySummary.totalClientsLosed)} />
+                                    <PanelStat label="Total Revenue" value={formatCurrency(yearlySummary.totalRevenue)} />
                                 </div>
                             ) : (
                                 <p className="py-12 text-center text-[13px] text-[#6B7280]">
@@ -1044,18 +1028,18 @@ const OutreachSection = () => {
                             {/* Totals first, then the channels that make them up — the same order
                                 the dashboard reads in, and the opposite of what this page did. */}
                             <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-                                <TrackerTile label="Total Attempts" value={formatNumber(summary.attempts)} />
-                                <TrackerTile
+                                <PanelStat label="Total Attempts" value={formatNumber(summary.attempts)} />
+                                <PanelStat
                                     label="Meetings Set"
                                     value={formatNumber(summary.meetings)}
                                     hint={`${calculatePercentage(summary.meetings, summary.attempts)}% of attempts`}
                                 />
-                                <TrackerTile
+                                <PanelStat
                                     label="Clients Closed"
                                     value={formatNumber(summary.clients)}
                                     hint={`${calculatePercentage(summary.clients, summary.meetings)}% of meetings`}
                                 />
-                                <TrackerTile label="Revenue" value={formatCurrency(summary.revenue)} />
+                                <PanelStat label="Revenue" value={formatCurrency(summary.revenue)} />
                             </div>
 
                             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
