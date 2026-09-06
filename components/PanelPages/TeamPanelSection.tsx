@@ -6,6 +6,7 @@ import { inter } from "@/lib/fonts";
 import RowActionMenu, { RowActionMenuDivider, RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
+import ActionResultModal from "@/components/ui/ActionResultModal";
 import Modal from "@/components/ui/Modal";
 import { computePresenceStatus } from "@/lib/presence";
 import {
@@ -127,6 +128,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const [deleting, setDeleting] = useState(false)
     const [showRescindModal, setShowRescindModal] = useState(false)
     const [inviteToRescind, setInviteToRescind] = useState<{ id: string; email: string } | null>(null)
+    const [rescindResult, setRescindResult] = useState<{ success: boolean; email: string } | null>(null)
     const [searchTerm, setSearchTerm] = useState("")
     const [sortBy, setSortBy] = useState<"position" | "timeZone" | "strikes" | "status">("position")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
@@ -210,11 +212,13 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 throw new Error("Failed to rescind invite")
             }
             setRows(prev => prev.filter(r => r.id !== inviteToRescind.id))
-            setShowRescindModal(false)
-            setInviteToRescind(null)
+            setRescindResult({ success: true, email: inviteToRescind.email })
         } catch (error) {
             console.error("Error rescinding invite:", error)
-            alert("Failed to rescind invite. Please try again.")
+            setRescindResult({ success: false, email: inviteToRescind.email })
+        } finally {
+            setShowRescindModal(false)
+            setInviteToRescind(null)
         }
     }
 
@@ -257,63 +261,46 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             const res = await fetch("/api/admin/users")
             if (!res.ok) throw new Error("Failed to fetch team data")
             const data = await res.json()
+            /**
+             * One request, one row per person. /api/admin/users already returns unaccepted
+             * invitations alongside the memberships, tagged with pendingInvite and reported as
+             * staff — so filtering on role alone let every invite through as though it were a
+             * colleague, and the separate /api/admin/invitations call then added the same person
+             * a second time. An invited teammate appeared twice, once looking established.
+             */
             const teamOnly = (data as any[]).filter((u: any) => u.role === "admin" || u.role === "staff")
-            const shaped: TeamRow[] = teamOnly.map((u: any) => ({
-                id: u.id,
-                name: u.name,
-                email: u.email,
-                image: u.image,
-                imageVersion: u.imageVersion,
-                position: u.position,
-                country: u.country,
-                company_email: u.company_email,
-                mentor: u.mentor,
-                strikes: typeof u.strikes === "number" ? u.strikes : 0,
-                time_zone: u.time_zone,
-                status: u.status,
-                lastActiveAt: u.lastActiveAt,
-                isPending: false,
-                isSelf: u.isSelf,
-            }))
-
-            let pendingRows: TeamRow[] = []
-            if (userRole === "admin") {
-                try {
-                    const invRes = await fetch("/api/admin/invitations")
-                    if (invRes.ok) {
-                        const invitations = await invRes.json()
-                        pendingRows = (invitations as any[]).map((inv: any) => ({
-                            id: inv.id,
-                            // The invite carries what the inviter filled in, so a pending row reads
-                            // like the rest of the table rather than repeating the email twice and
-                            // showing a dash where real answers exist. The Pending badge is what
-                            // marks it, not a placeholder in every column.
-                            name: [inv.first_name, inv.last_name].filter(Boolean).join(" ") || inv.email,
-                            email: inv.email,
-                            image: null,
-                            position: inv.position || "Invited",
-                            country: "—",
-                            company_email: null,
-                            mentor: null,
-                            time_zone: inv.time_zone || null,
-                            strikes: null,
-                            status: "pending",
-                            lastActiveAt: null,
-                            isPending: true,
-                        }))
-                    }
-                } catch (e) {
-                    console.warn("Failed to load pending invitations:", e)
+            const shaped: TeamRow[] = teamOnly.map((u: any) => {
+                const pending = Boolean(u.pendingInvite)
+                return {
+                    // The invite's own id, so rescinding has something to address.
+                    id: pending ? u.pendingInvite.id : u.id,
+                    name: u.name || u.email,
+                    email: u.email,
+                    image: u.image,
+                    imageVersion: u.imageVersion,
+                    position: u.position,
+                    country: u.country,
+                    company_email: u.company_email,
+                    mentor: u.mentor,
+                    // Not applicable until the invite is accepted: there is no membership to
+                    // count strikes against yet.
+                    strikes: pending ? null : typeof u.strikes === "number" ? u.strikes : 0,
+                    time_zone: u.time_zone,
+                    status: pending ? "pending" : u.status,
+                    lastActiveAt: pending ? null : u.lastActiveAt,
+                    isPending: pending,
+                    isSelf: u.isSelf,
                 }
-            }
+            })
 
-            setRows([...pendingRows, ...shaped])
+            // Invites first, so a new one is visible without hunting for it.
+            setRows([...shaped.filter((r) => r.isPending), ...shaped.filter((r) => !r.isPending)])
         } catch (error) {
             console.error("Error loading team data:", error)
         } finally {
         setLoading(false)
         }
-    }, [userRole])
+    }, [])
 
     /**
      * The rows the table shows. Derived, not stored.
@@ -575,6 +562,18 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                           ]
                         : []),
                 ]}
+            />
+
+            <ActionResultModal
+                isOpen={rescindResult !== null}
+                success={rescindResult?.success ?? false}
+                title={rescindResult?.success ? "Invite Rescinded" : "Could Not Rescind Invite"}
+                message={
+                    rescindResult?.success
+                        ? `The invite for ${rescindResult.email} has been rescinded. The link in it no longer works.`
+                        : "The invite is still active. Try again."
+                }
+                onClose={() => setRescindResult(null)}
             />
 
             {showAddStaff && userRole === "admin" && (
