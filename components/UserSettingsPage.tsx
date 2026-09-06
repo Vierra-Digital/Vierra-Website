@@ -3,7 +3,7 @@ import { signOut } from "@/lib/session-client";
 import ProfileImage from "./ProfileImage";
 import ImageCropModal from "./ImageCropModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
-import { FiChevronDown, FiLogOut, FiEdit3, FiUpload, FiRotateCcw, FiLock, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2, FiCalendar } from "react-icons/fi";
+import { FiChevronDown, FiLogOut, FiEdit3, FiUpload, FiRotateCcw, FiLock, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2, FiCalendar, FiCreditCard } from "react-icons/fi";
 import { FaFacebookF, FaLinkedinIn, FaGoogle } from "react-icons/fa";
 import { X } from "lucide-react";
 
@@ -89,6 +89,22 @@ const SettingsCard: React.FC<{
   </div>
 );
 
+/** Only what this card shows; the billing page reads the rest from the same endpoint. */
+type BillingSummary = {
+  connected: boolean;
+  paymentMethods: Array<{
+    id: string;
+    type: string;
+    brand: string | null;
+    last4: string | null;
+    bankName: string | null;
+    expMonth: number | null;
+    expYear: number | null;
+    isDefault: boolean;
+  }>;
+  subscription: { cancelAtPeriodEnd: boolean; currentPeriodEnd: string | null } | null;
+};
+
 const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate, onImageUpdate, onClose, variant = "panel", userRole: userRoleProp = null }) => {
   const [name, setName] = useState(user.name || "");
   const [isEditingName, setIsEditingName] = useState(false);
@@ -101,6 +117,10 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     language: "en"
   });
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+  const [billing, setBilling] = useState<BillingSummary | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [openingPortal, setOpeningPortal] = useState(false);
+  const [billingPortalError, setBillingPortalError] = useState("");
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
   const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -146,6 +166,30 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (userRoleProp) setUserRole(userRoleProp);
   }, [userRoleProp]);
+
+  useEffect(() => {
+    // Representatives only: staff have no billing of their own to show here.
+    if (userRole !== "user") return;
+    let cancelled = false;
+    // Fetching is the effect's purpose and the pending flag has to flip before it starts, or the
+    // card renders "no payment method on file" for a moment against data that has not arrived.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setBillingLoading(true);
+    void fetch("/api/client/billing")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body) => {
+        if (!cancelled) setBilling(body as BillingSummary | null);
+      })
+      .catch(() => {
+        if (!cancelled) setBilling(null);
+      })
+      .finally(() => {
+        if (!cancelled) setBillingLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userRole]);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -674,6 +718,20 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   // The email panel's settings render on a dark card, where the light tint disappears entirely.
   const skeletonTint = isDark ? "bg-white/10" : "bg-[#F1EFF6]";
 
+  const openBillingPortal = async () => {
+    setOpeningPortal(true);
+    setBillingPortalError("");
+    try {
+      const response = await fetch("/api/client/billing-portal", { method: "POST" });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body?.url) throw new Error(body?.message || "Could not open the billing portal.");
+      window.location.href = body.url as string;
+    } catch (e) {
+      setBillingPortalError(e instanceof Error ? e.message : "Could not open the billing portal.");
+      setOpeningPortal(false);
+    }
+  };
+
   /**
    * Shown until the settings request lands, so the page arrives once rather than in pieces.
    *
@@ -951,6 +1009,73 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
 
       {userRole === "user" && (
         <>
+          {/* Read from Stripe, not from our own copy: a card is replaced and a renewal is turned
+              off on Stripe's pages, and a mirrored value here would be stale the moment either
+              happened. Managing any of it goes through the billing portal for the same reason —
+              card details never touch this application. */}
+          <div className={`rounded-2xl ${cardBg} border p-5`}>
+            <div className="mb-5 flex items-center gap-2">
+              <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
+                <FiCreditCard className="h-4 w-4 text-[#701CC0]" />
+              </div>
+              <h3 className={`font-semibold ${textPrimary}`}>Payment</h3>
+            </div>
+            {billingLoading ? (
+              <div className="space-y-3">
+                <div className={`h-4 w-56 animate-pulse rounded ${skeletonTint}`} />
+                <div className={`h-4 w-40 animate-pulse rounded ${skeletonTint}`} />
+              </div>
+            ) : !billing?.connected ? (
+              <p className={`text-sm ${textSecondary}`}>
+                No payment method on file yet. Invoices are sent by email until one is added.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <p className={`mb-1 text-[11px] font-medium ${textSecondary}`}>On File</p>
+                  {billing.paymentMethods.length === 0 ? (
+                    <p className={`text-sm ${textPrimary}`}>Nothing on file — paid by invoice.</p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {billing.paymentMethods.map((method) => (
+                        <li key={method.id} className={`text-sm ${textPrimary}`}>
+                          {method.type === "card"
+                            ? `${(method.brand || "Card").replace(/^./, (c) => c.toUpperCase())} ending ${method.last4 ?? "••••"}`
+                            : `${method.bankName || "Bank account"} ending ${method.last4 ?? "••••"}`}
+                          {method.expMonth && method.expYear
+                            ? ` · expires ${String(method.expMonth).padStart(2, "0")}/${method.expYear}`
+                            : ""}
+                          {method.isDefault ? " · default" : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div>
+                  <p className={`mb-1 text-[11px] font-medium ${textSecondary}`}>Automatic Renewal</p>
+                  <p className={`text-sm ${textPrimary}`}>
+                    {!billing.subscription
+                      ? "No subscription — invoiced manually."
+                      : billing.subscription.cancelAtPeriodEnd
+                        ? `Off. Access ends ${billing.subscription.currentPeriodEnd ? new Date(billing.subscription.currentPeriodEnd).toLocaleDateString() : "at the end of this period"}.`
+                        : `On. Renews ${billing.subscription.currentPeriodEnd ? new Date(billing.subscription.currentPeriodEnd).toLocaleDateString() : "each period"}.`}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void openBillingPortal()}
+                  disabled={openingPortal}
+                  className="inline-flex h-9 items-center gap-2 rounded-[10px] bg-[#701CC0] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {openingPortal ? "Opening…" : "Manage Payment Method"}
+                </button>
+                {billingPortalError && <p className="text-[13px] text-[#B42318]">{billingPortalError}</p>}
+              </div>
+            )}
+          </div>
+
           <div className={`rounded-2xl ${cardBg} border p-5`}>
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-2">

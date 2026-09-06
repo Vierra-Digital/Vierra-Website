@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react"
+import React, { useCallback } from "react"
 import { inter } from "@/lib/fonts"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import { useFetch } from "@/hooks/useFetch"
@@ -27,25 +27,16 @@ type CampaignRow = {
     completedAt: string | null
 }
 
-type BillingRow = {
-    id: string
-    amountCents: number
-    occurredAt: string
-    note: string | null
-}
-
 type Overview = {
     analytics: { campaigns: number; activeCampaigns: number; leads: number; billedCents: number }
     campaigns: CampaignRow[]
-    billing: BillingRow[]
 }
 
-export type ClientOverviewView = "analytics" | "campaigns" | "billing"
+export type ClientOverviewView = "analytics" | "campaigns"
 
 const VIEW_TITLES: Record<ClientOverviewView, string> = {
     analytics: "Analytics",
     campaigns: "Campaign History",
-    billing: "Billing History",
 }
 
 const formatCurrency = (cents: number) =>
@@ -99,11 +90,6 @@ const ClientOverviewSection: React.FC<ClientOverviewSectionProps> = ({ view, com
         immediate: true,
         errorMessage: "Could not load this account. Retry to see current data.",
     })
-
-    const billedTotal = useMemo(
-        () => (data ? data.billing.reduce((sum, entry) => sum + entry.amountCents, 0) : 0),
-        [data]
-    )
 
     return (
         <div className={inter.className}>
@@ -173,40 +159,7 @@ const ClientOverviewSection: React.FC<ClientOverviewSectionProps> = ({ view, com
                             </PanelTable>
                         </PanelCard>
                     )
-                ) : data.billing.length === 0 ? (
-                    <p className="py-12 text-center text-[13px] text-[#6B7280]">Nothing has been billed yet.</p>
-                ) : (
-                    <>
-                        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-                            <PanelStat label="Billed To Date" value={formatCurrency(billedTotal)} />
-                            <PanelStat label="Entries" value={data.billing.length} />
-                        </div>
-                        <PanelCard>
-                            <PanelTable>
-                                <PanelThead>
-                                    <PanelTr>
-                                        <PanelTh>Date</PanelTh>
-                                        <PanelTh>Description</PanelTh>
-                                        <PanelTh className="!text-right">Amount</PanelTh>
-                                    </PanelTr>
-                                </PanelThead>
-                                <PanelTbody>
-                                    {data.billing.map((entry) => (
-                                        <PanelTr key={entry.id}>
-                                            <PanelTd className="whitespace-nowrap text-[#6B7280]">
-                                                {formatDate(entry.occurredAt)}
-                                            </PanelTd>
-                                            <PanelTd className="text-[#111827]">{entry.note || "Retainer"}</PanelTd>
-                                            <PanelTd className="text-right font-medium tabular-nums text-[#111827]">
-                                                {formatCurrency(entry.amountCents)}
-                                            </PanelTd>
-                                        </PanelTr>
-                                    ))}
-                                </PanelTbody>
-                            </PanelTable>
-                        </PanelCard>
-                    </>
-                )}
+                ) : null}
             </PanelPage>
         </div>
     )

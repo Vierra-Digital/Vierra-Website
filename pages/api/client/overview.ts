@@ -37,7 +37,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     try {
       const campaignScope = { campaigns: { company_id: companyId } };
-      const [campaigns, leadCount, billing, revenue] = await Promise.all([
+      const [campaigns, leadCount, revenue] = await Promise.all([
         prisma.campaign.findMany({
           where: { company_id: companyId },
           orderBy: [{ started_at: "desc" }, { created_at: "desc" }],
@@ -53,14 +53,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           },
         }),
         prisma.campaignContact.count({ where: campaignScope }),
-        prisma.financeEntry.findMany({
-          // Expenses are Vierra's own costs, not something a client was charged; only revenue is
-          // "what you were billed".
-          where: { company_id: companyId, kind: "revenue" },
-          orderBy: { occurred_at: "desc" },
-          take: 100,
-          select: { id: true, amount_cents: true, occurred_at: true, note: true },
-        }),
         prisma.financeEntry.aggregate({
           where: { company_id: companyId, kind: "revenue" },
           _sum: { amount_cents: true },
@@ -84,12 +76,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           createdAt: c.created_at.toISOString(),
           startedAt: c.started_at ? c.started_at.toISOString() : null,
           completedAt: c.completed_at ? c.completed_at.toISOString() : null,
-        })),
-        billing: billing.map((entry) => ({
-          id: entry.id,
-          amountCents: entry.amount_cents,
-          occurredAt: entry.occurred_at.toISOString(),
-          note: entry.note,
         })),
       });
     } catch (e) {

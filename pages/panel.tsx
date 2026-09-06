@@ -77,6 +77,10 @@ const AdminEditorSection = dynamic(
   () => import("@/components/PanelPages/AdminEditorSection"),
   { ssr: false }
 )
+const ClientBillingSection = dynamic(
+  () => import("@/components/PanelPages/ClientBillingSection"),
+  { ssr: false }
+)
 const ClientOverviewSection = dynamic(
   () => import("@/components/PanelPages/ClientOverviewSection"),
   { ssr: false }
@@ -602,7 +606,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                         <ClientOverviewSection view="campaigns" companyId={viewClient?.companyId ?? null} />
                       )}
                       {viewModeSection === 6 && (
-                        <ClientOverviewSection view="billing" companyId={viewClient?.companyId ?? null} />
+                        <ClientBillingSection companyId={viewClient?.companyId ?? null} />
                       )}
                       {viewModeSection === 1 && (
                         <FilesSection readOnly allowDelete showOwnerInReadOnly fileFilter={viewClient?.id} />

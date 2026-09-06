@@ -28,6 +28,10 @@ const LinkedInContextSection = dynamic(
   () => import("@/components/PanelPages/LinkedInContextSection"),
   { ssr: false }
 )
+const ClientBillingSection = dynamic(
+  () => import("@/components/PanelPages/ClientBillingSection"),
+  { ssr: false }
+)
 const ClientOverviewSection = dynamic(
   () => import("@/components/PanelPages/ClientOverviewSection"),
   { ssr: false }
@@ -271,7 +275,7 @@ const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) =
                 {currentSection === 3 && <ClientTeamSection />}
                 {currentSection === 4 && <ClientOverviewSection view="analytics" />}
                 {currentSection === 5 && <ClientOverviewSection view="campaigns" />}
-                {currentSection === 6 && <ClientOverviewSection view="billing" />}
+                {currentSection === 6 && <ClientBillingSection canManage />}
               </>
             )}
           </div>
