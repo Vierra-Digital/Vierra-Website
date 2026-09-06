@@ -32,7 +32,7 @@ const CONTROL_HEIGHT = "h-9"
 export const PanelPage: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="w-full bg-white text-[#111014]">
     <div className="px-8 lg:px-14 pt-1">
-      <div className="mx-auto w-full max-w-[1680px] pb-16">{children}</div>
+      <div className="mx-auto w-full max-w-[1680px] pb-8">{children}</div>
     </div>
   </div>
 )
@@ -240,6 +240,31 @@ export const PanelBadge: React.FC<{ tone?: BadgeTone; icon?: React.ReactNode; ch
  * "‹ Previous  1 / 3  Next ›" spelled out in two directions what the arrows already say, and put
  * three text elements where the eye only needs one.
  */
+/**
+ * Scrolls whatever is actually scrolling back to the top.
+ *
+ * Walks up from the pager rather than naming a container, so this keeps working if the panel's
+ * layout changes — and falls back to the window when nothing in the chain scrolls.
+ *
+ * Instant, not smooth: `behavior: "smooth"` is silently ignored on the panel's scroll container
+ * (measured — the element stays exactly where it was, while "auto" lands on 0). Animating a jump
+ * of two screens would be the wrong call anyway; turning a page should just start at the top.
+ */
+function scrollAncestorToTop(from: HTMLElement | null) {
+  let node: HTMLElement | null = from
+  while (node) {
+    if (node.scrollHeight > node.clientHeight + 1) {
+      const overflowY = window.getComputedStyle(node).overflowY
+      if (overflowY === "auto" || overflowY === "scroll") {
+        node.scrollTo({ top: 0, behavior: "auto" })
+        return
+      }
+    }
+    node = node.parentElement
+  }
+  window.scrollTo({ top: 0, behavior: "auto" })
+}
+
 export const PanelPagination: React.FC<{
   page: number
   pageSize: number
@@ -247,11 +272,18 @@ export const PanelPagination: React.FC<{
   onPageChange: (page: number) => void
 }> = ({ page, pageSize, total, onPageChange }) => {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
-  const step = (delta: number) => onPageChange(Math.min(totalPages - 1, Math.max(0, page + delta)))
+  const rootRef = React.useRef<HTMLDivElement>(null)
+  const step = (delta: number) => {
+    const next = Math.min(totalPages - 1, Math.max(0, page + delta))
+    if (next === page) return
+    onPageChange(next)
+    // Otherwise page two opens wherever page one was left, which on a 25-row table is the bottom.
+    scrollAncestorToTop(rootRef.current)
+  }
   const arrow =
     "inline-flex h-7 w-7 items-center justify-center rounded-md text-[#6B7280] transition-colors hover:bg-white hover:text-[#111827] disabled:pointer-events-none disabled:text-[#C7C4D2]"
   return (
-    <div className="flex items-center justify-center gap-1 border-t border-[#EFECF4] bg-[#FCFBFE] px-6 py-3">
+    <div ref={rootRef} className="flex items-center justify-center gap-1 border-t border-[#EFECF4] bg-[#FCFBFE] px-6 py-3">
       <button type="button" onClick={() => step(-1)} disabled={page === 0} aria-label="Previous page" className={arrow}>
         <ChevronLeft className="h-4 w-4" aria-hidden />
       </button>
@@ -296,10 +328,12 @@ export const PanelEmptyState: React.FC<{
   title: string
   message?: string
   image?: React.ReactNode
+  /** Gap under the illustration. A 56px icon wants less air than a 176px illustration. */
+  imageGapClassName?: string
   children?: React.ReactNode
-}> = ({ title, message, image, children }) => (
+}> = ({ title, message, image, imageGapClassName = "mb-6", children }) => (
   <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-    {image ? <div className="panel-empty-float mb-6">{image}</div> : null}
+    {image ? <div className={`panel-empty-float ${imageGapClassName}`}>{image}</div> : null}
     <h3 className="text-lg font-semibold text-[#111827]">{title}</h3>
     {message ? <p className="mt-2 max-w-md text-sm text-[#6B7280]">{message}</p> : null}
     {children ? <div className="mt-4">{children}</div> : null}
@@ -337,6 +371,7 @@ export function PanelDataTable<T>({
   emptyTitle,
   emptyMessage,
   emptyImage,
+  emptyImageGapClassName,
   emptyAction,
 }: {
   rows: T[]
@@ -350,6 +385,7 @@ export function PanelDataTable<T>({
   emptyTitle: string
   emptyMessage?: string
   emptyImage?: React.ReactNode
+  emptyImageGapClassName?: string
   emptyAction?: React.ReactNode
 }) {
   if (loading) {
@@ -357,7 +393,12 @@ export function PanelDataTable<T>({
   }
   if (rows.length === 0) {
     return (
-      <PanelEmptyState title={emptyTitle} message={emptyMessage} image={emptyImage}>
+      <PanelEmptyState
+        title={emptyTitle}
+        message={emptyMessage}
+        image={emptyImage}
+        imageGapClassName={emptyImageGapClassName}
+      >
         {emptyAction}
       </PanelEmptyState>
     )

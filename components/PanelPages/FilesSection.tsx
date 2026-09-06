@@ -132,9 +132,10 @@ const FilesSection: React.FC<{
             pageSize={PAGE_SIZE}
             onPageChange={setCurrentPage}
             emptyTitle="No Files Found"
+            emptyImageGapClassName="mb-3"
             emptyMessage={search ? "No files match your search." : "Files you upload will appear here."}
             emptyImage={
-              <div className="relative mb-4 flex h-14 w-14 items-center justify-center">
+              <div className="relative flex h-14 w-14 items-center justify-center">
                 <div className="files-empty-ping absolute inset-0 rounded-full bg-[#E9D5FF]" />
                 <div className="files-empty-icon relative flex h-14 w-14 items-center justify-center rounded-full bg-[#F3E8FF]">
                   <FiFolder className="w-7 h-7 text-[#701CC0]" />
