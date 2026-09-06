@@ -17,6 +17,20 @@ async function isFbTokenValid(token: string) {
   }
 }
 
+async function fetchFbLabel(token: string): Promise<string | null> {
+  try {
+    const url = new URL("https://graph.facebook.com/me");
+    url.searchParams.set("fields", "name");
+    url.searchParams.set("access_token", token);
+    const r = await fetch(url.toString());
+    if (!r.ok) return null;
+    const j = await r.json();
+    return typeof j?.name === "string" ? j.name : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  return handlePlatformStatus(req, res, "facebook", isFbTokenValid);
+  return handlePlatformStatus(req, res, "facebook", isFbTokenValid, fetchFbLabel);
 }

@@ -924,7 +924,7 @@ const ManageStaffModal: React.FC<{
                             type="text"
                             value={formData.name}
                             onChange={(e) => handleInputChange('name', e.target.value)}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
+                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm text-[#111827]"
                         />
                     </div>
                     <div>
@@ -933,9 +933,9 @@ const ManageStaffModal: React.FC<{
                             type="email"
                             value={formData.email}
                             onChange={(e) => handleInputChange('email', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm ${
-                                formData.email && !isValidEmail(formData.email) 
-                                    ? 'border-red-500 bg-red-50' 
+                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm text-[#111827] ${
+                                formData.email && !isValidEmail(formData.email)
+                                    ? 'border-red-500 bg-red-50'
                                     : 'border-[#D1D5DB]'
                             }`}
                             required
@@ -948,7 +948,7 @@ const ManageStaffModal: React.FC<{
                             <select
                                 value={formData.position}
                                 onChange={(e) => handleInputChange('position', e.target.value)}
-                                className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm pr-10 appearance-none bg-white"
+                                className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm pr-10 appearance-none bg-white text-[#111827]"
                             >
                                 <option value="">Select Position</option>
                                 {positionOptions.map(option => (
@@ -968,7 +968,7 @@ const ManageStaffModal: React.FC<{
                             type="text"
                             value={formData.country}
                             onChange={(e) => handleInputChange('country', e.target.value)}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
+                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm text-[#111827]"
                         />
                     </div>
                     <div>
@@ -977,7 +977,7 @@ const ManageStaffModal: React.FC<{
                             type="text"
                             value={formData.time_zone}
                             onChange={(e) => handleInputChange('time_zone', e.target.value)}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
+                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm text-[#111827]"
                         />
                     </div>
                     <div>
@@ -986,9 +986,9 @@ const ManageStaffModal: React.FC<{
                             type="email"
                             value={formData.company_email}
                             onChange={(e) => handleInputChange('company_email', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm ${
-                                formData.company_email && !isValidEmail(formData.company_email) 
-                                    ? 'border-red-500 bg-red-50' 
+                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm text-[#111827] ${
+                                formData.company_email && !isValidEmail(formData.company_email)
+                                    ? 'border-red-500 bg-red-50'
                                     : 'border-[#D1D5DB]'
                             }`}
                             pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
@@ -1000,7 +1000,7 @@ const ManageStaffModal: React.FC<{
                             type="text"
                             value={formData.mentor}
                             onChange={(e) => handleInputChange('mentor', e.target.value)}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
+                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm text-[#111827]"
                         />
                     </div>
                     <div>
@@ -1009,7 +1009,7 @@ const ManageStaffModal: React.FC<{
                             type="text"
                             value={formData.strikes}
                             onChange={(e) => handleInputChange('strikes', e.target.value)}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
+                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm text-[#111827]"
                         />
                     </div>
                 </div>

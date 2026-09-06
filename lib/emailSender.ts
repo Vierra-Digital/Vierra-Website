@@ -1,4 +1,5 @@
 import { sendSystemEmail } from "@/lib/email/systemSender";
+import { sendSystemEmailViaSmtp } from "@/lib/email/systemSmtpSender";
 import { escapeHtml } from "@/lib/utils";
 
 export interface EmailData {
@@ -276,21 +277,18 @@ export async function sendSignerCopyEmail(email: string, documentName: string, a
 }
 
 export async function sendPasswordResetEmail(email: string, name: string, resetLink: string, selfRequested = false): Promise<void> {
-  const mailOptions = {
-    from: fromAddress,
-    to: email,
-    subject: "Vierra | Reset Your Password",
-    html: renderEmailShell(`
+  const html = renderEmailShell(`
               <h2 style="font-size:28px;font-weight:700;color:#2e0a4f;margin:0 0 20px;line-height:1.3;">Reset Your Password</h2>
               <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 24px;">
                 Hi ${name || "there"}, ${selfRequested ? "we received a request to reset the password for your Vierra account" : "an admin requested a password reset for your Vierra account"}. Click the button below to set a new password. This link expires in 7 days.
               </p>
               ${ctaButton(resetLink, "Reset Password")}
-              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">If you didn't request this, you can safely ignore this email.<br/>- The Vierra Team</p>`),
-  };
+              <p style="color:#666;font-size:16px;line-height:1.6;margin:0 0 40px;">If you didn't request this, you can safely ignore this email.<br/>- The Vierra Team</p>`);
 
   try {
-    await deliver(mailOptions);
+    // SMTP, not the Gmail-API sendSystemEmail every other function here uses — see
+    // lib/email/systemSmtpSender.ts for why this one flow is the exception.
+    await sendSystemEmailViaSmtp({ to: email, subject: "Vierra | Reset Your Password", html });
     console.log(`Password reset email sent to ${email}`);
   } catch (error) {
     console.error(`Error sending password reset email to ${email}:`, error);
