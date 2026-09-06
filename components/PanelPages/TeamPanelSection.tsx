@@ -3,7 +3,7 @@ import { FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck, FiChevronDown } from "rea
 import Image from "next/image";
 import ProfileImage from "../ProfileImage";
 import { inter } from "@/lib/fonts";
-import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu";
+import RowActionMenu, { RowActionMenuDivider, RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import Modal from "@/components/ui/Modal";
@@ -36,9 +36,12 @@ const StaffActionsMenu: React.FC<{
                 Edit Staff
             </RowActionMenuItem>
             {!isSelf && (
-                <RowActionMenuItem onClick={onDelete} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
-                    Remove Staff
-                </RowActionMenuItem>
+                <>
+                    <RowActionMenuDivider />
+                    <RowActionMenuItem onClick={onDelete} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
+                        Remove Staff
+                    </RowActionMenuItem>
+                </>
             )}
         </RowActionMenu>
     )
@@ -135,7 +138,9 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const [statusFilter, setStatusFilter] = useState<"all" | "online" | "away" | "offline" | "pending">("all")
     const [isFilterOpen, setIsFilterOpen] = useState(false)
     const filterRef = useRef<HTMLDivElement>(null)
-    const pageSize = 10
+    // Twenty-five a page, the same as User Management — ten meant paging through a team that
+    // fits on one screen.
+    const pageSize = 25
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -499,18 +504,9 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 page={page}
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
-                emptyTitle={searchTerm ? "No Staff Found" : "No Staff Yet"}
-                emptyMessage={
-                    searchTerm ? "No staff match your search." : "Teammates you invite will appear here."
-                }
+                emptyTitle="No Staff Found"
+                emptyMessage="No staff match your search."
                 emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" priority />}
-                emptyAction={
-                    userRole === "admin" && !searchTerm ? (
-                        <PanelButton variant="primary" onClick={() => setShowAddStaff(true)} icon={<FiPlus className="h-4 w-4" />}>
-                            Invite Teammate
-                        </PanelButton>
-                    ) : null
-                }
                 columns={[
                     {
                         key: "name",
@@ -524,8 +520,13 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                                     alt={`${r.name}'s profile`}
                                 />
                                 <div className="min-w-0">
-                                    <div className="truncate font-medium text-[#111827]">{r.name}</div>
-                                    <div className="truncate text-[12px] text-[#6B7280]">{r.email}</div>
+                                    {/* A pending invite has no name, so both lines were the same
+                                        address printed twice. Same rule User Management uses: the
+                                        address is the line when there is nothing else to put there. */}
+                                    <div className="truncate font-medium text-[#111827]">{r.name || r.email}</div>
+                                    {r.name && r.email && r.name !== r.email ? (
+                                        <div className="truncate text-[12px] text-[#6B7280]">{r.email}</div>
+                                    ) : null}
                                 </div>
                             </div>
                         ),
