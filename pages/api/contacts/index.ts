@@ -13,12 +13,14 @@ export default withAuth(async (req, res, session) => {
   // working a client (staff or representative) sees the same contacts, not just whoever added
   // each one. user_id survives only as attribution now.
   const companyId = resolveTargetCompanyId(session, req);
-  if (!companyId) {
-    res.status(400).json({ message: "companyId is required" });
-    return;
-  }
 
   if (req.method === "GET") {
+    // No target company named: a representative's own companyId always resolves above, so this
+    // only happens for Vierra staff, who get every client's contacts merged together rather than
+    // a 400 — the active-client picker scopes writes (a contact must belong to one company) but
+    // was never meant to gate staff's ability to just look everything up.
+    const mergedView = !companyId;
+
     // Pagination is this route's own concern; the export sends every match.
     const pageRaw = Number(asQueryStr(req.query.page));
     const limitRaw = Number(asQueryStr(req.query.limit));
@@ -35,6 +37,7 @@ export default withAuth(async (req, res, session) => {
           include: {
             email_provider_accounts: { select: { account_email: true } },
             contact_tag_assignments: { include: { contact_tags: true } },
+            ...(mergedView ? { companies: { select: { name: true } } } : {}),
           },
           orderBy: [{ last_name: "asc" }, { first_name: "asc" }, { created_at: "desc" }],
           skip: (page - 1) * limit,
@@ -47,6 +50,9 @@ export default withAuth(async (req, res, session) => {
         contacts: contacts.map((contact) => ({
           ...serializeContact(contact),
           tags: contact.contact_tag_assignments.map((assignment) => assignment.contact_tags),
+          company: mergedView
+            ? { id: contact.company_id, name: (contact as unknown as { companies: { name: string } }).companies.name }
+            : null,
         })),
         pagination: {
           page,
@@ -59,6 +65,13 @@ export default withAuth(async (req, res, session) => {
       console.error("contacts GET", e);
       res.status(500).json({ message: "Failed to load contacts." });
     }
+    return;
+  }
+
+  // Every write below acts on exactly one company's contact list, so (unlike GET) a missing
+  // target company is always an error here, staff included.
+  if (!companyId) {
+    res.status(400).json({ message: "companyId is required" });
     return;
   }
 

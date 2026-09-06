@@ -1013,6 +1013,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       if (debouncedContactSearch) query.set("search", debouncedContactSearch);
       if (contactTagFilter) query.set("tagIds", contactTagFilter);
       if (contactSourceFilter) query.set("source", contactSourceFilter);
+      // Explicitly empty, not omitted: this list should show every client's contacts merged
+      // together regardless of whichever client the panel's picker has active, and an empty
+      // string here stops panelFetch from filling it back in with that active client's id (it
+      // only injects companyId when the param is entirely absent). A representative's own
+      // companyId still applies server-side no matter what this sends — only Vierra staff get
+      // the merged view. Writes (add/edit/delete/import/export) still go through panelFetch
+      // untouched, since those need one real target company.
+      query.set("companyId", "");
       // no-store: this reloads right after create/edit/delete/tag writes, and the
       // server's Cache-Control on this endpoint would otherwise serve the pre-write list.
       const response = await panelFetch(`/api/contacts?${query.toString()}`, { cache: "no-store" });
@@ -5260,6 +5268,7 @@ ${sourceText}`;
                                             />
                                           </th>
                                           <th className="px-4 py-3 font-medium">Name</th>
+                                          {contacts.some((c) => c.company) ? <th className="px-4 py-3 font-medium">Client</th> : null}
                                           <th className="px-4 py-3 font-medium">Email</th>
                                           {contactsVisibility.showPhone ? <th className="px-4 py-3 font-medium">Phone</th> : null}
                                           {contactsVisibility.showBusiness ? <th className="px-4 py-3 font-medium">Business</th> : null}
@@ -5289,6 +5298,9 @@ ${sourceText}`;
                                                 <div className="font-medium text-[#1E1B2E]">{displayName}</div>
                                                 <div className="mt-0.5 text-[11px] text-[#8A90A6] uppercase tracking-wide">{contact.source}</div>
                                               </td>
+                                              {contacts.some((c) => c.company) ? (
+                                                <td className="px-4 py-3 text-[#374151]">{contact.company?.name || "-"}</td>
+                                              ) : null}
                                               <td className="px-4 py-3 text-[#374151]">{contact.email}</td>
                                               {contactsVisibility.showPhone ? <td className="px-4 py-3 text-[#374151]">{contact.phone || "-"}</td> : null}
                                               {contactsVisibility.showBusiness ? <td className="px-4 py-3 text-[#374151]">{contact.business || "-"}</td> : null}

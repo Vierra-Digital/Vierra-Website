@@ -243,8 +243,8 @@ const InviteRepresentativeModal: React.FC<{ onClose: () => void; onCreated: () =
             setEmail(e.target.value);
             if (error) setError("");
           }}
-          className={`w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
-            email && !isValidEmail(email) ? "border-red-500 bg-red-50" : "border-[#E5E7EB]"
+          className={`w-full border rounded-lg px-3 py-2 bg-white text-[#111827] placeholder:text-[#9CA3AF] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
+            email && !isValidEmail(email) ? "border-red-500 bg-red-50 " : "border-[#E5E7EB]"
           }`}
           placeholder="teammate@yourcompany.com"
           required
@@ -263,10 +263,10 @@ const InviteRepresentativeModal: React.FC<{ onClose: () => void; onCreated: () =
         <button
           onClick={submit}
           disabled={submitting || !isValidEmail(email)}
-          className={`px-4 py-2 rounded-lg text-sm font-medium ${
+          className={`px-4 py-2 rounded-lg text-sm font-medium border ${
             submitting || !isValidEmail(email)
-              ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-              : "bg-[#701CC0] text-white hover:bg-[#5f17a5]"
+              ? "bg-[#E5E7EB] text-[#6B7280] border-[#E5E7EB] cursor-not-allowed"
+              : "bg-[#701CC0] text-white border-transparent hover:bg-[#5f17a5]"
           }`}
         >
           {submitting ? "Sending…" : "Send Invite"}

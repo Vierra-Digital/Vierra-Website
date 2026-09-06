@@ -2,11 +2,46 @@ import React, { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
-type DailyStat = { date: string; emailsSent: number; opens: number; clicks: number; replies: number };
+type DailyStat = {
+  date: string;
+  emailsSent: number;
+  opens: number;
+  clicks: number;
+  replies: number;
+  bounces: number;
+  unsubscribes: number;
+};
+type StepStat = {
+  stepId: string;
+  stepOrder: number;
+  name: string | null;
+  sent: number;
+  opened: number;
+  clicked: number;
+  openRate: number;
+  clickRate: number;
+};
 type Stats = {
   daily: DailyStat[];
-  totals: { emailsSent: number; opens: number; clicks: number; contacts: number; replied: number };
-  rates: { openRate: number; clickRate: number; replyRate: number };
+  totals: {
+    emailsSent: number;
+    opens: number;
+    clicks: number;
+    bounces: number;
+    unsubscribes: number;
+    contacts: number;
+    replied: number;
+    booked: number;
+  };
+  rates: {
+    openRate: number;
+    clickRate: number;
+    replyRate: number;
+    bounceRate: number;
+    unsubscribeRate: number;
+    bookingRate: number;
+  };
+  stepBreakdown: StepStat[];
 };
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
@@ -100,14 +135,20 @@ const AnalyticsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <RateCard label="Emails Sent" value={String(stats.totals.emailsSent)} sub={`last ${days}d`} />
-        <RateCard label="Open Rate" value={pct(stats.rates.openRate)} sub="pixel tracking not yet wired for campaigns" />
-        <RateCard label="Click Rate" value={pct(stats.rates.clickRate)} sub="pixel tracking not yet wired for campaigns" />
+        <RateCard label="Open Rate" value={pct(stats.rates.openRate)} sub={`${stats.totals.opens} opens`} />
+        <RateCard label="Click Rate" value={pct(stats.rates.clickRate)} sub={`${stats.totals.clicks} clicks`} />
         <RateCard label="Reply Rate" value={pct(stats.rates.replyRate)} sub={`${stats.totals.replied}/${stats.totals.contacts} contacts`} />
+        <RateCard label="Booking Rate" value={pct(stats.rates.bookingRate)} sub={`${stats.totals.booked}/${stats.totals.contacts} contacts`} />
       </div>
 
-      <div className="bg-white rounded-lg border border-[#E5E7EB] p-4">
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <RateCard label="Bounce Rate" value={pct(stats.rates.bounceRate)} sub={`${stats.totals.bounces} bounced`} />
+        <RateCard label="Unsubscribe Rate" value={pct(stats.rates.unsubscribeRate)} sub={`${stats.totals.unsubscribes} opted out`} />
+      </div>
+
+      <div className="bg-white rounded-lg border border-[#E5E7EB] p-4 mb-6">
         <h3 className="text-sm font-semibold text-[#111827] mb-4">Emails Sent Per Day</h3>
         <div style={{ width: "100%", height: 260 }}>
           <ResponsiveContainer>
@@ -121,6 +162,59 @@ const AnalyticsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
           </ResponsiveContainer>
         </div>
       </div>
+
+      {stats.stepBreakdown.length > 0 ? (
+        <div className="bg-white rounded-lg border border-[#E5E7EB] p-4">
+          <h3 className="text-sm font-semibold text-[#111827] mb-1">Sequence Drop-off</h3>
+          <p className="text-xs text-[#9CA3AF] mb-4">
+            Sent, opened and clicked per step, lifetime — where the sequence loses people. Reply
+            rate isn&rsquo;t attributed to a specific step, since nothing records which step a
+            reply answered.
+          </p>
+          <div style={{ width: "100%", height: 260 }}>
+            <ResponsiveContainer>
+              <BarChart
+                data={stats.stepBreakdown.map((s) => ({
+                  label: s.name || `Step ${s.stepOrder}`,
+                  Sent: s.sent,
+                  Opened: s.opened,
+                  Clicked: s.clicked,
+                }))}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
+                <XAxis dataKey="label" fontSize={12} stroke="#9CA3AF" />
+                <YAxis allowDecimals={false} fontSize={12} stroke="#9CA3AF" />
+                <Tooltip />
+                <Bar dataKey="Sent" fill="#C4B5FD" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Opened" fill="#8B3BEE" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Clicked" fill="#701CC0" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs uppercase tracking-wider text-[#9CA3AF]">
+                  <th className="pb-2 text-left font-medium">Step</th>
+                  <th className="pb-2 text-right font-medium">Sent</th>
+                  <th className="pb-2 text-right font-medium">Open Rate</th>
+                  <th className="pb-2 text-right font-medium">Click Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.stepBreakdown.map((s) => (
+                  <tr key={s.stepId} className="border-t border-[#F3F4F6]">
+                    <td className="py-2 text-[#374151]">{s.name || `Step ${s.stepOrder}`}</td>
+                    <td className="py-2 text-right tabular-nums text-[#374151]">{s.sent}</td>
+                    <td className="py-2 text-right tabular-nums text-[#374151]">{pct(s.openRate)}</td>
+                    <td className="py-2 text-right tabular-nums text-[#374151]">{pct(s.clickRate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
