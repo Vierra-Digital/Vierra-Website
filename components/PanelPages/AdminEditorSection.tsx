@@ -9,7 +9,6 @@ import {
     RefreshCw,
     RotateCw,
     Trash2,
-    UserCog,
     XCircle,
 } from "lucide-react"
 import { FiCheck, FiTrash2 } from "react-icons/fi"
@@ -138,12 +137,6 @@ const formatRelative = (iso: string | null | undefined, now: number) => {
     if (days < 7) return `${days}d Ago`
     return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
 }
-
-const ROLE_CHOICES: Array<{ value: RoleKey; label: string }> = [
-    { value: "admin", label: "Admin" },
-    { value: "staff", label: "Staff" },
-    { value: "client", label: "Client" },
-]
 
 const AdminEditorSection = () => <UsersPanel />
 
@@ -294,28 +287,6 @@ function UsersPanel() {
             setResetResult({ success: false, email })
         } finally {
             setResetSending((prev) => ({ ...prev, [userId]: false }))
-        }
-    }
-
-    const updateRole = async (userId: string, role: string) => {
-        setError("")
-        try {
-            const r = await fetch("/api/admin/users", {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id: userId, role }),
-            })
-            // The response was previously never checked, so the row was rewritten locally even when
-            // the server refused the change — the table then showed a role the database did not
-            // have, and it survived until the next reload.
-            if (!r.ok) {
-                const body = await r.json().catch(() => ({}))
-                setError(body?.message || `Could not change the role (HTTP ${r.status}).`)
-                return
-            }
-            setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)))
-        } catch {
-            setError("Could not change the role — the request failed.")
         }
     }
 
@@ -755,20 +726,6 @@ function UsersPanel() {
                                             {resetSending[u.id] ? "Sending…" : "Send Email Reset"}
                                         </RowActionMenuItem>
                                     )}
-                                    {canManageAccount && !u.isPlatformAdmin && (
-                                        <>
-                                            <RowActionMenuLabel>Change role</RowActionMenuLabel>
-                                            {ROLE_CHOICES.filter((choice) => choice.value !== normalizeRole(u.role)).map((choice) => (
-                                                <RowActionMenuItem
-                                                    key={choice.value}
-                                                    onClick={() => updateRole(u.id, choice.value === "client" ? "user" : choice.value)}
-                                                    icon={<UserCog className="w-4 h-4" />}
-                                                >
-                                                    {choice.label}
-                                                </RowActionMenuItem>
-                                            ))}
-                                        </>
-                                    )}
                                     {session && <RowActionMenuLabel>Session</RowActionMenuLabel>}
                                     {session && session.status !== "expired" && (
                                         <RowActionMenuItem
@@ -776,7 +733,7 @@ function UsersPanel() {
                                             disabled={loadingLink === session.token}
                                             icon={<LinkIcon className="w-4 h-4" />}
                                         >
-                                            {loadingLink === session.token ? "Loading…" : "Get session link"}
+                                            {loadingLink === session.token ? "Loading…" : "Get Session Link"}
                                         </RowActionMenuItem>
                                     )}
                                     {session && (
@@ -785,7 +742,7 @@ function UsersPanel() {
                                             disabled={renewingSession === session.token}
                                             icon={<RotateCw className={`w-4 h-4 ${renewingSession === session.token ? "animate-spin" : ""}`} />}
                                         >
-                                            Renew session
+                                            Renew Session
                                         </RowActionMenuItem>
                                     )}
                                     {(session || u.pendingInvite || (canManageAccount && !u.isSelf && !u.isPlatformAdmin)) && (
@@ -800,7 +757,7 @@ function UsersPanel() {
                                             icon={<Trash2 className="w-4 h-4" />}
                                             tone="danger"
                                         >
-                                            Delete session
+                                            Delete Session
                                         </RowActionMenuItem>
                                     )}
                                     {u.pendingInvite && (
@@ -808,14 +765,13 @@ function UsersPanel() {
                                             onClick={() => rescindInvite(u.pendingInvite!.id)}
                                             disabled={rescindingInvite === u.pendingInvite.id}
                                             icon={<Trash2 className="w-4 h-4" />}
-                                            tone="danger"
                                         >
-                                            Rescind invite
+                                            Rescind Invite
                                         </RowActionMenuItem>
                                     )}
                                     {canManageAccount && !u.isSelf && !u.isPlatformAdmin && (
                                         <RowActionMenuItem onClick={() => deleteUser(u.id)} icon={<Trash2 className="w-4 h-4" />} tone="danger">
-                                            Remove user
+                                            Remove User
                                         </RowActionMenuItem>
                                     )}
                                 </RowActionMenu>
@@ -927,10 +883,7 @@ const PasswordResetModal: React.FC<{
                         <h3 className="text-xl font-semibold text-[#111827] mb-2">Reset Email Sent!</h3>
                         <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
                             {email ? (
-                                <>
-                                    A password reset link is on its way to{" "}
-                                    <span className="font-medium text-[#111827]">{email}</span>.
-                                </>
+                                <>A password reset link is on its way to {email}.</>
                             ) : (
                                 "A password reset link has been sent."
                             )}

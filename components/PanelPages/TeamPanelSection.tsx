@@ -53,7 +53,7 @@ const InviteActionsMenu: React.FC<{
 }> = ({ inviteEmail, onRescind }) => {
     return (
         <RowActionMenu label={`Manage invite for ${inviteEmail}`}>
-            <RowActionMenuItem onClick={onRescind} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
+            <RowActionMenuItem onClick={onRescind} icon={<FiTrash2 className="w-4 h-4" />}>
                 Rescind Invite
             </RowActionMenuItem>
         </RowActionMenu>
