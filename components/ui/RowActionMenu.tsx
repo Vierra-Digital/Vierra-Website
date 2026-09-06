@@ -64,6 +64,41 @@ export const RowActionMenuLabel: React.FC<{ children: React.ReactNode }> = ({ ch
 const GAP = 6;
 const EDGE = 8;
 
+/**
+ * Drops separators that have nothing to separate.
+ *
+ * Call sites decide their items with conditions — a session action only when there is a session,
+ * Remove only when the row can be removed — so a menu can end up with a rule and no items above
+ * it, or a "Session" heading with nothing under it. Both read as a menu that has been cut off.
+ * Rather than making every call site's conditions agree with its dividers, the menu drops any
+ * separator that is leading, trailing, or next to another, and any label with no item following.
+ */
+function tidySeparators(children: React.ReactNode): React.ReactNode[] {
+  const items = React.Children.toArray(children).filter(Boolean);
+  const isDivider = (node: React.ReactNode) =>
+    React.isValidElement(node) && node.type === RowActionMenuDivider;
+  const isLabel = (node: React.ReactNode) => React.isValidElement(node) && node.type === RowActionMenuLabel;
+
+  const kept: React.ReactNode[] = [];
+  for (let i = 0; i < items.length; i += 1) {
+    const node = items[i];
+    if (isDivider(node)) {
+      // Nothing before it, or the previous kept node is itself a divider.
+      if (kept.length === 0 || isDivider(kept[kept.length - 1])) continue;
+      // Nothing after it worth separating.
+      if (!items.slice(i + 1).some((later) => !isDivider(later))) continue;
+    }
+    if (isLabel(node)) {
+      const next = items[i + 1];
+      if (next === undefined || isDivider(next) || isLabel(next)) continue;
+    }
+    kept.push(node);
+  }
+  // A trailing divider can survive the loop when everything after it was a label that was dropped.
+  while (kept.length > 0 && isDivider(kept[kept.length - 1])) kept.pop();
+  return kept;
+}
+
 const RowActionMenu: React.FC<RowActionMenuProps> = ({ label, children, menuWidthClassName = "w-[188px]" }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
@@ -156,7 +191,7 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({ label, children, menuWidt
           }}
           onClick={close}
         >
-          {children}
+          {tidySeparators(children)}
         </div>
       )}
     </div>
