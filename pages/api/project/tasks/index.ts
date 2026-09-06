@@ -1,17 +1,23 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { findCompanyBoard, serializeTask } from "@/lib/api/projectAccess";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 export default withAuth(async (req, res, session) => {
+  const companyId = resolveTargetCompanyId(session, req);
+  if (!companyId) {
+    return res.status(400).json({ message: "companyId is required" });
+  }
+
   if (req.method === "GET") {
-    const board = await findCompanyBoard(session.companyId, req.query.boardId as string | undefined);
+    const board = await findCompanyBoard(companyId, req.query.boardId as string | undefined);
     if (!board) {
       return res.status(400).json({ message: "Invalid or missing boardId" });
     }
 
     try {
       const tasks = await prisma.projectTask.findMany({
-        where: { board_id: board.id, company_id: session.companyId },
+        where: { board_id: board.id, company_id: companyId },
         include: { task_assignments: { select: { user_id: true } } },
         orderBy: [{ status: "asc" }, { created_at: "desc" }],
       });
@@ -31,7 +37,7 @@ export default withAuth(async (req, res, session) => {
     if (!boardId || !name || typeof description !== "string") {
       return res.status(400).json({ message: "boardId, name, and description are required" });
     }
-    const board = await findCompanyBoard(session.companyId, boardId);
+    const board = await findCompanyBoard(companyId, boardId);
     if (!board) {
       return res.status(400).json({ message: "Invalid boardId" });
     }
@@ -47,7 +53,7 @@ export default withAuth(async (req, res, session) => {
     try {
       const task = await prisma.projectTask.create({
         data: {
-          company_id: session.companyId,
+          company_id: companyId,
           board_id: board.id,
           name: String(name).trim(),
           description: String(description).trim(),

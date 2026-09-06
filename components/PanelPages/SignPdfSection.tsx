@@ -67,8 +67,12 @@ const SignPdfSection: React.FC = () => {
   const recipientIdRef = useRef<string>("")
   const [staffOptions, setStaffOptions] = useState<StaffOption[]>([])
   const [clientOptions, setClientOptions] = useState<ClientOption[]>([])
-  const [saveStatus, setSaveStatus] = useState<"idle" | "loading" | "success" | "error">("idle")
+  const [saveStatus, setSaveStatus] = useState<"idle" | "loading" | "error">("idle")
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [savedInfo, setSavedInfo] = useState<{ recipientLabel: string } | null>(null)
+  const [showSavedModal, setShowSavedModal] = useState(false)
+  const [recipientQuery, setRecipientQuery] = useState("")
+  const [copyError, setCopyError] = useState(false)
   const pageRef = useRef<HTMLDivElement>(null)
   /**
    * Size of the rendered page box, measured after layout.
@@ -294,8 +298,11 @@ const SignPdfSection: React.FC = () => {
       setGeneratedFileName(pdfFile.name || "document.pdf")
       setRecipientId("")
       recipientIdRef.current = ""
+      setRecipientQuery("")
       setSaveStatus("idle")
       setSaveError(null)
+      setSavedInfo(null)
+      setShowSavedModal(false)
     } catch (err: unknown) {
       setError(
         err instanceof Error ? err.message : "Failed to generate signing link."
@@ -307,10 +314,14 @@ const SignPdfSection: React.FC = () => {
 
   const handleCopyLink = () => {
     if (!generatedLink) return
-    navigator.clipboard.writeText(generatedLink).then(() => {
-      setLinkCopied(true)
-      setTimeout(() => setLinkCopied(false), 2000)
-    })
+    navigator.clipboard.writeText(generatedLink).then(
+      () => {
+        setLinkCopied(true)
+        setCopyError(false)
+        setTimeout(() => setLinkCopied(false), 2000)
+      },
+      () => setCopyError(true)
+    )
   }
 
   const handleSaveToFiles = async () => {
@@ -336,7 +347,12 @@ const SignPdfSection: React.FC = () => {
       if (!r.ok) {
         throw new Error(data.message || "Failed to save")
       }
-      setSaveStatus("success")
+      const options = recipientType === "staff" ? staffOptions : clientOptions
+      const label = options.find((o) => String(o.id) === selectedId)
+      const recipientLabel = label?.name || `${recipientType === "staff" ? "Staff" : "Client"} ${selectedId}`
+      setSaveStatus("idle")
+      setSavedInfo({ recipientLabel })
+      setShowSavedModal(true)
     } catch (e) {
       setSaveStatus("error")
       setSaveError(e instanceof Error ? e.message : "Failed to save to files.")
@@ -367,8 +383,11 @@ const SignPdfSection: React.FC = () => {
       setGeneratedFileName(presets.find((p) => p.id === presetId)?.name || "document.pdf")
       setRecipientId("")
       recipientIdRef.current = ""
+      setRecipientQuery("")
       setSaveStatus("idle")
       setSaveError(null)
+      setSavedInfo(null)
+      setShowSavedModal(false)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to generate link from preset.")
     } finally {
@@ -387,13 +406,44 @@ const SignPdfSection: React.FC = () => {
     setGeneratedFileName("")
     setRecipientId("")
     recipientIdRef.current = ""
+    setRecipientQuery("")
     setError(null)
     setLinkCopied(false)
+    setCopyError(false)
+    setSavedInfo(null)
+    setShowSavedModal(false)
+    setSaveStatus("idle")
+    setSaveError(null)
   }
 
   const goToPrevPage = () => setCurrentPage((prev) => Math.max(1, prev - 1))
   const goToNextPage = () =>
     setCurrentPage((prev) => Math.min(numPages!, prev + 1))
+
+  const PROGRESS_STEPS = ["Prepare PDF", "Review & place fields", "Generate link", "Save & share"] as const
+  const currentStepIndex = savedInfo ? 3 : generatedLink ? (pdfFile ? 2 : 3) : pdfFile ? 1 : 0
+  const ProgressBar = (
+    <ol className="flex flex-wrap items-center gap-x-1 gap-y-2 mb-6 text-xs font-medium" aria-label="Signing progress">
+      {PROGRESS_STEPS.map((label, index) => (
+        <li key={label} className="flex items-center">
+          <span
+            aria-current={index === currentStepIndex ? "step" : undefined}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 ${
+              index === currentStepIndex
+                ? "bg-[#701CC0] text-white"
+                : index < currentStepIndex
+                  ? "bg-[#F3E8FF] text-[#701CC0]"
+                  : "bg-[#F3F4F6] text-[#9CA3AF]"
+            }`}
+          >
+            {index < currentStepIndex && <FiCheck className="w-3.5 h-3.5" />}
+            {index + 1}. {label}
+          </span>
+          {index < PROGRESS_STEPS.length - 1 && <span className="mx-1.5 text-[#D1D5DB]">→</span>}
+        </li>
+      ))}
+    </ol>
+  )
 
   return (
     <div className={`w-full h-full bg-white text-[#111014] flex flex-col ${inter.className}`}>
@@ -409,6 +459,8 @@ const SignPdfSection: React.FC = () => {
 
           {generatedLink ? (
             <div className="w-full flex flex-col items-center max-w-xl mx-auto pb-12 pt-4">
+              {ProgressBar}
+              <p className="mb-2 text-sm font-medium text-[#374151]">{generatedFileName || "Document"}</p>
               <div className="w-full bg-white rounded-xl shadow-sm border border-[#E5E7EB] overflow-hidden">
                 <div className="p-6">
                   <div className="flex items-center gap-3 mb-4">
@@ -417,13 +469,14 @@ const SignPdfSection: React.FC = () => {
                     </div>
                     <div>
                       <h3 className="text-lg font-semibold text-[#111827]">Link Generated</h3>
-                      <p className="text-sm text-[#6B7280]">Share this link with the signer.</p>
+                      <p className="text-sm text-[#6B7280]">Share this link with the signer. This document has not been saved to files or signed yet.</p>
                     </div>
                   </div>
                   <div className="flex gap-2">
                     <input
                       type="text"
                       readOnly
+                      id="pdf-signer-generated-link"
                       value={generatedLink}
                       className="flex-1 p-3 bg-[#F9FAFB] border border-[#E5E7EB] rounded-lg text-[#111827] text-sm focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-[#701CC0]"
                       onFocus={(e) => e.target.select()}
@@ -436,6 +489,11 @@ const SignPdfSection: React.FC = () => {
                       {linkCopied ? "Copied" : "Copy"}
                     </button>
                   </div>
+                  {copyError && (
+                    <p className="mt-2 text-xs text-red-600">
+                      Could not copy automatically. The link is selected above — press Ctrl/Cmd+C to copy it manually.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -450,75 +508,119 @@ const SignPdfSection: React.FC = () => {
                       <p className="text-sm text-[#6B7280]">Store this PDF for a staff member or client.</p>
                     </div>
                   </div>
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap gap-3 items-center">
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <label className="text-sm font-medium text-[#374151]">Save To:</label>
-                        <div className="relative min-w-[120px]">
-                          <select
-                            value={recipientType}
-                            onChange={(e) => {
-                              setRecipientType(e.target.value as "staff" | "client")
-                              setRecipientId("")
-                              recipientIdRef.current = ""
-                              setSaveStatus("idle")
-                              setSaveError(null)
-                            }}
-                            className="h-10 w-full min-w-[120px] appearance-none rounded-lg border border-[#E5E7EB] bg-white py-2 pl-3 pr-10 text-sm text-[#111827] focus:border-[#701CC0] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                  {savedInfo ? (
+                    <div className="space-y-3">
+                      <p className="flex items-center gap-2 text-sm font-medium text-green-700">
+                        <FiCheck className="w-4 h-4" /> Saved to files — {savedInfo.recipientLabel}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {generatedTokenId && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              window.open(
+                                `/files/preview?tokenId=${encodeURIComponent(generatedTokenId)}&name=${encodeURIComponent(generatedFileName)}`,
+                                "_blank",
+                                "noopener,noreferrer"
+                              )
+                            }
+                            className={`px-4 py-2 border border-[#E5E7EB] text-[#374151] rounded-lg font-medium hover:bg-[#F9FAFB] text-sm transition ${inter.className}`}
                           >
-                            <option value="staff">Staff</option>
-                            <option value="client">Client</option>
-                          </select>
-                          <FiChevronDown
-                            className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6B7280]"
-                            aria-hidden
+                            Open saved file
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setSavedInfo(null)}
+                          className="px-4 py-2 text-sm font-medium text-[#701CC0] hover:underline"
+                        >
+                          Save to someone else too
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap gap-3 items-center">
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <label className="text-sm font-medium text-[#374151]">Save To:</label>
+                          <div className="relative min-w-[120px]">
+                            <select
+                              value={recipientType}
+                              onChange={(e) => {
+                                setRecipientType(e.target.value as "staff" | "client")
+                                setRecipientId("")
+                                recipientIdRef.current = ""
+                                setRecipientQuery("")
+                                setSaveStatus("idle")
+                                setSaveError(null)
+                              }}
+                              className="h-10 w-full min-w-[120px] appearance-none rounded-lg border border-[#E5E7EB] bg-white py-2 pl-3 pr-10 text-sm text-[#111827] focus:border-[#701CC0] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                            >
+                              <option value="staff">Staff</option>
+                              <option value="client">Client</option>
+                            </select>
+                            <FiChevronDown
+                              className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6B7280]"
+                              aria-hidden
+                            />
+                          </div>
+                        </div>
+                        <div className="relative min-w-[200px] flex-1">
+                          <input
+                            type="text"
+                            value={recipientQuery}
+                            onChange={(e) => setRecipientQuery(e.target.value)}
+                            placeholder={`Search ${recipientType === "staff" ? "staff" : "clients"}...`}
+                            className="h-10 w-full rounded-lg border border-[#E5E7EB] bg-white px-3 text-sm text-[#111827] focus:border-[#701CC0] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
                           />
                         </div>
                       </div>
-                      <div className="relative min-w-[200px] flex-1">
-                        <select
-                          value={recipientId}
-                          onChange={(e) => {
-                            const val = e.target.value
-                            setRecipientId(val)
-                            recipientIdRef.current = val
-                            setSaveStatus("idle")
-                            setSaveError(null)
-                          }}
-                          className="h-10 w-full appearance-none rounded-lg border border-[#E5E7EB] bg-white py-2 pl-3 pr-10 text-sm text-[#111827] focus:border-[#701CC0] focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
+                      {(() => {
+                        const query = recipientQuery.trim().toLowerCase()
+                        const matches =
+                          recipientType === "staff"
+                            ? staffOptions.filter((s) => !query || (s.name || s.role || "").toLowerCase().includes(query))
+                            : clientOptions.filter((c) => !query || c.name.toLowerCase().includes(query))
+                        return matches.length === 0 ? (
+                          <p className="text-sm text-[#6B7280]">No {recipientType === "staff" ? "staff members" : "clients"} match &ldquo;{recipientQuery}&rdquo;.</p>
+                        ) : (
+                          <div className="max-h-40 overflow-y-auto rounded-lg border border-[#E5E7EB] divide-y divide-[#F3F4F6]">
+                            {matches.map((option) => (
+                              <button
+                                key={option.id}
+                                type="button"
+                                onClick={() => {
+                                  setRecipientId(String(option.id))
+                                  recipientIdRef.current = String(option.id)
+                                  setSaveStatus("idle")
+                                  setSaveError(null)
+                                }}
+                                className={`w-full text-left px-3 py-2 text-sm transition ${
+                                  recipientId === String(option.id) ? "bg-[#F3E8FF] text-[#701CC0] font-medium" : "text-[#374151] hover:bg-[#F9FAFB]"
+                                }`}
+                              >
+                                {option.name || `${recipientType === "staff" ? "User" : "Client"} ${option.id}`}
+                              </button>
+                            ))}
+                          </div>
+                        )
+                      })()}
+                      <div className="flex justify-center">
+                        <button
+                          onClick={handleSaveToFiles}
+                          disabled={saveStatus === "loading" || !recipientId}
+                          className={`px-4 py-2.5 bg-[#701CC0] text-white rounded-lg font-medium hover:bg-[#5F18B0] disabled:opacity-50 disabled:cursor-not-allowed text-sm transition ${inter.className}`}
                         >
-                          <option value="">Select {recipientType === "staff" ? "staff" : "client"}...</option>
-                          {recipientType === "staff"
-                            ? staffOptions.map((s) => (
-                                <option key={s.id} value={String(s.id)}>
-                                  {s.name || s.role || `User ${s.id}`}
-                                </option>
-                              ))
-                            : clientOptions.map((c) => (
-                                <option key={c.id} value={c.id}>
-                                  {c.name}
-                                </option>
-                              ))}
-                        </select>
-                        <FiChevronDown
-                          className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6B7280]"
-                          aria-hidden
-                        />
+                          {saveStatus === "loading" ? "Saving..." : "Save To Files"}
+                        </button>
                       </div>
+                      {saveStatus === "error" && saveError && (
+                        <p className="text-red-500 text-sm">
+                          {saveError} The generated link above still works — retry saving without generating a new one.
+                        </p>
+                      )}
                     </div>
-                    <div className="flex justify-center">
-                      <button
-                        onClick={handleSaveToFiles}
-                        disabled={saveStatus === "loading" || !recipientId}
-                        className={`px-4 py-2.5 bg-[#701CC0] text-white rounded-lg font-medium hover:bg-[#5F18B0] disabled:opacity-50 disabled:cursor-not-allowed text-sm transition ${inter.className}`}
-                      >
-                        {saveStatus === "loading" ? "Saving..." : "Save To Files"}
-                      </button>
-                    </div>
-                    {saveStatus === "error" && saveError && (
-                      <p className="text-red-500 text-sm">{saveError}</p>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
 
@@ -528,16 +630,16 @@ const SignPdfSection: React.FC = () => {
                 className={`mt-8 w-full inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#701CC0] text-white rounded-lg font-medium hover:bg-[#5F18B0] transition ${inter.className}`}
               >
                 <FaRegFilePdf className="w-4 h-4" />
-                Upload Another PDF
+                Start another document
               </button>
 
-              {saveStatus === "success" && (
+              {showSavedModal && (
                 <div
                   className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4"
                   role="dialog"
                   aria-modal="true"
                   onClick={(e) => {
-                    if (e.target === e.currentTarget) setSaveStatus("idle")
+                    if (e.target === e.currentTarget) setShowSavedModal(false)
                   }}
                 >
                   <div
@@ -553,13 +655,13 @@ const SignPdfSection: React.FC = () => {
                           </span>
                         </span>
                       </div>
-                      <h3 className="text-xl font-semibold text-[#111827] mb-2">Saved Successfully!</h3>
+                      <h3 className="text-xl font-semibold text-[#111827] mb-2">Saved to files</h3>
                       <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
-                        The PDF has been saved to the selected user.
+                        {generatedFileName || "This document"} was saved for {savedInfo?.recipientLabel}. Saving does not mean it has been signed yet.
                       </p>
                       <button
                         type="button"
-                        onClick={() => setSaveStatus("idle")}
+                        onClick={() => setShowSavedModal(false)}
                         className="w-full rounded-lg px-4 py-2 bg-[#701CC0] text-white hover:bg-[#5f17a5] text-sm font-medium transition-colors"
                       >
                         Done
@@ -607,6 +709,7 @@ const SignPdfSection: React.FC = () => {
             </div>
           ) : (
             <div className="w-full flex flex-col pb-12">
+              {ProgressBar}
               <div className="flex flex-wrap items-center gap-4 mb-4">
                 <span className="text-sm text-[#6B7280]">{pdfFile.name}</span>
                 <button

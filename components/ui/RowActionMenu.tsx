@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 
 type RowActionMenuProps = {
@@ -104,11 +104,18 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({ label, children, menuWidt
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
 
   const close = useCallback(() => {
     setIsOpen(false);
     setPosition(null);
   }, []);
+
+  /** Closing by keyboard should put the caret back where it came from, not at the top of the page. */
+  const closeAndRefocus = useCallback(() => {
+    close();
+    buttonRef.current?.focus();
+  }, [close]);
 
   /**
    * Placement is measured, not guessed.
@@ -147,7 +154,7 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({ label, children, menuWidt
       close();
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
+      if (event.key === "Escape") closeAndRefocus();
     };
     // Fixed positioning is resolved once, so anything that moves the trigger invalidates it.
     // Closing is the honest response — a menu that drifts away from its row is worse than one
@@ -162,10 +169,21 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({ label, children, menuWidt
       window.removeEventListener("scroll", close, true);
       window.removeEventListener("resize", close);
     };
-  }, [isOpen, close]);
+  }, [isOpen, close, closeAndRefocus]);
+
+  // Move focus into the menu when it opens, so it is operable without a mouse.
+  useEffect(() => {
+    if (isOpen) menuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+  }, [isOpen]);
 
   return (
-    <div className="relative">
+    <div
+      className="relative"
+      onBlur={(event) => {
+        // Tabbing out of the menu closes it, the same as clicking away.
+        if (!event.currentTarget.contains(event.relatedTarget as Node)) close();
+      }}
+    >
       <button
         ref={buttonRef}
         type="button"
@@ -173,6 +191,7 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({ label, children, menuWidt
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={isOpen}
+        aria-controls={isOpen ? menuId : undefined}
         className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
           isOpen ? "bg-[#EFECF4] text-[#374151]" : "text-[#9CA3AF] hover:bg-[#F5F3F9] hover:text-[#374151]"
         }`}
@@ -182,6 +201,7 @@ const RowActionMenu: React.FC<RowActionMenuProps> = ({ label, children, menuWidt
       {isOpen && (
         <div
           ref={menuRef}
+          id={menuId}
           role="menu"
           className={`fixed z-[100] ${menuWidthClassName} rounded-xl border border-[#E4E0EC] bg-white p-1 shadow-[0_10px_28px_-8px_rgba(16,24,40,0.22)]`}
           style={{

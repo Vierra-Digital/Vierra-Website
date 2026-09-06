@@ -8,9 +8,17 @@ import type { BusyInterval } from "@/lib/calendar/googleCalendar";
  * America/New_York" lands on the right UTC instants across the DST boundary.
  */
 export type Availability = {
-  days: number[]; // 0=Sun … 6=Sat (host-local)
+  days: number[]; // 0=Sun … 6=Sat (host-local) — a day with no `perDay` entry uses this default window
   startMinutes: number; // e.g. 9*60 = 09:00 host-local
   endMinutes: number; // e.g. 17*60 = 17:00 host-local
+  /**
+   * Optional per-weekday override, for hosts whose hours actually differ by day (e.g. shorter
+   * weekend hours) rather than being uniform across every day in `days`. Keys are weekday
+   * indices from `days`; a day present here uses its own start/end instead of the top-level
+   * default. Omitting this (or a given day within it) keeps the old single-window behavior, so
+   * existing links' stored JSON needs no migration.
+   */
+  perDay?: Partial<Record<number, { startMinutes: number; endMinutes: number }>>;
 };
 
 export const DEFAULT_AVAILABILITY: Availability = { days: [1, 2, 3, 4, 5], startMinutes: 14 * 60, endMinutes: 22 * 60 };
@@ -102,9 +110,22 @@ export function computeSlots(opts: {
   // host tz at rangeStart isn't skipped), stopping once slots pass the end of the range.
   let { year, month, day } = localYMD(new Date(rangeStart.getTime() - 24 * 60 * 60 * 1000), timeZone);
 
-  for (let guard = 0; guard < 400 && slots.length < max; guard += 1) {
-    if (availability.days.includes(localWeekday(year, month, day, timeZone))) {
-      for (let m = availability.startMinutes; m + durationMinutes <= availability.endMinutes; m += durationMinutes) {
+  // Safety backstop, not the real terminator — the loop already exits via the rangeEnd check
+  // below once a local day starts past the window. Sized off the actual requested range (plus
+  // slack) instead of a fixed guess so a long window (e.g. an "unbounded" booking link's ~2-year
+  // horizon) can't get silently truncated by an unrelated hardcoded day count.
+  const maxIterations = Math.ceil((rangeEndMs - rangeStart.getTime()) / (24 * 60 * 60 * 1000)) + 3;
+  for (let guard = 0; guard < maxIterations && slots.length < max; guard += 1) {
+    const weekday = localWeekday(year, month, day, timeZone);
+    if (availability.days.includes(weekday)) {
+      const window = availability.perDay?.[weekday] ?? availability;
+      // Stepping by duration alone would offer slots back-to-back whenever nothing's actually
+      // booked yet — the buffer only ever kept slots away from *existing* busy blocks, never
+      // from each other. Advancing by duration+buffer makes every offered start time carry its
+      // own gap to the next one, matching how Google Calendar's own appointment-schedule buffer
+      // behaves (reference: a 15-min/10-min-buffer schedule offers :00, :25, :50, not :00/:15/:30).
+      const stepMinutes = durationMinutes + bufferMinutes;
+      for (let m = window.startMinutes; m + durationMinutes <= window.endMinutes; m += stepMinutes) {
         const startMs = wallToUtc(year, month, day, m, timeZone).getTime();
         const endMs = startMs + durMs;
         if (startMs <= nowMs || startMs < rangeStart.getTime()) continue;

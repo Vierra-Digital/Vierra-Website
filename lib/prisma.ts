@@ -1,4 +1,4 @@
-import { PrismaClient } from "@/lib/generated/prisma/client";
+import { Prisma, PrismaClient } from "@/lib/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import os from "os";
 
@@ -84,8 +84,21 @@ let client: PrismaClient | undefined;
 function getClient(): PrismaClient {
   if (client) return client;
   if (global.prisma) {
-    client = global.prisma;
-    return client;
+    // Hot reload preserves globals across schema/client generation changes. An older
+    // instance can lack newly generated delegates even though raw SQL still works.
+    const cached = global.prisma;
+    const hasCurrentModels = Object.values(Prisma.ModelName).every((name) => {
+      const delegate = name.charAt(0).toLowerCase() + name.slice(1);
+      return delegate in cached;
+    });
+    if (hasCurrentModels) {
+      client = cached;
+      return client;
+    }
+    global.prisma = undefined;
+    void cached.$disconnect().catch((error: unknown) => {
+      console.error("[prisma] failed to disconnect outdated client:", error);
+    });
   }
   client = new PrismaClient({
     adapter: new PrismaPg({

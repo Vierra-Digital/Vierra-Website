@@ -2,11 +2,18 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { asStr, asQueryStr } from "@/lib/api/parsing";
 import { serializeCampaign, CAMPAIGN_STATUSES, SEND_PROVIDERS } from "@/lib/api/campaigns";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 
 export default withAuth(async (req, res, session) => {
+  const companyId = resolveTargetCompanyId(session, req);
+  if (!companyId) {
+    res.status(400).json({ message: "companyId is required" });
+    return;
+  }
+
   if (req.method === "GET") {
     const status = asQueryStr(req.query.status);
-    const where: any = { company_id: session.companyId };
+    const where: any = { company_id: companyId };
     if (status && (CAMPAIGN_STATUSES as readonly string[]).includes(status)) where.status = status;
 
     const campaigns = await prisma.campaign.findMany({
@@ -41,7 +48,7 @@ export default withAuth(async (req, res, session) => {
     let resolvedAccountId: string;
     if (accountId) {
       const account = await prisma.emailProviderAccount.findFirst({
-        where: { id: accountId, user_id: session.user.id, company_id: session.companyId },
+        where: { id: accountId, user_id: session.user.id, company_id: companyId },
         select: { id: true, smtp_password_enc: true },
       });
       if (!account) {
@@ -64,14 +71,14 @@ export default withAuth(async (req, res, session) => {
       // no SMTP/IMAP fields needed, the vendor sends the mail. See lib/email/smtp.ts's
       // requireSmtpCredentials() and prisma/schema.prisma's EmailProviderAccount comment.
       const existing = await prisma.emailProviderAccount.findFirst({
-        where: { user_id: session.user.id, company_id: session.companyId, account_email: accountEmail },
+        where: { user_id: session.user.id, company_id: companyId, account_email: accountEmail },
         select: { id: true },
       });
       resolvedAccountId =
         existing?.id ??
         (
           await prisma.emailProviderAccount.create({
-            data: { company_id: session.companyId, user_id: session.user.id, account_email: accountEmail },
+            data: { company_id: companyId, user_id: session.user.id, account_email: accountEmail },
             select: { id: true },
           })
         ).id;
@@ -84,7 +91,7 @@ export default withAuth(async (req, res, session) => {
 
     const created = await prisma.campaign.create({
       data: {
-        company_id: session.companyId,
+        company_id: companyId,
         account_id: resolvedAccountId,
         created_by: session.user.id,
         name,

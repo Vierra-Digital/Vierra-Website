@@ -5,6 +5,8 @@ import { parseContactsCsvWithValidation } from "@/lib/contacts/csv";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
 import { mapInBatches } from "@/lib/batch";
+import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
+import { normalizePhone } from "@/lib/contacts/phone";
 
 type ImportedRow = {
   lineNumber: number;
@@ -46,14 +48,13 @@ function hasLiteralNull(value: string) {
   return value.trim().toLowerCase() === "null";
 }
 
-function normalizePhone(value: string) {
-  const digits = value.replace(/\D/g, "");
-  if (digits.length !== 10) return null;
-  return `(${digits.slice(0, 3)})-${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
-}
-
 export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
+  const companyId = resolveTargetCompanyId(session, req);
+  if (!companyId) {
+    res.status(400).json({ message: "companyId is required" });
+    return;
+  }
 
   const csvText = typeof req.body?.csvText === "string" ? req.body.csvText : "";
   if (!csvText.trim()) {
@@ -175,16 +176,23 @@ export default withAuth(async (req, res, session) => {
   // Phase 3 — upsert contacts with bounded concurrency. Emails are unique after the collapse above,
   // so there are no key races; each returns its id + tag names for the assignment phase.
   const written = await mapInBatches([...byEmail.entries()], async ([email, v]) => {
-    const createData = { user_id: userId, account_id: accountId, source: "csv" as const, email, ...v.data };
+    const createData = {
+      company_id: companyId,
+      user_id: userId,
+      account_id: accountId,
+      source: "csv" as const,
+      email,
+      ...v.data,
+    };
     const contact = accountId
       ? await prisma.contact.upsert({
-          where: { user_id_account_id_email: { user_id: userId, account_id: accountId, email } },
+          where: { company_id_account_id_email: { company_id: companyId, account_id: accountId, email } },
           create: createData,
           update: v.data,
         })
       : await (async () => {
           const existing = await prisma.contact.findFirst({
-            where: { user_id: userId, account_id: null, email },
+            where: { company_id: companyId, account_id: null, email },
             select: { id: true },
           });
           if (existing) return prisma.contact.update({ where: { id: existing.id }, data: v.data });
@@ -206,7 +214,7 @@ export default withAuth(async (req, res, session) => {
   }
 
   if (imported > 0) {
-    await syncContactsSpreadsheetForUser({ userId, companyId: session.companyId });
+    await syncContactsSpreadsheetForUser({ userId, companyId });
   }
   res.status(200).json({
     imported,

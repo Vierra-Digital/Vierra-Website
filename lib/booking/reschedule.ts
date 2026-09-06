@@ -56,14 +56,18 @@ export async function rescheduleBooking(bookingId: string, newStart: Date, resch
   });
   const hostUserId = resolveHostUserId(booking);
 
-  let busy: BusyInterval[];
+  let calendarBusy: BusyInterval[];
   if (link.company_id) {
-    busy = await getTeamBusyIntersection(link.company_id, now.toISOString(), validationRangeEnd.toISOString());
+    calendarBusy = await getTeamBusyIntersection(link.company_id, now.toISOString(), validationRangeEnd.toISOString());
   } else {
     const token = await getValidGmailAccessToken(link.user_id, link.account_email);
-    busy = token.ok ? await getBusy(token.accessToken, now.toISOString(), validationRangeEnd.toISOString()) : [];
+    const result = token.ok ? await getBusy(token.accessToken, now.toISOString(), validationRangeEnd.toISOString()) : null;
+    // null means we couldn't check the calendar, not that it's empty — proceeding as `[]` would
+    // let a reschedule land on a real conflict we simply failed to see (see slots.ts's fix).
+    if (result === null) return { ok: false, message: "Could not verify host availability right now — please try again shortly." };
+    calendarBusy = result;
   }
-  busy = [...busy, ...localBookings.map((b) => ({ start: b.start_at.toISOString(), end: b.end_at.toISOString() }))];
+  const busy = [...calendarBusy, ...localBookings.map((b) => ({ start: b.start_at.toISOString(), end: b.end_at.toISOString() }))];
 
   const availability = (link.availability as unknown as Availability) || DEFAULT_AVAILABILITY;
   const offered = computeSlots({

@@ -133,7 +133,12 @@ export async function handlePlatformStatus(
   req: NextApiRequest,
   res: NextApiResponse,
   platform: string,
-  validateToken: (token: string) => Promise<boolean>
+  validateToken: (token: string) => Promise<boolean>,
+  // Optional: a friendly label (name/email) for whichever account the token belongs to, so a
+  // caller isn't stuck with a bare "Connected" and no way to tell it's the wrong account. Not
+  // persisted anywhere (no schema change) — fetched fresh from the provider on every status
+  // check, same as validateToken already does.
+  fetchLabel?: (token: string) => Promise<string | null>
 ) {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
@@ -152,22 +157,24 @@ export async function handlePlatformStatus(
         select: { access_token: true },
       });
       if (!row) {
-        res.status(200).json({ connected: false });
+        res.status(200).json({ connected: false, label: null });
         return;
       }
-      const connected = await validateToken(decrypt(row.access_token));
-      res.status(200).json({ connected });
+      const token = decrypt(row.access_token);
+      const connected = await validateToken(token);
+      const label = connected && fetchLabel ? await fetchLabel(token).catch(() => null) : null;
+      res.status(200).json({ connected, label });
       return;
     } catch (e) {
       console.error(`${platform} onboarding status error`, e);
-      res.status(200).json({ connected: false });
+      res.status(200).json({ connected: false, label: null });
       return;
     }
   }
 
   const session = await requireSession(req, res);
   if (!session) {
-    res.status(401).json({ connected: false });
+    res.status(401).json({ connected: false, label: null });
     return;
   }
 
@@ -178,14 +185,16 @@ export async function handlePlatformStatus(
       select: { access_token: true },
     });
     if (!row) {
-      res.status(200).json({ connected: false });
+      res.status(200).json({ connected: false, label: null });
       return;
     }
-    const connected = await validateToken(decrypt(row.access_token));
-    res.status(200).json({ connected });
+    const token = decrypt(row.access_token);
+    const connected = await validateToken(token);
+    const label = connected && fetchLabel ? await fetchLabel(token).catch(() => null) : null;
+    res.status(200).json({ connected, label });
   } catch (e) {
     console.error(`${platform} status error`, e);
-    res.status(200).json({ connected: false });
+    res.status(200).json({ connected: false, label: null });
   }
 }
 

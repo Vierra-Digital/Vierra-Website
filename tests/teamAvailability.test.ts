@@ -11,7 +11,13 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 vi.mock("@/lib/gmail/tokens", () => ({ getValidGmailAccessToken: vi.fn() }));
-vi.mock("@/lib/calendar/googleCalendar", () => ({ getBusy: vi.fn() }));
+// getTeamBusyIntersection calls getBusyOverRange (a thin wrapper around getBusy that chunks
+// wide ranges) rather than getBusy directly — alias it to the same mock so existing
+// busyFor.mockImplementation(...) setup below still governs what it returns.
+vi.mock("@/lib/calendar/googleCalendar", () => {
+  const getBusy = vi.fn();
+  return { getBusy, getBusyOverRange: getBusy };
+});
 
 import { prisma } from "@/lib/prisma";
 import { getValidGmailAccessToken } from "@/lib/gmail/tokens";

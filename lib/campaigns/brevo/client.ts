@@ -1,12 +1,12 @@
 /**
  * Brevo Transactional Email API client for "brevo"-provider campaign sends — see
- * .claude/schema_v2_campaigns_brevo_integration.md. Kept fully separate from lib/email/brevo.ts
- * (system auth/transactional email — unrelated, sends from a fixed FROM_EMAIL) so this stopgap
- * stays a self-contained, removable diff: campaign sends go out as the connected mailbox's own
- * address (account.account_email), per the chosen per-user-domain-verification sender model (§2),
- * not the fixed sender lib/email/brevo.ts uses.
+ * .claude/schema_v2_campaigns_brevo_integration.md. Campaigns-only: system/transactional email
+ * (password resets, onboarding links, signed documents, ...) sends through the authenticated
+ * Google Workspace mailbox instead (lib/email/systemSender.ts), not Brevo — see that module's
+ * docstring for why. Campaign sends go out as the connected mailbox's own address
+ * (account.account_email), per the chosen per-user-domain-verification sender model (§2).
  *
- * Env: BREVO_API_KEY (shared with lib/email/brevo.ts — same Brevo account).
+ * Env: BREVO_API_KEY.
  */
 
 const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";

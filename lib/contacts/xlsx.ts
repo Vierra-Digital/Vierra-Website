@@ -43,22 +43,25 @@ function asSheetValue(value: string | null | undefined) {
 }
 
 export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsheetInput) {
+  // Contacts are client-scoped (see docs/ROLE_MODEL_REDESIGN.md's "v2" section) — one shared
+  // spreadsheet per company, not per staff member, so everyone working this client sees the same
+  // export. Keyed by companyId now, not userId.
   const contacts = await prisma.contact.findMany({
-    where: { user_id: input.userId },
+    where: { company_id: input.companyId },
     orderBy: [{ last_name: "asc" }, { first_name: "asc" }, { created_at: "desc" }],
   });
 
-  const signingTokenId = `contacts-xlsx:${input.userId}`;
+  const signingTokenId = `contacts-xlsx:${input.companyId}`;
   const legacyWhere: Prisma.StoredFileWhereInput = {
-    user_id: input.userId,
+    company_id: input.companyId,
     file_type: "xlsx",
-    signing_token_id: { startsWith: `contacts-xlsx:${input.userId}:` },
+    signing_token_id: { startsWith: `contacts-xlsx:${input.companyId}:` },
   };
   await cleanupStoredFileObjects(legacyWhere);
   await prisma.storedFile.deleteMany({ where: legacyWhere });
   if (contacts.length === 0) {
     const emptyWhere: Prisma.StoredFileWhereInput = {
-      user_id: input.userId,
+      company_id: input.companyId,
       signing_token_id: signingTokenId,
       file_type: "xlsx",
     };
@@ -138,7 +141,7 @@ export async function syncContactsSpreadsheetForUser(input: SyncContactsSpreadsh
 
   const existing = await prisma.storedFile.findFirst({
     where: {
-      user_id: input.userId,
+      company_id: input.companyId,
       signing_token_id: signingTokenId,
       file_type: "xlsx",
     },

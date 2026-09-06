@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import nodemailer from "nodemailer";
 import { resolveBaseUrl, toSameSiteUrl } from "@/lib/api/url";
-import { isBrevoConfigured, sendBrevoEmail } from "@/lib/email/brevo";
+import { sendSystemEmail } from "@/lib/email/systemSender";
 import { requireRole } from "@/lib/auth";
 import { isValidEmail } from "@/lib/utils";
 import { escapeHtml } from "@/lib/gmail/sendCore";
@@ -27,27 +26,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ message: "Invalid onboarding link." });
   }
 
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-    pool: false,
-  } as nodemailer.TransportOptions);
-
   // Rebuilt on our own base so the emailed button can only ever point at this site. Previously an
   // absolute off-site URL passed straight through, and a malformed one fell back to the raw input.
   const fullLink = toSameSiteUrl(link, resolveBaseUrl(req));
   if (!fullLink) {
     return res.status(400).json({ message: "Invalid onboarding link." });
   }
-  const fromEmail = process.env.FROM_EMAIL || "alex@vierradev.com";
-  const fromName = process.env.FROM_NAME || "Vierra";
-  const fromAddress = `"${fromName}" <${fromEmail}>`;
-
   const mailOptions = {
-    from: fromAddress,
     to: email,
     subject: "Vierra | Onboarding Link",
     html: `
@@ -97,11 +82,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
 
   try {
-    if (isBrevoConfigured()) {
-      await sendBrevoEmail({ to: mailOptions.to, subject: mailOptions.subject, html: mailOptions.html });
-    } else {
-      await transporter.sendMail(mailOptions);
-    }
+    await sendSystemEmail(mailOptions);
     return res.status(200).json({ message: "Email sent" });
   } catch (err: any) {
     console.error("Failed to send session link email:", err);

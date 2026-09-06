@@ -1,13 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Force the Brevo path (isBrevoConfigured -> true) and capture what deliver() sends,
-// so we can assert on the rendered HTML without any network or SMTP transport.
-vi.mock("@/lib/email/brevo", () => ({
-  isBrevoConfigured: () => true,
-  sendBrevoEmail: vi.fn(async () => {}),
+// Stub the Google Workspace system sender and capture what deliver() sends, so we can assert on
+// the rendered HTML without any network, Prisma, or Gmail API calls.
+vi.mock("@/lib/email/systemSender", () => ({
+  sendSystemEmail: vi.fn(async () => {}),
+}));
+// sendPasswordResetEmail is the one exception routed via SMTP instead of the Gmail-API
+// sendSystemEmail above — see lib/email/systemSmtpSender.ts.
+vi.mock("@/lib/email/systemSmtpSender", () => ({
+  sendSystemEmailViaSmtp: vi.fn(async () => {}),
 }));
 
-import { sendBrevoEmail } from "@/lib/email/brevo";
+import { sendSystemEmail } from "@/lib/email/systemSender";
+import { sendSystemEmailViaSmtp } from "@/lib/email/systemSmtpSender";
 import {
   sendEmail,
   sendAuditConfirmationEmail,
@@ -17,10 +22,15 @@ import {
   sendClientOnboardingCompletedEmail,
 } from "@/lib/emailSender";
 
-const mockSend = sendBrevoEmail as unknown as ReturnType<typeof vi.fn>;
+const mockSend = sendSystemEmail as unknown as ReturnType<typeof vi.fn>;
+const mockSendSmtp = sendSystemEmailViaSmtp as unknown as ReturnType<typeof vi.fn>;
 const lastHtml = (): string => mockSend.mock.calls.at(-1)![0].html as string;
+const lastSmtpHtml = (): string => mockSendSmtp.mock.calls.at(-1)![0].html as string;
 
-beforeEach(() => mockSend.mockClear());
+beforeEach(() => {
+  mockSend.mockClear();
+  mockSendSmtp.mockClear();
+});
 
 // Every transactional email must carry the shared shell chrome.
 function expectShell(html: string) {
@@ -105,13 +115,14 @@ describe("transactional email templates", () => {
     expect(html).toContain("Download PDF");
   });
 
-  it("sendPasswordResetEmail links the reset URL in the CTA", async () => {
+  it("sendPasswordResetEmail links the reset URL in the CTA, sent via SMTP not the Gmail API", async () => {
     await sendPasswordResetEmail("user@acme.test", "Sam", "https://vierradev.com/reset?t=abc");
-    const html = lastHtml();
+    const html = lastSmtpHtml();
     expectShell(html);
     expect(html).toContain("Reset Your Password");
     expect(html).toContain('href="https://vierradev.com/reset?t=abc"');
     expect(html).toContain("Reset Password");
+    expect(mockSend).not.toHaveBeenCalled();
   });
 
   it("sendClientOnboardingCompletedEmail shows client details and the set-password CTA", async () => {

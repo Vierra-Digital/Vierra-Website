@@ -56,6 +56,7 @@ export function serializeCampaign(row: CampaignRow) {
     name: row.name,
     status: row.status,
     sendProvider: row.send_provider,
+    companyId: row.company_id,
     accountId: row.account_id,
     accountEmail: row.email_provider_accounts?.account_email ?? null,
     createdBy: row.created_by,

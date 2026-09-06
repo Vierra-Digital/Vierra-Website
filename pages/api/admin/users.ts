@@ -2,51 +2,43 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
 import { createSupabaseAuthUser, deleteSupabaseAuthUser, updateSupabaseAuthUserEmail } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
+import { computePresenceStatus } from "@/lib/presence";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await requireRole(req, res);
   if (!session) return;
   const { companyId } = session;
   const userRole = session.user.role;
-  const isPlatformAdmin = session.user.isPlatformAdmin === true;
+  const isAdmin = userRole === "admin";
 
   if (req.method === "GET") {
     if (userRole !== "admin" && userRole !== "staff") {
       return res.status(403).json({ message: "Forbidden" });
     }
     try {
-      // Platform admins (see prisma/schema.prisma's User.is_platform_admin) see every company's
-      // people, not just their own — everyone else stays scoped to companyId as before.
+      // Role model v2 (docs/ROLE_MODEL_REDESIGN.md): every company_memberships row is Vierra's
+      // own team, all pointed at the same fixed company id — no cross-company bypass needed,
+      // every caller's own companyId already is every other Vierra member's companyId too.
       const memberships = await prisma.companyMembership.findMany({
-        where: isPlatformAdmin ? {} : { company_id: companyId },
+        where: { company_id: companyId },
         include: {
           users_company_memberships_user_idTousers: {
             select: {
               id: true,
               name: true,
               email: true,
-              is_platform_admin: true,
               user_preferences: { select: { time_zone: true, image_storage_key: true, image_updated_at: true } },
               clients_clients_user_idTousers: { select: { name: true } },
             },
           },
-          ...(isPlatformAdmin ? { companies: { select: { id: true, name: true } } } : {}),
         },
         orderBy: { joined_at: "asc" },
       });
 
-      /**
-       * Presence is derived from the heartbeat, not the stored word. Sign-out and session-expiry
-       * paths write "offline" without clearing last_active_at, so an active member can sit on a
-       * stale "offline" — which is why Staff Orbital showed you as offline while you were using
-       * it. Same five-minute window the dashboard's staff panel uses.
-       */
-      const PRESENCE_WINDOW_MS = 5 * 60 * 1000;
-      const nowMs = Date.now();
       const shaped = memberships
-        // Superadmins are invisible to everyone except other superadmins — a regular company
-        // admin/staff member shouldn't even know the account exists, let alone see it in the list.
-        .filter((m) => isPlatformAdmin || !m.users_company_memberships_user_idTousers.is_platform_admin)
+        // Admins are invisible to everyone except other admins — a regular staff member
+        // shouldn't even know the account exists, let alone see it in the list.
+        .filter((m) => isAdmin || m.role !== "admin")
         .map((m) => {
         const u = m.users_company_memberships_user_idTousers;
         return {
@@ -66,15 +58,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           mentor: m.mentor_id ?? null,
           strikes: m.strikes,
           time_zone: u.user_preferences?.time_zone ?? null,
-          status: (() => {
-            const seen = m.last_active_at ? m.last_active_at.getTime() : null;
-            if (seen === null || nowMs - seen > PRESENCE_WINDOW_MS) return "offline";
-            return m.status === "away" || m.status === "busy" ? m.status : "online";
-          })(),
+          // Derived, not read: sign-out and session-expiry paths write "offline" without
+          // clearing last_active_at, so the stored word says offline for someone heartbeating
+          // right now. lib/presence.ts is the same helper Staff Orbital and the dashboard use.
+          status: computePresenceStatus(m.last_active_at),
           lastActiveAt: m.last_active_at ? m.last_active_at.toISOString() : null,
           clientName: u.clients_clients_user_idTousers?.name ?? null,
-          companyName: isPlatformAdmin ? ((m as any).companies?.name ?? null) : null,
-          isPlatformAdmin: u.is_platform_admin,
           hasPassword: false,
           isSelf: u.id === session.user.id,
         };
@@ -85,8 +74,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
        * Management" showed a subset of users. Clients are appended with role "client" and the
        * same shape, so the table renders them without special-casing.
        */
+      // Not scoped: a client belongs to its own company, so filtering by the caller's company
+      // returned nothing at all. Role model v2 lets any Vierra staff member see every client,
+      // the same rule /api/session/listClientSessions follows.
       const clients = await prisma.client.findMany({
-        where: isPlatformAdmin ? {} : { company_id: companyId },
         select: {
           id: true,
           user_id: true,
@@ -115,7 +106,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           status: "offline",
           lastActiveAt: null,
           clientName: c.name,
-          companyName: isPlatformAdmin ? (c.companies?.name ?? null) : null,
+          companyName: c.companies?.name ?? null,
           isPlatformAdmin: false,
           hasPassword: false,
           isSelf: false,
@@ -151,7 +142,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const pendingInvites = await prisma.invitation.findMany({
         where: {
           accepted_at: null,
-          ...(isPlatformAdmin ? {} : { company_id: companyId }),
+          company_id: companyId,
         },
         select: {
           id: true,
@@ -178,7 +169,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         status: "offline",
         lastActiveAt: null,
         clientName: null,
-        companyName: isPlatformAdmin ? (invite.companies?.name ?? null) : null,
+        companyName: invite.companies?.name ?? null,
         isPlatformAdmin: false,
         hasPassword: false,
         isSelf: false,
@@ -213,16 +204,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (userRole !== "admin") return res.status(403).json({ message: "Forbidden" });
 
   if (req.method === "POST") {
-    const { name, email, password, role: newRole } = req.body ?? {};
-    if (!email || !newRole) {
-      return res.status(400).json({ message: "email and role are required" });
+    const { name, email, password } = req.body ?? {};
+    if (!email) {
+      return res.status(400).json({ message: "email is required" });
     }
-    const roleToStore = String(newRole).toLowerCase();
-    if (roleToStore !== "admin" && roleToStore !== "staff") {
-      // Client accounts aren't created here — they need a `clients` row (business name, etc.)
-      // and are provisioned via Clients -> Add Client's onboarding-link flow instead.
-      return res.status(400).json({ message: "Use Clients -> Add Client to create a client account." });
-    }
+    // role model v2: every company_memberships row created here is Vierra staff — "admin" is
+    // never a settable role anywhere in the app (set only via direct database access, see
+    // docs/ROLE_MODEL_REDESIGN.md), and client accounts aren't created here — they need a
+    // `clients` row (business name, etc.) and are provisioned via Clients -> Add Client's
+    // onboarding-link flow instead.
+    const roleToStore = "staff";
     const normalizedEmail = String(email).trim().toLowerCase();
 
     let authUserId: string | undefined;
@@ -277,27 +268,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } = req.body ?? {};
     if (!id) return res.status(400).json({ message: "id is required" });
     try {
-      // The membership update below is company-scoped, but the user.name/email update and prefs are
-      // not — gate the whole PUT on the target being a member of the admin's own company so one
-      // company's admin can't edit another company's user record by id. Platform admins (see
-      // prisma/schema.prisma's User.is_platform_admin) act as an admin of every company, so they
-      // skip that scoping and edit by user_id alone — targetCompanyId then drives the
-      // membership-scoped queries below instead of the caller's own companyId.
+      // Gate the whole PUT on the target being a member of the caller's own (fixed Vierra)
+      // company — one Vierra member can't edit a user id that isn't part of the team this way.
       const target = await prisma.companyMembership.findFirst({
-        where: isPlatformAdmin ? { user_id: String(id) } : { company_id: companyId, user_id: String(id) },
-        select: {
-          user_id: true,
-          company_id: true,
-          users_company_memberships_user_idTousers: { select: { is_platform_admin: true } },
-        },
+        where: { company_id: companyId, user_id: String(id) },
+        select: { user_id: true, company_id: true, role: true },
       });
       if (!target) return res.status(404).json({ message: "User not found" });
       const targetCompanyId = target.company_id;
-      // A superadmin's own company role can't be changed from here, by anyone (including another
-      // superadmin) — it's not what determines their access, so editing it would be misleading at
-      // best. Other fields (name, email, position, time zone...) are unaffected.
-      if (newRole !== undefined && target.users_company_memberships_user_idTousers.is_platform_admin) {
-        return res.status(403).json({ message: "Superadmin accounts can't have their role changed here." });
+      // An admin's own role can't be changed from here, by anyone (including another admin) —
+      // "admin" is set only via direct database access (see docs/ROLE_MODEL_REDESIGN.md), never
+      // through this endpoint. Other fields (name, email, position, time zone...) are unaffected.
+      if (newRole !== undefined && target.role === "admin") {
+        return res.status(403).json({ message: "Admin accounts can't have their role changed here." });
       }
 
       const normalizedEmail = email !== undefined ? String(email).trim().toLowerCase() : undefined;
@@ -316,7 +299,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       const memberUpdateData: Record<string, unknown> = {};
-      if (newRole) memberUpdateData.role = String(newRole).toLowerCase() === "client" ? "staff" : String(newRole);
+      // "admin" is never a settable value through this endpoint (see the is-target-already-admin
+      // guard above) — any other requested role coerces to "staff", the only value this endpoint
+      // may ever write.
+      if (newRole) memberUpdateData.role = "staff";
       if (position !== undefined) memberUpdateData.position = position;
       if (mentor !== undefined) memberUpdateData.mentor_id = mentor;
       if (strikes !== undefined) memberUpdateData.strikes = strikes;
@@ -341,7 +327,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
       const membership = await prisma.companyMembership.findFirst({
         where: { company_id: targetCompanyId, user_id: String(id) },
-        select: { role: true, position: true, mentor_id: true, strikes: true, status: true },
+        select: { role: true, position: true, mentor_id: true, strikes: true, status: true, last_active_at: true },
       });
       const pref = await prisma.userPreference.findUnique({
         where: { user_id: String(id) },
@@ -357,7 +343,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         strikes: membership?.strikes ?? 0,
         time_zone: pref?.time_zone ?? null,
         status: membership?.status ?? null,
-        lastActiveAt: null,
+        lastActiveAt: membership?.last_active_at ? membership.last_active_at.toISOString() : null,
       });
     } catch (e) {
       console.error("admin/users PUT", e);
@@ -376,33 +362,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       /**
        * A user belongs to a company through one of two tables, and this only ever looked at one.
        *
-       * Staff and admins have a company_memberships row; client accounts have a clients row and
-       * no membership at all. Scoping the lookup through memberships alone meant every client
-       * came back "User not found" — which is to say removal failed for exactly the accounts this
-       * page was extended to list.
+       * Staff have a company_memberships row; client accounts have a clients row and no
+       * membership at all. Looking only at memberships meant every client came back "User not
+       * found" — removal failed for exactly the accounts this page was extended to list.
        *
-       * Both routes are checked now. Platform admins skip the company check entirely (see the PUT
-       * handler above for why) but still have to match a real user.
+       * Both routes are checked. Scope and the admin guard follow role model v2: one fixed
+       * company, and admins are removed elsewhere.
        */
       const target = await prisma.user.findUnique({
         where: { id: String(userId) },
         select: {
           id: true,
-          is_platform_admin: true,
-          company_memberships_company_memberships_user_idTousers: { select: { company_id: true } },
+          company_memberships_company_memberships_user_idTousers: { select: { company_id: true, role: true } },
           clients_clients_user_idTousers: { select: { company_id: true } },
         },
       });
-      if (!target) return res.status(404).json({ message: "User not found" });
-      if (!isPlatformAdmin) {
-        const belongsToCompany =
-          target.company_memberships_company_memberships_user_idTousers?.company_id === companyId ||
-          target.clients_clients_user_idTousers?.company_id === companyId;
-        // Same 404 as an unknown id: a caller outside the company learns nothing either way.
-        if (!belongsToCompany) return res.status(404).json({ message: "User not found" });
-      }
-      if (target.is_platform_admin) {
-        return res.status(403).json({ message: "Superadmin accounts can't be removed here." });
+      const membership = target?.company_memberships_company_memberships_user_idTousers ?? null;
+      const clientRow = target?.clients_clients_user_idTousers ?? null;
+      const belongs = membership?.company_id === companyId || Boolean(clientRow);
+      // Same 404 as an unknown id: a caller with no business here learns nothing either way.
+      if (!target || !belongs) return res.status(404).json({ message: "User not found" });
+      if (membership?.role === "admin") {
+        return res.status(403).json({ message: "Admin accounts can't be removed here." });
       }
       await prisma.client.updateMany({ where: { user_id: userId }, data: { user_id: null } });
       await prisma.user.delete({ where: { id: userId } });

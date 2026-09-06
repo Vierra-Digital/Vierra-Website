@@ -15,7 +15,7 @@ export { escapeHtml };
 /**
  * Reusable email send core — extracted from pages/api/gmail/send.ts so it can be
  * called both by the authenticated send endpoint AND by the session-less scheduled
- * dispatcher (Netlify Scheduled Function). No req/res/session coupling: the caller
+ * dispatcher (Supabase pg_cron job). No req/res/session coupling: the caller
  * passes userId + payload + baseUrl and gets a plain result back.
  */
 
@@ -113,7 +113,7 @@ function encodeSubjectHeader(subject: string): string {
     : clean;
 }
 
-function buildRawMime(opts: {
+export function buildRawMime(opts: {
   to: string;
   cc: string;
   bcc: string;
@@ -243,7 +243,7 @@ async function sendViaSmtp(
 }
 
 /** Send via the Gmail REST API, retrying once on a 401 with a force-refreshed token. Extracted verbatim. */
-async function sendViaGmail(
+export async function sendViaGmail(
   userId: string,
   accountEmail: string,
   sendPayload: Record<string, string>,
@@ -459,7 +459,12 @@ export async function sendEmailCore(
 
   const notifyTo = payload.requestReceipt ? fromAlias || accountEmail : "";
   const rawMime = buildRawMime({
-    from: fromAlias || "",
+    // A blank `from` here (previously `fromAlias || ""`) omits the MIME From header entirely —
+    // Gmail's send API then silently substitutes the account's own default "send as" alias
+    // instead of accountEmail, which is how a booking confirmation from alex@vierradev.com went
+    // out as his configured default alias (business@alexshick.com) instead. The SMTP path below
+    // already falls back to accountEmail; this brings the Gmail path in line with it.
+    from: fromAlias || accountEmail,
     to: toRecipients.join(", "),
     cc: ccRecipients.length > 0 ? ccRecipients.join(", ") : "",
     bcc: bccRecipients.length > 0 ? bccRecipients.join(", ") : "",

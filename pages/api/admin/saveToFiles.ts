@@ -49,7 +49,10 @@ export default withAuth(
         })
       } else {
         const clientId = String(recipientId)
-        const client = await prisma.client.findFirst({ where: { id: clientId, company_id: companyId } })
+        // Any Vierra staff member may save a file to any client (see
+        // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — looked up by id alone, and filed under
+        // that client's own company, not the caller's (Vierra's fixed company).
+        const client = await prisma.client.findFirst({ where: { id: clientId } })
         if (!client) {
           return res.status(404).json({ message: "Client not found." })
         }
@@ -65,7 +68,7 @@ export default withAuth(
             signing_token_id: tokenId,
             file_type: "pdf",
             client_id: clientId,
-            company_id: companyId,
+            company_id: client.company_id,
           },
         })
       }

@@ -7,6 +7,7 @@ import RowActionMenu, { RowActionMenuDivider, RowActionMenuItem } from "@/compon
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import Modal from "@/components/ui/Modal";
+import { computePresenceStatus } from "@/lib/presence";
 import {
     PanelBadge,
     PanelButton,
@@ -92,18 +93,7 @@ const StatusBadge: React.FC<{ lastActiveAt: string | null; isPending?: boolean }
         )
     }
 
-    const getActualStatus = () => {
-        if (!lastActiveAt) return "offline"
-
-        const lastActive = new Date(lastActiveAt)
-        const now = new Date()
-        const diffMinutes = (now.getTime() - lastActive.getTime()) / (1000 * 60)
-        if (diffMinutes > 30) return "offline"
-        if (diffMinutes > 10) return "away"
-        return "online"
-    }
-
-    const actualStatus = getActualStatus()
+    const actualStatus = computePresenceStatus(lastActiveAt)
 
     const getStatusColor = () => {
         if (actualStatus === "online") return "bg-green-100 text-green-800"
@@ -737,7 +727,6 @@ const InviteTeammateModal: React.FC<{
     mentorOptions: Array<{ id: string; name: string; email: string }>
 }> = ({ onClose, onCreated, mentorOptions }) => {
     const [email, setEmail] = useState("")
-    const [role, setRole] = useState<"admin" | "staff">("staff")
     const [position, setPosition] = useState("")
     const [mentorId, setMentorId] = useState("")
     const [timeZone, setTimeZone] = useState("")
@@ -757,7 +746,7 @@ const InviteTeammateModal: React.FC<{
             const response = await fetch("/api/admin/invitations", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, role, position, mentorId, timeZone, strikes }),
+                body: JSON.stringify({ email, position, mentorId, timeZone, strikes }),
             })
             if (!response.ok) {
                 const errorData = await response.json()
@@ -848,15 +837,6 @@ const InviteTeammateModal: React.FC<{
                             placeholder="name@vierradev.com"
                             required
                         />
-                    </div>
-                    <div>
-                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
-                            Role <span className="text-[#B42318]">*</span>
-                        </label>
-                        <FieldSelect value={role} onChange={(value) => setRole(value as "admin" | "staff")}>
-                            <option value="staff">Staff</option>
-                            <option value="admin">Admin</option>
-                        </FieldSelect>
                     </div>
                     <div>
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">

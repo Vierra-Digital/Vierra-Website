@@ -18,19 +18,20 @@ vi.mock("@/lib/api/emailAccounts", () => ({
 const { buildContactsWhere, serializeContact } = await import("@/lib/api/contacts");
 
 const USER = "user-1";
+const COMPANY = "company-1";
 
 beforeEach(() => {
   resolveAccountId.mockReset();
 });
 
 describe("buildContactsWhere", () => {
-  it("always scopes to the user, even with no filters", async () => {
-    expect(await buildContactsWhere(USER, {})).toEqual({ user_id: USER });
+  it("always scopes to the company, even with no filters", async () => {
+    expect(await buildContactsWhere(USER, COMPANY, {})).toEqual({ company_id: COMPANY });
     expect(resolveAccountId).not.toHaveBeenCalled();
   });
 
   it("searches the four fields the list searches, case-insensitively", async () => {
-    const where = await buildContactsWhere(USER, { search: "acme" });
+    const where = await buildContactsWhere(USER, COMPANY, { search: "acme" });
     expect(where.OR).toEqual([
       { first_name: { contains: "acme", mode: "insensitive" } },
       { last_name: { contains: "acme", mode: "insensitive" } },
@@ -41,23 +42,23 @@ describe("buildContactsWhere", () => {
 
   it("accepts only the three real sources and ignores anything else", async () => {
     for (const source of ["manual", "gmail", "csv"]) {
-      expect((await buildContactsWhere(USER, { source })).source).toBe(source);
+      expect((await buildContactsWhere(USER, COMPANY, { source })).source).toBe(source);
     }
     // Case and padding are normalised rather than rejected (see the next case); this list is
     // for values that are genuinely not a source. Such a value must not become a filter —
     // matching nothing would read to the user as "this account has no contacts".
     for (const source of ["", "sql", "'; drop table contacts;--", "manualx"]) {
-      expect((await buildContactsWhere(USER, { source })).source, source).toBeUndefined();
+      expect((await buildContactsWhere(USER, COMPANY, { source })).source, source).toBeUndefined();
     }
   });
 
   it("uppercases and pads are tolerated on source, since the query string is not trusted", async () => {
-    expect((await buildContactsWhere(USER, { source: "  GMAIL  " })).source).toBe("gmail");
+    expect((await buildContactsWhere(USER, COMPANY, { source: "  GMAIL  " })).source).toBe("gmail");
   });
 
   it("matches nothing when the account filter does not resolve", async () => {
     resolveAccountId.mockResolvedValue(null);
-    const where = await buildContactsWhere(USER, { accountEmail: "gone@example.com" });
+    const where = await buildContactsWhere(USER, COMPANY, { accountEmail: "gone@example.com" });
     // The alternative — leaving account_id unset — would return every contact for a filter the
     // user believes is narrowing the list.
     expect(where.account_id).toBe("__none__");
@@ -65,25 +66,25 @@ describe("buildContactsWhere", () => {
 
   it("uses the resolved account id, lowercasing the address first", async () => {
     resolveAccountId.mockResolvedValue("acct-9");
-    const where = await buildContactsWhere(USER, { accountEmail: "Sam@Example.COM" });
+    const where = await buildContactsWhere(USER, COMPANY, { accountEmail: "Sam@Example.COM" });
     expect(resolveAccountId).toHaveBeenCalledWith(USER, "sam@example.com");
     expect(where.account_id).toBe("acct-9");
   });
 
   it("splits tag ids on commas and drops the empties", async () => {
-    const where = await buildContactsWhere(USER, { tagIds: "a, b ,,c," });
+    const where = await buildContactsWhere(USER, COMPANY, { tagIds: "a, b ,,c," });
     expect(where.contact_tag_assignments).toEqual({ some: { tag_id: { in: ["a", "b", "c"] } } });
   });
 
   it("omits the tag filter entirely when no ids survive", async () => {
     for (const tagIds of ["", " ", ",,,"]) {
-      expect((await buildContactsWhere(USER, { tagIds })).contact_tag_assignments, tagIds).toBeUndefined();
+      expect((await buildContactsWhere(USER, COMPANY, { tagIds })).contact_tag_assignments, tagIds).toBeUndefined();
     }
   });
 
   it("combines every filter at once", async () => {
     resolveAccountId.mockResolvedValue("acct-1");
-    const where = await buildContactsWhere(USER, {
+    const where = await buildContactsWhere(USER, COMPANY, {
       accountEmail: "a@b.co",
       search: "acme",
       source: "csv",
@@ -98,7 +99,7 @@ describe("buildContactsWhere", () => {
 
   it("takes the first value when a param arrives repeated", async () => {
     // Next hands `?source=csv&source=gmail` over as an array.
-    expect((await buildContactsWhere(USER, { source: ["csv", "gmail"] })).source).toBe("csv");
+    expect((await buildContactsWhere(USER, COMPANY, { source: ["csv", "gmail"] })).source).toBe("csv");
   });
 });
 

@@ -8,14 +8,18 @@ export default withAuth(async (req, res, session) => {
   const id = req.query.id as string;
   if (!id) return res.status(400).json({ message: "Task id required" });
 
+  // Any Vierra staff member may act on any client's task (see
+  // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — looked up by id alone.
   const existing = await prisma.projectTask.findFirst({
-    where: { id, company_id: session.companyId },
+    where: { id },
     include: { task_assignments: { select: { user_id: true } } },
   });
   if (!existing) return res.status(404).json({ message: "Task not found" });
 
   if (req.method === "PATCH") {
-    const { name, description, checklist, status, assignedTo, deadline } = req.body;
+    const { name, description, checklist, status, assignedTo, deadline, expectedUpdatedAt } = req.body;
+    if (expectedUpdatedAt !== undefined && (typeof expectedUpdatedAt !== "string" || !Number.isFinite(Date.parse(expectedUpdatedAt)))) return res.status(400).json({ message: "Invalid task revision." });
+    if (expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== existing.updated_at.getTime()) return res.status(409).json({ message: "This task changed since you opened it. Your edits are kept; reopen the latest task before saving." });
 
     const updates: Record<string, unknown> = {};
     if (typeof name === "string") updates.name = name.trim();
@@ -75,24 +79,32 @@ export default withAuth(async (req, res, session) => {
     }
 
     try {
+      const task = await prisma.$transaction(async (tx) => {
+      // Compare and lock the row before changing assignments. Both changes roll back
+      // together when another writer won the race after our initial read.
+      await tx.projectTask.update({
+        where: { id, updated_at: existing.updated_at },
+        data: { ...updates, updated_at: new Date() },
+      });
       if (assignmentIds !== null) {
         const currentIds = existing.task_assignments.map((a) => a.user_id);
         const toAdd = assignmentIds.filter((aid) => !currentIds.includes(aid));
         const toRemove = currentIds.filter((aid) => !assignmentIds!.includes(aid));
         if (toRemove.length) {
-          await prisma.taskAssignment.deleteMany({ where: { task_id: id, user_id: { in: toRemove } } });
+          await tx.taskAssignment.deleteMany({ where: { task_id: id, user_id: { in: toRemove } } });
         }
         if (toAdd.length) {
-          await prisma.taskAssignment.createMany({ data: toAdd.map((userId) => ({ task_id: id, user_id: userId })) });
+          await tx.taskAssignment.createMany({ data: toAdd.map((userId) => ({ task_id: id, user_id: userId })) });
         }
       }
-      const task = await prisma.projectTask.update({
+      return tx.projectTask.findUniqueOrThrow({
         where: { id },
-        data: updates,
         include: { task_assignments: { select: { user_id: true } } },
+      });
       });
       return res.status(200).json(serializeTask(task));
     } catch (e) {
+      if (e && typeof e === "object" && "code" in e && e.code === "P2025") return res.status(409).json({ message: "This task was changed by someone else. Reopen it to review the latest version." });
       console.error("project/tasks PATCH", e);
       return res.status(500).json({ message: "Internal Server Error" });
     }

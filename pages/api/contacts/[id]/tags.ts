@@ -21,72 +21,80 @@ export default withAuth(async (req, res, session) => {
     return;
   }
 
-  const contact = await prisma.contact.findFirst({
-    where: { id: contactId, user_id: userId },
-  });
-  if (!contact) {
-    res.status(404).json({ message: "Contact not found." });
-    return;
-  }
-
-  if (req.method === "GET") {
-    const tags = await prisma.contactTagAssignment.findMany({
-      where: { contact_id: contactId },
-      include: { contact_tags: true },
-      orderBy: { created_at: "asc" },
+  try {
+    // Contacts are client-scoped now (see docs/ROLE_MODEL_REDESIGN.md's "v2" section) — looked up
+    // by id alone, not user_id. Tags themselves stay personal to the tagging user for now (out of
+    // the client-scoping ask).
+    const contact = await prisma.contact.findFirst({
+      where: { id: contactId },
     });
-    res.status(200).json({ tags: tags.map((row) => row.contact_tags) });
-    return;
-  }
-
-  if (req.method === "POST") {
-    const tagId = asStr(req.body?.tagId);
-    if (!tagId) {
-      res.status(400).json({ message: "tagId is required" });
+    if (!contact) {
+      res.status(404).json({ message: "Contact not found." });
       return;
     }
-    const tag = await prisma.contactTag.findFirst({ where: { id: tagId, user_id: userId } });
-    if (!tag) {
-      res.status(404).json({ message: "Tag not found." });
-      return;
-    }
-    await prisma.contactTagAssignment.upsert({
-      where: { contact_id_tag_id: { contact_id: contactId, tag_id: tagId } },
-      update: {},
-      create: { contact_id: contactId, tag_id: tagId },
-    });
-    res.status(200).json({ ok: true });
-    return;
-  }
 
-  if (req.method === "PUT") {
-    const tagIds = asArray(req.body?.tagIds);
-    const validTags = await prisma.contactTag.findMany({
-      where: { user_id: userId, id: { in: tagIds } },
-      select: { id: true },
-    });
-    const validTagIds = validTags.map((tag) => tag.id);
-
-    await prisma.contactTagAssignment.deleteMany({ where: { contact_id: contactId } });
-    if (validTagIds.length > 0) {
-      await prisma.contactTagAssignment.createMany({
-        data: validTagIds.map((tagId) => ({ contact_id: contactId, tag_id: tagId })),
+    if (req.method === "GET") {
+      const tags = await prisma.contactTagAssignment.findMany({
+        where: { contact_id: contactId },
+        include: { contact_tags: true },
+        orderBy: { created_at: "asc" },
       });
-    }
-    res.status(200).json({ ok: true });
-    return;
-  }
-
-  if (req.method === "DELETE") {
-    const tagId = asStr(req.body?.tagId);
-    if (!tagId) {
-      res.status(400).json({ message: "tagId is required" });
+      res.status(200).json({ tags: tags.map((row) => row.contact_tags) });
       return;
     }
-    await prisma.contactTagAssignment.deleteMany({
-      where: { contact_id: contactId, tag_id: tagId },
-    });
-    res.status(200).json({ ok: true });
-    return;
+
+    if (req.method === "POST") {
+      const tagId = asStr(req.body?.tagId);
+      if (!tagId) {
+        res.status(400).json({ message: "tagId is required" });
+        return;
+      }
+      const tag = await prisma.contactTag.findFirst({ where: { id: tagId, user_id: userId } });
+      if (!tag) {
+        res.status(404).json({ message: "Tag not found." });
+        return;
+      }
+      await prisma.contactTagAssignment.upsert({
+        where: { contact_id_tag_id: { contact_id: contactId, tag_id: tagId } },
+        update: {},
+        create: { contact_id: contactId, tag_id: tagId },
+      });
+      res.status(200).json({ ok: true });
+      return;
+    }
+
+    if (req.method === "PUT") {
+      const tagIds = asArray(req.body?.tagIds);
+      const validTags = await prisma.contactTag.findMany({
+        where: { user_id: userId, id: { in: tagIds } },
+        select: { id: true },
+      });
+      const validTagIds = validTags.map((tag) => tag.id);
+
+      await prisma.contactTagAssignment.deleteMany({ where: { contact_id: contactId } });
+      if (validTagIds.length > 0) {
+        await prisma.contactTagAssignment.createMany({
+          data: validTagIds.map((tagId) => ({ contact_id: contactId, tag_id: tagId })),
+        });
+      }
+      res.status(200).json({ ok: true });
+      return;
+    }
+
+    if (req.method === "DELETE") {
+      const tagId = asStr(req.body?.tagId);
+      if (!tagId) {
+        res.status(400).json({ message: "tagId is required" });
+        return;
+      }
+      await prisma.contactTagAssignment.deleteMany({
+        where: { contact_id: contactId, tag_id: tagId },
+      });
+      res.status(200).json({ ok: true });
+      return;
+    }
+  } catch (e) {
+    console.error("contacts/[id]/tags", req.method, e);
+    res.status(500).json({ message: "Failed to process tag request." });
   }
 }, { methods: ["GET", "POST", "PUT", "DELETE"] });

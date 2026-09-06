@@ -3,12 +3,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Both handlers are reachable from the public internet (proxy.ts skips /api/) and both perform
 // privileged work, so the session check is the only thing standing in front of them. These tests
 // exist so it cannot quietly go missing again.
-const { requireRoleMock, sendBrevoEmail, isBrevoConfigured, sendMail, escapeHtml, formidableParse, saveSessionData } =
+const { requireRoleMock, sendSystemEmail, escapeHtml, formidableParse, saveSessionData } =
   vi.hoisted(() => ({
     requireRoleMock: vi.fn(),
-    sendBrevoEmail: vi.fn(),
-    isBrevoConfigured: vi.fn(),
-    sendMail: vi.fn(),
+    sendSystemEmail: vi.fn(),
     // Stands in for the real escaper (covered by its own tests) with a marker, so these tests
     // assert the handler routes the value through it rather than re-testing the escaping itself.
     escapeHtml: vi.fn((v: string) => `ESC(${v})`),
@@ -17,8 +15,7 @@ const { requireRoleMock, sendBrevoEmail, isBrevoConfigured, sendMail, escapeHtml
   }));
 
 vi.mock("@/lib/auth", () => ({ requireRole: requireRoleMock, requireSession: vi.fn() }));
-vi.mock("@/lib/email/brevo", () => ({ isBrevoConfigured, sendBrevoEmail }));
-vi.mock("nodemailer", () => ({ default: { createTransport: () => ({ sendMail }) } }));
+vi.mock("@/lib/email/systemSender", () => ({ sendSystemEmail }));
 vi.mock("@/lib/gmail/sendCore", () => ({ escapeHtml }));
 vi.mock("formidable", () => ({ default: () => ({ parse: formidableParse }) }));
 vi.mock("@/lib/sessionStore", () => ({ saveSessionData }));
@@ -38,14 +35,13 @@ function mockRes() {
 
 const post = (body: unknown) => ({ method: "POST", body, headers: { host: "vierradev.com" }, query: {} }) as never;
 
-/** The HTML the handler handed to whichever transport is configured. */
-const sentHtml = () => String((sendBrevoEmail.mock.calls[0]?.[0] as { html: string })?.html ?? "");
+/** The HTML the handler handed to the system sender. */
+const sentHtml = () => String((sendSystemEmail.mock.calls[0]?.[0] as { html: string })?.html ?? "");
 
 beforeEach(() => {
   vi.clearAllMocks();
   requireRoleMock.mockResolvedValue(STAFF);
-  isBrevoConfigured.mockReturnValue(true);
-  sendBrevoEmail.mockResolvedValue(undefined);
+  sendSystemEmail.mockResolvedValue(undefined);
   escapeHtml.mockImplementation((v: string) => `ESC(${v})`);
   process.env.NEXT_PUBLIC_APP_URL = "https://vierradev.com";
 });
@@ -56,15 +52,14 @@ describe("sendSessionLinkEmail — panel-only", () => {
     // check anyone could send Vierra-branded mail from Vierra's address to any recipient.
     requireRoleMock.mockResolvedValue(null);
     await sendSessionLinkEmail(post({ email: "victim@example.com", link: "/session/abc" }), mockRes() as never);
-    expect(sendBrevoEmail).not.toHaveBeenCalled();
-    expect(sendMail).not.toHaveBeenCalled();
+    expect(sendSystemEmail).not.toHaveBeenCalled();
   });
 
   it("rejects a malformed recipient without sending", async () => {
     const res = mockRes();
     await sendSessionLinkEmail(post({ email: "not-an-address", link: "/session/abc" }), res as never);
     expect(res.statusCode).toBe(400);
-    expect(sendBrevoEmail).not.toHaveBeenCalled();
+    expect(sendSystemEmail).not.toHaveBeenCalled();
   });
 
   it("rewrites an off-site link onto our own base", async () => {

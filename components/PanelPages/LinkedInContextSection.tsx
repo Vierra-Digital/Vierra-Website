@@ -3,12 +3,14 @@ import { inter } from "@/lib/fonts";
 import { PanelHeader } from "@/components/panel/PanelTable";
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { useDraftGuard } from "@/hooks/useDraftGuard";
 
 const NON_RESIZABLE_TEXT_KEYS = new Set(["website", "brandTone"]);
 
 export type LinkedInContextData = {
   client: { id: string; name: string; email: string; businessName: string };
   sessionId: string | null;
+  revision?: string | null;
   onboarding: {
     website: string;
     industry: string;
@@ -64,6 +66,10 @@ const LinkedInContextSection: React.FC<Props> = ({
   const [context, setContext] = useState<LinkedInContextData | null>(null);
   const [editableAnswers, setEditableAnswers] = useState<Record<string, string>>({});
   const [activeCategory, setActiveCategory] = useState<string>("");
+  const [savedAnswers, setSavedAnswers] = useState("{}");
+  const [revision, setRevision] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  useDraftGuard(JSON.stringify(editableAnswers) !== savedAnswers, "Client context", "client", saving);
 
   useEffect(() => {
     let active = true;
@@ -80,6 +86,8 @@ const LinkedInContextSection: React.FC<Props> = ({
         const typed = payload as LinkedInContextData;
         setContext(typed);
         setEditableAnswers(typed.editableAnswers || {});
+        setSavedAnswers(JSON.stringify(typed.editableAnswers || {}));
+        setRevision(typed.revision ?? null);
         if (typed.categories?.length) {
           setActiveCategory((current) => current || typed.categories[0].id);
         }
@@ -96,7 +104,7 @@ const LinkedInContextSection: React.FC<Props> = ({
     return () => {
       active = false;
     };
-  }, [clientId, onContextLoaded]);
+  }, [clientId, onContextLoaded, retry]);
 
   const hasOnboardingSignal = useMemo(() => {
     if (!editableAnswers) return false;
@@ -110,6 +118,7 @@ const LinkedInContextSection: React.FC<Props> = ({
   }, [context, activeCategory]);
 
   const saveContext = async () => {
+    if (saving) return;
     setSaving(true);
     setShowSuccessModal(false);
     setError("");
@@ -118,11 +127,12 @@ const LinkedInContextSection: React.FC<Props> = ({
       const response = await fetch(`/api/context/client${query}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ editableAnswers }),
+        body: JSON.stringify({ editableAnswers, expectedRevision: revision }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.message || "Failed to save context");
-      setShowSuccessModal(true);
+      setSavedAnswers(JSON.stringify(editableAnswers));
+      setRevision(payload.revision ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save context");
     } finally {
@@ -150,6 +160,9 @@ const LinkedInContextSection: React.FC<Props> = ({
       <div className="flex-1 flex justify-center px-6 pt-2 overflow-y-auto">
         <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full pb-16 lg:pb-24">
           {!embedded && <PanelHeader title={title} />}
+
+          <p role="status" className="mb-3 text-sm text-gray-600">{saving ? "Saving…" : JSON.stringify(editableAnswers) !== savedAnswers ? "Unsaved changes" : "Saved"}</p>
+          {!context && error && <button type="button" onClick={() => setRetry(value => value + 1)} className="mb-3 rounded text-sm text-[#701CC0] underline">Retry loading context</button>}
 
           {error ? (
             <div className="mb-4 rounded-lg border border-red-200 bg-red-50 text-red-700 px-4 py-3 text-sm">

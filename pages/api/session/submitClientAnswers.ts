@@ -114,6 +114,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     });
 
+    // Also handed back to the browser (see below) so the tab that just finished onboarding can
+    // go straight to /set-password itself, rather than only ever reaching it by way of the email.
+    let setPasswordLink: string | null = null;
     if (completed && userId && userEmail) {
       try {
         const baseUrl = resolveBaseUrl(req);
@@ -123,15 +126,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           email: userEmail,
           options: { redirectTo: `${baseUrl}/set-password` },
         });
-        const setPasswordLink = (linkData as any)?.properties?.action_link ?? `${baseUrl}/set-password`;
-        await sendClientOnboardingCompletedEmail(
-          userEmail,
-          clientName || "there",
-          businessName || "",
-          setPasswordLink
-        );
-      } catch (emailErr) {
-        console.error("submitClientAnswers: failed to send onboarding completion email:", emailErr);
+        setPasswordLink = (linkData as any)?.properties?.action_link ?? `${baseUrl}/set-password`;
+      } catch (linkErr) {
+        console.error("submitClientAnswers: failed to generate set-password link:", linkErr);
+      }
+      if (setPasswordLink) {
+        try {
+          await sendClientOnboardingCompletedEmail(userEmail, clientName || "there", businessName || "", setPasswordLink);
+        } catch (emailErr) {
+          console.error("submitClientAnswers: failed to send onboarding completion email:", emailErr);
+        }
       }
     }
 
@@ -140,6 +144,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       message: newSupabaseUserId
         ? "User created, linked, and tokens migrated."
         : "User linked and tokens migrated.",
+      setPasswordLink,
     });
   } catch (err) {
     console.error("Error saving answers / completing:", err);

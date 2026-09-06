@@ -154,7 +154,7 @@ export default withSession(async (req, res, session) => {
         prisma.onboardingSession.findFirst({
           where: { client_id: clientId },
           orderBy: { created_at: "desc" },
-          select: { id: true, answers: true },
+          select: { id: true, answers: true, last_updated_at: true },
         }),
         prisma.storedFile.findMany({
           where: { client_id: clientId },
@@ -192,6 +192,7 @@ export default withSession(async (req, res, session) => {
       return res.status(200).json({
         client,
         sessionId: latestSession?.id ?? null,
+        revision: latestSession?.last_updated_at ?? null,
         onboarding: normalizeOnboardingAnswers(latestSession?.answers),
         editableAnswers,
         categories: buildCategories(editableAnswers),
@@ -217,11 +218,15 @@ export default withSession(async (req, res, session) => {
       const latestSession = await prisma.onboardingSession.findFirst({
         where: { client_id: clientId },
         orderBy: { created_at: "desc" },
-        select: { id: true, answers: true },
+        select: { id: true, answers: true, last_updated_at: true },
       });
 
       if (!latestSession) {
         return res.status(404).json({ message: "No onboarding session found for this client." });
+      }
+      if (body.expectedRevision !== undefined) {
+        const actual = latestSession.last_updated_at?.toISOString() ?? null;
+        if (body.expectedRevision !== actual) return res.status(409).json({ message: "This context changed since you opened it. Your edits are kept. Copy your changes and reopen the latest context before saving." });
       }
 
       const baseAnswers =
@@ -256,17 +261,19 @@ export default withSession(async (req, res, session) => {
         });
       }
 
+      const revision = new Date();
       await prisma.onboardingSession.update({
-        where: { id: latestSession.id },
+        where: { id: latestSession.id, last_updated_at: latestSession.last_updated_at },
         data: {
           answers: updatedAnswers as Prisma.InputJsonValue,
-          last_updated_at: new Date(),
+          last_updated_at: revision,
         },
       });
 
-      return res.status(200).json({ ok: true });
+      return res.status(200).json({ ok: true, revision });
     } catch (error) {
       console.error("context/client PUT", error);
+      if (error && typeof error === "object" && "code" in error && error.code === "P2025") return res.status(409).json({ message: "Context changed while saving. Your edits have been kept; reopen the latest context." });
       return res.status(500).json({ message: "Failed to save context." });
     }
   }

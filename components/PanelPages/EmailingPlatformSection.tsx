@@ -63,9 +63,13 @@ import { scoreTrackerImage } from "@/lib/email/trackerDetection";
 import { isSafeEmailHref, stripRemoteUrlsFromStyle, UNSAFE_EMAIL_TAG_SELECTOR } from "@/lib/email/htmlSafety";
 import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
 import { printComposeContent } from "@/components/email/printCompose";
+import { useDraftGuard, usePageLeaveGuard } from "@/hooks/useDraftGuard";
+import { prepareSendRequest, sendPanelEmail } from "@/lib/email/sendRequest";
 import { getJson } from "@/lib/email/panelApi";
+import { panelFetch } from "@/lib/panelFetch";
 import BrandLoadingScreen from "@/components/ui/BrandLoadingScreen";
 import MoveToMenu from "@/components/email/MoveToMenu";
+import MeetingInviteCard from "@/components/email/MeetingInviteCard";
 import { buildReplyReferences } from "@/lib/email/threading";
 import {
   BRAND_LOGO,
@@ -136,6 +140,16 @@ const EmailAnalyticsView = dynamic(() => import("@/components/email/EmailAnalyti
 // Lazy-load the Campaigns view (incorporated from the campaigns branch) so its bundle
 // only loads when the Campaigns module is opened.
 const CampaignsView = dynamic(() => import("@/components/PanelPages/CampaignsSection"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-full flex items-center justify-center">
+      <div className="w-10 h-10 rounded-full border-4 border-[#E9D4FB] border-t-[#701CC0] motion-safe:animate-spin" />
+    </div>
+  ),
+});
+
+// Lazy-load the Cartography view so its bundle only loads when that module is opened.
+const CartographyView = dynamic(() => import("@/components/PanelPages/CartographySection"), {
   ssr: false,
   loading: () => (
     <div className="h-full flex items-center justify-center">
@@ -329,7 +343,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   /** messageId → tracker verdict. Filled in just after the list paints (see the scan effect). */
   /** Index into the sender's ordered avatar candidates; advanced on each image error. */
   const [messageTrackers, setMessageTrackers] = useState<
-    Record<string, { tracked: boolean; count: number; vendors: string[]; hasAttachment?: boolean }>
+    Record<string, { tracked: boolean; count: number; vendors: string[]; hasAttachment?: boolean; hasMeetingInvite?: boolean }>
   >({});
   const [gmailAccounts, setGmailAccounts] = useState<GmailAccountConnection[]>([]);
   const [gmailLoading, setGmailLoading] = useState(false);
@@ -475,6 +489,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   const pendingSendBodyRef = useRef<string | null>(null);
   const [artemisDrafting, setArtemisDrafting] = useState(false);
   const [artemisRewriteOpen, setArtemisRewriteOpen] = useState(false);
+  const draftSaveQueue = useRef(new Map<string, Promise<boolean>>());
+  const composeClosePending = useRef(false);
+  const composeEditVersion = useRef(0);
+  const [draftSaveState, setDraftSaveState] = useState("");
   const [composeError, setComposeError] = useState("");
   const [composeSuccess, setComposeSuccess] = useState("");
   const [sentToastMessage, setSentToastMessage] = useState<string | null>(null);
@@ -578,6 +596,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   });
   const [contactToDelete, setContactToDelete] = useState<ContactRow | null>(null);
   const [deletingContact, setDeletingContact] = useState(false);
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [confirmBulkDeleteContacts, setConfirmBulkDeleteContacts] = useState(false);
+  const [bulkContactActionLoading, setBulkContactActionLoading] = useState(false);
+  const [bulkContactActionError, setBulkContactActionError] = useState("");
   const [contactsVisibility, setContactsVisibility] = useState<ContactVisibility>({
     showPhone: true,
     showBusiness: true,
@@ -982,6 +1004,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     const isStale = () => requestId !== loadContactsRequestRef.current;
     setContactsLoading(true);
     setContactsError("");
+    setSelectedContactIds([]);
     try {
       const query = new URLSearchParams({
         limit: String(CONTACTS_PAGE_SIZE),
@@ -992,7 +1015,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       if (contactSourceFilter) query.set("source", contactSourceFilter);
       // no-store: this reloads right after create/edit/delete/tag writes, and the
       // server's Cache-Control on this endpoint would otherwise serve the pre-write list.
-      const response = await fetch(`/api/contacts?${query.toString()}`, { cache: "no-store" });
+      const response = await panelFetch(`/api/contacts?${query.toString()}`, { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(payload?.message || "Failed to load contacts.");
@@ -1048,7 +1071,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setAddContactError("");
     setContactsError("");
     try {
-      const response = await fetch("/api/contacts", {
+      const response = await panelFetch("/api/contacts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1117,6 +1140,64 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
       setContactsError(error instanceof Error ? error.message : "Failed to delete contact.");
     } finally {
       setDeletingContact(false);
+    }
+  };
+
+  const toggleContactSelected = (contactId: string) => {
+    setSelectedContactIds((prev) =>
+      prev.includes(contactId) ? prev.filter((id) => id !== contactId) : [...prev, contactId]
+    );
+  };
+
+  const toggleAllContactsSelected = () => {
+    const visibleIds = contacts.map((c) => c.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedContactIds.includes(id));
+    setSelectedContactIds(allSelected ? [] : visibleIds);
+  };
+
+  const confirmBulkDeleteContactsAction = async () => {
+    if (selectedContactIds.length === 0 || bulkContactActionLoading) return;
+    setBulkContactActionLoading(true);
+    setBulkContactActionError("");
+    try {
+      const response = await fetch("/api/contacts/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedContactIds }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.message || "Failed to delete contacts.");
+      }
+      setSelectedContactIds([]);
+      setConfirmBulkDeleteContacts(false);
+      await loadContacts();
+    } catch (error) {
+      setBulkContactActionError(error instanceof Error ? error.message : "Failed to delete contacts.");
+    } finally {
+      setBulkContactActionLoading(false);
+    }
+  };
+
+  const bulkAddTagToSelected = async (tagId: string) => {
+    if (!tagId || selectedContactIds.length === 0) return;
+    setBulkContactActionLoading(true);
+    setBulkContactActionError("");
+    try {
+      const response = await fetch("/api/contacts/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedContactIds, tagId }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.message || "Failed to tag contacts.");
+      }
+      await loadContacts();
+    } catch (error) {
+      setBulkContactActionError(error instanceof Error ? error.message : "Failed to tag contacts.");
+    } finally {
+      setBulkContactActionLoading(false);
     }
   };
 
@@ -1207,7 +1288,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     if (contactSearch.trim()) query.set("search", contactSearch.trim());
     if (contactTagFilter) query.set("tagIds", contactTagFilter);
     if (contactSourceFilter) query.set("source", contactSourceFilter);
-    const response = await fetch(`/api/contacts/export?${query.toString()}`);
+    const response = await panelFetch(`/api/contacts/export?${query.toString()}`);
     if (!response.ok) {
       setContactsError("Failed to export contacts.");
       return;
@@ -1246,7 +1327,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     setContactsError("");
     setContactsImportSuccessOpen(false);
     try {
-      const response = await fetch("/api/contacts/import", {
+      const response = await panelFetch("/api/contacts/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1326,7 +1407,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
           tags: target.tags,
         },
       ]);
-      const response = await fetch("/api/contacts/import", {
+      const response = await panelFetch("/api/contacts/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accountEmail: null, csvText }),
@@ -2389,6 +2470,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
               vendors: Array.isArray(payload.trackers.vendors) ? payload.trackers.vendors : [],
             }
           : undefined,
+      meetingInvite: payload?.meetingInvite ?? null,
     } as MessageDetail;
   }, []);
 
@@ -2500,9 +2582,17 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     loadBlockedSenders();
   }, [loadBlockedSenders, selectedMessage?.accountEmail]);
 
+  useEffect(() => { composeEditVersion.current += 1; }, [composeTo, composeCc, composeBcc, composeSubject, composeBody, composeBodyHtml, composeAccountEmail]);
+  usePageLeaveGuard();
+  useDraftGuard((isComposeOpen && Boolean(composeTo || composeSubject || composeBody || composeBodyHtml)) || Boolean(inlineComposeMode && inlineComposeIntroText), "Email draft", "email", sendingCompose || inlineComposeSending);
+
   const saveLocalDraft = useCallback(async (key: string, draft: LocalEmailDraft, options?: { keepalive?: boolean }) => {
-    if (!key) return;
-    await fetch("/api/gmail/drafts", {
+    if (!key) return false;
+    const previous = draftSaveQueue.current.get(key);
+    const operation = (async () => {
+    if (previous) await previous;
+    setDraftSaveState("Saving draft...");
+    const response = await fetch("/api/gmail/drafts", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       keepalive: Boolean(options?.keepalive),
@@ -2523,6 +2613,13 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         references: draft.references || "",
       }),
     }).catch(() => null);
+    setDraftSaveState(response?.ok ? "Draft saved" : "Could not save draft. Keep this page open and retry.");
+    return Boolean(response?.ok);
+    })();
+    draftSaveQueue.current.set(key, operation);
+    const success = await operation;
+    if (draftSaveQueue.current.get(key) === operation) draftSaveQueue.current.delete(key);
+    return success;
   }, []);
 
   const clearLocalDraft = useCallback(async (key: string, options?: { keepalive?: boolean }) => {
@@ -2539,7 +2636,8 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
     }
   }, []);
 
-  const flushDraftsNow = useCallback(() => {
+  const flushDraftsNow = useCallback(async () => {
+    const writes: Promise<boolean>[] = [];
     if (!sendingCompose && isComposeOpen && effectiveComposeDraftStorageKey) {
       // Recipients or a subject with no body still count — closing after typing only a
       // "To" used to discard it, which reads as the composer losing your work.
@@ -2549,7 +2647,7 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
         composeTo.trim() ||
         composeSubject.trim();
       if (hasComposeContent) {
-        void saveLocalDraft(
+        writes.push(saveLocalDraft(
           effectiveComposeDraftStorageKey,
           {
             to: composeTo,
@@ -2564,14 +2662,14 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             updatedAt: Date.now(),
           },
           { keepalive: true }
-        );
+        ));
       }
     }
 
     if (!inlineComposeSending && inlineComposeMode && inlineDraftStorageKey) {
       const hasInlineContent = inlineComposeIntroText.trim();
       if (hasInlineContent) {
-        void saveLocalDraft(
+        writes.push(saveLocalDraft(
           inlineDraftStorageKey,
           {
             to: inlineComposeTo,
@@ -2586,9 +2684,10 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
             updatedAt: Date.now(),
           },
           { keepalive: true }
-        );
+        ));
       }
     }
+    return (await Promise.all(writes)).every(Boolean);
   }, [
     composeAccountEmail,
     composeBcc,
@@ -3413,10 +3512,7 @@ ${sourceText}`;
     setInlineComposeError("");
     setInlineComposeSuccess("");
     try {
-      const response = await fetch("/api/gmail/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const response = await sendPanelEmail({
           accountEmail: selectedMessage.accountEmail,
           to: inlineComposeTo.trim(),
           cc: inlineComposeCc.trim() || undefined,
@@ -3430,10 +3526,9 @@ ${sourceText}`;
           draftKey: inlineDraftStorageKey || undefined,
           providerAccountId:
             providerAccounts.find((entry) => entry.accountEmail === selectedMessage.accountEmail.toLowerCase())?.id || undefined,
-        }),
-      });
+        });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
+      if (!response.ok || payload?.ok !== true) {
         throw new Error(payload?.message || "Failed to send email.");
       }
       if (selectedMessage && inlineComposeMode) {
@@ -3820,13 +3915,9 @@ ${sourceText}`;
     setComposeError("");
     setComposeSuccess("");
     try {
-      const response = await fetch("/api/gmail/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildSendPayload()),
-      });
+      const response = await sendPanelEmail(buildSendPayload());
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
+      if (!response.ok || payload?.ok !== true) {
         throw new Error(payload?.message || "Failed to send email.");
       }
       if (composeActiveDraftKey && composeActiveDraftKey !== composeDraftStorageKey) {
@@ -3890,12 +3981,17 @@ ${sourceText}`;
   // Closing/discarding the composer must abort any in-flight undo-send window. The Undo banner
   // lives inside this modal, so once it's closed there's no way to cancel — leaving the timer
   // running would send a message the user just tried to abort (and could clobber a fresh draft).
-  const closeCompose = () => {
+  const closeCompose = async () => {
+    if (sendingCompose || composeClosePending.current) return;
+    composeClosePending.current = true;
+    const version = composeEditVersion.current;
     cancelUndoSend();
     // The autosave is debounced 450ms and its cleanup cancels the pending write, so closing
     // right after a keystroke dropped those edits. Flush synchronously first, then resync the
     // Drafts badge so the count reflects a draft created by this close.
-    flushDraftsNow();
+    const saved = await flushDraftsNow();
+    composeClosePending.current = false;
+    if (!saved || version !== composeEditVersion.current) return;
     setIsComposeOpen(false);
     void loadMailboxCounts();
     // Closing a compose can create, update or empty a draft, so the cached Drafts page is now
@@ -3938,7 +4034,7 @@ ${sourceText}`;
     }
     setComposeError("");
     setUndoCountdown(delay);
-    pendingSendBodyRef.current = JSON.stringify(buildSendPayload());
+    try { pendingSendBodyRef.current = JSON.stringify(prepareSendRequest(buildSendPayload())); } catch (error) { cancelUndoSend(); setComposeError(error instanceof Error ? error.message : "Could not prepare send"); return; }
     undoSendTimeoutRef.current = setTimeout(() => {
       cancelUndoSend();
       void performSendCompose();
@@ -4586,6 +4682,10 @@ ${sourceText}`;
                     <div className="h-full overflow-y-auto">
                       <CampaignsView />
                     </div>
+                  ) : activeModule === "cryptography" ? (
+                    <div className="h-full overflow-y-auto">
+                      <CartographyView />
+                    </div>
                   ) : activeModule === "scheduled" ? (
                     <div className="flex h-full flex-col">
                       <div className="flex items-center justify-between gap-3 border-b border-white/30 px-4 py-3">
@@ -5103,10 +5203,62 @@ ${sourceText}`;
                                 </div>
                               ) : (
                                 <div className="space-y-3">
+                                  {selectedContactIds.length > 0 ? (
+                                    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-[#E8DDFB] bg-[#F8F3FF] px-4 py-2.5">
+                                      <span className="text-xs font-medium text-[#4B2E83]">
+                                        {selectedContactIds.length} selected
+                                      </span>
+                                      {bulkContactActionError ? (
+                                        <span className="text-xs text-red-600">{bulkContactActionError}</span>
+                                      ) : null}
+                                      <div className="ml-auto flex items-center gap-2">
+                                        <div className="relative">
+                                          <select
+                                            value=""
+                                            disabled={bulkContactActionLoading}
+                                            onChange={(e) => bulkAddTagToSelected(e.target.value)}
+                                            className="rounded-lg border border-[#E5E7EB] bg-white px-3 py-1.5 text-xs text-[#374151] disabled:opacity-50"
+                                            aria-label="Add tag to selected contacts"
+                                          >
+                                            <option value="">Add tag to selected…</option>
+                                            {contactsTags.map((tag) => (
+                                              <option key={tag.id} value={tag.id}>
+                                                {tag.name}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          disabled={bulkContactActionLoading}
+                                          onClick={() => setConfirmBulkDeleteContacts(true)}
+                                          className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                                        >
+                                          <FiTrash2 className="w-3.5 h-3.5" />
+                                          Delete selected
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setSelectedContactIds([])}
+                                          className="text-xs text-[#6B7280] hover:text-[#374151]"
+                                        >
+                                          Clear
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : null}
                                   <div className="rounded-xl border border-[#E8EBF4] bg-white overflow-hidden">
                                     <table className="min-w-full text-sm">
                                       <thead className="sticky top-0 bg-[#F9FAFD] z-10">
                                         <tr className="border-b border-[#E8EBF4] text-left text-xs text-[#6B7280] uppercase tracking-wide">
+                                          <th className="w-10 px-4 py-3">
+                                            <input
+                                              type="checkbox"
+                                              aria-label="Select all contacts on this page"
+                                              checked={contacts.length > 0 && contacts.every((c) => selectedContactIds.includes(c.id))}
+                                              onChange={toggleAllContactsSelected}
+                                            />
+                                          </th>
                                           <th className="px-4 py-3 font-medium">Name</th>
                                           <th className="px-4 py-3 font-medium">Email</th>
                                           {contactsVisibility.showPhone ? <th className="px-4 py-3 font-medium">Phone</th> : null}
@@ -5125,6 +5277,14 @@ ${sourceText}`;
                                             `${contact.firstName || ""} ${contact.lastName || ""}`.trim() || "(No Name)";
                                           return (
                                             <tr key={contact.id} className="hover:bg-[#F8F3FF] transition-colors">
+                                              <td className="px-4 py-3">
+                                                <input
+                                                  type="checkbox"
+                                                  aria-label={`Select ${displayName}`}
+                                                  checked={selectedContactIds.includes(contact.id)}
+                                                  onChange={() => toggleContactSelected(contact.id)}
+                                                />
+                                              </td>
                                               <td className="px-4 py-3">
                                                 <div className="font-medium text-[#1E1B2E]">{displayName}</div>
                                                 <div className="mt-0.5 text-[11px] text-[#8A90A6] uppercase tracking-wide">{contact.source}</div>
@@ -5398,6 +5558,11 @@ ${sourceText}`;
 
                                   {/* Attachment marker + time */}
                                   <span className="flex shrink-0 items-center justify-end gap-1.5">
+                                    {incomingTracker?.hasMeetingInvite ? (
+                                      <span className="email-tip flex items-center text-[#8F88A8]" data-tip="Meeting invite" aria-label="Meeting invite">
+                                        <FiCalendar className="h-3.5 w-3.5" aria-hidden />
+                                      </span>
+                                    ) : null}
                                     {incomingTracker?.hasAttachment ? (
                                       <span className="email-tip flex items-center text-[#8F88A8]" data-tip="Has attachment" aria-label="Has attachment">
                                         <FiPaperclip className="h-3.5 w-3.5" aria-hidden />
@@ -5658,7 +5823,16 @@ ${sourceText}`;
                             <div className="text-xs text-[#6B7280] space-y-1">
                               <p>From: {formatIdentity(selectedMessageDetail?.fromRaw || selectedMessage.fromRaw || selectedMessage.from || "-")}</p>
                               <p>To: {formatIdentity(selectedMessageDetail?.toRaw || selectedMessage.toRaw || selectedMessage.to || "-")}</p>
-                              <p>{formatDetailedDate(selectedMessageDetail?.timestamp || selectedMessage.timestamp, selectedMessageDetail?.date || selectedMessage.date)}</p>
+                              <p className="flex items-center gap-1">
+                                {selectedMessageDetail?.meetingInvite ? (
+                                  <FiCalendar
+                                    className="h-3 w-3 text-[#701CC0]"
+                                    aria-label="This email carries a meeting invite"
+                                    title="This email carries a meeting invite"
+                                  />
+                                ) : null}
+                                {formatDetailedDate(selectedMessageDetail?.timestamp || selectedMessage.timestamp, selectedMessageDetail?.date || selectedMessage.date)}
+                              </p>
                               {(() => {
                                 const { count: trackers, vendors } =
                                   selectedMessageDetail?.trackers ?? detectTrackers(selectedMessageDetail?.bodyHtml || "");
@@ -5690,6 +5864,18 @@ ${sourceText}`;
                               <p className="text-sm text-red-600">{detailError}</p>
                             ) : (
                               <div className="space-y-4">
+                                {selectedMessageDetail?.meetingInvite ? (
+                                  <MeetingInviteCard
+                                    invite={selectedMessageDetail.meetingInvite}
+                                    accountEmail={selectedMessage.accountEmail}
+                                    messageId={selectedMessage.id}
+                                    onResponded={(response) =>
+                                      setSelectedMessageDetail((prev) =>
+                                        prev?.meetingInvite ? { ...prev, meetingInvite: { ...prev.meetingInvite, myResponse: response } } : prev
+                                      )
+                                    }
+                                  />
+                                ) : null}
                                 {/* `email-body-card` keeps the sender's own HTML on a light surface —
                                     that markup is authored for white backgrounds, so the panel's
                                     dark theme deliberately stops at this boundary. */}
@@ -6445,6 +6631,7 @@ ${sourceText}`;
                   onClick={closeCompose}
                   className="rounded-full p-2 text-white/90 hover:bg-white/15"
                   title="Close"
+                  disabled={sendingCompose}
                   aria-label="Close compose"
                 >
                   <FiX className="h-5 w-5" />
@@ -6626,6 +6813,7 @@ ${sourceText}`;
               </div>
 
               <div className="shrink-0 border-t border-[#EAE5F4] bg-white px-3 py-2">
+                {draftSaveState && <p role="status" className="text-sm">{draftSaveState}</p>}
                 {composeError ? (
                   <div className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-xs text-red-800">{composeError}</div>
                 ) : null}
@@ -6660,6 +6848,7 @@ ${sourceText}`;
                     <button
                       type="button"
                       onClick={handleSendCompose}
+                      aria-label={`Send from ${composeFrom || composeAccountEmail}`}
                       disabled={
                         sendingCompose ||
                         undoCountdown !== null ||
@@ -7245,6 +7434,23 @@ ${sourceText}`;
           setContactToDelete(null);
         }}
         onConfirm={confirmDeleteContact}
+      />
+      <ConfirmActionModal
+        isOpen={confirmBulkDeleteContacts}
+        title="Delete Contacts"
+        message={
+          <>
+            Are you sure you want to delete{" "}
+            <span className="font-semibold text-[#1E1B2E]">{selectedContactIds.length} contacts</span>? This action
+            cannot be undone.
+          </>
+        }
+        confirmLabel={bulkContactActionLoading ? "Deleting..." : "Delete Contacts"}
+        onCancel={() => {
+          if (bulkContactActionLoading) return;
+          setConfirmBulkDeleteContacts(false);
+        }}
+        onConfirm={confirmBulkDeleteContactsAction}
       />
       <ConfirmActionModal
         isOpen={confirmHardDelete}

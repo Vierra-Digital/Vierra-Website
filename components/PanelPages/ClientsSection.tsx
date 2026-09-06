@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import Image from "next/image"
 import ProfileImage from "../ProfileImage"
-import { FiPlus, FiFilter, FiTrash2, FiCheckCircle, FiXCircle, FiEye, FiChevronDown } from 'react-icons/fi'
+import { FiPlus, FiFilter, FiChevronDown, FiTrash2, FiCheckCircle, FiXCircle, FiEye, FiBriefcase } from 'react-icons/fi'
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import {
     PanelBadge,
@@ -17,9 +17,11 @@ import {
 } from "@/components/panel/PanelTable"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import RowActionMenu, { RowActionMenuItem } from "@/components/ui/RowActionMenu"
+import { useRouter } from "next/router"
 
 type ClientRow = {
     id: string
+    companyId: string
     name: string
     email: string
     businessName: string
@@ -37,9 +39,25 @@ type ClientRow = {
 }
 
 const StatusBadge: React.FC<{ status: string }> = ({ status }) => {
-    if (status === "completed") return <PanelBadge tone="positive">Active</PanelBadge>
-    if (status === "pending" || status === "in_progress") return <PanelBadge tone="warning">Pending</PanelBadge>
-    return <PanelBadge tone="danger">Inactive</PanelBadge>
+    let bgColor = "bg-red-100";
+    let textColor = "text-red-700";
+    let label = "Inactive";
+    
+    if (status === "completed") {
+        bgColor = "bg-green-100";
+        textColor = "text-green-700";
+        label = "Active";
+    } else if (status === "pending" || status === "in_progress") {
+        bgColor = "bg-yellow-100";
+        textColor = "text-yellow-700";
+        label = "Pending";
+    }
+    
+    return (
+        <span className={`px-3 py-1 rounded-full text-xs ${bgColor} ${textColor}`}>
+            {label}
+        </span>
+    )
 }
 
 const ClientActionsMenu: React.FC<{
@@ -47,35 +65,49 @@ const ClientActionsMenu: React.FC<{
     clientName: string
     isActive: boolean
     hasImage: boolean
+    isAdmin: boolean
+    busy: boolean
     onView: () => void
+    onSetActive: () => void
     onDelete: () => void
     onToggleStatus: (isActive: boolean) => void
-}> = ({ clientName, isActive, onView, onDelete, onToggleStatus }) => {
+}> = ({ clientName, isActive, isAdmin, busy, onView, onSetActive, onDelete, onToggleStatus }) => {
     return (
         <RowActionMenu label={`Manage ${clientName}`}>
+          <RowActionMenuItem onClick={onSetActive} icon={<FiBriefcase className="w-4 h-4" />}>
+            Work On This Client
+          </RowActionMenuItem>
           <RowActionMenuItem onClick={onView} icon={<FiEye className="w-4 h-4" />}>
-            View Client
+            Open Client Workspace
           </RowActionMenuItem>
-          <RowActionMenuItem
-            onClick={() => onToggleStatus(!isActive)}
-            icon={isActive ? <FiXCircle className="w-4 h-4" /> : <FiCheckCircle className="w-4 h-4" />}
-          >
-            {isActive ? "Mark As Inactive" : "Mark As Active"}
-          </RowActionMenuItem>
-          <RowActionMenuItem onClick={onDelete} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
-            Remove Client
-          </RowActionMenuItem>
+          {isAdmin && (
+            <RowActionMenuItem
+                onClick={() => onToggleStatus(!isActive)}
+                disabled={busy}
+                icon={isActive ? <FiXCircle className="w-4 h-4" /> : <FiCheckCircle className="w-4 h-4" />}
+            >
+                {isActive ? "Mark As Inactive" : "Mark As Active"}
+            </RowActionMenuItem>
+          )}
+          {isAdmin && (
+            <RowActionMenuItem onClick={onDelete} disabled={busy} icon={<FiTrash2 className="w-4 h-4" />} tone="danger">
+                Remove Client
+            </RowActionMenuItem>
+          )}
         </RowActionMenu>
     )
 }
 
-interface ClientsSectionProps { 
+interface ClientsSectionProps {
+    isAdmin?: boolean
     onAddClient?: () => void
     refreshTrigger?: number
     onViewClient?: (client: Pick<ClientRow, "id" | "name" | "email">) => void
+    onSetActiveClient?: (client: Pick<ClientRow, "companyId" | "businessName">) => void
 }
 
-const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTrigger, onViewClient }) => {
+const ClientsSection: React.FC<ClientsSectionProps> = ({ isAdmin = false, onAddClient, refreshTrigger, onViewClient, onSetActiveClient }) => {
+    const router = useRouter()
     const [rows, setRows] = useState<ClientRow[]>([])
     /**
      * Cache-buster for client avatars, stamped once per load of the list.
@@ -88,6 +120,16 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
      */
     const [imageStamp, setImageStamp] = useState(() => Date.now())
     const [loading, setLoading] = useState(true)
+    const [hasLoaded, setHasLoaded] = useState(false)
+    const fetchPending = useRef(false)
+    const mutationPending = useRef(false)
+    const [updatingClient, setUpdatingClient] = useState<string | null>(null)
+    const [rowErrors, setRowErrors] = useState<Record<string, string>>({})
+    const [statusNeedsRefresh, setStatusNeedsRefresh] = useState<string | null>(null)
+    const [notice, setNotice] = useState("")
+    const [deleting, setDeleting] = useState(false)
+    const [deleteError, setDeleteError] = useState("")
+    const refreshButtonRef = useRef<HTMLButtonElement>(null)
     const [error, setError] = useState<string | null>(null)
     const [currentPage, setCurrentPage] = useState(0)
     const [searchQuery, setSearchQuery] = useState("")
@@ -97,19 +139,51 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
     const [retainerSort, setRetainerSort] = useState<'none' | 'asc' | 'desc'>("none")
     const [deleteModalOpen, setDeleteModalOpen] = useState(false)
     const [clientToDelete, setClientToDelete] = useState<{ id: string; name: string } | null>(null)
+    const hydratingView = useRef(false)
     const pageSize = 10
+    useEffect(() => {
+        if (!router.isReady) return
+        hydratingView.current = true
+        const q = router.query
+        /* eslint-disable react-hooks/set-state-in-effect */
+        setSearchQuery(typeof q.q === "string" ? q.q : "")
+        setStatusFilter(["active", "inactive", "pending"].includes(String(q.status)) ? q.status as "active" | "inactive" | "pending" : "all")
+        setNameSort(q.nameSort === "asc" || q.nameSort === "desc" ? q.nameSort : "none")
+        setRetainerSort(q.retainerSort === "asc" || q.retainerSort === "desc" ? q.retainerSort : "none")
+        setCurrentPage(Number.isSafeInteger(Number(q.page)) ? Math.max(0, Number(q.page)) : 0)
+        /* eslint-enable react-hooks/set-state-in-effect */
+    }, [router.isReady, router.query])
+
+    useEffect(() => {
+        if (!router.isReady || router.query.section !== "clients") return
+        if (hydratingView.current) { hydratingView.current = false; return }
+        const timer = window.setTimeout(() => {
+            void router.replace({ pathname: router.pathname, query: { ...router.query, q: searchQuery, status: statusFilter, nameSort, retainerSort, page: currentPage } }, undefined, { shallow: true, scroll: false }).catch(() => {})
+        }, 300)
+        return () => window.clearTimeout(timer)
+    }, [searchQuery, statusFilter, nameSort, retainerSort, currentPage, router])
 
     const fetchClients = async () => {
+        if (fetchPending.current) return false
+        fetchPending.current = true
+        setError(null)
         try {
             setLoading(true)
             const r = await fetch("/api/admin/clients")
-            if (!r.ok) throw new Error(`HTTP ${r.status}`)
+            if (!r.ok) throw new Error("Could not load clients. Try again.")
             const data: ClientRow[] = await r.json()
+            if (!Array.isArray(data)) throw new Error("Could not load clients. Try again.")
             setRows(data)
+            setHasLoaded(true)
+            setStatusNeedsRefresh(null)
+            setRowErrors({})
             setImageStamp(Date.now())
-        } catch (e: any) {
-            setError(e?.message ?? "Failed to load clients")
+            return true
+        } catch {
+            setError("Could not load clients. Try again.")
+            return false
         } finally {
+            fetchPending.current = false
             setLoading(false)
         }
     }
@@ -129,31 +203,46 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
     }, [refreshTrigger])
 
     const handleDeleteClient = async () => {
-        if (!clientToDelete) return
-
+        if (!clientToDelete || mutationPending.current || fetchPending.current) return
+        mutationPending.current = true
+        setDeleting(true)
+        setDeleteError("")
+        setNotice("")
         try {
             const r = await fetch(`/api/admin/deleteClient?clientId=${clientToDelete.id}`, {
                 method: "DELETE",
             })
             
             if (!r.ok) {
-                const data = await r.json()
-                throw new Error(data.message || `HTTP ${r.status}`)
+                throw new Error("Could not confirm removal. Close this dialog and refresh the list before trying again.")
             }
+            const result = await r.json()
+            if (result?.clientId !== clientToDelete.id) throw new Error("Unexpected removal response")
             setRows(prev => prev.filter(client => client.id !== clientToDelete.id))
+            setNotice(`Removed ${clientToDelete.name}.`)
             setDeleteModalOpen(false)
             setClientToDelete(null)
-        } catch (e: any) {
-            setError(e?.message ?? "Failed to delete client")
+            requestAnimationFrame(() => refreshButtonRef.current?.focus())
+        } catch {
+            setDeleteError("Could not confirm removal. Close this dialog and refresh the list before trying again.")
+        } finally {
+            mutationPending.current = false
+            setDeleting(false)
         }
     }
 
     const openDeleteModal = (client: { id: string; name: string }) => {
+        setDeleteError("")
         setClientToDelete(client)
         setDeleteModalOpen(true)
     }
 
     const handleToggleStatus = async (clientId: string, newStatus: boolean) => {
+        if (mutationPending.current || fetchPending.current || statusNeedsRefresh) return
+        mutationPending.current = true
+        setUpdatingClient(clientId)
+        setNotice("")
+        setRowErrors(prev => ({ ...prev, [clientId]: "" }))
         try {
             const r = await fetch("/api/admin/toggleClientStatus", {
                 method: "PUT",
@@ -162,15 +251,39 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
             })
             
             if (!r.ok) {
-                const data = await r.json()
-                throw new Error(data.message || `HTTP ${r.status}`)
+                throw new Error("Could not confirm status change.")
             }
-            await fetchClients()
-        } catch (e: any) {
-            setError(e?.message ?? "Failed to update client status")
+            const result = await r.json()
+            if (result?.clientId !== clientId || result?.isActive !== newStatus) throw new Error("Unexpected status response")
+            const refreshed = await fetchClients()
+            if (!refreshed) {
+                setStatusNeedsRefresh(clientId)
+                setRowErrors(prev => ({ ...prev, [clientId]: "Status saved, but the list could not be refreshed. Refresh to see the current status." }))
+            } else {
+                const name = rows.find(client => client.id === clientId)?.name || "Client"
+                setNotice(`${name}: status updated.`)
+            }
+        } catch {
+            setStatusNeedsRefresh(clientId)
+            setRowErrors(prev => ({ ...prev, [clientId]: "Could not confirm the status change. Refresh the list before trying again." }))
+        } finally {
+            mutationPending.current = false
+            setUpdatingClient(null)
         }
     }
 
+    const columns = useMemo(
+        () => [
+            { key: "name", header: "Client Name" },
+            { key: "businessName", header: "Business Name" },
+            { key: "industry", header: "Industry" },
+            { key: "monthlyRetainer", header: "Monthly Retainer ($)" },
+            { key: "clientGoal", header: "Client Goal" },
+            { key: "status", header: "Status" },
+            { key: "manage", header: "Manage" },
+        ],
+        []
+    )
 
     const filteredRows = useMemo(() => {
         const query = searchQuery.trim().toLowerCase()
@@ -220,6 +333,14 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
     // explain it; the old effect only covered searchQuery, not the status or sort filters.
     const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize))
     const page = Math.min(currentPage, totalPages - 1)
+    const hasFilters = Boolean(searchQuery.trim() || statusFilter !== "all" || nameSort !== "none" || retainerSort !== "none")
+    const clearFilters = () => {
+        setSearchQuery("")
+        setStatusFilter("all")
+        setNameSort("none")
+        setRetainerSort("none")
+        setCurrentPage(0)
+    }
 
     return (
         <>
@@ -379,7 +500,10 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                                 clientName={r.name}
                                 isActive={r.isActive}
                                 hasImage={r.image}
+                                isAdmin={isAdmin}
+                                busy={updatingClient === r.id || deleting}
                                 onView={() => onViewClient?.({ id: r.id, name: r.name, email: r.email })}
+                                onSetActive={() => handleSetActive(r)}
                                 onDelete={() => openDeleteModal({ id: r.id, name: r.name })}
                                 onToggleStatus={(newStatus) => handleToggleStatus(r.id, newStatus)}
                             />
@@ -398,12 +522,16 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
             <>
               Are you sure you want to remove{" "}
               <span className="font-semibold text-[#111827]">{clientToDelete?.name || ""}</span>? This action is permanent
-              and cannot be undone. All associated data will be removed.
+              and cannot be undone.
             </>
           }
           confirmLabel="Remove Client"
+          busy={deleting}
+          busyLabel="Removing…"
+          error={deleteError}
           onConfirm={handleDeleteClient}
           onCancel={() => {
+            if (mutationPending.current) return
             setDeleteModalOpen(false)
             setClientToDelete(null)
           }}

@@ -20,6 +20,17 @@ export default withAuth(async (req, res, session) => {
     res.status(404).json({ message: "Email account not found." });
     return;
   }
+  // Contacts are client-scoped now (see docs/ROLE_MODEL_REDESIGN.md's "v2" section) — the
+  // mailbox being synced already pins down which client this is, no separate target needed.
+  const account = await prisma.emailProviderAccount.findUnique({
+    where: { id: accountId },
+    select: { company_id: true },
+  });
+  const companyId = account?.company_id;
+  if (!companyId) {
+    res.status(404).json({ message: "Email account not found." });
+    return;
+  }
 
   const tokenResult = await getValidGmailAccessToken(userId, accountEmail);
   if (!tokenResult.ok) {
@@ -88,13 +99,14 @@ export default withAuth(async (req, res, session) => {
   await mapInBatches(toUpsert, (person) =>
     prisma.contact.upsert({
       where: {
-        user_id_account_id_email: {
-          user_id: userId,
+        company_id_account_id_email: {
+          company_id: companyId,
           account_id: accountId,
           email: person.email.toLowerCase(),
         },
       },
       create: {
+        company_id: companyId,
         user_id: userId,
         account_id: accountId,
         source: "gmail",
@@ -147,7 +159,7 @@ export default withAuth(async (req, res, session) => {
       last_error: null,
     },
   });
-  await syncContactsSpreadsheetForUser({ userId, companyId: session.companyId });
+  await syncContactsSpreadsheetForUser({ userId, companyId });
 
   res.status(200).json({
     ok: true,

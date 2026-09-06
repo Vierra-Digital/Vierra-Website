@@ -3,10 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/emailSender", () => ({
   sendEmail: vi.fn(async () => {}),
-  sendAuditConfirmationEmail: vi.fn(async () => {}),
 }));
 
-import { sendAuditConfirmationEmail, sendEmail } from "@/lib/emailSender";
+import { sendEmail } from "@/lib/emailSender";
 import handler from "@/pages/api/sendEmail";
 
 const validAuditPayload = {
@@ -54,7 +53,6 @@ describe("public audit API", () => {
 
     expect(response.statusCode).toBe(200);
     expect(sendEmail).not.toHaveBeenCalled();
-    expect(sendAuditConfirmationEmail).not.toHaveBeenCalled();
   });
 
   it("rejects invalid input before reaching the email layer", async () => {
@@ -69,7 +67,7 @@ describe("public audit API", () => {
     expect(sendEmail).not.toHaveBeenCalled();
   });
 
-  it("passes normalized legitimate input to both email operations", async () => {
+  it("passes normalized legitimate input to the email operation", async () => {
     const response = makeResponse();
 
     await handler(makeRequest(validAuditPayload, "audit-valid-test"), response);
@@ -83,9 +81,6 @@ describe("public audit API", () => {
       monthlyRevenue: "$10k - $25k",
       desiredRevenue: "$50,000+",
     });
-    expect(sendAuditConfirmationEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ fullName: "Jane Doe", email: "jane@example.com" })
-    );
   });
 
   it("rate-limits repeated submissions from the same IP", async () => {

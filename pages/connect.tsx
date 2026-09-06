@@ -20,7 +20,6 @@ export default function ConnectPage({ dashboardHref, initialImageVersion }: Page
   const router = useRouter()
   const [showSettings, setShowSettings] = useState(false)
 
-  const [fbConnected, setFb] = useState(false)
   const [liConnected, setLi] = useState(false)
   const [gaConnected, setGa] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -51,12 +50,7 @@ export default function ConnectPage({ dashboardHref, initialImageVersion }: Page
 
     ;(async () => {
       try {
-        const [fb, li, ga] = await Promise.all([
-          fetch(`/api/facebook/status`, {
-            headers: { Authorization: `Bearer ${token}` },
-          })
-            .then((r) => (r.ok ? r.json() : { connected: false }))
-            .catch(() => ({ connected: false })),
+        const [li, ga] = await Promise.all([
           fetch(`/api/linkedin/status`, {
             headers: { Authorization: `Bearer ${token}` },
           })
@@ -68,7 +62,6 @@ export default function ConnectPage({ dashboardHref, initialImageVersion }: Page
             .then((r) => (r.ok ? r.json() : { connected: false }))
             .catch(() => ({ connected: false })),
         ])
-        setFb(!!fb.connected)
         setLi(!!li.connected)
         setGa(!!ga.connected)
       } finally {
@@ -194,12 +187,12 @@ export default function ConnectPage({ dashboardHref, initialImageVersion }: Page
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <button
-                      onClick={() => startOauth("facebook")}
-                      className="flex items-center justify-between p-5 bg-white/5 rounded-lg hover:bg-white/10 transition"
+                      disabled
+                      title="Facebook linking is temporarily unavailable"
+                      className="flex items-center justify-between p-5 bg-white/5 rounded-lg opacity-50 cursor-not-allowed"
                     >
                       <span className="text-white">
-                        Facebook{" "}
-                        {fbConnected ? "(Connected)" : "(Not Connected)"}
+                        Facebook (Coming Soon)
                       </span>
                       <FiChevronRight className="w-5 h-5 text-white/70" />
                     </button>

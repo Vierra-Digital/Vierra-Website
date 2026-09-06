@@ -9,18 +9,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const session = await requireRole(req, res);
   if (!session) return;
-  const { companyId } = session;
-  const isPlatformAdmin = session.user.isPlatformAdmin === true;
 
   try {
-    /**
-     * Platform admins see every company's sessions, the same exemption /api/admin/users already
-     * makes. Without it the two lists disagreed: User Management listed clients from every
-     * company and then looked up their sessions in one company only, so every row outside the
-     * caller's own company showed no session at all.
-     */
+    // Any Vierra staff member may see any client's onboarding sessions (see
+    // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — not scoped to one company. This supersedes
+    // the platform-admin exemption this branch had added: master drops the company filter for
+    // every staff role, which covers the same case (a session on a client in another company
+    // showing blank in User Management) and more.
     const sessions = await prisma.onboardingSession.findMany({
-      where: isPlatformAdmin ? {} : { company_id: companyId },
       include: {
         clients: true,
         onboarding_platform_tokens: { select: { platform: true } },
@@ -49,6 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       clientEmail: s.clients.email,
       businessName: s.clients.business_name,
       createdAt: s.created_at.getTime(),
+      expiresAt: s.expires_at?.getTime() || null,
       submittedAt: s.submitted_at?.getTime() || null,
       lastUpdatedAt: s.last_updated_at?.getTime() || null,
       status: effectiveStatus(s.status, s.expires_at),

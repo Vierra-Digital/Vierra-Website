@@ -3,17 +3,17 @@ import { withAuth } from "@/lib/api/withAuth";
 import crypto from "crypto";
 
 export default withAuth(
-  async (req, res, session) => {
-    const { companyId } = session;
-
+  async (req, res) => {
     const { clientEmail } = req.query;
     if (!clientEmail || typeof clientEmail !== "string") {
       return res.status(400).json({ message: "Missing clientEmail" });
     }
 
     try {
+      // Any Vierra staff member may act on any client's representative (see
+      // docs/ROLE_MODEL_REDESIGN.md's "v2" section) — looked up by email alone.
       const client = await prisma.client.findFirst({
-        where: { company_id: companyId, email: clientEmail.toLowerCase() },
+        where: { email: clientEmail.toLowerCase() },
         include: {
           onboarding_sessions: {
             orderBy: { created_at: "desc" },
@@ -43,7 +43,7 @@ export default withAuth(
         data: {
           id: token,
           client_id: client.id,
-          company_id: companyId,
+          company_id: client.company_id,
           status: "pending",
           expires_at: new Date(Date.now() + 60 * 60 * 1000),
         },

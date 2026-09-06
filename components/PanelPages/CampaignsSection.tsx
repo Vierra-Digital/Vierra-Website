@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { FiPlus, FiX, FiCheck, FiTrash2 } from "react-icons/fi";
 import { Inter } from "next/font/google";
+import { useDraftGuard } from "@/hooks/useDraftGuard";
 import Modal from "@/components/ui/Modal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import CampaignDetail from "./CampaignsSection/CampaignDetail";
+import { panelFetch } from "@/lib/panelFetch";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -13,6 +15,7 @@ export type Campaign = {
   name: string;
   status: "draft" | "active" | "paused" | "completed" | "cancelled";
   sendProvider: "internal" | "smartlead" | "brevo";
+  companyId: string;
   accountId: string;
   accountEmail: string | null;
   sendDelaySeconds: number;
@@ -124,7 +127,7 @@ const CampaignsSection: React.FC = () => {
     try {
       // no-store: this reloads right after create/delete/status-change writes, and the
       // server's Cache-Control on this endpoint would otherwise serve the pre-write list.
-      const res = await fetch("/api/campaigns", { cache: "no-store" });
+      const res = await panelFetch("/api/campaigns", { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to load campaigns");
       const data = await res.json();
       setCampaigns(data.campaigns || []);
@@ -368,6 +371,7 @@ const isMockTemplateId = (id: string) => id === "mock-template";
 const isMockCampaignId = (id: string | null) => !!id && id.startsWith("mock-");
 
 const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = ({ onClose, onDone }) => {
+  const mutationPending = useRef(false);
   const [wizardStep, setWizardStep] = useState(0);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -392,6 +396,12 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
 
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [enrolledCount, setEnrolledCount] = useState<number | null>(null);
+
+  const canClose = useDraftGuard(Boolean(name || campaignId), "campaign wizard", "email", saving);
+  const closeWizard = () => {
+    if (mutationPending.current) return;
+    void (async () => { if (await canClose()) onClose(); })();
+  };
 
   // Lazy: only fetch Brevo's sender list once someone actually picks that provider, so a
   // BREVO_API_KEY-less setup never surfaces an error for reps who only use internal campaigns.
@@ -432,10 +442,14 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
   // (step 3's button) are all real API calls now — a mock campaign/account/template still short-
   // circuits to local-only state, for offline testing of the wizard UI itself.
   const goNext = async () => {
+    if (mutationPending.current) return;
+    mutationPending.current = true;
     setError("");
+    mutationPending.current = true;
     setSaving(true);
     try {
       if (wizardStep === 0) {
+        if (campaignId) { setWizardStep(1); return; }
         if (!name.trim()) {
           setError("Name is required.");
           return;
@@ -458,7 +472,7 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
         if (useAccountId) body.accountId = useAccountId;
         else body.accountEmail = senderEmail.trim();
 
-        const res = await fetch("/api/campaigns", {
+        const res = await panelFetch("/api/campaigns", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -503,11 +517,13 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
     } catch (e: any) {
       setError(e?.message || "Something went wrong.");
     } finally {
+      mutationPending.current = false;
       setSaving(false);
     }
   };
 
   const addStep = async () => {
+    if (mutationPending.current) return;
     if (!campaignId) return;
     if (!newStepTemplateId) {
       setError("Pick a template for this step.");
@@ -530,6 +546,7 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
       setNewStepDelayDays(0);
       return;
     }
+    mutationPending.current = true;
     setSaving(true);
     try {
       const res = await fetch(`/api/campaigns/${campaignId}/steps`, {
@@ -545,6 +562,7 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
     } catch (e: any) {
       setError(e?.message || "Failed to add step.");
     } finally {
+      mutationPending.current = false;
       setSaving(false);
     }
   };
@@ -566,12 +584,14 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
   };
 
   const launch = async () => {
+    if (mutationPending.current) return;
     if (!campaignId) return;
     setError("");
     if (isMockCampaignId(campaignId)) {
       onDone();
       return;
     }
+    mutationPending.current = true;
     setSaving(true);
     try {
       const res = await fetch(`/api/campaigns/${campaignId}`, {
@@ -585,6 +605,7 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
     } catch (e: any) {
       setError(e?.message || "Failed to launch campaign.");
     } finally {
+      mutationPending.current = false;
       setSaving(false);
     }
   };
@@ -595,12 +616,12 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
       backdropClassName="bg-[#14101E]/55 backdrop-blur-sm"
       cardClassName="email-dialog-dark rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
       label="New Campaign"
-      onClose={onClose}
+      onClose={closeWizard}
       closeOnBackdrop={!saving}
     >
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-xl font-semibold text-[#111827]">New Campaign</h3>
-        <button onClick={onClose} className="text-[#6B7280] hover:text-[#111827]">
+        <button onClick={closeWizard} className="text-[#6B7280] hover:text-[#111827]">
           <FiX className="w-5 h-5" />
         </button>
       </div>
@@ -623,8 +644,9 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
         ))}
       </div>
 
+      {wizardStep === 0 && campaignId && <p className="mb-3 text-sm">Draft already created. Sender and name are fixed for this wizard; continue to edit its sequence and audience.</p>}
       {wizardStep === 0 && (
-        <div className="space-y-4">
+        <fieldset disabled={Boolean(campaignId) || saving} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-[#374151] mb-2">Campaign Name</label>
             <input
@@ -716,7 +738,7 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
               </p>
             </div>
           )}
-        </div>
+        </fieldset>
       )}
 
       {wizardStep === 1 && (
@@ -831,7 +853,7 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
 
       <div className="flex justify-between items-center mt-6 pt-4 border-t border-[#E5E7EB]">
         <button
-          onClick={() => (wizardStep === 0 ? onClose() : setWizardStep((s) => s - 1))}
+          onClick={() => (wizardStep === 0 ? closeWizard() : setWizardStep((s) => s - 1))}
           disabled={saving}
           className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium disabled:opacity-50"
         >

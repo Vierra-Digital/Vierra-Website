@@ -766,6 +766,7 @@ model Company {
   signed_documents        SignedDocument[]
   stored_files            StoredFile[]
   campaigns Campaign[]
+  contacts                Contact[]
 
   @@map("companies")
   @@schema("public")
@@ -852,7 +853,13 @@ model ContactTag {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model Contact {
   id                      String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id                 String                    @db.Uuid
+  // Visibility/ownership boundary (see docs/ROLE_MODEL_REDESIGN.md's "v2" section) — every
+  // representative and every Vierra staff member working that client sees the same contacts.
+  company_id              String                    @db.Uuid
+  // Attribution only ("who originally added this") — not the access boundary, and nullable so a
+  // departing staff member's account can be deleted without losing a client's contact list
+  // (onDelete: SetNull, not Cascade).
+  user_id                 String?                   @db.Uuid
   account_id              String?                   @db.Uuid
   source                  String                    @default("manual")
   first_name              String?
@@ -868,12 +875,14 @@ model Contact {
   updated_at              DateTime                  @default(now()) @db.Timestamptz(6)
   contact_tag_assignments ContactTagAssignment[]
   email_provider_accounts EmailProviderAccount?  @relation(fields: [account_id], references: [id], onUpdate: NoAction)
-  users                   User              @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  companies               Company           @relation(fields: [company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  users                   User?             @relation(fields: [user_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
   campaign_contacts CampaignContact[]
 
   @@map("contacts")
   @@index([user_id], map: "idx_contacts_user_id")
-  @@unique([user_id, account_id, email], map: "uq_contacts_user_account_email")
+  @@index([company_id], map: "idx_contacts_company_id")
+  @@unique([company_id, account_id, email], map: "uq_contacts_company_account_email")
   @@schema("public")
 }
 
@@ -1161,8 +1170,9 @@ model BookingLink {
 }
 
 // DB cache for the dashboard's "Upcoming Meetings" card, refreshed on a schedule by
-// pages/api/dashboard/meetings-sync/dispatch.ts (see netlify/functions/sync-upcoming-meetings.ts)
-// instead of hitting the Google Calendar API on every dashboard load. Always the top 3
+// pages/api/dashboard/meetings-sync/dispatch.ts (see the `sync-upcoming-meetings` pg_cron job
+// in prisma/manual/20260901_migrate_cron_to_pg_cron.sql) instead of hitting the Google Calendar
+// API on every dashboard load. Always the top 3
 // upcoming meetings for the user — see lib/dashboard/upcomingMeetings.ts.
 model DashboardUpcomingMeeting {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -1666,6 +1676,34 @@ model EmailProviderAccount {
 }
 
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model EmailMeetingResponse {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id         String   @db.Uuid
+  account_email   String
+  ics_uid         String
+  // The invite's own ICS SEQUENCE at the time of this response — a stale response (lower than
+  // the invite's current SEQUENCE) means the organizer rescheduled and this response no longer
+  // applies; see pages/api/gmail/message-detail.ts's meetingInvite.myResponse handling.
+  sequence        Int      @default(0)
+  response        String
+  organizer_email String?
+  summary         String?
+  start_at        DateTime? @db.Timestamptz(6)
+  end_at          DateTime? @db.Timestamptz(6)
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @default(now()) @db.Timestamptz(6)
+  users           User     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("email_meeting_responses")
+  // `map` names the DB constraint only — the client's compound-where key is `name` (or, absent
+  // one, the fields joined by "_"). Pinned explicitly so the two call sites that key off it
+  // (message-detail.ts, meeting-rsvp.ts) can't silently drift from whatever the default would be.
+  @@unique([user_id, account_email, ics_uid], name: "user_id_account_email_ics_uid", map: "uq_email_meeting_responses_user_account_uid")
+  @@index([user_id, account_email], map: "idx_email_meeting_responses_user_account")
+  @@schema("public")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model EmailSignature {
   id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id                 String                   @db.Uuid
@@ -2099,9 +2137,10 @@ model User {
   id                                                            String                              @id @db.Uuid
   email                                                         String                              @unique
   name                                                          String?
-  // Grants cross-company visibility in admin/users GET (see pages/api/admin/users.ts) — set
-  // directly via SQL for Vierra's own internal accounts, never exposed in any self-service UI, so
-  // a company's own admin can't escalate into other companies' data.
+  // Discontinued (role model v2, docs/ROLE_MODEL_REDESIGN.md, 2026-09-06) — no longer read or
+  // written anywhere in the app. "admin" vs. "staff" is company_memberships.role directly now,
+  // set only via direct database access. Column kept (not dropped) since this is a data
+  // migration, not a schema change — see prisma/manual/20260906_role_model_v2_vierra_staff.sql.
   is_platform_admin                                             Boolean                             @default(false)
   created_at                                                    DateTime                            @default(now()) @db.Timestamptz(6)
   updated_at                                                    DateTime                            @default(now()) @db.Timestamptz(6)
@@ -2120,6 +2159,7 @@ model User {
   dashboard_upcoming_meetings                                   DashboardUpcomingMeeting[]
   dashboard_meetings_sync_status                                DashboardMeetingsSyncStatus?
   email_blocked_senders                                         EmailBlockedSender[]
+  email_meeting_responses                                       EmailMeetingResponse[]
   lead_status_events                                            LeadStatusEvent[]
   email_compose_drafts                                          EmailComposeDraft[]
   email_outbound_messages                                       EmailOutboundMessage[]
@@ -2179,6 +2219,135 @@ model FinanceEntry {
   @@schema("public")
 }
 
+/// Lead-sourcing candidates (see docs/CARTOGRAPHY_DESIGN.md). Pre-contacts — only a
+/// reviewed/promoted row becomes a real Contact. See prisma/manual/20260831_cartography_schema.sql.
+///
+/// Cartography is meant to be extractable later into its own gRPC-reached service (see the
+/// design doc's Storage section), so company_id/created_by/client_id/campaign_id/
+/// promoted_contact_id below are deliberately PLAIN SCALAR COLUMNS, not Prisma relations —
+/// there is no real Postgres FK backing them (Postgres can't enforce one across two separate
+/// database instances), so no @relation is declared for them either. Only relations entirely
+/// internal to the Cartography store (run -> run_tasks -> contacts, company -> contacts) are
+/// real Prisma relations, matching the real FKs in the SQL migration.
+model CartographyCompany {
+  id                 String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /** Soft reference to companies.id — see the model doc comment. */
+  company_id         String                 @db.Uuid
+  name               String
+  domain             String?
+  industry           String?
+  description        String?
+  address            String?
+  lat                Float?
+  lng                Float?
+  /** "google_business" | "linkedin_sales_nav" | "general" */
+  source_method      String                 @default("general")
+  /** Non-null only for rows in the standing "General Cartography" pool. */
+  brand_universe_tag String?
+  created_at         DateTime               @default(now()) @db.Timestamptz(6)
+  updated_at         DateTime               @default(now()) @db.Timestamptz(6)
+  cartography_contacts CartographyContact[]
+
+  @@map("cartography_companies")
+  @@index([company_id], map: "idx_cartography_companies_company_id")
+  @@index([company_id, industry], map: "idx_cartography_companies_industry")
+  @@index([lat, lng], map: "idx_cartography_companies_lat_lng")
+  @@schema("public")
+}
+
+/// One agentic discovery run (see docs/CARTOGRAPHY_DESIGN.md's "Two run modes" and "Sub-agent
+/// orchestration"). No `method` field — a run fans out into per-method sub-agents, tracked
+/// individually in CartographyRunTask, rather than running a single method itself.
+model CartographyRun {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /** Soft references — see CartographyCompany's doc comment. */
+  company_id      String               @db.Uuid
+  created_by      String?              @db.Uuid
+  /** "general" | "client_spec" */
+  mode            String
+  client_id       String?              @db.Uuid
+  campaign_id     String?              @db.Uuid
+  icp_description String?
+  target_count    Int?
+  /** "running" | "review_pending" | "completed" | "failed" — rolled up from
+   * cartography_run_tasks by the application layer, not a DB trigger. */
+  status          String               @default("running")
+  /** Set by screenCartographyQuery() when it rejects/flags this run's query; null if clean. */
+  screening_note  String?
+  created_at      DateTime             @default(now()) @db.Timestamptz(6)
+  completed_at    DateTime?            @db.Timestamptz(6)
+  cartography_run_tasks CartographyRunTask[]
+  cartography_contacts CartographyContact[]
+
+  @@map("cartography_runs")
+  @@index([company_id], map: "idx_cartography_runs_company_id")
+  @@index([client_id], map: "idx_cartography_runs_client_id")
+  @@index([company_id, status], map: "idx_cartography_runs_status")
+  @@schema("public")
+}
+
+/// One sub-agent invocation within a run (see docs/CARTOGRAPHY_DESIGN.md's "Sub-agent
+/// orchestration"). A real Prisma relation to CartographyRun — entirely internal to the
+/// Cartography store, so it stays a real FK regardless of where that store ends up living.
+model CartographyRunTask {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  run_id          String              @db.Uuid
+  /** "google_business" | "linkedin_sales_nav" | "general" */
+  method          String
+  /** "pending" | "running" | "completed" | "failed" | "not_implemented" */
+  status          String              @default("pending")
+  candidate_count Int?
+  error           String?
+  started_at      DateTime?           @db.Timestamptz(6)
+  completed_at    DateTime?           @db.Timestamptz(6)
+  created_at      DateTime            @default(now()) @db.Timestamptz(6)
+  cartography_runs CartographyRun     @relation(fields: [run_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  cartography_contacts CartographyContact[]
+
+  @@map("cartography_run_tasks")
+  @@index([run_id], map: "idx_cartography_run_tasks_run_id")
+  @@unique([run_id, method], map: "uq_cartography_run_tasks_run_method")
+  @@schema("public")
+}
+
+/// One sourced person, tied to a CartographyCompany (see docs/CARTOGRAPHY_DESIGN.md's
+/// "Review -> import flow"). promoted_contact_id is set once staff import it into Contact.
+model CartographyContact {
+  id                      String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /** Soft reference — see CartographyCompany's doc comment. */
+  company_id              String              @db.Uuid
+  cartography_company_id  String              @db.Uuid
+  /** Denormalized off task_id purely to avoid a join for "all candidates for this run". */
+  run_id                  String?             @db.Uuid
+  task_id                 String?             @db.Uuid
+  name                    String?
+  /** Drives the CEO/CMO-first relevance sort. */
+  title                   String?
+  email                   String?
+  phone                   String?
+  linkedin_url            String?
+  /** "pending" | "enriched" | "failed" */
+  enrichment_status       String              @default("pending")
+  /** "candidate" | "reviewed" | "promoted" | "rejected" | "duplicate" */
+  status                  String              @default("candidate")
+  /** Soft reference to contacts.id — see CartographyCompany's doc comment. Promotion becomes
+   * a real cross-service call once Cartography is genuinely separate, not a DB write. */
+  promoted_contact_id     String?             @unique @db.Uuid
+  created_at              DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at              DateTime            @default(now()) @db.Timestamptz(6)
+  cartography_companies   CartographyCompany  @relation(fields: [cartography_company_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  cartography_runs        CartographyRun?     @relation(fields: [run_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  cartography_run_tasks   CartographyRunTask? @relation(fields: [task_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@map("cartography_contacts")
+  @@index([company_id], map: "idx_cartography_contacts_company_id")
+  @@index([cartography_company_id], map: "idx_cartography_contacts_cartography_company_id")
+  @@index([run_id], map: "idx_cartography_contacts_run_id")
+  @@index([task_id], map: "idx_cartography_contacts_task_id")
+  @@index([company_id, status], map: "idx_cartography_contacts_status")
+  @@unique([company_id, email], map: "uq_cartography_contacts_company_email")
+  @@schema("public")
+}
 
 /// Artemis control plane — the panel-side state for the self-hosted AI box (Sparkey).
 /// Applied to the database by prisma/manual/20260902_artemis_control_plane.sql; these models are

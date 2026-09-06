@@ -7,6 +7,7 @@ import ContactsTab from "./ContactsTab";
 import AnalyticsTab from "./AnalyticsTab";
 import { STATUS_STYLE } from "../CampaignsSection";
 
+
 const TABS = ["Overview", "Contacts", "Analytics"] as const;
 type Tab = (typeof TABS)[number];
 
@@ -46,6 +47,8 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
     const entry = detailCache.get(campaignId);
     return !(entry && Date.now() - entry.ts < DETAIL_CACHE_TTL_MS);
   });
+  const [preflight, setPreflight] = useState<{ companyName: string; steps: number; audience: number; blockers: string[] } | null>(null);
+  const [loadError, setLoadError] = useState("");
   const [tab, setTab] = useState<Tab>("Overview");
   const [busy, setBusy] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
@@ -65,21 +68,26 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
       }
 
       setLoading(true);
+      setLoadError("");
       try {
         const [campaignRes, stepsRes, failedRes] = await Promise.all([
           fetch(`/api/campaigns/${campaignId}`),
           fetch(`/api/campaigns/${campaignId}/steps`),
           fetch(`/api/campaigns/${campaignId}/failed`),
         ]);
-        const nextCampaign = campaignRes.ok ? (await campaignRes.json()).campaign : null;
+        if (!campaignRes.ok || !stepsRes.ok || !failedRes.ok) throw new Error("Could not load all campaign details. Try again.");
+        const campaignPayload = await campaignRes.json();
+        const nextCampaign = campaignPayload.campaign;
+        setPreflight(campaignPayload.preflight || null);
         const nextSteps = stepsRes.ok ? (await stepsRes.json()).steps || [] : [];
         const nextFailed = failedRes.ok ? (await failedRes.json()).failed || [] : [];
+        if (!nextCampaign || !Array.isArray(nextSteps) || !Array.isArray(nextFailed)) throw new Error("Campaign response was incomplete. Try again.");
         setCampaign(nextCampaign);
         setSteps(nextSteps);
         setFailed(nextFailed);
         detailCache.set(campaignId, { data: { campaign: nextCampaign, steps: nextSteps, failed: nextFailed }, ts: Date.now() });
       } catch (e) {
-        console.error("Error loading campaign detail:", e);
+        setLoadError(e instanceof Error ? e.message : "Could not load campaign details.");
       } finally {
         setLoading(false);
       }
@@ -93,7 +101,7 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
     // synchronous flag would mean adopting Suspense-based fetching across the panel, which is an
     // architectural decision and not a lint fix.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
+    load(true);
   }, [load]);
 
   const transition = async (status: string) => {
@@ -110,7 +118,7 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
       const entry = detailCache.get(campaignId);
       if (entry) detailCache.set(campaignId, { ...entry, data: { ...entry.data, campaign: data.campaign } });
     } catch (e: any) {
-      alert(e?.message || "Failed to update campaign.");
+      setSyncMessage(e?.message || "Failed to update campaign.");
     } finally {
       setBusy(false);
     }
@@ -130,7 +138,7 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
       const entry = detailCache.get(campaignId);
       if (entry) detailCache.set(campaignId, { ...entry, data: { ...entry.data, campaign: data.campaign } });
     } catch (e: any) {
-      alert(e?.message || "Failed to update campaign.");
+      setSyncMessage(e?.message || "Failed to update campaign.");
     } finally {
       setBusy(false);
     }
@@ -140,7 +148,8 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
     setBusy(true);
     setSyncMessage("");
     try {
-      const res = await fetch("/api/campaigns/send-queue/tick", { method: "POST" });
+      if (!campaign?.companyId) throw new Error("Reload this campaign to confirm its company before running the queue.");
+      const res = await fetch("/api/campaigns/send-queue/tick", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ companyId: campaign.companyId }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to run send queue");
       setSyncMessage(`Sent ${data.sent}, failed ${data.failed}, skipped ${data.skipped} (of ${data.processed} due).`);
@@ -187,7 +196,9 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
     }
   };
 
-  if (loading || !campaign) {
+  if (!campaign && loadError) return <div role="alert" className="p-6"><p>{loadError}</p><button onClick={() => void load(true)} disabled={loading} className="p-2 underline">Retry</button><button onClick={onBack} className="p-2 underline">Back to campaigns</button></div>;
+
+  if (!campaign) {
     return (
       <div className="w-full h-full flex items-center justify-center">
         <LoadingSpinner label="Loading campaign..." />
@@ -204,6 +215,8 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
             Back to Campaigns
           </button>
 
+          {preflight && <div className="mb-4 rounded border p-3 text-sm"><p>{preflight.companyName} | Sender: {campaign.accountEmail || "Unavailable"} | {preflight.steps} sequence steps | {preflight.audience} enrolled contacts</p><p>Queue actions process due messages across this company. Enrollment is not a delivered count.</p>{preflight.blockers.map(blocker => <p key={blocker} className="mt-1 text-red-600">{blocker}</p>)}</div>}
+          {loadError && <p role="alert" className="mb-3 text-red-600">{loadError} Showing previously loaded data. <button onClick={() => void load(true)} disabled={loading} className="underline">Retry</button></p>}
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-semibold text-[#111827]">{campaign.name}</h1>
@@ -220,7 +233,7 @@ const CampaignDetail: React.FC<{ campaignId: string; onBack: () => void }> = ({ 
               {campaign.status === "active" && (
                 <>
                   <button onClick={runSendQueueTick} disabled={busy} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 text-sm font-medium text-[#374151] hover:bg-gray-200 disabled:opacity-50">
-                    <FiRefreshCw className="w-4 h-4" /> Run Send Queue
+                    <FiRefreshCw className="w-4 h-4" /> Run company send queue
                   </button>
                   <button onClick={() => transition("paused")} disabled={busy} className="px-3 py-2 rounded-lg border border-[#E5E7EB] text-sm font-medium text-[#374151] hover:bg-gray-50 disabled:opacity-50">
                     Pause
