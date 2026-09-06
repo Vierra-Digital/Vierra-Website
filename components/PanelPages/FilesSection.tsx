@@ -54,6 +54,7 @@ const FilesContent: React.FC<FilesSectionProps> = ({
   const [fileType, setFileType] = useState("")
   const [owner, setOwner] = useState("")
   const [sort, setSort] = useState("name")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
   const [showFilters, setShowFilters] = useState(false)
   const [currentPage, setCurrentPage] = useState(0)
   // Twenty-five a page, matching the other panel tables.
@@ -75,9 +76,16 @@ const FilesContent: React.FC<FilesSectionProps> = ({
 
   const filteredFiles = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return files.filter(f => f.name.toLowerCase().includes(q) && (!fileType || f.fileType === fileType) && (!owner || f.owner === owner)).sort((a, b) => sort === "type" ? a.fileType.localeCompare(b.fileType) || a.name.localeCompare(b.name) : a.name.localeCompare(b.name))
-  }, [files, search, fileType, owner, sort])
-  const clearFilters = () => { setSearch(""); setFileType(""); setOwner(""); setSort("name"); setCurrentPage(0); }
+    return files
+      .filter(f => f.name.toLowerCase().includes(q) && (!fileType || f.fileType === fileType) && (!owner || f.owner === owner))
+      .sort((a, b) => {
+        const comparison = sort === "type"
+          ? a.fileType.localeCompare(b.fileType) || a.name.localeCompare(b.name)
+          : a.name.localeCompare(b.name)
+        return sortDir === "asc" ? comparison : -comparison
+      })
+  }, [files, search, fileType, owner, sort, sortDir])
+  const clearFilters = () => { setSearch(""); setFileType(""); setOwner(""); setSort("name"); setSortDir("asc"); setCurrentPage(0); }
 
   // Clamped rather than reset from an effect (see ClientsSection's identical comment): searching
   // to a shorter list could leave currentPage past the end, and slicing beyond the array renders
@@ -166,7 +174,7 @@ const FilesContent: React.FC<FilesSectionProps> = ({
                   value={sort}
                   onChange={setSort}
                   options={[
-                    { value: "name", label: "Name A–Z" },
+                    { value: "name", label: "Name" },
                     { value: "type", label: "File Type" },
                   ]}
                 />
@@ -200,6 +208,28 @@ const FilesContent: React.FC<FilesSectionProps> = ({
                     ]}
                   />
                 )}
+                <div className="mb-4">
+                  <span className="mb-1.5 block text-[11px] font-medium text-[#6B7280]">Order</span>
+                  <div className="flex gap-2">
+                    {(["asc", "desc"] as const).map((dir) => (
+                      <button
+                        key={dir}
+                        type="button"
+                        onClick={() => {
+                          setSortDir(dir)
+                          setCurrentPage(0)
+                        }}
+                        className={`h-8 flex-1 rounded-lg text-[12px] font-medium transition-colors ${
+                          sortDir === dir
+                            ? "bg-[#701CC0] text-white"
+                            : "bg-[#F3F1F8] text-[#5B5468] hover:bg-[#EAE6F3]"
+                        }`}
+                      >
+                        {dir === "asc" ? "Ascending" : "Descending"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <PanelClearFilters
                   onClick={() => {
                     clearFilters()

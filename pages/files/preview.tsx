@@ -4,11 +4,10 @@ import type { GetServerSideProps } from "next"
 
 type Props = {
   tokenId: string
-  returnHref: string
   name: string
 }
 
-export default function FilePreviewPage({ tokenId, name, returnHref }: Props) {
+export default function FilePreviewPage({ tokenId, name }: Props) {
   const displayName = name.replace(/\.[^/.]+$/, "") || name
   const fileUrl = `/api/admin/file/${encodeURIComponent(name)}?tokenId=${encodeURIComponent(tokenId)}&preview=1`
 
@@ -17,13 +16,7 @@ export default function FilePreviewPage({ tokenId, name, returnHref }: Props) {
       <Head>
         <title>{displayName}</title>
       </Head>
-      <div className="fixed inset-0 bg-[#1a1a1a] flex flex-col">
-        <header className="flex flex-wrap items-center justify-between gap-3 p-4 text-white">
-          <h1 className="break-all">{displayName}</h1>
-          <a href={returnHref} className="underline">Return to files</a>
-        </header>
-        <iframe title={displayName} src={fileUrl} className="flex-1 w-full border-0" />
-      </div>
+      <iframe title={displayName} src={fileUrl} className="fixed inset-0 h-full w-full border-0 bg-[#1a1a1a]" />
     </>
   )
 }
@@ -48,7 +41,6 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   return {
     props: {
       tokenId,
-      returnHref: role === "user" ? "/client" : "/panel?section=files",
       name: typeof name === "string" ? name : "document.pdf",
     },
   }

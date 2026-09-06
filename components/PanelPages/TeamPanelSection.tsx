@@ -901,7 +901,7 @@ const InviteTeammateModal: React.FC<{
                             value={firstName}
                             onChange={(e) => setFirstName(e.target.value)}
                             className={FIELD}
-                            placeholder="Jordan"
+                            placeholder="Bidoof"
                             required
                         />
                     </div>
@@ -914,7 +914,7 @@ const InviteTeammateModal: React.FC<{
                             value={lastName}
                             onChange={(e) => setLastName(e.target.value)}
                             className={FIELD}
-                            placeholder="Reyes"
+                            placeholder="Sanchez"
                             required
                         />
                     </div>
