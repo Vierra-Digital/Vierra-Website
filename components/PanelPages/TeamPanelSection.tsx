@@ -70,8 +70,13 @@ interface TeamRow {
     country: string
     company_email: string | null
     mentor: string | null
-    time_zone: string
-    strikes: string
+    time_zone: string | null
+    /**
+     * The count, not the "2/3" label. It was typed as a string while the API sends the integer
+     * column straight through, so sorting by Strikes called .split on a number and took the whole
+     * panel down with it. null means "not applicable" — a pending invite has no strike count.
+     */
+    strikes: number | null
     status: string
     lastActiveAt: string | null
     isPending?: boolean
@@ -273,7 +278,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 country: u.country,
                 company_email: u.company_email,
                 mentor: u.mentor,
-                strikes: u.strikes,
+                strikes: typeof u.strikes === "number" ? u.strikes : 0,
                 time_zone: u.time_zone,
                 status: u.status,
                 lastActiveAt: u.lastActiveAt,
@@ -297,7 +302,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                             company_email: null,
                             mentor: null,
                             time_zone: "—",
-                            strikes: "—",
+                            strikes: null,
                             status: "pending",
                             lastActiveAt: null,
                             isPending: true,
@@ -363,8 +368,9 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                     bValue = b.time_zone || ""
                     break
                 case "strikes":
-                    aValue = parseInt(a.strikes?.split("/")[0] || "0")
-                    bValue = parseInt(b.strikes?.split("/")[0] || "0")
+                    // Rows with no strike count sort last in either direction.
+                    aValue = a.strikes ?? -1
+                    bValue = b.strikes ?? -1
                     break
                 case "status":
                     const statusOrder = { "pending": 0, "online": 1, "away": 2, "offline": 3 }
@@ -491,7 +497,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 </div>
                 {userRole === "admin" && (
                     <PanelButton variant="primary" onClick={() => setShowAddStaff(true)} icon={<FiPlus className="h-4 w-4" />}>
-                        Invite Teammate
+                        Invite Staff
                     </PanelButton>
                 )}
             </PanelHeader>
@@ -538,7 +544,12 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                     },
                     { key: "time_zone", header: "Time Zone", cell: (r) => r.time_zone || <PanelEmptyCell /> },
                     { key: "mentor", header: "Mentor", cell: (r) => r.mentor || <PanelEmptyCell /> },
-                    { key: "strikes", header: "Strikes", className: "tabular-nums", cell: (r) => r.strikes || "0/3" },
+                    {
+                        key: "strikes",
+                        header: "Strikes",
+                        className: "tabular-nums",
+                        cell: (r) => (r.strikes === null ? <PanelEmptyCell /> : `${r.strikes}/3`),
+                    },
                     {
                         key: "status",
                         header: "Status",
@@ -584,6 +595,9 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             {showManageModal && selectedStaff && userRole === "admin" && (
                 <ManageStaffModal
                     staff={selectedStaff}
+                    mentorOptions={rows
+                        .filter((r) => !r.isPending)
+                        .map((r) => ({ id: r.id, name: r.name, email: r.email }))}
                     onClose={() => {
                         setShowManageModal(false)
                         setSelectedStaff(null)
@@ -747,14 +761,14 @@ const InviteTeammateModal: React.FC<{
             zIndexClass="z-50"
             backdropClassName="bg-black/50 backdrop-blur-sm"
             cardClassName="bg-white rounded-2xl shadow-xl p-6 max-w-lg w-full mx-4"
-            label="Invite Teammate"
+            label="Invite Staff"
             onClose={onClose}
         >
                 <div className="flex items-center gap-3 mb-6">
                     <div className="w-12 h-12 rounded-full bg-[#701CC0]/10 flex items-center justify-center">
                         <FiPlus className="w-6 h-6 text-[#701CC0]" />
                     </div>
-                    <h3 className="text-xl font-semibold text-[#111827]">Invite Teammate</h3>
+                    <h3 className="text-xl font-semibold text-[#111827]">Invite Staff</h3>
             </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -849,37 +863,35 @@ const InviteTeammateModal: React.FC<{
         </Modal>
     )
 }
+/**
+ * Edit a staff member.
+ *
+ * Rebuilt on the same fields as the invite dialog. Two things went with the rebuild: Country and
+ * Company Email, which the list stopped showing because the API hardcodes both to null and the
+ * PUT accepts neither — the dialog was offering to save what nothing could store. Mentor becomes
+ * a picker for the same reason it is one on the invite: the column is a uuid foreign key, so a
+ * typed name was never going anywhere.
+ */
 const ManageStaffModal: React.FC<{
     staff: TeamRow
+    mentorOptions: Array<{ id: string; name: string; email: string }>
     onClose: () => void
     onUpdate: (data: Partial<TeamRow>) => void
-}> = ({ staff, onClose, onUpdate }) => {
-    const [formData, setFormData] = useState({
-        name: staff.name || "",
-        email: staff.email || "",
-        position: staff.position || "",
-        country: staff.country || "",
-        company_email: staff.company_email || "",
-        mentor: staff.mentor || "",
-        time_zone: staff.time_zone || "",
-        strikes: staff.strikes || "0/3"
-    })
+}> = ({ staff, mentorOptions, onClose, onUpdate }) => {
+    const [name, setName] = useState(staff.name || "")
+    const [email, setEmail] = useState(staff.email || "")
+    const [position, setPosition] = useState(staff.position || "")
+    const [mentorId, setMentorId] = useState(staff.mentor || "")
+    const [timeZone, setTimeZone] = useState(staff.time_zone || "")
+    const [strikes, setStrikes] = useState(staff.strikes ?? 0)
     const [isSubmitting, setIsSubmitting] = useState(false)
 
-    const handleInputChange = (field: string, value: string) => {
-        setFormData(prev => ({ ...prev, [field]: value }))
-    }
-
-    const hasValidEmails = () => {
-        const mainEmailValid = formData.email ? isValidEmail(formData.email) : false
-        const companyEmailValid = formData.company_email ? isValidEmail(formData.company_email) : true
-        return mainEmailValid && companyEmailValid
-    }
+    const emailValid = email ? isValidEmail(email) : false
 
     const handleSave = async () => {
         setIsSubmitting(true)
         try {
-            await onUpdate(formData)
+            await onUpdate({ name, email, position, mentor: mentorId || null, time_zone: timeZone || null, strikes })
             onClose()
         } catch (error) {
             console.error("Error updating staff:", error)
@@ -888,147 +900,92 @@ const ManageStaffModal: React.FC<{
         }
     }
 
-
-    const positionOptions = [
-        "Founder",
-        "Leadership",
-        "Business Advisor",
-        "Developer",
-        "Designer",
-        "Outreach"
-    ]
-
     return (
         <Modal
             zIndexClass="z-50"
-            backdropClassName="bg-black/50"
-            cardClassName="bg-white rounded-xl p-6 w-full max-w-2xl mx-4"
-            label="Edit Staff Member"
+            backdropClassName="bg-black/50 backdrop-blur-sm"
+            cardClassName="bg-white rounded-2xl shadow-xl p-6 max-w-lg w-full mx-4"
+            label="Edit Staff"
             onClose={onClose}
         >
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                        <FiEdit3 className="w-6 h-6 text-blue-600" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-[#111827]">Edit Staff Member</h3>
-                </div>
+            <div className="mb-5 flex items-center gap-3">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#701CC0]/10">
+                    <FiEdit3 className="h-4 w-4 text-[#701CC0]" />
+                </span>
+                <h3 className="text-xl font-semibold text-[#111827]">Edit Staff</h3>
+            </div>
 
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Name</label>
-                        <input
-                            type="text"
-                            value={formData.name}
-                            onChange={(e) => handleInputChange('name', e.target.value)}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Email</label>
-                        <input
-                            type="email"
-                            value={formData.email}
-                            onChange={(e) => handleInputChange('email', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm ${
-                                formData.email && !isValidEmail(formData.email) 
-                                    ? 'border-red-500 bg-red-50' 
-                                    : 'border-[#D1D5DB]'
-                            }`}
-                            required
-                            pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Position</label>
-                        <div className="relative">
-                            <select
-                                value={formData.position}
-                                onChange={(e) => handleInputChange('position', e.target.value)}
-                                className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm pr-10 appearance-none bg-white"
-                            >
-                                <option value="">Select Position</option>
-                                {positionOptions.map(option => (
-                                    <option key={option} value={option}>{option}</option>
-                                ))}
-                            </select>
-                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                <svg className="w-4 h-4 text-[#6B7280]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Country</label>
-                        <input
-                            type="text"
-                            value={formData.country}
-                            onChange={(e) => handleInputChange('country', e.target.value)}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Timezone</label>
-                        <input
-                            type="text"
-                            value={formData.time_zone}
-                            onChange={(e) => handleInputChange('time_zone', e.target.value)}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Company Email</label>
-                        <input
-                            type="email"
-                            value={formData.company_email}
-                            onChange={(e) => handleInputChange('company_email', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm ${
-                                formData.company_email && !isValidEmail(formData.company_email) 
-                                    ? 'border-red-500 bg-red-50' 
-                                    : 'border-[#D1D5DB]'
-                            }`}
-                            pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Mentor</label>
-                        <input
-                            type="text"
-                            value={formData.mentor}
-                            onChange={(e) => handleInputChange('mentor', e.target.value)}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-[#374151] mb-1">Strikes</label>
-                        <input
-                            type="text"
-                            value={formData.strikes}
-                            onChange={(e) => handleInputChange('strikes', e.target.value)}
-                            className="w-full px-3 py-2 border border-[#D1D5DB] rounded-md focus:outline-none focus:ring-2 focus:ring-[#701CC0] text-sm"
-                        />
-                    </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Name</label>
+                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} className={FIELD} />
                 </div>
-                
-                <div className="flex gap-3 justify-end">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 rounded-lg border border-[#E5E7EB] text-[#374151] hover:bg-gray-50 text-sm font-medium"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleSave}
-                        disabled={isSubmitting || !hasValidEmails()}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                            isSubmitting || !hasValidEmails()
-                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                : 'bg-[#701CC0] text-white hover:bg-[#5f17a5]'
+                <div className="sm:col-span-2">
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Email</label>
+                    <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className={`h-9 w-full rounded-[10px] px-3 text-[13px] ring-1 ring-inset transition-shadow focus:outline-none focus:ring-[#701CC0]/35 ${
+                            email && !emailValid ? "bg-red-50 ring-red-300" : "bg-[#F4F2F8] ring-transparent focus:bg-white"
                         }`}
-                    >
-                        {isSubmitting ? "Saving..." : "Save Changes"}
-                    </button>
+                    />
                 </div>
+                <div>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Position</label>
+                    <FieldSelect value={position} onChange={setPosition}>
+                        <option value="">Not set</option>
+                        {POSITION_OPTIONS.map((option) => (
+                            <option key={option} value={option}>{option}</option>
+                        ))}
+                    </FieldSelect>
+                </div>
+                <div>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Mentor</label>
+                    <FieldSelect value={mentorId} onChange={setMentorId}>
+                        <option value="">None</option>
+                        {mentorOptions
+                            .filter((option) => option.id !== staff.id)
+                            .map((option) => (
+                                <option key={option.id} value={option.id}>{option.name || option.email}</option>
+                            ))}
+                    </FieldSelect>
+                </div>
+                <div>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Strikes</label>
+                    <FieldSelect value={String(strikes)} onChange={(value) => setStrikes(Number(value))}>
+                        {[0, 1, 2, 3].map((n) => (
+                            <option key={n} value={n}>{n}/3</option>
+                        ))}
+                    </FieldSelect>
+                </div>
+                <div>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Time Zone</label>
+                    <input
+                        type="text"
+                        value={timeZone}
+                        onChange={(e) => setTimeZone(e.target.value)}
+                        placeholder="America/New_York"
+                        className={FIELD}
+                    />
+                </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+                <button
+                    onClick={onClose}
+                    className="h-9 rounded-[10px] bg-[#F4F2F8] px-3.5 text-[13px] font-medium text-[#374151] transition-colors hover:bg-[#EAE6F3]"
+                >
+                    Cancel
+                </button>
+                <button
+                    onClick={handleSave}
+                    disabled={isSubmitting || !emailValid}
+                    className="h-9 rounded-[10px] bg-[#701CC0] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                    {isSubmitting ? "Saving…" : "Save Changes"}
+                </button>
+            </div>
         </Modal>
     )
 }
