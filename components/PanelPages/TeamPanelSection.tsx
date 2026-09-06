@@ -6,6 +6,12 @@ import { inter } from "@/lib/fonts";
 import RowActionMenu, { RowActionMenuDivider, RowActionMenuItem } from "@/components/ui/RowActionMenu";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
+// The house form styling, shared with the client dialog so the two cannot drift apart.
+import {
+    PANEL_FIELD as FIELD,
+    PANEL_FIELD_INVALID as FIELD_INVALID,
+    PanelFieldSelect as FieldSelect,
+} from "@/components/ui/PanelForm";
 import ActionResultModal from "@/components/ui/ActionResultModal";
 import Modal from "@/components/ui/Modal";
 import { computePresenceStatus } from "@/lib/presence";
@@ -655,26 +661,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         </PanelPage>
     )
 }
-const FIELD_BASE =
-    "h-9 w-full rounded-[10px] px-3 text-[13px] text-[#111827] ring-1 ring-inset transition-shadow focus:outline-none"
-const FIELD = `${FIELD_BASE} bg-[#F4F2F8] ring-transparent focus:bg-white focus:ring-[#701CC0]/35`
-/** Same field, flagged. Built from the same base rather than rewritten, which is how the colour
- *  went missing the first time. */
-const FIELD_INVALID = `${FIELD_BASE} bg-red-50 ring-red-300 focus:ring-red-400`
-
-/** Select in the panel's field styling, with our chevron rather than the platform's. */
-const FieldSelect: React.FC<{
-    value: string
-    onChange: (value: string) => void
-    children: React.ReactNode
-}> = ({ value, onChange, children }) => (
-    <span className="relative block">
-        <select value={value} onChange={(e) => onChange(e.target.value)} className={`${FIELD} appearance-none pr-9`}>
-            {children}
-        </select>
-        <FiChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]" aria-hidden />
-    </span>
-)
 
 const POSITION_OPTIONS = ["Founder", "Leadership", "Business Advisor", "Developer", "Designer", "Outreach"]
 
@@ -967,7 +953,7 @@ const InviteTeammateModal: React.FC<{
                             ))}
                         </FieldSelect>
                     </div>
-                    <div className="sm:col-span-2">
+                    <div>
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                             Time Zone <span className="text-[#B42318]">*</span>
                         </label>

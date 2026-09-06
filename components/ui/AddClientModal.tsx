@@ -1,23 +1,28 @@
 import React, { useState, useEffect, useRef } from "react";
 import { EMAIL_REGEX } from "@/lib/utils";
 import { inter } from "@/lib/fonts";
-import { FiUser, FiCheck } from 'react-icons/fi'
+import { FiCheck } from 'react-icons/fi'
 import type { SessionItem } from "@/types/session";
 import { useDraftGuard } from "@/hooks/useDraftGuard";
 import Modal from "@/components/ui/Modal";
+import {
+  PANEL_FIELD,
+  PANEL_FIELD_INVALID,
+  PanelFieldLabel,
+  PanelModalFooter,
+  PanelModalHeader,
+} from "@/components/ui/PanelForm";
 
 
 interface AddClientModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreated?: (row: SessionItem) => void;
-  /** Rendered above the "Add Client" title on step 1 only — lets a caller (e.g. User
-   * Management's combined create flow) offer a way to switch to a different creation mode
-   * without this modal needing to know what that other mode is. */
-  modeSwitcher?: React.ReactNode;
 }
 
-const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCreated, modeSwitcher }) => {
+const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCreated }) => {
+  // Kept as a plain progress counter now that the wizard is one screen: 1 while the form is up,
+  // 3 once the client exists. The draft guard and the onboarding-email effect both read it.
   const [step, setStep] = useState(1);
   const [clientData, setClientData] = useState({ clientName: "", clientEmail: "", businessName: "", industry: "", monthlyRetainer: "", clientGoal: "" });
   const [sessionLink, setSessionLink] = useState<string | null>(null);
@@ -60,11 +65,6 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   const emailValid = EMAIL_REGEX.test(clientData.clientEmail.trim());
 
   const nextStep = () => setStep((s) => s + 1);
-  const prevStep = () => setStep((s) => Math.max(1, s - 1));
-  const steps = [
-    { number: 1, title: "Basic Information" },
-    { number: 2, title: "Business & Targets" },
-  ];
 
   const handleSubmit = async () => {
     if (pending.current) return;
@@ -173,257 +173,149 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
 
   if (!isOpen) return null;
 
+  // One screen rather than a two-step wizard. Six fields fit the same two-column grid Staff
+  // Orbital's invite dialog uses, and the stepper was navigation over a form short enough not to
+  // need any — you could not see what you were being asked for until you had answered half of it.
+  const formValid = basicInfoValid && businessInfoValid;
+
   return (
     <Modal
       onClose={close}
       zIndexClass="z-50"
       backdropClassName="bg-black/50 backdrop-blur-sm"
-      cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4"
+      cardClassName="bg-white rounded-2xl shadow-xl p-6 max-w-lg w-full mx-4"
       closeOnBackdrop={true}
       label="Add Client"
     >
-
-        {step === 1 && modeSwitcher}
-
-        <div className="flex items-center gap-3 mb-6">
-          {(step === 1 || step === 2) && (
-            <>
-              <div className="w-12 h-12 rounded-full bg-[#701CC0]/10 flex items-center justify-center">
-                <FiUser className="w-6 h-6 text-[#701CC0]" />
-              </div>
-              <h3 id="add-client-title" className="text-xl font-semibold text-[#111827]">Add Client</h3>
-            </>
-          )}
+      {sessionLink ? (
+        <div className="flex flex-col items-center text-center">
+          <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-30" />
+            <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
+                <FiCheck className="h-6 w-6" />
+              </span>
+            </span>
+          </div>
+          <h3 className="mb-2 text-xl font-semibold text-[#111827]">Client Added</h3>
+          <p className={`mb-6 text-sm text-[#6B7280] ${inter.className}`}>{emailStatus}</p>
+          {err && <p className="mb-3 text-[13px] text-[#B42318]">{err}</p>}
+          <button
+            type="button"
+            disabled={!sessionLink}
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(`${origin}${sessionLink}`);
+              } catch {
+                setErr("Could not copy the link. Copy it from the address bar of the onboarding email instead.");
+                return;
+              }
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }}
+            className={`mb-2 h-9 w-full rounded-[10px] text-[13px] font-medium transition-colors ${
+              copied
+                ? "bg-green-50 text-green-700"
+                : "bg-[#F4F2F8] text-[#374151] hover:bg-[#EAE6F3]"
+            }`}
+          >
+            {copied ? "Copied To Clipboard" : "Copy Session Link"}
+          </button>
+          <button
+            type="button"
+            onClick={handleFinish}
+            className="h-9 w-full rounded-[10px] bg-[#701CC0] text-[13px] font-medium text-white transition-colors hover:bg-[#5f17a5]"
+          >
+            Done
+          </button>
         </div>
+      ) : (
+        <>
+          <PanelModalHeader title="Add Client" onClose={close} />
 
-        {(step === 1 || step === 2) && (
-          <div className="mb-6">
-            <div className="flex items-center justify-center">
-              {steps.map((s, index) => (
-                <div key={s.number} className="flex items-center">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                    step >= s.number ? "bg-[#701CC0] text-white" : "bg-gray-200 text-gray-600"
-                  }`}>
-                    {s.number}
-                  </div>
-                  <span className={`ml-2 text-sm ${
-                    step >= s.number ? "text-[#701CC0] font-medium" : "text-gray-600"
-                  }`}>
-                    {s.title}
-                  </span>
-                  {index < steps.length - 1 && (
-                    <div className={`w-24 h-0.5 mx-4 ${
-                      step > s.number ? "bg-[#701CC0]" : "bg-gray-200"
-                    }`} />
-                  )}
-                </div>
-              ))}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <PanelFieldLabel required>Client Name</PanelFieldLabel>
+              <input
+                name="clientName"
+                type="text"
+                value={clientData.clientName}
+                onChange={handleChange}
+                className={PANEL_FIELD}
+                placeholder="Bidoof Sanchez"
+              />
+            </div>
+            <div>
+              <PanelFieldLabel required>Business Name</PanelFieldLabel>
+              <input
+                name="businessName"
+                type="text"
+                value={clientData.businessName}
+                onChange={handleChange}
+                className={PANEL_FIELD}
+                placeholder="Sanchez Dental"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <PanelFieldLabel required>Client Email</PanelFieldLabel>
+              <input
+                name="clientEmail"
+                type="email"
+                value={clientData.clientEmail}
+                onChange={handleChange}
+                className={clientData.clientEmail && !emailValid ? PANEL_FIELD_INVALID : PANEL_FIELD}
+                placeholder="name@business.com"
+                required
+              />
+            </div>
+            <div>
+              <PanelFieldLabel required>Industry</PanelFieldLabel>
+              <input
+                name="industry"
+                type="text"
+                value={clientData.industry}
+                onChange={handleChange}
+                className={PANEL_FIELD}
+                placeholder="Dentistry"
+              />
+            </div>
+            <div>
+              <PanelFieldLabel required>Monthly Retainer</PanelFieldLabel>
+              <input
+                name="monthlyRetainer"
+                type="text"
+                inputMode="decimal"
+                value={clientData.monthlyRetainer}
+                onChange={(e) => handleNumericChange("monthlyRetainer", e.target.value)}
+                className={PANEL_FIELD}
+                placeholder="2500"
+              />
+            </div>
+            <div>
+              <PanelFieldLabel required>Client Goal</PanelFieldLabel>
+              <input
+                name="clientGoal"
+                type="text"
+                inputMode="numeric"
+                value={clientData.clientGoal}
+                onChange={(e) => handleNumericChange("clientGoal", e.target.value)}
+                className={PANEL_FIELD}
+                placeholder="40"
+              />
+              <p className="mt-1 text-[11.5px] text-[#9CA3AF]">Leads per month</p>
             </div>
           </div>
-        )}
 
-  {err ? <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div> : null}
+          {err && <p className="mt-4 text-[13px] text-[#B42318]">{err}</p>}
 
-        {step === 1 && (
-          <>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-2">Client Name</label>
-                <input
-                  id="clientName"
-                  name="clientName"
-                  type="text"
-                  value={clientData.clientName}
-                  onChange={handleChange}
-                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                  placeholder="Enter Client Name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-2">Client Email</label>
-                <input
-                  id="clientEmail"
-                  name="clientEmail"
-                  type="email"
-                  value={clientData.clientEmail}
-                  onChange={handleChange}
-                  className={`w-full border rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
-                    clientData.clientEmail && !emailValid 
-                      ? 'border-red-500 bg-red-50' 
-                      : 'border-[#E5E7EB]'
-                  }`}
-                  placeholder="Enter Email Address"
-                  required
-                  pattern="[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$"
-                />
-                {!emailValid && clientData.clientEmail && (
-                  <p className="mt-1 text-xs text-red-600">Please enter a valid email address.</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-2">Business Name</label>
-                <input
-                  id="businessName"
-                  name="businessName"
-                  type="text"
-                  value={clientData.businessName}
-                  onChange={handleChange}
-                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                  placeholder="Enter Business Name"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center mt-6">
-              <button
-                onClick={close}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={nextStep}
-                disabled={!basicInfoValid}
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                  !basicInfoValid
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-[#701CC0] text-white hover:bg-[#5f17a5]'
-                }`}
-              >
-                Next
-              </button>
-            </div>
-          </>
-        )}
-
-        {step === 2 && (
-          <>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-2">Industry</label>
-                <input
-                  id="industry"
-                  name="industry"
-                  type="text"
-                  value={clientData.industry}
-                  onChange={handleChange}
-                  className="w-full border border-[#E5E7EB] rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                  placeholder="Enter Industry"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-2">Monthly Retainer (USD)</label>
-                <input
-                  id="monthlyRetainer"
-                  name="monthlyRetainer"
-                  type="number"
-                  min="1"
-                  step="0.01"
-                  value={clientData.monthlyRetainer}
-                  onChange={(e) => handleNumericChange("monthlyRetainer", e.target.value)}
-                  onKeyDown={(e) => {
-                    if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
-                  }}
-                  className={`w-full border rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
-                    clientData.monthlyRetainer && !monthlyRetainerValid
-                      ? "border-red-500 bg-red-50"
-                      : "border-[#E5E7EB]"
-                  }`}
-                  placeholder="Enter Monthly Amount (E.g., 2500)"
-                  required
-                />
-                {clientData.monthlyRetainer && !monthlyRetainerValid && (
-                  <p className="mt-1 text-xs text-red-600">Please enter a valid amount greater than 0.</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-2">Client Goal (Leads)</label>
-                <input
-                  id="clientGoal"
-                  name="clientGoal"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={clientData.clientGoal}
-                  onChange={(e) => handleNumericChange("clientGoal", e.target.value)}
-                  onKeyDown={(e) => {
-                    if (["e", "E", "+", "-", "."].includes(e.key)) e.preventDefault();
-                  }}
-                  className={`w-full border rounded-lg px-3 py-2 text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
-                    clientData.clientGoal && !clientGoalValid
-                      ? "border-red-500 bg-red-50"
-                      : "border-[#E5E7EB]"
-                  }`}
-                  placeholder="Enter Lead Goal (Number Only)"
-                  required
-                />
-                {clientData.clientGoal && !clientGoalValid && (
-                  <p className="mt-1 text-xs text-red-600">Please enter a whole number (0 or higher).</p>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center mt-6">
-              <button
-                disabled={submitting}
-                onClick={prevStep}
-                className="px-4 py-2 border border-[#E5E7EB] text-[#374151] rounded-lg hover:bg-gray-50 text-sm font-medium"
-              >
-                Back
-              </button>
-              <button
-                onClick={async () => {
-                  await handleSubmit();
-                }}
-                disabled={!businessInfoValid || submitting}
-                className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                  !businessInfoValid || submitting
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-[#701CC0] text-white hover:bg-[#5f17a5]'
-                }`}
-              >
-                {submitting ? "Creating..." : "Create Client"}
-              </button>
-            </div>
-          </>
-        )}
-
-        {step === 3 && (
-          <>
-            <div className="flex flex-col items-center text-center p-6">
-              <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
-                <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
-                <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
-                    <FiCheck className="h-6 w-6" />
-                  </span>
-                </span>
-              </div>
-              <h3 className="text-xl font-semibold text-[#111827] mb-2">Client Added Successfully!</h3>
-              <p className={`text-sm text-[#6B7280] mb-4 ${inter.className}`}>{emailStatus}</p>
-              <button
-                className={`mb-3 w-full rounded-lg px-4 py-2 text-sm ${copied ? 'bg-green-50 text-green-700 border border-green-200' : 'text-[#111827] border border-[#E5E7EB] hover:bg-gray-50'} ${inter.className}`}
-                onClick={async () => {
-                  if (sessionLink) {
-                    try { await navigator.clipboard.writeText(`${origin}${sessionLink}`); } catch { setErr("Could not copy the link. Please try again."); return; }
-                    setCopied(true)
-                    setTimeout(() => setCopied(false), 2000)
-                  }
-                }}
-                disabled={!sessionLink}
-              >
-                {copied ? 'Copied To Clipboard' : 'Copy Session Link'}
-              </button>
-              <button
-                className="w-full rounded-lg bg-[#5B21B6] px-4 py-2 text-white text-sm font-medium hover:bg-[#4C1D95]"
-                onClick={handleFinish}
-              >
-                Done
-              </button>
-            </div>
-          </>
-        )}
-
+          <PanelModalFooter
+            onCancel={close}
+            onConfirm={() => void handleSubmit()}
+            confirmLabel={submitting ? "Adding…" : "Add Client"}
+            confirmDisabled={submitting || !formValid}
+          />
+        </>
+      )}
     </Modal>
   );
 };
