@@ -37,6 +37,7 @@ import Modal from "@/components/ui/Modal";
 import { useDraftGuard } from "@/hooks/useDraftGuard";
 import { useRouter } from "next/router";
 import { panelFetch } from "@/lib/panelFetch";
+import { PANEL_FIELD, PanelFieldLabel, PanelModalHeader } from "@/components/ui/PanelForm";
 
 
 type ProjectTaskStatus = "not_started" | "ongoing" | "under_review" | "completed";
@@ -124,7 +125,6 @@ export default function ProjectManagement() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<ProjectTask | null>(null);
   const [boardMembers, setBoardMembers] = useState<BoardMember[]>([]);
-  const [addStep, setAddStep] = useState(1);
   const [addForm, setAddForm] = useState({
     name: "",
     description: "",
@@ -356,7 +356,6 @@ export default function ProjectManagement() {
         setTasks((prev) => [...prev, task]);
         setShowAddModal(false);
         setAddForm({ name: "", description: "", checklistText: "", assignedTo: [], deadline: "" });
-        setAddStep(1);
       } else {
         const err = await r.json();
         setActionError(err.message || "Failed to create task");
@@ -793,15 +792,12 @@ export default function ProjectManagement() {
           busy={taskBusy}
           form={addForm}
           setForm={setAddForm}
-          step={addStep}
-          setStep={setAddStep}
           boardMembers={boardMembers}
           onSubmit={handleAddTask}
           onClose={() => { void (async () => {
             if (!(await canLeave())) return;
             setShowAddModal(false);
             setAddForm({ name: "", description: "", checklistText: "", assignedTo: [], deadline: "" });
-            setAddStep(1);
           })(); }}
         />
       )}
@@ -855,13 +851,17 @@ function ConfirmDeleteTaskModal({
   );
 }
 
+/**
+ * One screen, in the same shape as Invite Staff and Add Client.
+ *
+ * This was a three-step wizard over five fields, two of them optional — so the step you were on
+ * told you less than the form would have if it had simply been shown.
+ */
 function AddTaskModal({
   feedback,
   busy,
   form,
   setForm,
-  step,
-  setStep,
   boardMembers,
   onSubmit,
   onClose,
@@ -870,210 +870,129 @@ function AddTaskModal({
   busy: boolean;
   form: { name: string; description: string; checklistText: string; assignedTo: string[]; deadline: string };
   setForm: React.Dispatch<React.SetStateAction<{ name: string; description: string; checklistText: string; assignedTo: string[]; deadline: string }>>;
-  step: number;
-  setStep: (n: number) => void;
   boardMembers: BoardMember[];
   onSubmit: (e: React.FormEvent) => void;
   onClose: () => void;
 }) {
-  const steps = [
-    { number: 1, title: "Basic Info" },
-    { number: 2, title: "Team & Timeline" },
-    { number: 3, title: "Checklist" },
-  ];
-  const canNext =
-    step === 1
-      ? form.name.trim() && form.description.trim()
-      : step === 2
-        ? form.assignedTo.length > 0
-        : true;
-  const isLastStep = step === 3;
+  const canSubmit = form.name.trim() !== "" && !busy;
 
   return (
     <Modal
-      onClose={() => { if (!busy) onClose(); }}
       zIndexClass="z-50"
-      backdropClassName="bg-black/40 backdrop-blur-sm"
-      cardClassName="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-[#E5E7EB]"
-      closeOnBackdrop={!busy}
+      backdropClassName="bg-black/50 backdrop-blur-sm"
+      cardClassName="bg-white rounded-2xl shadow-xl p-6 max-w-lg w-full mx-4"
+      label="New Task"
+      onClose={onClose}
     >
-      <div role="status" className="px-6 pt-3 text-sm text-red-700">{busy ? "Saving…" : feedback}</div>
-        <div className="flex items-center gap-3 px-6 py-5 border-b border-[#E5E7EB]">
-          <div className="w-10 h-10 rounded-xl bg-[#701CC0]/10 flex items-center justify-center">
-            <FiPlus className="w-5 h-5 text-[#701CC0]" />
+      <PanelModalHeader title="New Task" onClose={onClose} />
+
+      <form onSubmit={onSubmit}>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <PanelFieldLabel required>Task Name</PanelFieldLabel>
+            <input
+              type="text"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              className={PANEL_FIELD}
+              placeholder="Rebuild the pricing page"
+              required
+            />
           </div>
-          <h2 className="text-lg font-semibold text-[#111827] flex-1">New Task</h2>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg text-[#6B7280] hover:bg-red-50 hover:text-red-600 transition-colors"
-          >
-            <FiX className="w-5 h-5" />
-          </button>
+
+          <div className="sm:col-span-2">
+            <PanelFieldLabel>Description</PanelFieldLabel>
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              className={`${PANEL_FIELD} min-h-[88px] resize-none py-2`}
+              placeholder="What needs doing, and what done looks like"
+            />
+          </div>
+
+          <div>
+            <PanelFieldLabel>Deadline</PanelFieldLabel>
+            <input
+              type="date"
+              value={form.deadline}
+              onChange={(e) => setForm((f) => ({ ...f, deadline: e.target.value }))}
+              className={PANEL_FIELD}
+            />
+          </div>
+
+          <div>
+            <PanelFieldLabel hint="Optional">Assign</PanelFieldLabel>
+            <div className="max-h-[132px] space-y-1 overflow-y-auto rounded-[10px] bg-[#F4F2F8] p-1.5">
+              {boardMembers.length === 0 ? (
+                <p className="px-2 py-2 text-[12px] text-[#8B8598]">Nobody has access to this board.</p>
+              ) : (
+                boardMembers.map((member) => {
+                  const checked = form.assignedTo.includes(member.id);
+                  return (
+                    <label
+                      key={member.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-white"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          setForm((f) => ({
+                            ...f,
+                            assignedTo: checked
+                              ? f.assignedTo.filter((id) => id !== member.id)
+                              : [...f.assignedTo, member.id],
+                          }))
+                        }
+                        className="rounded border-[#D6CFE4] text-[#701CC0] focus:ring-[#701CC0]"
+                      />
+                      <ProfileImage
+                        src={member.image ? `/api/admin/getUserImage?userId=${member.id}` : null}
+                        alt={member.name || ""}
+                        name={member.name || member.email || "?"}
+                        size={20}
+                        className="rounded-full"
+                      />
+                      <span className="truncate text-[12.5px] text-[#111827]">
+                        {member.name || member.email}
+                      </span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="sm:col-span-2">
+            <PanelFieldLabel hint="Optional, one item per line">Checklist</PanelFieldLabel>
+            <textarea
+              value={form.checklistText}
+              onChange={(e) => setForm((f) => ({ ...f, checklistText: e.target.value }))}
+              className={`${PANEL_FIELD} min-h-[88px] resize-none py-2`}
+              placeholder={"Draft copy\nReview with design\nShip"}
+            />
+          </div>
         </div>
 
-        
-        <div className="px-6 pt-4">
-          <div className="flex items-center gap-2">
-            {steps.map((s, i) => (
-              <React.Fragment key={s.number}>
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium transition-colors ${
-                      step >= s.number ? "bg-[#701CC0] text-white" : "bg-[#E5E7EB] text-[#9CA3AF]"
-                    }`}
-                  >
-                    {s.number}
-                  </div>
-                  <span className={`text-sm ${step >= s.number ? "text-[#701CC0] font-medium" : "text-[#9CA3AF]"}`}>
-                    {s.title}
-                  </span>
-                </div>
-                {i < steps.length - 1 && (
-                  <div className={`flex-1 h-0.5 mx-2 min-w-[20px] ${step > s.number ? "bg-[#701CC0]" : "bg-[#E5E7EB]"}`} />
-                )}
-              </React.Fragment>
-            ))}
-          </div>
-        </div>
+        {feedback && !busy && <p className="mt-4 text-[13px] text-[#B42318]">{feedback}</p>}
 
-        <form
-          className="p-6"
-          onSubmit={(e) => e.preventDefault()}
-        >
-          {step === 1 && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Task Name</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                  className="w-full border border-[#E5E7EB] rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-[#701CC0] focus:border-transparent transition-shadow"
-                  placeholder="E.g., Design Landing Page Hero"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
-                <textarea
-                  value={form.description}
-                  onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-                  className="w-full border border-[#E5E7EB] rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-[#701CC0] focus:border-transparent min-h-[100px] resize-none transition-shadow"
-                  placeholder="Describe the task..."
-                  required
-                />
-              </div>
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Assign</label>
-                <div className="max-h-32 overflow-y-auto border border-[#E5E7EB] rounded-xl p-2 space-y-1.5">
-                  {boardMembers.length === 0 ? (
-                    <p className="text-xs text-[#9CA3AF] py-2">No team members with board access</p>
-                  ) : (
-                    boardMembers.map((m) => (
-                      <label
-                        key={m.id}
-                        className="flex items-center gap-2 p-2 rounded-lg hover:bg-[#F8F0FF]/50 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={form.assignedTo.includes(m.id)}
-                          onChange={(e) => {
-                            setForm((p) => ({
-                              ...p,
-                              assignedTo: e.target.checked
-                                ? [...p.assignedTo, m.id]
-                                : p.assignedTo.filter((id) => id !== m.id),
-                            }));
-                          }}
-                          className="rounded border-[#E5E7EB] text-[#701CC0] focus:ring-[#701CC0]"
-                        />
-                        <ProfileImage
-                          src={m.image ? `/api/admin/getUserImage?userId=${m.id}` : null}
-                          alt={m.name || ""}
-                          name={m.name || m.email || "?"}
-                          size={24}
-                          className="rounded-full flex-shrink-0"
-                        />
-                        <span className="text-sm text-[#111827]">
-                          {m.name || m.email} {m.position ? `· ${m.position}` : ""}
-                        </span>
-                      </label>
-                    ))
-                  )}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Deadline</label>
-                <input
-                  type="date"
-                  value={form.deadline}
-                  onChange={(e) => setForm((p) => ({ ...p, deadline: e.target.value }))}
-                  className="w-full border border-[#E5E7EB] rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-[#701CC0] focus:border-transparent"
-                />
-              </div>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div>
-              <label className="block text-sm font-medium text-[#374151] mb-1.5">
-                Checklist <span className="text-[#9CA3AF] font-normal">(Optional, One Item Per Line)</span>
-              </label>
-              <textarea
-                value={form.checklistText}
-                onChange={(e) => setForm((p) => ({ ...p, checklistText: e.target.value }))}
-                className="w-full border border-[#E5E7EB] rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-[#701CC0] focus:border-transparent min-h-[100px] resize-none transition-shadow placeholder:text-[#9CA3AF]"
-                placeholder="Enter subtasks..."
-              />
-            </div>
-          )}
-        </form>
-
-        <div className="flex justify-between items-center px-6 pb-6 pt-4 mt-4 border-t border-[#E5E7EB]">
+        <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 text-sm font-medium transition-colors"
+            className="h-9 rounded-[10px] bg-[#F4F2F8] px-3.5 text-[13px] font-medium text-[#374151] transition-colors hover:bg-[#EAE6F3]"
           >
             Cancel
           </button>
-          <div className="flex gap-3">
-            {step > 1 ? (
-              <button
-                type="button"
-                onClick={() => setStep(step - 1)}
-                className="px-4 py-2.5 border border-[#E5E7EB] rounded-xl text-[#374151] hover:bg-[#F9FAFB] text-sm font-medium transition-colors flex items-center gap-1.5"
-              >
-                <FiChevronLeft className="w-4 h-4" /> Back
-              </button>
-            ) : null}
-            {isLastStep ? (
-              <button
-                type="button"
-                onClick={() => onSubmit({ preventDefault: () => {} } as React.FormEvent)}
-                className="px-4 py-2.5 bg-[#701CC0] text-white rounded-xl hover:bg-[#5f17a5] text-sm font-medium transition-colors shadow-sm"
-              >
-                Create Task
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setStep(step + 1)}
-                disabled={!canNext}
-                className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                  canNext ? "bg-[#701CC0] text-white hover:bg-[#5f17a5] shadow-sm" : "bg-[#E5E7EB] text-[#9CA3AF] cursor-not-allowed"
-                }`}
-              >
-                Next <FiChevronRight className="w-4 h-4 inline ml-1" />
-              </button>
-            )}
-          </div>
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="h-9 rounded-[10px] bg-[#701CC0] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? "Creating…" : "Create Task"}
+          </button>
         </div>
+      </form>
     </Modal>
   );
 }

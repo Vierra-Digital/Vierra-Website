@@ -24,7 +24,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   // Kept as a plain progress counter now that the wizard is one screen: 1 while the form is up,
   // 3 once the client exists. The draft guard and the onboarding-email effect both read it.
   const [step, setStep] = useState(1);
-  const [clientData, setClientData] = useState({ clientName: "", clientEmail: "", businessName: "", industry: "", monthlyRetainer: "", clientGoal: "" });
+  const [clientData, setClientData] = useState({ firstName: "", lastName: "", clientEmail: "", businessName: "", industry: "", monthlyRetainer: "", clientGoal: "" });
   const [sessionLink, setSessionLink] = useState<string | null>(null);
   // Read once at first render rather than set from an effect, which rendered an empty origin
   // and then immediately re-rendered. Guarded for the server, where there is no location.
@@ -69,7 +69,8 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   const handleSubmit = async () => {
     if (pending.current) return;
     const basicInfoValid =
-      !!clientData.clientName.trim() &&
+      !!clientData.firstName.trim() &&
+      !!clientData.lastName.trim() &&
       !!clientData.clientEmail.trim() &&
       emailValid &&
       !!clientData.businessName.trim();
@@ -97,7 +98,7 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
     setSubmitting(true);
     try {
       const payload = {
-        clientName: clientData.clientName.trim(),
+        clientName: `${clientData.firstName.trim()} ${clientData.lastName.trim()}`,
         clientEmail: clientData.clientEmail.trim().toLowerCase(),
         businessName: clientData.businessName.trim(),
         industry: clientData.industry.trim(),
@@ -136,14 +137,14 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
         body: JSON.stringify({
           email: clientData.clientEmail,
           link: `${origin}${sessionLink}`,
-          clientName: clientData.clientName,
+          clientName: `${clientData.firstName.trim()} ${clientData.lastName.trim()}`,
           businessName: clientData.businessName,
         }),
       }).then(response => {
         setEmailStatus(response.ok ? "Onboarding email sent." : "Client created, but the email could not be confirmed. Copy and share the link below.");
       }).catch(() => setEmailStatus("Client created, but the email could not be confirmed. Copy and share the link below."));
     }
-  }, [step, sessionLink, clientData.clientEmail, origin, clientData.clientName, clientData.businessName]);
+  }, [step, sessionLink, clientData.clientEmail, origin, clientData.firstName, clientData.lastName, clientData.businessName]);
 
   const handleFinish = () => {
     onClose();
@@ -161,7 +162,8 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
     clientGoalAmount >= 0;
 
   const basicInfoValid =
-    !!clientData.clientName.trim() &&
+    !!clientData.firstName.trim() &&
+    !!clientData.lastName.trim() &&
     !!clientData.clientEmail.trim() &&
     emailValid &&
     !!clientData.businessName.trim();
@@ -235,14 +237,25 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <PanelFieldLabel required>Client Name</PanelFieldLabel>
+              <PanelFieldLabel required>First Name</PanelFieldLabel>
               <input
-                name="clientName"
+                name="firstName"
                 type="text"
-                value={clientData.clientName}
+                value={clientData.firstName}
                 onChange={handleChange}
                 className={PANEL_FIELD}
-                placeholder="Bidoof Sanchez"
+                placeholder="Bidoof"
+              />
+            </div>
+            <div>
+              <PanelFieldLabel required>Last Name</PanelFieldLabel>
+              <input
+                name="lastName"
+                type="text"
+                value={clientData.lastName}
+                onChange={handleChange}
+                className={PANEL_FIELD}
+                placeholder="Sanchez"
               />
             </div>
             <div>

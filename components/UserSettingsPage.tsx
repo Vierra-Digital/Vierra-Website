@@ -671,16 +671,65 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const pageBg = isDark ? "bg-transparent" : "bg-white";
   const canManageGmailAccounts = ["user", "admin", "staff"].includes(userRole || "");
   const gmailSettingsSource = userRole === "admin" || userRole === "staff" ? "panel-settings" : "settings";
+  // The email panel's settings render on a dark card, where the light tint disappears entirely.
+  const skeletonTint = isDark ? "bg-white/10" : "bg-[#F1EFF6]";
+
+  /**
+   * Shown until the settings request lands, so the page arrives once rather than in pieces.
+   *
+   * The cards used to render immediately against their defaults — an empty name, every toggle
+   * off, the language on its first option — and then rearrange themselves when the real values
+   * came back. The shapes here match the cards they stand in for, so nothing moves when they are
+   * swapped out.
+   */
+  const cardsSkeleton = (
+    <div className="space-y-4" aria-hidden>
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+        {[0, 1, 2].map((card) => (
+          <div key={card} className={`rounded-2xl ${cardBg} border p-5`}>
+            <div className="mb-5 flex items-center gap-2">
+              <div className={`h-7 w-7 animate-pulse rounded-lg ${skeletonTint}`} />
+              <div className={`h-3.5 w-24 animate-pulse rounded ${skeletonTint}`} />
+            </div>
+            {card === 0 && <div className={`mb-5 h-24 w-24 animate-pulse rounded-full ${skeletonTint}`} />}
+            <div className="space-y-4">
+              {[0, 1, 2].map((row) => (
+                <div key={row} className="space-y-1.5">
+                  <div className={`h-2.5 w-20 animate-pulse rounded ${skeletonTint}`} />
+                  <div className={`h-9 w-full animate-pulse rounded-[10px] ${skeletonTint}`} />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {[0, 1].map((card) => (
+        <div key={card} className={`rounded-2xl ${cardBg} border p-5`}>
+          <div className="mb-5 flex items-center gap-2">
+            <div className={`h-7 w-7 animate-pulse rounded-lg ${skeletonTint}`} />
+            <div className={`h-3.5 w-32 animate-pulse rounded ${skeletonTint}`} />
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            {[0, 1, 2].map((cell) => (
+              <div key={cell} className={`h-16 animate-pulse rounded-xl ${skeletonTint}`} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   const cardsContent = (
     /* A grid, not CSS columns. Masonry filled both sides of the page but let each card start
        wherever the previous one happened to end, so nothing lined up with anything and the page
-       read as a pile of boxes. Rows here are explicit: profile spans the width, security and
-       preferences share the row under it, and the wide cards below span again. */
+       read as a pile of boxes. Rows here are explicit: profile, security and preferences share
+       the top row, and the wide cards below span the width. */
     <div className="space-y-4">
-      
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
+      {/* The avatar sits above the fields rather than beside them: a third of the row is too
+          narrow to put a 96px image next to a name and an email without either wrapping. */}
       <div className={`rounded-2xl ${cardBg} border p-5`}>
-        <div className="flex flex-col sm:flex-row gap-6">
+        <div className="flex flex-col gap-5">
           <div className="relative flex-shrink-0 self-start" ref={avatarMenuRef}>
             <div className="relative inline-block">
               <ProfileImage
@@ -808,8 +857,6 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       </div>
 
       
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-        
         <div className={`rounded-2xl ${cardBg} border p-5`}>
           <div className="flex items-center gap-2 mb-5">
             <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
@@ -1158,7 +1205,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               Account Settings
             </h1>
             <div className="pb-16">
-              {cardsContent}
+              {isLoadingSettings ? cardsSkeleton : cardsContent}
             </div>
           </div>
         </div>
@@ -1177,7 +1224,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
           </div>
           <div className="flex-1 overflow-y-auto px-6 py-6">
             <div className="max-w-2xl mx-auto">
-              {cardsContent}
+              {isLoadingSettings ? cardsSkeleton : cardsContent}
             </div>
           </div>
         </>
