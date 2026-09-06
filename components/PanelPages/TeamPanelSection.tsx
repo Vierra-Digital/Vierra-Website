@@ -612,7 +612,10 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                             )}
                         </>
                     }
-                    confirmLabel={deleting ? "Removing…" : "Remove Staff"}
+                    confirmLabel="Remove Staff"
+                    // As above: the label changed but the button stayed clickable.
+                    busy={deleting}
+                    busyLabel="Removing…"
                     onCancel={() => {
                         setShowDeleteModal(false)
                         setStaffToDelete(null)

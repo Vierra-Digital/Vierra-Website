@@ -797,7 +797,11 @@ function UsersPanel() {
                         )}
                     </>
                 }
-                confirmLabel={deletingUser ? "Removing…" : "Remove User"}
+                confirmLabel="Remove User"
+                // Without this the confirm button stayed live through the request: a second click
+                // sent a second DELETE, and the backdrop could dismiss the dialog mid-delete.
+                busy={deletingUser}
+                busyLabel="Removing…"
                 onConfirm={confirmDeleteUser}
                 onCancel={() => {
                     setDeleteModalOpen(false)
