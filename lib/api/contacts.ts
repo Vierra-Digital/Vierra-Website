@@ -25,7 +25,7 @@ const FILTERABLE_SOURCES = ["manual", "gmail", "csv"];
  */
 export async function buildContactsWhere(
   userId: string,
-  companyId: string,
+  companyId: string | null,
   query: ContactsQuery
 ): Promise<Prisma.ContactWhereInput> {
   const accountEmail = asQueryStr(query.accountEmail).toLowerCase();
@@ -38,8 +38,9 @@ export async function buildContactsWhere(
 
   // Scoped by company, not by the caller: a contact belongs to the client it was gathered for,
   // and every teammate working that client needs to see it. userId is still needed below to
-  // resolve an account filter, which is per-user.
-  const where: Prisma.ContactWhereInput = { company_id: companyId };
+  // resolve an account filter, which is per-user. A null companyId (Vierra staff with no target
+  // company named) intentionally matches every company — see pages/api/contacts/index.ts.
+  const where: Prisma.ContactWhereInput = companyId ? { company_id: companyId } : {};
 
   if (accountEmail) {
     const accountId = await resolveAccountId(userId, accountEmail);
