@@ -132,38 +132,29 @@ export default withSession(async (req, res, session) => {
   const clientId = await resolveClientId(req, role, sessionUserId, sessionEmail);
   if (!clientId) return res.status(400).json({ message: "clientId is required." });
 
-  // admin/staff pass an arbitrary clientId in the query — verify it belongs to their company before
-  // reading or writing its context. (The "user" role's clientId was self-resolved from their own
-  // account above, so it's inherently owned.)
-  if (role !== "user") {
-    const companyId = (session as { companyId?: string }).companyId;
-    const owned = await prisma.client.findFirst({
-      where: { id: clientId, company_id: companyId },
-      select: { id: true },
-    });
-    if (!owned) return res.status(404).json({ message: "Client not found." });
-  }
-
   if (req.method === "GET") {
     try {
-      const [client, latestSession, files] = await Promise.all([
-        prisma.client.findUnique({
-          where: { id: clientId },
-          select: { id: true, name: true, email: true, business_name: true },
-        }),
+      const client = await prisma.client.findUnique({
+        where: { id: clientId },
+        select: { id: true, name: true, email: true, business_name: true, company_id: true },
+      });
+      if (!client) return res.status(404).json({ message: "Client not found." });
+
+      // Scoped to the company, not this one representative's own client row — every
+      // teammate on the same client company (see ClientTeamSection.tsx) shares one business
+      // context and one set of brand assets, not a separate copy per person.
+      const [latestSession, files] = await Promise.all([
         prisma.onboardingSession.findFirst({
-          where: { client_id: clientId },
+          where: { company_id: client.company_id },
           orderBy: { created_at: "desc" },
           select: { id: true, answers: true, last_updated_at: true },
         }),
         prisma.storedFile.findMany({
-          where: { client_id: clientId },
+          where: { company_id: client.company_id },
           orderBy: { created_at: "desc" },
           select: { id: true, name: true, file_type: true, signing_token_id: true, created_at: true },
         }),
       ]);
-
-      if (!client) return res.status(404).json({ message: "Client not found." });
 
       const answersObject =
         latestSession?.answers && typeof latestSession.answers === "object"
@@ -215,8 +206,16 @@ export default withSession(async (req, res, session) => {
       const hasOverridePayload =
         "additionalBusinessInfo" in body || "postTopic" in body || "keywords" in body || "notes" in body;
 
+      const client = await prisma.client.findUnique({
+        where: { id: clientId },
+        select: { company_id: true },
+      });
+      if (!client) return res.status(404).json({ message: "Client not found." });
+
+      // Same company-wide scope as the GET handler above — an edit from any representative
+      // updates the one shared context, not a copy tied to whichever teammate made it.
       const latestSession = await prisma.onboardingSession.findFirst({
-        where: { client_id: clientId },
+        where: { company_id: client.company_id },
         orderBy: { created_at: "desc" },
         select: { id: true, answers: true, last_updated_at: true },
       });
