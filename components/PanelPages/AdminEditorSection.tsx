@@ -6,15 +6,13 @@ import {
     Filter,
     KeyRound,
     Link as LinkIcon,
-    Plus,
     RefreshCw,
     RotateCw,
     Trash2,
     UserCog,
-    X,
     XCircle,
 } from "lucide-react"
-import { FiCheck, FiPlus, FiTrash2 } from "react-icons/fi"
+import { FiCheck, FiTrash2 } from "react-icons/fi"
 import { inter } from "@/lib/fonts";
 import Image from "next/image"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
@@ -165,7 +163,6 @@ function UsersPanel() {
     const [sessions, setSessions] = useState<SessionRow[]>([])
     const [loading, setLoading] = useState<boolean>(false)
     const [error, setError] = useState<string>("")
-    const [showCreate, setShowCreate] = useState<boolean>(false)
     const [resetSending, setResetSending] = useState<Record<string, boolean>>({})
     const [deleteModalOpen, setDeleteModalOpen] = useState<boolean>(false)
     const [userToDelete, setUserToDelete] = useState<{ id: string; name: string | null; email: string | null } | null>(null)
@@ -647,15 +644,13 @@ function UsersPanel() {
                     )}
                 </div>
                 <PanelButton
+                    variant="primary"
                     onClick={expireSessions}
                     disabled={expiring}
                     icon={<RefreshCw className={`h-4 w-4 ${expiring ? "animate-spin" : ""}`} />}
                     title="Expire sessions that have passed their deadline"
                 >
                     Update Sessions
-                </PanelButton>
-                <PanelButton variant="primary" onClick={() => setShowCreate(true)} icon={<Plus className="h-4 w-4" />}>
-                    Create User
                 </PanelButton>
             </PanelHeader>
 
@@ -710,7 +705,7 @@ function UsersPanel() {
                         cell: (u) =>
                             u.pendingInvite ? (
                                 <span className={`text-[12px] ${u.pendingInvite.expired ? "text-[#B42318]" : "text-[#9CA3AF]"}`}>
-                                    {u.pendingInvite.expired ? "Invite expired" : `Invited ${formatRelative(u.pendingInvite.invitedAt, now)}`}
+                                    {u.pendingInvite.expired ? "Invite Expired" : `Invited ${formatRelative(u.pendingInvite.invitedAt, now)}`}
                                 </span>
                             ) : u.lastLoginAt ? (
                                 /* Time first, address underneath and muted: the address is why the column
@@ -832,16 +827,6 @@ function UsersPanel() {
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
             {notice && !error && <div className="mt-3 text-sm text-[#6B7280]">{notice}</div>}
 
-            {showCreate && (
-                <CreateUserModal
-                    onClose={() => setShowCreate(false)}
-                    onCreated={() => {
-                        setShowCreate(false)
-                        load()
-                    }}
-                />
-            )}
-
             <ConfirmActionModal
                 isOpen={deleteModalOpen}
                 title="Remove User"
@@ -901,250 +886,6 @@ function UsersPanel() {
                 }}
             />
         </PanelPage>
-    )
-}
-
-function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-    const [name, setName] = useState<string>("")
-    const [email, setEmail] = useState<string>("")
-    const [password, setPassword] = useState<string>("")
-    const [role, setRole] = useState<string>("staff")
-    const [submitting, setSubmitting] = useState<boolean>(false)
-    const [error, setError] = useState<string>("")
-    const [showSuccess, setShowSuccess] = useState<boolean>(false)
-    const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-
-    const isValidEmail = (email: string) => {
-        const emailRegex = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i
-        return emailRegex.test(email)
-    }
-
-    const validateForm = () => {
-        const errors: Record<string, string> = {}
-
-        if (!name.trim()) {
-            errors.name = "Name is required"
-        }
-
-        if (!email.trim()) {
-            errors.email = "Email is required"
-        } else if (!isValidEmail(email)) {
-            errors.email = "Please enter a valid email address."
-        }
-
-        if (!password.trim()) {
-            errors.password = "Password is required"
-        }
-
-        setFieldErrors(errors)
-        return Object.keys(errors).length === 0
-    }
-
-    const submit = async () => {
-        if (!validateForm()) {
-            return
-        }
-
-        setSubmitting(true)
-        setError("")
-        try {
-            const r = await fetch("/api/admin/users", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, email, password, role }),
-            })
-            if (!r.ok) throw new Error((await r.json())?.message || "Failed to create user")
-            setShowSuccess(true)
-        } catch (e: any) {
-            setError(e?.message || "Failed to create user")
-        } finally {
-            setSubmitting(false)
-        }
-    }
-
-    const handleFieldChange = (field: string, value: string) => {
-        setFieldErrors((prev) => ({ ...prev, [field]: "" }))
-        setError("")
-        if (field === "name") setName(value)
-        else if (field === "email") setEmail(value)
-        else if (field === "password") setPassword(value)
-        else if (field === "role") setRole(value)
-    }
-
-    if (showSuccess) {
-    return (
-            <Modal
-                zIndexClass="z-[200]"
-                backdropClassName="bg-black/50 backdrop-blur-sm"
-                cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
-                label="User Created"
-                onClose={() => {
-                    setShowSuccess(false)
-                    onCreated()
-                    onClose()
-                }}
-            >
-                    <div className="flex flex-col items-center text-center">
-                        <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
-                            <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
-                            <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-                                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
-                                    <FiCheck className="h-6 w-6" />
-                                </span>
-                            </span>
-                </div>
-                        <h3 className="text-xl font-semibold text-[#111827] mb-2">User Created Successfully!</h3>
-                        <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
-                            The user has been created successfully and can now access the system.
-                        </p>
-                        <button
-                            className="w-full rounded-lg px-4 py-2 bg-[#701CC0] text-white hover:bg-[#5f17a5] text-sm font-medium transition-colors"
-                            onClick={() => {
-                                setShowSuccess(false)
-                                onCreated()
-                                onClose()
-                            }}
-                        >
-                            Done
-                    </button>
-                </div>
-            </Modal>
-    )
-    }
-
-    return (
-        <Modal
-            zIndexClass="z-[200]"
-            backdropClassName="bg-black/50 backdrop-blur-sm"
-            cardClassName="w-full max-w-2xl rounded-lg bg-white shadow-xl border border-[#E5E7EB] p-6"
-            label="Create User"
-            onClose={onClose}
-        >
-                <div className="flex items-center justify-between mb-5">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-[#701CC0]/10 text-[#701CC0] inline-flex items-center justify-center">
-                            <FiPlus className="w-5 h-5" />
-                        </div>
-                        <h2 className="text-xl font-semibold text-[#111827]">Create User</h2>
-                    </div>
-                    <button 
-                        onClick={onClose} 
-                        className="p-1.5 rounded-md text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#374151]"
-                        aria-label="Close modal"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                        <label htmlFor="create-user-name" className="block text-sm font-medium text-[#374151] mb-1">
-                            Name <span className="text-red-500">*</span>
-                        </label>
-                        <input 
-                            id="create-user-name"
-                            type="text" 
-                            value={name} 
-                            onChange={(e) => handleFieldChange("name", e.target.value)} 
-                            placeholder="Enter Name"
-                            className={`w-full rounded-lg border px-3 py-2 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0] ${
-                                fieldErrors.name ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB]'
-                            }`}
-                        />
-                        {fieldErrors.name ? <p className="mt-1 text-xs text-red-600">{fieldErrors.name}</p> : null}
-                    </div>
-
-                    <div>
-                        <label htmlFor="create-user-role" className="block text-sm font-medium text-[#374151] mb-1">
-                            Role <span className="text-red-500">*</span>
-                        </label>
-                        <div className="relative">
-                            <select 
-                                id="create-user-role"
-                                value={role} 
-                                onChange={(e) => handleFieldChange("role", e.target.value)} 
-                                className="w-full rounded-lg border border-[#E5E7EB] px-3 py-2 pr-10 text-sm bg-white text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0] appearance-none"
-                            >
-                                <option value="admin">Admin</option>
-                                <option value="staff">Staff</option>
-                            </select>
-                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                <ChevronDown className="w-4 h-4 text-[#6B7280]" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="md:col-span-2">
-                        <label htmlFor="create-user-email" className="block text-sm font-medium text-[#374151] mb-1">
-                            Email <span className="text-red-500">*</span>
-                        </label>
-                        <input 
-                            id="create-user-email"
-                            type="email" 
-                            value={email} 
-                            onChange={(e) => handleFieldChange("email", e.target.value)} 
-                            placeholder="Enter Email"
-                            className={`w-full rounded-lg border px-3 py-2 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0] ${
-                                fieldErrors.email || (email && !isValidEmail(email))
-                                    ? 'border-red-500 bg-red-50' 
-                                    : 'border-[#E5E7EB]'
-                            }`}
-                        />
-                        {fieldErrors.email ? <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p> : null}
-                        {email && !fieldErrors.email && !isValidEmail(email) ? (
-                            <p className="mt-1 text-xs text-red-600">Please enter a valid email address.</p>
-                        ) : null}
-                    </div>
-
-                    <div className="md:col-span-2">
-                        <label htmlFor="create-user-password" className="block text-sm font-medium text-[#374151] mb-1">
-                            Password <span className="text-red-500">*</span>
-                        </label>
-                        <input 
-                            id="create-user-password"
-                            type="password" 
-                            value={password} 
-                            onChange={(e) => handleFieldChange("password", e.target.value)} 
-                            placeholder="Enter Password"
-                            className={`w-full rounded-lg border px-3 py-2 text-sm text-[#111827] outline-none focus:ring-2 focus:ring-[#701CC0] ${
-                                fieldErrors.password ? 'border-red-500 bg-red-50' : 'border-[#E5E7EB]'
-                            }`}
-                        />
-                        {fieldErrors.password ? <p className="mt-1 text-xs text-red-600">{fieldErrors.password}</p> : null}
-                    </div>
-                </div>
-
-                {error ? (
-                    <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
-                ) : null}
-
-                <div className="flex items-center justify-between mt-5">
-                    <button 
-                        onClick={onClose}
-                        disabled={submitting}
-                        className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        Cancel
-                    </button>
-                    <button 
-                        disabled={submitting || !name.trim() || !email.trim() || !password.trim() || (email ? !isValidEmail(email) : false)} 
-                        onClick={submit} 
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm font-medium hover:bg-[#5f17a5] disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {submitting ? (
-                            <>
-                                <RefreshCw className="w-4 h-4 animate-spin" />
-                                Creating...
-                            </>
-                        ) : (
-                            <>
-                                <FiPlus className="w-4 h-4" />
-                                Create User
-                            </>
-                        )}
-                    </button>
-                </div>
-        </Modal>
     )
 }
 
