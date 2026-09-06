@@ -668,6 +668,7 @@ function UsersPanel() {
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
                 emptyTitle="No Users Found"
+                emptyMessage={searchQuery ? "No users match your search." : "No users to show yet."}
                 emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" priority />}
                 columns={[
                     {
@@ -1024,10 +1025,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                         <div className="w-10 h-10 rounded-full bg-[#701CC0]/10 text-[#701CC0] inline-flex items-center justify-center">
                             <FiPlus className="w-5 h-5" />
                         </div>
-                        <div>
-                            <h2 className="text-xl font-semibold text-[#111827]">Create User</h2>
-                            <p className="text-sm text-[#6B7280] mt-0.5">Add a new user to the system</p>
-                        </div>
+                        <h2 className="text-xl font-semibold text-[#111827]">Create User</h2>
                     </div>
                     <button 
                         onClick={onClose} 
@@ -1074,9 +1072,6 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
                                 <ChevronDown className="w-4 h-4 text-[#6B7280]" />
                             </div>
                         </div>
-                        <p className="mt-1 text-xs text-[#6B7280]">
-                            Need a client account? Use <span className="font-medium">Clients &rarr; Add Client</span> instead — clients set their own password via an onboarding link.
-                        </p>
                     </div>
 
                     <div className="md:col-span-2">
