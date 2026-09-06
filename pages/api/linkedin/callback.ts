@@ -42,6 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== "GET") { res.status(405).end(); return; }
 
   const code = asStr(req.query.code);
+  const oauthError = asStr(req.query.error) || asStr(req.query.error_description);
   const cookies = readCookies(req.headers.cookie);
   const hasStateCookie = !!cookies.li_oauth_state;
   const redirectFromCookie = asStr(cookies.li_oauth_redirect as string | undefined);
@@ -58,7 +59,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     (isCompanyMode ? process.env.LINKEDIN_COMPANY_REDIRECT_URI : process.env.LINKEDIN_REDIRECT_URI) ||
     process.env.LINKEDIN_REDIRECT_URI!;
   const connectedRedirect = isSettingsSource ? "/client?settings=1&connected=linkedin" : "/connect?connected=linkedin";
-  if (!code) { res.status(400).send("Missing code"); return; }
+
+  // Onboarding-context failures land on a small page that tells the opener what happened and
+  // closes itself, instead of leaving the popup on a bare text response. Settings-context
+  // failures (hasStateCookie) are unchanged.
+  const failOnboarding = (reason: string) => {
+    res.redirect(`/social-connect-failed?provider=linkedin&reason=${encodeURIComponent(reason)}`);
+  };
+
+  if (!code) {
+    if (!hasStateCookie) { failOnboarding(oauthError || "missing_code"); return; }
+    res.status(400).send("Missing code");
+    return;
+  }
   const primary = await exchangeLinkedInToken({
     code,
     clientId,
@@ -98,13 +111,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (!tokenPayload) {
+    if (!hasStateCookie) { failOnboarding("token_exchange_failed"); return; }
     const detail = primary.ok ? "Unknown token exchange failure." : primary.text;
     res.status(400).send(`LinkedIn token exchange failed: ${detail}`);
     return;
   }
 
   const { access_token, expires_in, refresh_token } = tokenPayload;
-  if (!access_token) { res.status(400).send("No access token received"); return; }
+  if (!access_token) {
+    if (!hasStateCookie) { failOnboarding("no_access_token"); return; }
+    res.status(400).send("No access token received");
+    return;
+  }
 
   const expiresAt = expires_in ? new Date(Date.now() + expires_in * 1000) : undefined;
   if (hasStateCookie) {
@@ -130,7 +148,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.redirect(connectedRedirect);
     return;
   }
-  if (!state) { res.status(400).send("Missing state"); return; }
+  if (!state) { failOnboarding("missing_code"); return; }
   const sess = await prisma.onboardingSession.findUnique({ where: { id: state } });
   if (!sess) {
     // No li_oauth_state cookie AND `state` is not a valid onboarding session id. Do NOT bind the
@@ -142,7 +160,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       res.redirect("/login?callbackUrl=%2Fclient%3Fsettings%3D1");
       return;
     }
-    res.status(400).send("Invalid or missing state");
+    failOnboarding("invalid_session");
     return;
   }
 

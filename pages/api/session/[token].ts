@@ -1,6 +1,32 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { parseCookie, serializeCookie } from "@/lib/api/cookies";
+
+const sessionInclude = {
+  clients: { include: { client_billing: { select: { monthly_retainer_cents: true } } } },
+} satisfies Prisma.OnboardingSessionInclude;
+const sessionWithClient = { include: sessionInclude };
+type SessionWithClient = Prisma.OnboardingSessionGetPayload<{ include: typeof sessionInclude }>;
+
+// Matches the shape pages/session/onboarding/[token].tsx's getServerSideProps builds from the same
+// query, so the client-side refresh fetch and the SSR initial prop agree on field names/casing.
+function toSessionDto(session: SessionWithClient) {
+  return {
+    clientName: session.clients.name,
+    clientEmail: session.clients.email,
+    businessName: session.clients.business_name,
+    monthlyRetainer:
+      typeof session.clients.client_billing?.monthly_retainer_cents === "number"
+        ? session.clients.client_billing.monthly_retainer_cents / 100
+        : null,
+    token: session.id,
+    createdAt: session.created_at.getTime(),
+    answers: (session.answers as Record<string, unknown>) || {},
+    status: session.status,
+    submittedAt: session.submitted_at ? session.submitted_at.getTime() : null,
+  };
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") return res.status(405).json({ message: "Method Not Allowed" });
@@ -13,7 +39,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const session = await prisma.onboardingSession.findUnique({
       where: { id: token },
-      include: { clients: true },
+      ...sessionWithClient,
     });
     if (!session) return res.status(404).json({ message: "Session not found" });
 
@@ -47,7 +73,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const updated = await prisma.onboardingSession.update({
         where: { id: token },
         data: { first_accessed_at: now, status: "in_progress" },
-        include: { clients: true },
+        ...sessionWithClient,
       });
       const secondsLeft = session.expires_at
         ? Math.max(1, Math.floor((session.expires_at.getTime() - now.getTime()) / 1000))
@@ -71,13 +97,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ];
 
       res.setHeader("Set-Cookie", cookiesToSet);
-      return res.status(200).json(updated);
+      return res.status(200).json(toSessionDto(updated));
     }
     if (!hasCookie) {
       return res.status(410).json({ message: "Link already used" });
     }
 
-    return res.status(200).json(session);
+    return res.status(200).json(toSessionDto(session));
   } catch (err) {
     console.error("Error reading session:", err);
     return res.status(500).json({ message: "Internal server error" });
