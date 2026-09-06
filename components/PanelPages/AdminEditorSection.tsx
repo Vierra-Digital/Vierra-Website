@@ -631,7 +631,10 @@ function UsersPanel() {
                 page={page}
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
-                emptyMessage={searchQuery ? "No users match your search." : "No users found."}
+                emptyTitle={searchQuery ? "No Users Found" : "No Users Yet"}
+                emptyMessage={
+                    searchQuery ? "No users match your search." : "Users, clients and pending invites will appear here."
+                }
                 emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" />}
                 emptyAction={
                     !searchQuery ? (
@@ -653,8 +656,13 @@ function UsersPanel() {
                                     alt={`${u.name || u.email || "User"}'s profile`}
                                 />
                                 <div className="min-w-0">
-                                    <div className="truncate font-medium text-[#111827]">{u.name || "—"}</div>
-                                    <div className="truncate text-[12px] text-[#6B7280]">{u.email || "—"}</div>
+                                    {/* An invitation has no name yet, and rendering an em-dash above the
+                                        address left the row's main line blank. The address becomes the
+                                        line when there is nothing else to put there. */}
+                                    <div className="truncate font-medium text-[#111827]">{u.name || u.email || "—"}</div>
+                                    {u.name && u.email ? (
+                                        <div className="truncate text-[12px] text-[#6B7280]">{u.email}</div>
+                                    ) : null}
                                 </div>
                             </div>
                         ),

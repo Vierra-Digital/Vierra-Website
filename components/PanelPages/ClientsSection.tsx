@@ -313,7 +313,10 @@ const ClientsSection: React.FC<ClientsSectionProps> = ({ onAddClient, refreshTri
                 page={page}
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
-                emptyMessage={searchQuery ? "No clients match your search." : "You have no clients added."}
+                emptyTitle={searchQuery ? "No Clients Found" : "No Clients Yet"}
+                emptyMessage={
+                    searchQuery ? "No clients match your search." : "Clients you add will appear here."
+                }
                 emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" />}
                 emptyAction={
                     !searchQuery ? (

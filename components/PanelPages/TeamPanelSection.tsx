@@ -499,7 +499,10 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 page={page}
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
-                emptyMessage={searchTerm ? "No staff match your search." : "You have no staff added."}
+                emptyTitle={searchTerm ? "No Staff Found" : "No Staff Yet"}
+                emptyMessage={
+                    searchTerm ? "No staff match your search." : "Teammates you invite will appear here."
+                }
                 emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" />}
                 emptyAction={
                     userRole === "admin" && !searchTerm ? (

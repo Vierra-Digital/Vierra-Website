@@ -283,15 +283,17 @@ export const PanelClearFilters: React.FC<{ onClick: () => void }> = ({ onClick }
  * around an illustration and one line of text framed the absence of results as though it were
  * a result.
  */
-export const PanelEmptyState: React.FC<{ message: string; image?: React.ReactNode; children?: React.ReactNode }> = ({
-  message,
-  image,
-  children,
-}) => (
-  <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
+export const PanelEmptyState: React.FC<{
+  title: string
+  message: string
+  image?: React.ReactNode
+  children?: React.ReactNode
+}> = ({ title, message, image, children }) => (
+  <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
     {image}
-    <p className="text-[13px] text-[#6B7280]">{message}</p>
-    {children}
+    <h3 className="mt-1 text-lg font-semibold text-[#111827]">{title}</h3>
+    <p className="mt-2 max-w-md text-sm text-[#6B7280]">{message}</p>
+    {children ? <div className="mt-4">{children}</div> : null}
   </div>
 )
 
@@ -323,6 +325,7 @@ export function PanelDataTable<T>({
   page,
   pageSize,
   onPageChange,
+  emptyTitle,
   emptyMessage,
   emptyImage,
   emptyAction,
@@ -335,6 +338,7 @@ export function PanelDataTable<T>({
   page: number
   pageSize: number
   onPageChange: (page: number) => void
+  emptyTitle: string
   emptyMessage: string
   emptyImage?: React.ReactNode
   emptyAction?: React.ReactNode
@@ -344,7 +348,7 @@ export function PanelDataTable<T>({
   }
   if (rows.length === 0) {
     return (
-      <PanelEmptyState message={emptyMessage} image={emptyImage}>
+      <PanelEmptyState title={emptyTitle} message={emptyMessage} image={emptyImage}>
         {emptyAction}
       </PanelEmptyState>
     )
