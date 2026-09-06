@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import { signOut } from "@/lib/session-client";
 import ProfileImage from "./ProfileImage";
+import Modal from "@/components/ui/Modal";
+import {
+  PANEL_FIELD,
+  PANEL_FIELD_INVALID,
+  PanelFieldLabel,
+  PanelModalFooter,
+  PanelModalHeader,
+} from "@/components/ui/PanelForm";
 import ImageCropModal from "./ImageCropModal";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import { FiChevronDown, FiLogOut, FiEdit3, FiUpload, FiRotateCcw, FiLock, FiUser, FiMail, FiShield, FiSettings, FiCheck, FiRefreshCw, FiPlus, FiTrash2, FiCalendar, FiCreditCard } from "react-icons/fi";
@@ -795,8 +803,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
           </div>
         <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Profile</h3>
         </div>
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
+        <div className="flex items-start gap-5">
+          <div className="order-1 min-w-0 flex-1">
             <div className="space-y-4">
               <div>
                 <label className={`mb-1 block text-[11px] font-medium ${textSecondary}`}>Full Name</label>
@@ -857,26 +865,29 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               </div>
             )}
           </div>
-          <div className="relative flex-shrink-0 self-start" ref={avatarMenuRef}>
+          <div className="relative order-2 shrink-0" ref={avatarMenuRef}>
             <div className="relative inline-block">
               <ProfileImage
                 src={user.image}
                 alt={displayName}
                 name={displayName}
-                size={96}
+                size={72}
                 className={`ring-2 rounded-full ${isPanel ? "ring-gray-200" : "ring-[#701CC0]/30"}`}
                 priority
                 quality={100}
               />
               <button
+                type="button"
                 onClick={() => setShowAvatarMenu(!showAvatarMenu)}
-                className="absolute bottom-0 right-0 bg-[#701CC0] text-white rounded-full p-2 hover:bg-[#5f17a5] transition-colors shadow-lg"
+                aria-label="Change profile picture"
+                aria-expanded={showAvatarMenu}
+                className="absolute -bottom-0.5 -right-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#701CC0] text-white shadow-md transition-colors hover:bg-[#5f17a5]"
               >
-                <FiEdit3 className="w-4 h-4" />
+                <FiEdit3 className="h-3.5 w-3.5" />
               </button>
             </div>
             {showAvatarMenu && (
-              <div className={`absolute top-full left-0 mt-2 w-48 rounded-xl shadow-xl border py-2 z-20 ${isDark ? "bg-[#2E0A4F] border-white/20" : "bg-white border-gray-100"}`}>
+              <div className={`absolute top-full right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border py-1 shadow-xl ${isDark ? "bg-[#2E0A4F] border-white/20" : "bg-white border-[#E4E0EC]"}`}>
                 <input
                   type="file"
                   accept="image/*"
@@ -893,18 +904,18 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 />
                 <label
                   htmlFor="image-upload"
-                  className={`flex items-center gap-2 px-4 py-2.5 text-sm cursor-pointer transition-colors ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-gray-50 text-[#111827]"} ${isUpdating ? "opacity-50 cursor-not-allowed" : ""}`}
+                  className={`flex cursor-pointer items-center gap-2 px-3 py-2 text-[12.5px] transition-colors ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-[#F5F3F9] text-[#111827]"} ${isUpdating ? "cursor-not-allowed opacity-50" : ""}`}
                 >
-                  <FiUpload className="w-4 h-4" />
+                  <FiUpload className="h-3.5 w-3.5 shrink-0" />
                   {isUpdating ? "Uploading..." : "Upload Image"}
                 </label>
                 {user.image && (
                   <button
                     onClick={handleImageReset}
                     disabled={isUpdating}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-sm w-full text-left transition-colors ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-gray-50 text-[#111827]"} ${isUpdating ? "opacity-50 cursor-not-allowed" : ""}`}
+                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] transition-colors ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-[#F5F3F9] text-[#111827]"} ${isUpdating ? "cursor-not-allowed opacity-50" : ""}`}
                   >
-                    <FiRotateCcw className="w-4 h-4" />
+                    <FiRotateCcw className="h-3.5 w-3.5 shrink-0" />
                     {isUpdating ? "Resetting..." : "Reset To Default"}
                   </button>
                 )}
@@ -924,7 +935,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Security</h3>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className={`text-[13px] font-medium ${textPrimary}`}>Email Notifications</p>
@@ -947,12 +958,15 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 disabled={isUpdating || isLoadingSettings}
               />
             </div>
-            <div className={`pt-4 border-t ${isDark ? "border-white/10" : "border-gray-100"}`}>
+            {/* A hairline is enough to separate an action from the toggles above it; the rule
+                plus a full row of padding read as a gap in the card. Sized like Add account. */}
+            <div className={`mt-1 border-t pt-3 ${isDark ? "border-white/10" : "border-[#EEF1F7]"}`}>
               <button
+                type="button"
                 onClick={() => setShowPasswordModal(true)}
-                className="inline-flex h-9 items-center gap-2 rounded-[10px] bg-[#701CC0] px-3.5 text-[12.5px] font-medium text-white transition-colors hover:bg-[#5f17a5]"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#701CC0] px-3 text-[12.5px] font-medium text-white transition-colors hover:bg-[#5f17a5]"
               >
-                <FiLock className="w-4 h-4" />
+                <FiLock className="h-3.5 w-3.5" />
                 Change Password
               </button>
             </div>
@@ -1397,99 +1411,80 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
 
       
       {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={closePasswordModal}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-[#E5E7EB]" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-5 border-b border-[#E5E7EB]">
-              <div>
-                <h2 className="text-lg font-semibold text-[#111827]">Change Password</h2>
-                <p className="text-sm text-[#6B7280] mt-0.5">Update your account password</p>
-              </div>
-              <button 
-                onClick={closePasswordModal}
-                className="p-2 rounded-lg text-[#6B7280] hover:text-red-600 hover:bg-red-50 transition-colors"
-                aria-label="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+        <Modal
+          zIndexClass="z-50"
+          backdropClassName="bg-black/50 backdrop-blur-sm"
+          cardClassName="bg-white rounded-2xl shadow-xl p-6 max-w-lg w-full mx-4"
+          label="Change Password"
+          onClose={closePasswordModal}
+        >
+          <PanelModalHeader title="Change Password" onClose={closePasswordModal} />
 
-            <div className="p-6 space-y-4">
-              {passwordFieldErrors.general && (
-                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
-                  {passwordFieldErrors.general}
-                </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <PanelFieldLabel required>Current Password</PanelFieldLabel>
+              <input
+                id="current-password"
+                type="password"
+                autoComplete="current-password"
+                value={passwordData.currentPassword}
+                onChange={(e) => handlePasswordFieldChange("currentPassword", e.target.value)}
+                className={passwordFieldErrors.currentPassword ? PANEL_FIELD_INVALID : PANEL_FIELD}
+              />
+              {passwordFieldErrors.currentPassword && (
+                <p className="mt-1 text-[12px] text-[#B42318]">{passwordFieldErrors.currentPassword}</p>
               )}
-
-              <div>
-                <label htmlFor="current-password" className="block text-sm font-medium text-[#374151] mb-1.5">Current Password</label>
-                <input
-                  id="current-password"
-                  type="password"
-                  value={passwordData.currentPassword}
-                  onChange={(e) => handlePasswordFieldChange("currentPassword", e.target.value)}
-                  className={`w-full rounded-xl px-4 py-2.5 text-sm border focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
-                    passwordFieldErrors.currentPassword ? "border-red-500 bg-red-50" : "border-[#E5E7EB]"
-                  }`}
-                  placeholder="Enter current password"
-                />
-                {passwordFieldErrors.currentPassword && (
-                  <p className="mt-1 text-sm text-red-600">{passwordFieldErrors.currentPassword}</p>
-                )}
-              </div>
-              
-              <div>
-                <label htmlFor="new-password" className="block text-sm font-medium text-[#374151] mb-1.5">New Password</label>
-                <input
-                  id="new-password"
-                  type="password"
-                  value={passwordData.newPassword}
-                  onChange={(e) => handlePasswordFieldChange("newPassword", e.target.value)}
-                  className={`w-full rounded-xl px-4 py-2.5 text-sm border focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
-                    passwordFieldErrors.newPassword ? "border-red-500 bg-red-50" : "border-[#E5E7EB]"
-                  }`}
-                  placeholder="Enter new password"
-                />
-                {passwordFieldErrors.newPassword && (
-                  <p className="mt-1 text-sm text-red-600">{passwordFieldErrors.newPassword}</p>
-                )}
-              </div>
-              
-              <div>
-                <label htmlFor="confirm-password" className="block text-sm font-medium text-[#374151] mb-1.5">Confirm New Password</label>
-                <input
-                  id="confirm-password"
-                  type="password"
-                  value={passwordData.confirmPassword}
-                  onChange={(e) => handlePasswordFieldChange("confirmPassword", e.target.value)}
-                  className={`w-full rounded-xl px-4 py-2.5 text-sm border focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${
-                    passwordFieldErrors.confirmPassword ? "border-red-500 bg-red-50" : "border-[#E5E7EB]"
-                  }`}
-                  placeholder="Confirm new password"
-                />
-                {passwordFieldErrors.confirmPassword && (
-                  <p className="mt-1 text-sm text-red-600">{passwordFieldErrors.confirmPassword}</p>
-                )}
-              </div>
             </div>
 
-            <div className="px-6 py-4 bg-[#F9FAFB] border-t border-[#E5E7EB] rounded-b-2xl flex justify-end gap-3">
-              <button
-                onClick={closePasswordModal}
-                disabled={isUpdating}
-                className="px-4 py-2.5 border border-[#E5E7EB] rounded-xl text-[#374151] hover:bg-[#F3F4F6] text-sm font-medium transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePasswordChange}
-                disabled={isUpdating}
-                className="px-4 py-2.5 bg-[#701CC0] text-white rounded-xl hover:bg-[#5f17a5] text-sm font-medium transition-colors disabled:opacity-50"
-              >
-                {isUpdating ? "Changing..." : "Change Password"}
-              </button>
+            <div>
+              <PanelFieldLabel required>New Password</PanelFieldLabel>
+              <input
+                id="new-password"
+                type="password"
+                autoComplete="new-password"
+                value={passwordData.newPassword}
+                onChange={(e) => handlePasswordFieldChange("newPassword", e.target.value)}
+                className={passwordFieldErrors.newPassword ? PANEL_FIELD_INVALID : PANEL_FIELD}
+              />
+              {passwordFieldErrors.newPassword && (
+                <p className="mt-1 text-[12px] text-[#B42318]">{passwordFieldErrors.newPassword}</p>
+              )}
+            </div>
+
+            <div>
+              <PanelFieldLabel required>Confirm New Password</PanelFieldLabel>
+              <input
+                id="confirm-password"
+                type="password"
+                autoComplete="new-password"
+                value={passwordData.confirmPassword}
+                onChange={(e) => handlePasswordFieldChange("confirmPassword", e.target.value)}
+                className={passwordFieldErrors.confirmPassword ? PANEL_FIELD_INVALID : PANEL_FIELD}
+              />
+              {passwordFieldErrors.confirmPassword && (
+                <p className="mt-1 text-[12px] text-[#B42318]">{passwordFieldErrors.confirmPassword}</p>
+              )}
             </div>
           </div>
-        </div>
+
+          {/* The catch branch files its message under `general`; naming it anything else here
+              would have swallowed every unexpected failure silently. */}
+          {passwordFieldErrors.general && (
+            <p role="alert" className="mt-4 text-[13px] text-[#B42318]">{passwordFieldErrors.general}</p>
+          )}
+
+          <PanelModalFooter
+            onCancel={closePasswordModal}
+            onConfirm={() => void handlePasswordChange()}
+            confirmLabel={isUpdating ? "Updating…" : "Update Password"}
+            confirmDisabled={
+              isUpdating ||
+              !passwordData.currentPassword ||
+              !passwordData.newPassword ||
+              !passwordData.confirmPassword
+            }
+          />
+        </Modal>
       )}
 
       {showDeleteGmailModal && (
