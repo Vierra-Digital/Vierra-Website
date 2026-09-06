@@ -655,8 +655,12 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
         </PanelPage>
     )
 }
-const FIELD =
-    "h-9 w-full rounded-[10px] bg-[#F4F2F8] px-3 text-[13px] text-[#111827] ring-1 ring-inset ring-transparent transition-shadow focus:bg-white focus:outline-none focus:ring-[#701CC0]/35"
+const FIELD_BASE =
+    "h-9 w-full rounded-[10px] px-3 text-[13px] text-[#111827] ring-1 ring-inset transition-shadow focus:outline-none"
+const FIELD = `${FIELD_BASE} bg-[#F4F2F8] ring-transparent focus:bg-white focus:ring-[#701CC0]/35`
+/** Same field, flagged. Built from the same base rather than rewritten, which is how the colour
+ *  went missing the first time. */
+const FIELD_INVALID = `${FIELD_BASE} bg-red-50 ring-red-300 focus:ring-red-400`
 
 /** Select in the panel's field styling, with our chevron rather than the platform's. */
 const FieldSelect: React.FC<{
@@ -840,9 +844,7 @@ const InviteTeammateModal: React.FC<{
                                 setEmail(e.target.value)
                                 if (error) setError("")
                             }}
-                            className={`h-9 w-full rounded-[10px] px-3 text-[13px] ring-1 ring-inset transition-shadow focus:outline-none focus:ring-[#701CC0]/35 ${
-                                email && !isValidEmail(email) ? "bg-red-50 ring-red-300" : "bg-[#F4F2F8] ring-transparent focus:bg-white"
-                            }`}
+                            className={email && !isValidEmail(email) ? FIELD_INVALID : FIELD}
                             placeholder="name@vierradev.com"
                             required
                         />
@@ -997,9 +999,7 @@ const ManageStaffModal: React.FC<{
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className={`h-9 w-full rounded-[10px] px-3 text-[13px] ring-1 ring-inset transition-shadow focus:outline-none focus:ring-[#701CC0]/35 ${
-                            email && !isValidEmail(email) ? "bg-red-50 ring-red-300" : "bg-[#F4F2F8] ring-transparent focus:bg-white"
-                        }`}
+                        className={email && !isValidEmail(email) ? FIELD_INVALID : FIELD}
                     />
                 </div>
                 <div>

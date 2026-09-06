@@ -25,6 +25,11 @@ type ModalProps = {
 /**
  * Shared modal shell: fixed backdrop, centered card, click-outside + Escape to close.
  * Replaces the ~identical overlay markup duplicated across the app's dialogs.
+ *
+ * Note for anyone passing their own `cardClassName`: this portals into <body>, and globals.css
+ * applies `text-foreground` — which is white — to body. So a card that sets no colour of its own
+ * makes every unstyled child inside it white on white. The default below sets one; a custom card
+ * has to as well (or be one of the deliberately dark email dialogs).
  */
 export default function Modal({
   isOpen = true,
@@ -32,7 +37,7 @@ export default function Modal({
   children,
   zIndexClass = "z-50",
   backdropClassName = "bg-black/50 backdrop-blur-sm",
-  cardClassName = "w-full max-w-md rounded-lg bg-white p-6 shadow-xl",
+  cardClassName = "w-full max-w-md rounded-lg bg-white p-6 text-[#111827] shadow-xl",
   label,
   closeOnBackdrop = true,
   closeOnEscape = true,
