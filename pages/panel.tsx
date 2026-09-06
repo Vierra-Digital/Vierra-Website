@@ -407,7 +407,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                 {([
                   [4, "Analytics", <FiBarChart2 key="a" className="w-4 h-4 shrink-0" />],
                   [5, "Campaign History", <FiSend key="c" className="w-4 h-4 shrink-0" />],
-                  [6, "Billing History", <FiCreditCard key="b" className="w-4 h-4 shrink-0" />],
+                  [6, "Billing", <FiCreditCard key="b" className="w-4 h-4 shrink-0" />],
                 ] as const).map(([section, label, icon]) => (
                   <button
                     key={section}

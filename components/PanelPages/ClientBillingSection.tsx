@@ -120,6 +120,7 @@ type ClientBillingSectionProps = {
 const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId = null, canManage = false }) => {
     const [openingPortal, setOpeningPortal] = useState(false)
     const [portalError, setPortalError] = useState("")
+    const [renewalBusy, setRenewalBusy] = useState(false)
 
     const fetcher = useCallback(async () => {
         const url = companyId
@@ -149,13 +150,39 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
         }
     }
 
+    const setAutoRenew = async (autoRenew: boolean) => {
+        setRenewalBusy(true)
+        setPortalError("")
+        try {
+            const response = await fetch("/api/client/billing-subscription", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ autoRenew }),
+            })
+            const body = await response.json().catch(() => ({}))
+            if (!response.ok) throw new Error(body?.message || "Could not update renewal.")
+            await run()
+        } catch (e) {
+            setPortalError(e instanceof Error ? e.message : "Could not update renewal.")
+        } finally {
+            setRenewalBusy(false)
+        }
+    }
+
+    // Drafts carry no amount anyone owes yet, and a void invoice is not owed either — counting
+    // either as outstanding overstates the balance.
     const paidTotal = data ? data.invoices.reduce((sum, i) => sum + i.amountPaidCents, 0) : 0
-    const outstanding = data ? data.invoices.reduce((sum, i) => sum + i.amountDueCents, 0) : 0
+    const outstanding = data
+        ? data.invoices
+              .filter((i) => i.status === "open" || i.status === "uncollectible")
+              .reduce((sum, i) => sum + i.amountDueCents, 0)
+        : 0
+    const openInvoices = data ? data.invoices.filter((i) => i.status === "open").length : 0
 
     return (
         <div className={inter.className}>
             <PanelPage>
-                <PanelHeader title="Billing History">
+                <PanelHeader title="Billing">
                     {canManage && data?.connected && (
                         <button
                             type="button"
@@ -193,7 +220,11 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                             <PanelStat
                                 label="Outstanding"
                                 value={money(outstanding)}
-                                hint={outstanding === 0 ? "Nothing due" : "Awaiting payment"}
+                                hint={
+                                    outstanding === 0
+                                        ? "Nothing due"
+                                        : `${openInvoices} invoice${openInvoices === 1 ? "" : "s"} to pay`
+                                }
                             />
                             <PanelStat
                                 label="Retainer"
@@ -219,7 +250,55 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                             />
                         </div>
 
-                        <div className="mb-4 grid grid-cols-1 gap-4">
+                        <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                            <PanelCard>
+                                <div className="border-b border-[#EEF1F7] bg-[#FBFCFF] px-4 py-3">
+                                    <h3 className="text-[13px] font-semibold text-[#111827]">Subscription</h3>
+                                </div>
+                                <div className="p-4">
+                                    {!data.subscription ? (
+                                        <p className="text-[13px] text-[#6B7280]">
+                                            No subscription. Invoices are raised manually.
+                                        </p>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            <div className="flex flex-wrap items-center gap-2 text-[13px]">
+                                                <PanelBadge
+                                                    tone={data.subscription.status === "active" ? "positive" : "warning"}
+                                                >
+                                                    {data.subscription.status}
+                                                </PanelBadge>
+                                                {data.subscription.amountCents !== null && (
+                                                    <span className="text-[#111827]">
+                                                        {money(data.subscription.amountCents)}
+                                                        {data.subscription.interval ? ` / ${data.subscription.interval}` : ""}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-[13px] text-[#6B7280]">
+                                                {data.subscription.cancelAtPeriodEnd
+                                                    ? `Automatic renewal is off. Access ends ${date(data.subscription.currentPeriodEnd)}.`
+                                                    : `Renews automatically on ${date(data.subscription.currentPeriodEnd)}.`}
+                                            </p>
+                                            {canManage && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => void setAutoRenew(data.subscription!.cancelAtPeriodEnd)}
+                                                    disabled={renewalBusy}
+                                                    className="h-8 rounded-lg bg-[#F4F2F8] px-3 text-[12.5px] font-medium text-[#374151] transition-colors hover:bg-[#EAE6F3] disabled:cursor-not-allowed disabled:opacity-50"
+                                                >
+                                                    {renewalBusy
+                                                        ? "Updating…"
+                                                        : data.subscription.cancelAtPeriodEnd
+                                                          ? "Turn Renewal On"
+                                                          : "Turn Renewal Off"}
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </PanelCard>
+
                             <PanelCard>
                                 <div className="border-b border-[#EEF1F7] bg-[#FBFCFF] px-4 py-3">
                                     <h3 className="text-[13px] font-semibold text-[#111827]">Payment Methods</h3>
@@ -260,40 +339,80 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                         <PanelTr>
                                             <PanelTh>Invoice</PanelTh>
                                             <PanelTh>Date</PanelTh>
+                                            <PanelTh>Due</PanelTh>
                                             <PanelTh>Description</PanelTh>
                                             <PanelTh>Status</PanelTh>
                                             <PanelTh className="!text-right">Amount</PanelTh>
-                                            <PanelTh className="!text-right">PDF</PanelTh>
+                                            <PanelTh className="!text-right">Actions</PanelTh>
                                         </PanelTr>
                                     </PanelThead>
                                     <PanelTbody>
                                         {data.invoices.map((invoice) => (
                                             <PanelTr key={invoice.id}>
-                                                <PanelTd className="font-medium text-[#111827]">{invoice.number ?? "—"}</PanelTd>
+                                                <PanelTd className="whitespace-nowrap font-medium text-[#111827]">
+                                                    {/* A draft has no number until Stripe finalises it. */}
+                                                    {invoice.number ?? (
+                                                        <span className="font-normal text-[#9CA3AF]">Not issued</span>
+                                                    )}
+                                                </PanelTd>
                                                 <PanelTd className="whitespace-nowrap text-[#6B7280]">{date(invoice.created)}</PanelTd>
+                                                <PanelTd className="whitespace-nowrap text-[#6B7280]">
+                                                    {invoice.dueDate ? date(invoice.dueDate) : "On receipt"}
+                                                </PanelTd>
                                                 <PanelTd className="text-[#6B7280]">{invoice.description ?? "Retainer"}</PanelTd>
                                                 <PanelTd>
                                                     <PanelBadge tone={INVOICE_TONES[invoice.status ?? ""] ?? "neutral"}>
                                                         {invoice.status ?? "unknown"}
                                                     </PanelBadge>
                                                 </PanelTd>
-                                                <PanelTd className="text-right font-medium tabular-nums">
+                                                <PanelTd className="whitespace-nowrap text-right font-medium tabular-nums">
                                                     {money(invoice.totalCents, invoice.currency)}
+                                                    {invoice.amountDueCents > 0 && invoice.status === "open" && (
+                                                        <span className="block text-[11.5px] font-normal text-[#B42318]">
+                                                            {money(invoice.amountDueCents, invoice.currency)} due
+                                                        </span>
+                                                    )}
                                                 </PanelTd>
                                                 <PanelTd className="text-right">
-                                                    {invoice.pdfUrl ? (
-                                                        <a
-                                                            href={invoice.pdfUrl}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="inline-flex items-center gap-1.5 rounded font-medium text-[#701CC0] hover:underline"
-                                                        >
-                                                            <FiDownload className="h-3.5 w-3.5" />
-                                                            PDF
-                                                        </a>
-                                                    ) : (
-                                                        <span className="text-[#9CA3AF]">—</span>
-                                                    )}
+                                                    <div className="flex items-center justify-end gap-3">
+                                                        {/* Stripe's hosted page is where an open invoice is paid — it takes
+                                                            the card, not us. Both open in a new tab so the panel is still
+                                                            behind them when the reader comes back. */}
+                                                        {invoice.status === "open" && invoice.hostedUrl && (
+                                                            <a
+                                                                href={invoice.hostedUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-flex items-center gap-1.5 rounded font-medium text-[#701CC0] hover:underline"
+                                                            >
+                                                                <FiExternalLink className="h-3.5 w-3.5" />
+                                                                {canManage ? "Pay" : "View"}
+                                                            </a>
+                                                        )}
+                                                        {invoice.hostedUrl && invoice.status !== "open" && (
+                                                            <a
+                                                                href={invoice.hostedUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="rounded font-medium text-[#701CC0] hover:underline"
+                                                            >
+                                                                View
+                                                            </a>
+                                                        )}
+                                                        {invoice.pdfUrl ? (
+                                                            <a
+                                                                href={invoice.pdfUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-flex items-center gap-1.5 rounded font-medium text-[#701CC0] hover:underline"
+                                                            >
+                                                                <FiDownload className="h-3.5 w-3.5" />
+                                                                PDF
+                                                            </a>
+                                                        ) : (
+                                                            <span className="text-[#9CA3AF]">—</span>
+                                                        )}
+                                                    </div>
                                                 </PanelTd>
                                             </PanelTr>
                                         ))}

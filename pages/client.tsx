@@ -148,7 +148,7 @@ const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) =
             {([
               [4, "Analytics", <FiBarChart2 key="a" />],
               [5, "Campaign History", <FiSend key="c" />],
-              [6, "Billing History", <FiCreditCard key="b" />],
+              [6, "Billing", <FiCreditCard key="b" />],
             ] as const).map(([section, label, icon]) => (
               <div
                 key={section}

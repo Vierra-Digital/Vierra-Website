@@ -57,12 +57,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const { stripe } = await import("@/lib/stripe");
+    /**
+     * Paged, not capped at one response.
+     *
+     * A test customer has a handful of rows and a single list() looks complete; a customer two
+     * years into a monthly retainer has more than a page, and the tail would simply never be
+     * shown. autoPagingToArray follows the cursor, with a ceiling so one very old account cannot
+     * hold the request open indefinitely.
+     */
     const [customer, methods, subscriptions, invoices, charges] = await Promise.all([
       stripe.customers.retrieve(customerId),
       stripe.paymentMethods.list({ customer: customerId, limit: 20 }),
-      stripe.subscriptions.list({ customer: customerId, status: "all", limit: 5 }),
-      stripe.invoices.list({ customer: customerId, limit: 100 }),
-      stripe.charges.list({ customer: customerId, limit: 100 }),
+      stripe.subscriptions.list({ customer: customerId, status: "all", limit: 10 }),
+      stripe.invoices
+        .list({ customer: customerId, limit: 100 })
+        .autoPagingToArray({ limit: 500 }),
+      stripe.charges.list({ customer: customerId, limit: 100 }).autoPagingToArray({ limit: 500 }),
     ]);
 
     const defaultMethodId =
@@ -107,8 +117,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             interval: subscription.items.data[0]?.price?.recurring?.interval ?? null,
           }
         : null,
-      invoices: invoices.data.map((invoice) => ({
+      invoices: invoices.map((invoice) => ({
         id: invoice.id,
+        // A draft has no number and no PDF until it is finalised, so the UI is told plainly
+        // rather than rendering an empty cell where an identifier should be.
         number: invoice.number,
         status: invoice.status,
         totalCents: invoice.total,
@@ -121,7 +133,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         hostedUrl: invoice.hosted_invoice_url ?? null,
         description: invoice.lines.data[0]?.description ?? null,
       })),
-      payments: charges.data.map((charge) => ({
+      payments: charges.map((charge) => ({
         id: charge.id,
         status: charge.status,
         amountCents: charge.amount,
