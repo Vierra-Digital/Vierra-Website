@@ -25,6 +25,22 @@ import {
 import { RiArrowDropDownLine } from "react-icons/ri";
 import { useSession } from "@/lib/session-client"
 import { useActivityHeartbeat } from "@/hooks/useActivityHeartbeat"
+import { useActiveClient } from "@/lib/activeClient"
+import { PANEL_SECTIONS, resolvePanelSection } from "@/lib/panel/navigation"
+
+/**
+ * The sections this file actually mounts. PANEL_SECTIONS is wider — it still carries ltv, blog and
+ * artemis, which this branch removed from the panel — so a URL naming one of those has to be caught
+ * here instead of switching to a section with nothing behind it.
+ */
+const RENDERED_SECTIONS = new Set([0, 1, 2, 5, 6, 8, 9, 10])
+
+/**
+ * Sections whose markup is gated on !isStaff. resolvePanelSection already withholds 8 and 9 from
+ * staff, but not 1 — it has no reason to, since Clients is staff-visible on master. Here it is not,
+ * so a staff member following ?section=clients would land on a section that renders nothing.
+ */
+const ADMIN_ONLY_SECTIONS = new Set([1, 8, 9])
 const SignPdfSection = dynamic(
   () => import("@/components/PanelPages/SignPdfSection"),
   { ssr: false }
@@ -96,6 +112,7 @@ const SECTION_VERSION_DOMAIN: Record<number, string> = {
 const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: PanelPageProps) => {
   const router = useRouter()
   const [showSettings, setShowSettings] = useState(false)
+  const [navigationNotice, setNavigationNotice] = useState("")
   const [currentSection, setCurrentSection] = useState(0);
   // Section 0 is always mounted; section 1 (Clients) joins it immediately for admins, who land
   // there most often right after Dashboard. Seeded here rather than added by an effect — this is
@@ -117,6 +134,43 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   const [viewModeSection, setViewModeSection] = useState<0 | 1 | 2 | 3>(0)
   const [viewClient, setViewClient] = useState<{ id: string; name: string; email: string } | null>(null)
   const resolvedUserRole = ((session?.user as any)?.role ?? initialUserRole) as "admin" | "staff"
+  const { setActiveClient } = useActiveClient()
+
+  /**
+   * The section lives in the URL, so Back/Forward and bookmarks work and a link can point at a
+   * particular page of the panel. The nav buttons only push; this effect is the single place that
+   * turns a URL into state, which is why they do not set it themselves.
+   *
+   * resolvePanelSection is shared with master and still knows the sections this branch dropped
+   * (ltv, blog, artemis — LTV is a modal now). Those resolve to a number nothing renders, so they
+   * are checked against what is actually mounted and fall back to Dashboard with a notice rather
+   * than showing an empty panel.
+   */
+  useEffect(() => {
+    if (!router.isReady) return
+    const resolved = resolvePanelSection(router.query.section, resolvedUserRole)
+    const available =
+      RENDERED_SECTIONS.has(resolved.section) &&
+      !(resolvedUserRole === "staff" && ADMIN_ONLY_SECTIONS.has(resolved.section))
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCurrentSection(available ? resolved.section : 0)
+    setNavigationNotice(
+      resolved.invalid || !available ? "This page is unavailable. Showing Dashboard." : ""
+    )
+  }, [router.isReady, router.query.section, resolvedUserRole])
+
+  const navigateSection = (section: number) => {
+    setShowSettings(false)
+    setIsSidebarOpen(false)
+    void router
+      .push(
+        { pathname: "/panel", query: { ...router.query, section: PANEL_SECTIONS[section] } },
+        undefined,
+        { shallow: true, scroll: false }
+      )
+      .catch(() => {})
+  }
+
   const isAdmin = resolvedUserRole === "admin"
   const isStaff = resolvedUserRole === "staff"
   const canAccessEmailPanel = isAdmin || isStaff
@@ -276,107 +330,110 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
           <div id="panel-nav" className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col gap-y-[14px] items-center text-[#EDF1F5] pt-0 pb-5">
             {isClientViewMode ? (
               <>
-                <div id="panel-nav-item" onClick={() => { setViewModeSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${viewModeSection === 0 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                <button type="button" aria-current={viewModeSection === 0 && !showSettings ? "page" : undefined} onClick={() => { setViewModeSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 0 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiGrid className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Dashboard
                   </span>
-                </div>
-                <div id="panel-nav-item" onClick={() => { setViewModeSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${viewModeSection === 2 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                </button>
+                <button type="button" aria-current={viewModeSection === 2 && !showSettings ? "page" : undefined} onClick={() => { setViewModeSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 2 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiGlobe className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Outreach
                   </span>
-                </div>
-                <div id="panel-nav-item" onClick={() => { setViewModeSection(3); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${viewModeSection === 3 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                </button>
+                <button type="button" aria-current={viewModeSection === 3 && !showSettings ? "page" : undefined} onClick={() => { setViewModeSection(3); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 3 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiFileText className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Context
                   </span>
-                </div>
-                <div id="panel-nav-item" onClick={() => { setViewModeSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${viewModeSection === 1 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                </button>
+                <button type="button" aria-current={viewModeSection === 1 && !showSettings ? "page" : undefined} onClick={() => { setViewModeSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === 1 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiFolder className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Files
                   </span>
-                </div>
+                </button>
               </>
             ) : (
               <>
-                <div id="panel-nav-item" onClick={() => { setCurrentSection(0); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 0 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                <button type="button" aria-current={currentSection === 0 && !showSettings ? "page" : undefined} onClick={() => navigateSection(0)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 0 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiGrid className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Dashboard
                   </span>
-                </div>
+                </button>
                 {!isStaff && (
-                  <div id="panel-nav-item" onClick={() => { setCurrentSection(1); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 1 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                  <button type="button" aria-current={currentSection === 1 && !showSettings ? "page" : undefined} onClick={() => navigateSection(1)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 1 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                     <FiUsers className="w-4 h-4 shrink-0" />
                     <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                       Clients
                     </span>
-                  </div>
+                  </button>
                 )}
-                <div id="panel-nav-item" onClick={() => { setCurrentSection(2); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 2 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                <button type="button" aria-current={currentSection === 2 && !showSettings ? "page" : undefined} onClick={() => navigateSection(2)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 2 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiUserCheck className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Staff Orbital
                   </span>
-                </div>
+                </button>
                 {canAccessEmailPanel && (
-                  <div id="panel-nav-item" onClick={() => { window.open('/panel/email', '_blank', 'noopener,noreferrer'); setIsSidebarOpen(false); }} className="w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 hover:bg-white hover:text-black">
+                  <button type="button" onClick={() => { window.open('/panel/email', '_blank', 'noopener,noreferrer'); setIsSidebarOpen(false); }} className="w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 hover:bg-white hover:text-black">
                     <FiMail className="w-4 h-4 shrink-0" />
                     <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                       Email Panel
                     </span>
-                  </div>
+                  </button>
                 )}
-                <div id="panel-nav-item" onClick={() => { setCurrentSection(5); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 5 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                <button type="button" aria-current={currentSection === 5 && !showSettings ? "page" : undefined} onClick={() => navigateSection(5)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 5 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiGlobe className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Marketing Tracker
                   </span>
-                </div>
-                <div id="panel-nav-item" onClick={() => { setCurrentSection(6); setShowSettings(false); setIsSidebarOpen(false)}} className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 6 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
+                </button>
+                <button type="button" aria-current={currentSection === 6 && !showSettings ? "page" : undefined} onClick={() => navigateSection(6)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 6 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiFolder className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Project Tasks
                   </span>
-                </div>
+                </button>
                 
                 {!isStaff && (
-                  <div
-                    id="panel-nav-item"
-                    onClick={() => { setCurrentSection(9); setShowSettings(false); setIsSidebarOpen(false); }}
-                    className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 9 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
+                  <button
+                    type="button"
+                    aria-current={currentSection === 9 && !showSettings ? "page" : undefined}
+                    onClick={() => navigateSection(9)}
+                    className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 9 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
                   >
                     <FiFile />
                     <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                       PDF Signer
                     </span>
-                  </div>
+                  </button>
                 )}
-                <div
-                  id="panel-nav-item"
-                  onClick={() => { setCurrentSection(10); setShowSettings(false); setIsSidebarOpen(false)}}
-                  className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 10 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
+                <button
+                  type="button"
+                  aria-current={currentSection === 10 && !showSettings ? "page" : undefined}
+                  onClick={() => navigateSection(10)}
+                  className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 10 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
                 >
                   <FiFolder className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                     Files
                   </span>
-                </div>
+                </button>
                 {!isStaff && (
-                  <div
-                    id="panel-nav-item"
-                    onClick={() => { setCurrentSection(8); setShowSettings(false); setIsSidebarOpen(false)}}
-                    className={`w-[calc(100%-16px)] flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 cursor-pointer transition-colors duration-150 ${currentSection === 8 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
+                  <button
+                    type="button"
+                    aria-current={currentSection === 8 && !showSettings ? "page" : undefined}
+                    onClick={() => navigateSection(8)}
+                    className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 8 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
                   >
                     <FiShield className="w-4 h-4 shrink-0" />
                     <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
                       User Management
                     </span>
-                  </div>
+                  </button>
                 )}
               </>
             )}
@@ -468,6 +525,11 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
               />
             </div>
             <div style={{ display: showSettings ? "none" : undefined }}>
+              {/* Announced rather than shown: a bookmark to a removed section lands on Dashboard,
+                  and without this the panel just looks like it ignored the link. */}
+              <span role="status" className="sr-only">
+                {navigationNotice}
+              </span>
               {isClientViewMode ? (
                     <>
                       {viewModeSection === 0 && <DashboardSection />}
@@ -486,10 +548,21 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                       )}
                       {visitedSections.has(1) && !isStaff && (
                         <div style={{ display: currentSection === 1 ? undefined : "none" }}>
+                          {/*
+                            Choosing a client is what scopes the rest of the panel: panelFetch reads
+                            the id back out of the cache and sends it as companyId. onSetActiveClient
+                            was dropped here, so "Set Active" called an undefined callback and nothing
+                            was ever written — every request went out unscoped. isAdmin was dropped
+                            with it, which defaulted to false and hid the admin row actions.
+                          */}
                           <ClientsSection
+                            isAdmin={isAdmin}
                             onAddClient={() => setIsAddClientOpen(true)}
                             refreshTrigger={clientRefreshTrigger}
                             onViewClient={enterClientViewMode}
+                            onSetActiveClient={(client) =>
+                              setActiveClient({ id: client.companyId, name: client.businessName })
+                            }
                           />
                         </div>
                       )}
