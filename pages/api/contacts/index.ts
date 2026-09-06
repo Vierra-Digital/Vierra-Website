@@ -50,9 +50,10 @@ export default withAuth(async (req, res, session) => {
         contacts: contacts.map((contact) => ({
           ...serializeContact(contact),
           tags: contact.contact_tag_assignments.map((assignment) => assignment.contact_tags),
-          company: mergedView
-            ? { id: contact.company_id, name: (contact as unknown as { companies: { name: string } }).companies.name }
-            : null,
+          company:
+            mergedView && "companies" in contact && contact.companies
+              ? { id: contact.company_id, name: (contact.companies as { name: string }).name }
+              : null,
         })),
         pagination: {
           page,

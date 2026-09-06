@@ -31,9 +31,11 @@ type ProspectTaskResult =
 
 /**
  * Cartography's companyId identifies a client's whole company, shared across every teammate on
- * it (see pages/api/context/client.ts) -- but /prospect's seeker lookup is keyed on a specific
- * client row. Any client row for that company resolves to the same onboarding context, so this
- * just picks one deterministically (oldest) rather than needing the caller to know which.
+ * it (see pages/api/context/client.ts). When the company already has an onboarded Client row,
+ * /prospect's seeker uses it (any row for that company resolves to the same onboarding context,
+ * so this just picks one deterministically -- oldest). A company with no Client row yet -- a
+ * brand-new company, or a Vierra-internal one staff are prospecting for directly -- has none, and
+ * that's fine: startProspectJob falls back to the Company's own name as the seeker.
  */
 async function resolveSeekerClientId(companyId: string): Promise<string | null> {
   const client = await prisma.client.findFirst({
@@ -50,9 +52,8 @@ export async function startProspectDiscovery(
   requestedBy: string
 ): Promise<ProspectStartOutcome> {
   const clientId = await resolveSeekerClientId(companyId);
-  if (!clientId) return { ok: false, status: 404, message: "No client found for this company." };
 
-  const result = await startProspectJob({ clientId, goal: description, requestedBy });
+  const result = await startProspectJob({ clientId, companyId, goal: description, requestedBy });
   if (!result.ok) return result;
   return { ok: true, jobId: result.jobId };
 }
@@ -108,7 +109,7 @@ export function prospectResultToRunResult(payload: unknown): { tasks: ProspectTa
 export async function persistCompletedProspectJob(params: {
   jobId: string;
   companyId: string;
-  clientId: string;
+  clientId: string | null;
   createdBy: string | null;
   goal: string;
   payload: unknown;
