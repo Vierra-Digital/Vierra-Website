@@ -2,46 +2,20 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { syncContactsSpreadsheetForUser } from "@/lib/contacts/xlsx";
 import { resolveAccountId } from "@/lib/api/emailAccounts";
-import { serializeContact } from "@/lib/api/contacts";
-import { asStr, asQueryStr } from "@/lib/api/parsing";
+import { buildContactsWhere, serializeContact } from "@/lib/api/contacts";
+import { asQueryStr, asStr } from "@/lib/api/parsing";
 
 export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
 
   if (req.method === "GET") {
-    const accountEmail = asQueryStr(req.query.accountEmail).trim().toLowerCase();
-    const search = asQueryStr(req.query.search).trim();
-    const source = asQueryStr(req.query.source).trim().toLowerCase();
-    const tagIds = asQueryStr(req.query.tagIds)
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter(Boolean);
+    // Pagination is this route's own concern; the export sends every match.
     const pageRaw = Number(asQueryStr(req.query.page));
     const limitRaw = Number(asQueryStr(req.query.limit));
     const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 100) : 50;
 
-    const where: any = { user_id: userId };
-    if (accountEmail) {
-      const accountId = await resolveAccountId(userId, accountEmail);
-      where.account_id = accountId ?? "__none__";
-    }
-    if (source && ["manual", "gmail", "csv"].includes(source)) where.source = source;
-    if (search) {
-      where.OR = [
-        { first_name: { contains: search, mode: "insensitive" } },
-        { last_name: { contains: search, mode: "insensitive" } },
-        { email: { contains: search, mode: "insensitive" } },
-        { business: { contains: search, mode: "insensitive" } },
-      ];
-    }
-    if (tagIds.length > 0) {
-      where.contact_tag_assignments = {
-        some: {
-          tag_id: { in: tagIds },
-        },
-      };
-    }
+    const where = await buildContactsWhere(userId, req.query);
 
     const [total, contacts] = await Promise.all([
       prisma.contact.count({ where }),

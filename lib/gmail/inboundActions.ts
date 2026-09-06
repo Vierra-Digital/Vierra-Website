@@ -8,6 +8,7 @@ import { addToDnc } from "@/lib/campaigns/dnc";
 import { bumpCampaignStat } from "@/lib/campaigns/campaignStats";
 import { looksLikeBounce, parseDeliveryStatus, extractDsnParts } from "@/lib/gmail/dsn";
 import type { InboundMessage, InboundContext } from "@/lib/gmail/inboundTypes";
+import { resolveReplyLeadStatus } from "@/lib/campaigns/replyStatus";
 
 /** True for automated/bulk mail we must never auto-reply to (prevents mail loops). */
 function isAutomatedSender(msg: InboundMessage): boolean {
@@ -309,8 +310,7 @@ export async function maybeReplyIntelligence(msg: InboundMessage): Promise<Reply
   });
   if (!contact) return null;
 
-  // Default: a reply pauses the sequence. ("reply" — not "replied", which isn't in LEAD_STATUSES.)
-  let leadStatus = "reply";
+  let classifierLabel: string | null = null;
 
   if (artemisConfigured()) {
     const result = await artemisGenerate({
@@ -321,39 +321,19 @@ export async function maybeReplyIntelligence(msg: InboundMessage): Promise<Reply
       maxTokens: 8,
     });
     if (result.ok) {
-      const label = result.text.trim().toLowerCase().replace(/[^a-z_]/g, "");
-      // Values must be canonical LEAD_STATUSES (lib/api/campaigns.ts) — "interested" and
-      // "unsubscribed" were never valid entries there (positive_response / remove_contact are);
-      // writing the old values meant these replies wouldn't match the UI's status filter chips.
-      const map: Record<string, string> = {
-        interested: "positive_response",
-        not_interested: "not_interested",
-        out_of_office: "no_response",
-        unsubscribe: "remove_contact",
-        neutral: "reply",
-      };
-      if (map[label]) leadStatus = map[label];
+      // The label -> status map and the sticky rule live in lib/campaigns/replyStatus, typed so
+      // a non-canonical status is a compile error. This once wrote "interested" and
+      // "unsubscribed", which are not LEAD_STATUSES, so those replies never matched the filters.
+      classifierLabel = result.text;
     }
   }
 
   const fromStatus = contact.lead_status;
-  // An out-of-office-flavored reply ("no_response") must not erase a status that already carries
-  // real signal — isAutomatedSender() only checks headers, so a genuine human reply whose body
-  // just reads like an OOO note (e.g. "swamped this week, will follow up Monday" sent from a
-  // normal inbox) can reach here after the contact was already classified positive_response,
-  // meeting_booked, etc. Downgrading that back to no_response would silently discard the prior
-  // signal. Keep the existing status in that case instead of overwriting it.
-  const STICKY_STATUSES = new Set([
-    "positive_response",
-    "positive_response_closed",
-    "meeting_booked",
-    "not_interested",
-    "remove_contact",
-    "bad_timing",
-  ]);
-  if (leadStatus === "no_response" && STICKY_STATUSES.has(fromStatus)) {
-    leadStatus = fromStatus;
-  }
+  // resolveReplyLeadStatus also refuses to downgrade a status that already carries signal:
+  // isAutomatedSender() only inspects headers, so a human reply that merely reads like an
+  // out-of-office note reaches here and would otherwise erase positive_response or
+  // meeting_booked.
+  const leadStatus = resolveReplyLeadStatus(classifierLabel, fromStatus);
   const now = new Date();
   await prisma.campaignContact.update({
     where: { id: contact.id },

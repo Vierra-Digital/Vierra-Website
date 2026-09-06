@@ -1,41 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { toContactsCsv } from "@/lib/contacts/csv";
-import { resolveAccountId } from "@/lib/api/emailAccounts";
-import { asQueryStr } from "@/lib/api/parsing";
+import { buildContactsWhere } from "@/lib/api/contacts";
 
 export default withAuth(async (req, res, session) => {
   const userId = session.user.id;
 
-  const accountEmail = asQueryStr(req.query.accountEmail).toLowerCase();
-  const search = asQueryStr(req.query.search);
-  const source = asQueryStr(req.query.source).toLowerCase();
-  const tagIds = asQueryStr(req.query.tagIds)
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-
-  const where: any = { user_id: userId };
-  if (accountEmail) {
-    const accountId = await resolveAccountId(userId, accountEmail);
-    where.account_id = accountId ?? "__none__";
-  }
-  if (source && ["manual", "gmail", "csv"].includes(source)) where.source = source;
-  if (search) {
-    where.OR = [
-      { first_name: { contains: search, mode: "insensitive" } },
-      { last_name: { contains: search, mode: "insensitive" } },
-      { email: { contains: search, mode: "insensitive" } },
-      { business: { contains: search, mode: "insensitive" } },
-    ];
-  }
-  if (tagIds.length > 0) {
-    where.contact_tag_assignments = {
-      some: {
-        tag_id: { in: tagIds },
-      },
-    };
-  }
+  const where = await buildContactsWhere(userId, req.query);
 
   const contacts = await prisma.contact.findMany({
     where,
