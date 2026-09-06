@@ -255,8 +255,8 @@ export const PanelPagination: React.FC<{
       <button type="button" onClick={() => step(-1)} disabled={page === 0} aria-label="Previous page" className={arrow}>
         <ChevronLeft className="h-4 w-4" aria-hidden />
       </button>
-      <span className="min-w-[76px] text-center text-[12.5px] tabular-nums text-[#6B7280]">
-        Page <span className="font-medium text-[#374151]">{page + 1}</span> of {totalPages}
+      <span className="min-w-[86px] text-center text-[12.5px] tabular-nums text-[#6B7280]">
+        Page {page + 1} of {totalPages}
       </span>
       <button
         type="button"
@@ -282,7 +282,7 @@ export const PanelClearFilters: React.FC<{ onClick: () => void }> = ({ onClick }
       onClick={onClick}
       className="h-8 w-full rounded-lg bg-[#F4F2F8] text-[12.5px] font-medium text-[#6B7280] transition-colors hover:bg-[#EAE6F3] hover:text-[#374151]"
     >
-      Clear all filters
+      Clear All Filters
     </button>
   </div>
 )
@@ -299,8 +299,8 @@ export const PanelEmptyState: React.FC<{
   children?: React.ReactNode
 }> = ({ title, message, image, children }) => (
   <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-    {image}
-    <h3 className="mt-1 text-lg font-semibold text-[#111827]">{title}</h3>
+    {image ? <div className="panel-empty-float mb-6">{image}</div> : null}
+    <h3 className="text-lg font-semibold text-[#111827]">{title}</h3>
     <p className="mt-2 max-w-md text-sm text-[#6B7280]">{message}</p>
     {children ? <div className="mt-4">{children}</div> : null}
   </div>
@@ -394,7 +394,10 @@ export function PanelDataTable<T>({
           ))}
         </PanelTbody>
       </PanelTable>
-      <PanelPagination page={safePage} pageSize={pageSize} total={rows.length} onPageChange={onPageChange} />
+      {/* Nothing to page to, nothing to show. */}
+      {totalPages > 1 && (
+        <PanelPagination page={safePage} pageSize={pageSize} total={rows.length} onPageChange={onPageChange} />
+      )}
     </PanelCard>
   )
 }

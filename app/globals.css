@@ -1515,3 +1515,26 @@ input[type="search"]::-ms-clear:hover {
 @media (prefers-reduced-motion: reduce) {
   .dash-skeleton { animation: none; background: rgba(17, 24, 39, 0.07); }
 }
+
+/* Empty-state illustration: a slow drift so the panel's "nothing here" states have the same
+   quiet motion the Files one already had, rather than sitting dead still. motion-safe only —
+   prefers-reduced-motion turns it off. */
+@keyframes panel-empty-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.panel-empty-float {
+  animation: panel-empty-float 3.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-empty-float {
+    animation: none;
+  }
+}
