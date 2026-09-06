@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { resolveBaseUrl } from "@/lib/api/url";
@@ -33,6 +34,29 @@ export default withAuth(
     const strikeCount = Number.isFinite(Number(strikes)) ? Math.min(3, Math.max(0, Math.trunc(Number(strikes)))) : 0;
     const asText = (value: unknown) =>
       typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+
+    /**
+     * Refuse an address the system already knows.
+     *
+     * generateLink("invite") happily mints a second link for an existing account, so inviting
+     * someone who already has one sent them a join link for an account they were already using,
+     * and left a pending row in Staff Orbital beside their real one. Checked here rather than in
+     * the dialog because the dialog cannot see the other rows it would be colliding with.
+     */
+    const existingUser = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true },
+    });
+    if (existingUser) {
+      return res.status(409).json({ message: "Someone with that email address already has an account." });
+    }
+    const existingInvite = await prisma.invitation.findFirst({
+      where: { email: normalizedEmail, company_id: session.companyId, accepted_at: null },
+      select: { id: true },
+    });
+    if (existingInvite) {
+      return res.status(409).json({ message: "That email address already has an invite waiting." });
+    }
 
     // Mint-only (never sends) — Supabase's own invite email goes out through its dashboard SMTP
     // config, which fails DMARC for this domain (see the chat this shipped from). We send our own

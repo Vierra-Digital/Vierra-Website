@@ -17,7 +17,6 @@ import Image from "next/image"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import RowActionMenu, { RowActionMenuDivider, RowActionMenuItem, RowActionMenuLabel } from "@/components/ui/RowActionMenu"
 import Modal from "@/components/ui/Modal"
-import ActionResultModal from "@/components/ui/ActionResultModal"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import ProfileImage from "@/components/ProfileImage"
 import {
@@ -175,7 +174,7 @@ function UsersPanel() {
     const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
     const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
     const [resetResult, setResetResult] = useState<{ success: boolean; email: string | null } | null>(null)
-    const [rescindResult, setRescindResult] = useState<{ success: boolean; email: string | null } | null>(null)
+    const [inviteToRescind, setInviteToRescind] = useState<{ id: string; email: string | null } | null>(null)
 
     // Session-side state, carried over wholesale from the view this page absorbed.
     const [expiring, setExpiring] = useState<boolean>(false)
@@ -330,15 +329,16 @@ function UsersPanel() {
         try {
             const r = await fetch(`/api/admin/invitations/${encodeURIComponent(inviteId)}`, { method: "DELETE" })
             if (!r.ok) {
-                setRescindResult({ success: false, email: inviteEmail })
+                const body = await r.json().catch(() => ({}))
+                setError(body?.message || `Could not rescind the invite for ${inviteEmail ?? "this address"}.`)
                 return
             }
             await load()
-            setRescindResult({ success: true, email: inviteEmail })
         } catch {
-            setRescindResult({ success: false, email: inviteEmail })
+            setError(`Could not rescind the invite for ${inviteEmail ?? "this address"} — the request failed.`)
         } finally {
             setRescindingInvite(null)
+            setInviteToRescind(null)
         }
     }
 
@@ -764,7 +764,7 @@ function UsersPanel() {
                                     )}
                                     {u.pendingInvite && (
                                         <RowActionMenuItem
-                                            onClick={() => rescindInvite(u.pendingInvite!.id, u.email)}
+                                            onClick={() => setInviteToRescind({ id: u.pendingInvite!.id, email: u.email })}
                                             disabled={rescindingInvite === u.pendingInvite.id}
                                             icon={<Trash2 className="w-4 h-4" />}
                                         >
@@ -812,16 +812,24 @@ function UsersPanel() {
                 }}
             />
 
-            <ActionResultModal
-                isOpen={rescindResult !== null}
-                success={rescindResult?.success ?? false}
-                title={rescindResult?.success ? "Invite Rescinded" : "Could Not Rescind Invite"}
+            <ConfirmActionModal
+                isOpen={inviteToRescind !== null}
+                title="Rescind Invite"
                 message={
-                    rescindResult?.success
-                        ? `The invite for ${rescindResult.email ?? "this address"} has been rescinded. The link in it no longer works.`
-                        : "The invite is still active. Try again."
+                    <>
+                        Rescind the invite for{" "}
+                        <span className="font-semibold text-[#111827]">{inviteToRescind?.email || "this address"}</span>?
+                        The link they were sent will stop working and they will not be able to join.
+                    </>
                 }
-                onClose={() => setRescindResult(null)}
+                confirmLabel="Rescind Invite"
+                busy={rescindingInvite !== null}
+                busyLabel="Rescinding…"
+                danger={false}
+                onConfirm={() => {
+                    if (inviteToRescind) void rescindInvite(inviteToRescind.id, inviteToRescind.email)
+                }}
+                onCancel={() => setInviteToRescind(null)}
             />
 
             <PasswordResetModal

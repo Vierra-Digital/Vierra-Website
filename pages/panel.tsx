@@ -145,7 +145,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   const [viewModeSection, setViewModeSection] = useState<0 | 1 | 2 | 3>(0)
   const [viewClient, setViewClient] = useState<{ id: string; name: string; email: string } | null>(null)
   const resolvedUserRole = ((session?.user as any)?.role ?? initialUserRole) as "admin" | "staff"
-  const { setActiveClient } = useActiveClient()
+  const { activeClient, setActiveClient } = useActiveClient()
 
   /**
    * The section lives in the URL, so Back/Forward and bookmarks work and a link can point at a
@@ -610,8 +610,13 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                             onAddClient={() => setIsAddClientOpen(true)}
                             refreshTrigger={clientRefreshTrigger}
                             onViewClient={(client) => void enterClientViewMode(client)}
+                            activeCompanyId={activeClient?.id ?? null}
                             onSetActiveClient={(client) =>
-                              setActiveClient({ id: client.companyId, name: client.businessName })
+                              // null clears it, which puts the dashboard and the trackers back to
+                              // the company-wide view.
+                              setActiveClient(
+                                client ? { id: client.companyId, name: client.businessName } : null
+                              )
                             }
                           />
                         </div>

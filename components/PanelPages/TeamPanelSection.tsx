@@ -12,7 +12,6 @@ import {
     PANEL_FIELD_INVALID as FIELD_INVALID,
     PanelFieldSelect as FieldSelect,
 } from "@/components/ui/PanelForm";
-import ActionResultModal from "@/components/ui/ActionResultModal";
 import Modal from "@/components/ui/Modal";
 import { computePresenceStatus } from "@/lib/presence";
 import {
@@ -78,6 +77,8 @@ interface TeamRow {
     country: string
     company_email: string | null
     mentor: string | null
+    /** Resolved for display; `mentor` stays the id the edit dialog preselects with. */
+    mentorName: string | null
     time_zone: string | null
     /**
      * The count, not the "2/3" label. It was typed as a string while the API sends the integer
@@ -134,7 +135,8 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const [deleting, setDeleting] = useState(false)
     const [showRescindModal, setShowRescindModal] = useState(false)
     const [inviteToRescind, setInviteToRescind] = useState<{ id: string; email: string } | null>(null)
-    const [rescindResult, setRescindResult] = useState<{ success: boolean; email: string } | null>(null)
+    const [rescindError, setRescindError] = useState("")
+    const [rescinding, setRescinding] = useState(false)
     const [searchTerm, setSearchTerm] = useState("")
     const [sortBy, setSortBy] = useState<"position" | "timeZone" | "strikes" | "status">("position")
     const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
@@ -207,8 +209,9 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     }
 
     const confirmRescindInvite = async () => {
-        if (!inviteToRescind) return
-
+        if (!inviteToRescind || rescinding) return
+        setRescinding(true)
+        setRescindError("")
         try {
             const response = await fetch(`/api/admin/invitations/${inviteToRescind.id}`, {
                 method: "DELETE",
@@ -218,13 +221,15 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 throw new Error("Failed to rescind invite")
             }
             setRows(prev => prev.filter(r => r.id !== inviteToRescind.id))
-            setRescindResult({ success: true, email: inviteToRescind.email })
-        } catch (error) {
-            console.error("Error rescinding invite:", error)
-            setRescindResult({ success: false, email: inviteToRescind.email })
-        } finally {
+            // Closed only on success — a failure leaves the dialog up so the reason in it can be
+            // read, which a finally block closing unconditionally would not allow.
             setShowRescindModal(false)
             setInviteToRescind(null)
+        } catch (error) {
+            console.error("Error rescinding invite:", error)
+            setRescindError(`Could not rescind the invite for ${inviteToRescind.email}. Try again.`)
+        } finally {
+            setRescinding(false)
         }
     }
 
@@ -288,6 +293,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                     country: u.country,
                     company_email: u.company_email,
                     mentor: u.mentor,
+                    mentorName: u.mentorName ?? null,
                     // Not applicable until the invite is accepted: there is no membership to
                     // count strikes against yet.
                     strikes: pending ? null : typeof u.strikes === "number" ? u.strikes : 0,
@@ -534,7 +540,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                         header: "Time Zone",
                         cell: (r) => (r.time_zone ? timeZoneLabel(r.time_zone) : <PanelEmptyCell />),
                     },
-                    { key: "mentor", header: "Mentor", cell: (r) => r.mentor || <PanelEmptyCell /> },
+                    { key: "mentor", header: "Mentor", cell: (r) => r.mentorName || <PanelEmptyCell /> },
                     {
                         key: "strikes",
                         header: "Strikes",
@@ -568,18 +574,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                           ]
                         : []),
                 ]}
-            />
-
-            <ActionResultModal
-                isOpen={rescindResult !== null}
-                success={rescindResult?.success ?? false}
-                title={rescindResult?.success ? "Invite Rescinded" : "Could Not Rescind Invite"}
-                message={
-                    rescindResult?.success
-                        ? `The invite for ${rescindResult.email} has been rescinded. The link in it no longer works.`
-                        : "The invite is still active. Try again."
-                }
-                onClose={() => setRescindResult(null)}
             />
 
             {showAddStaff && userRole === "admin" && (
@@ -644,16 +638,24 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                     title="Rescind Invite"
                     message={
                         <>
-                            Are you sure you want to rescind the invite for{" "}
-                            <span className="font-semibold text-[#111827]">{inviteToRescind?.email || ""}</span>? They
-                            will no longer be able to use this invite to join the team.
+                            Rescind the invite for{" "}
+                            <span className="font-semibold text-[#111827]">{inviteToRescind?.email || ""}</span>? The
+                            link they were sent will stop working and they will not be able to join.
+                            {rescindError && (
+                                <span className="mt-3 block rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
+                                    {rescindError}
+                                </span>
+                            )}
                         </>
                     }
                     confirmLabel="Rescind Invite"
+                    busy={rescinding}
+                    busyLabel="Rescinding…"
                     danger={false}
                     onCancel={() => {
                         setShowRescindModal(false)
                         setInviteToRescind(null)
+                        setRescindError("")
                     }}
                     onConfirm={confirmRescindInvite}
                 />

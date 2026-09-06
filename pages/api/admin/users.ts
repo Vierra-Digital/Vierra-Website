@@ -22,6 +22,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const memberships = await prisma.companyMembership.findMany({
         where: { company_id: companyId },
         include: {
+          // mentor_id is a uuid, and the Mentor column was rendering it verbatim. The dialog still
+          // needs the id to preselect its picker, so both are reported.
+          users_company_memberships_mentor_idTousers: { select: { id: true, name: true, email: true } },
           users_company_memberships_user_idTousers: {
             select: {
               id: true,
@@ -56,6 +59,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           country: null,
           company_email: null,
           mentor: m.mentor_id ?? null,
+          mentorName:
+            m.users_company_memberships_mentor_idTousers?.name ||
+            m.users_company_memberships_mentor_idTousers?.email ||
+            null,
           strikes: m.strikes,
           time_zone: u.user_preferences?.time_zone ?? null,
           // Derived, not read: sign-out and session-expiry paths write "offline" without
@@ -101,6 +108,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           country: null,
           company_email: null,
           mentor: null,
+          mentorName: null,
           strikes: 0,
           time_zone: null,
           status: "offline",
@@ -175,6 +183,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         country: null,
         company_email: null,
         mentor: invite.mentor_id,
+        mentorName: null,
         strikes: invite.strikes,
         time_zone: invite.time_zone,
         status: "offline",
