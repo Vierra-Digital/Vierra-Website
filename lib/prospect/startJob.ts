@@ -5,7 +5,11 @@ const ARTEMIS_PROSPECT_KEY = process.env.ARTEMIS_PROSPECT_KEY || "";
 const PUBLIC_BASE_URL = (process.env.PUBLIC_BASE_URL || "").replace(/\/+$/, "");
 
 export type StartProspectJobParams = {
-  clientId: string;
+  // Either identifies the seeker. clientId (when given) takes precedence and companyId is derived
+  // from it; companyId alone is enough for a company with no onboarded Client yet (see
+  // lib/cartography/prospectMethod.ts).
+  clientId?: string | null;
+  companyId?: string;
   goal: string;
   requestedBy: string;
   partnershipTypes?: string[];
@@ -30,18 +34,34 @@ export async function startProspectJob(params: StartProspectJobParams): Promise<
     return { ok: false, status: 503, message: "Artemis prospect is not configured." };
   }
 
-  const client = await prisma.client.findUnique({
-    where: { id: params.clientId },
-    select: { id: true, company_id: true, business_name: true },
-  });
-  if (!client) return { ok: false, status: 404, message: "Client not found." };
+  let companyId: string;
+  let businessName: string;
+  if (params.clientId) {
+    const client = await prisma.client.findUnique({
+      where: { id: params.clientId },
+      select: { id: true, company_id: true, business_name: true },
+    });
+    if (!client) return { ok: false, status: 404, message: "Client not found." };
+    companyId = client.company_id;
+    businessName = client.business_name;
+  } else if (params.companyId) {
+    const company = await prisma.company.findUnique({
+      where: { id: params.companyId },
+      select: { id: true, name: true },
+    });
+    if (!company) return { ok: false, status: 404, message: "Company not found." };
+    companyId = company.id;
+    businessName = company.name;
+  } else {
+    return { ok: false, status: 400, message: "clientId or companyId is required." };
+  }
 
   // seeker_id is retired -- Artemis no longer looks up a profile on our behalf, so we build the
-  // seeker object it replaced from what we already know about this client. targetAudience comes
+  // seeker object it replaced from what we already know about this company. targetAudience comes
   // from the company's latest onboarding answers (see pages/api/context/client.ts); we don't
   // track a structured city/region anywhere, so those only appear when the caller passed geo.
   const latestOnboarding = await prisma.onboardingSession.findFirst({
-    where: { company_id: client.company_id },
+    where: { company_id: companyId },
     orderBy: { created_at: "desc" },
     select: { answers: true },
   });
@@ -52,7 +72,7 @@ export async function startProspectJob(params: StartProspectJobParams): Promise<
   const wtAudience = typeof onboardingAnswers.targetAudience === "string" ? onboardingAnswers.targetAudience.trim() : "";
 
   const seeker: { name: string; wtAudience?: string; city?: string; region?: string } = {
-    name: client.business_name,
+    name: businessName,
   };
   if (wtAudience) seeker.wtAudience = wtAudience;
   if (params.geo?.city) seeker.city = params.geo.city;
@@ -95,8 +115,8 @@ export async function startProspectJob(params: StartProspectJobParams): Promise<
   await prisma.artemisProspectJob.create({
     data: {
       id: jobId,
-      client_id: client.id,
-      company_id: client.company_id,
+      client_id: params.clientId ?? null,
+      company_id: companyId,
       requested_by: params.requestedBy,
       goal: params.goal,
       status: "queued",
