@@ -1,18 +1,86 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import Image from "next/image"
 import { useSession } from "@/lib/session-client"
-import { FiChevronLeft, FiChevronRight, FiCalendar, FiTrendingUp, FiDollarSign, FiUsers, FiTarget } from "react-icons/fi"
+import { FiChevronLeft, FiChevronRight, FiTrendingUp } from "react-icons/fi"
 import { m as motion } from "framer-motion"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
-import { PanelHeader, PanelPage } from "@/components/panel/PanelTable"
+import {
+    PanelCard,
+    PanelHeader,
+    PanelPage,
+    PanelTable,
+    PanelTbody,
+    PanelTd,
+    PanelTh,
+    PanelThead,
+    PanelTr,
+} from "@/components/panel/PanelTable"
+import { PANEL_FIELD, PanelFieldLabel, PanelFieldSelect } from "@/components/ui/PanelForm"
 import { useDraftGuard } from "@/hooks/useDraftGuard";
 import { panelFetch } from "@/lib/panelFetch"
 
+/**
+ * The dashboard's stat tile. This page had four different ways of showing a number — a bordered
+ * white card, a figure on a purple gradient, a label-and-value row — none of which matched the
+ * dashboard the numbers are also shown on.
+ */
+const TrackerTile: React.FC<{ label: string; value: React.ReactNode; hint?: React.ReactNode }> = ({
+    label,
+    value,
+    hint,
+}) => (
+    <div className="rounded-xl bg-[#F1EFF6] px-3.5 py-3.5 transition-colors duration-150 hover:bg-[#EBE8F3]">
+        <h3 className="mb-1.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">{label}</h3>
+        <div className="text-[22px] font-semibold leading-none tracking-[-0.02em] text-[#111827]">{value}</div>
+        {hint ? <div className="mt-1.5 text-[12px] font-medium text-[#6B7280]">{hint}</div> : null}
+    </div>
+)
+
+/** A titled card in the panel's shape, so every section here is bounded the same way. */
+const TrackerCard: React.FC<{
+    title: React.ReactNode
+    children: React.ReactNode
+    className?: string
+}> = ({ title, children, className = "" }) => (
+    <div className={className}>
+        <PanelCard>
+            <div className="flex items-center gap-2 border-b border-[#EEF1F7] bg-[#FBFCFF] px-4 py-3">
+                <h3 className="flex items-center gap-2 text-[13px] font-semibold text-[#111827]">{title}</h3>
+            </div>
+            <div className="p-4">{children}</div>
+        </PanelCard>
+    </div>
+)
+
+/** One labelled number entry, in the panel's field styling rather than a hand-rolled border. */
+const TrackerInput: React.FC<{
+    label: React.ReactNode
+    value: string
+    onChange: (value: string) => void
+    editable: boolean
+    busy: boolean
+}> = ({ label, value, onChange, editable, busy }) => (
+    <label className="block">
+        <span className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+            {label}
+        </span>
+        <input
+            type="text"
+            className={`${PANEL_FIELD} text-right tabular-nums disabled:cursor-not-allowed disabled:opacity-60`}
+            value={value}
+            onChange={(event) => onChange(event.target.value.replace(/,/g, ""))}
+            placeholder="0"
+            disabled={!editable || busy}
+            readOnly={!editable}
+        />
+    </label>
+)
+
 const statFields = [
-    { key: "attempts", label: "Attempts", icon: FiTarget },
-    { key: "meetings", label: "Meetings", icon: FiCalendar },
-    { key: "clients", label: "Clients Closed", icon: FiUsers },
-    { key: "revenue", label: "Revenue", icon: FiDollarSign }
+    { key: "attempts", label: "Attempts" },
+    { key: "meetings", label: "Meetings" },
+    { key: "clients", label: "Clients Closed" },
+    { key: "revenue", label: "Revenue" }
 ];
 
 type CardKey =
@@ -523,62 +591,47 @@ const OutreachSection = () => {
         return (
             <motion.div
                 key={cardKey}
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-                className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white transition-colors hover:border-[#D6CFE4]"
+                transition={{ duration: 0.25 }}
             >
-                <div className="px-4 py-3 border-b border-[#EEF1F7] bg-[#FBFCFF]">
-                    <h3 className="font-semibold text-[#111827] flex items-center gap-2">
-                        <span className={`inline-flex items-center justify-center w-7 h-7 rounded-md ${config.iconChip}`}>
-                            <Image src={config.icon} alt={cardKey} width={16} height={16} className="w-4 h-4" />
-                        </span>
-                        {cardLabels[cardKey]}
-                    </h3>
-                </div>
-                <div className="p-5">
-                    <div className="space-y-4">
-                        {statFields.map(field => {
-                            const Icon = field.icon
-                            return (
-                                <div key={field.key} className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <Icon className="w-4 h-4 text-[#6B7280]" />
-                                        <span className="text-sm text-[#6B7280]">{field.label}</span>
-                                    </div>
-                                    <input
-                                        type="text"
-                                        className={`text-sm font-semibold text-[#111827] w-28 rounded-md border px-2 py-1 bg-white ${
-                                            isEditable ? "border-[#D7DDED] focus:border-[#701CC0] focus:ring-1 focus:ring-[#701CC0]" : "border-[#E5E7EB]"
-                                        } focus:outline-none text-right transition-colors ${!isEditable ? 'cursor-not-allowed opacity-60' : ''}`}
-                                        value={getInputValue(cardStats[field.key as keyof typeof cardStats] as number)}
-                                        onChange={e => {
-                                            const value = e.target.value.replace(/,/g, '');
-                                            handleStatChange(cardKey, field.key as StatField, value);
-                                        }}
-                                        placeholder="0"
-                                        disabled={!isEditable || isUpdating}
-                                        readOnly={!isEditable}
-                                    />
-                                </div>
-                            )
-                        })}
-                        <div className="pt-3 border-t border-gray-200 space-y-2">
-                            <div className="flex justify-between items-center">
-                                <span className="text-xs text-[#6B7280]">Attempts To Meetings</span>
-                                <span className="text-sm font-semibold text-[#701CC0]">
-                                    {calculatePercentage(cardStats.meetings, cardStats.attempts)}%
-                                </span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-xs text-[#6B7280]">Meetings To Clients</span>
-                                <span className="text-sm font-semibold text-[#701CC0]">
-                                    {calculatePercentage(cardStats.clients, cardStats.meetings)}%
-                                </span>
-                            </div>
-                        </div>
+                <TrackerCard
+                    title={
+                        <>
+                            <span className={`inline-flex h-6 w-6 items-center justify-center rounded-md ${config.iconChip}`}>
+                                <Image src={config.icon} alt="" width={14} height={14} className="h-3.5 w-3.5" />
+                            </span>
+                            {cardLabels[cardKey]}
+                        </>
+                    }
+                >
+                    <div className="grid grid-cols-2 gap-3">
+                        {statFields.map((field) => (
+                            <TrackerInput
+                                key={field.key}
+                                label={field.label}
+                                value={getInputValue(cardStats[field.key as keyof typeof cardStats] as number)}
+                                onChange={(value) => handleStatChange(cardKey, field.key as StatField, value)}
+                                editable={isEditable}
+                                busy={isUpdating}
+                            />
+                        ))}
                     </div>
-                </div>
+                    <div className="mt-4 flex items-center justify-between gap-4 border-t border-[#EEF1F7] pt-3 text-[12px]">
+                        <span className="text-[#6B7280]">
+                            Attempts to meetings{" "}
+                            <span className="font-semibold text-[#701CC0]">
+                                {calculatePercentage(cardStats.meetings, cardStats.attempts)}%
+                            </span>
+                        </span>
+                        <span className="text-[#6B7280]">
+                            Meetings to clients{" "}
+                            <span className="font-semibold text-[#701CC0]">
+                                {calculatePercentage(cardStats.clients, cardStats.meetings)}%
+                            </span>
+                        </span>
+                    </div>
+                </TrackerCard>
             </motion.div>
         )
     }
@@ -648,46 +701,54 @@ const OutreachSection = () => {
                             {(scope !== "company" || viewMode === "monthly") ? (
                                 <>
                                     
-                                    <div className="inline-flex h-9 items-center rounded-lg bg-[#701CC0] text-white">
+                                    <div className="inline-flex h-9 items-center rounded-[10px] bg-[#F4F2F8] text-[#374151]">
                                         <button
+                                            type="button"
+                                            aria-label="Previous month"
                                             onClick={() => void changeView(() => navigateMonth("prev"))}
                                             disabled={!canNavigatePrev}
-                                            className="p-2 hover:bg-white/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded-l-lg"
+                                            className="rounded-l-[10px] p-2 transition-colors hover:bg-[#EAE6F3] disabled:cursor-not-allowed disabled:opacity-40"
                                         >
-                                            <FiChevronLeft className="w-4 h-4 text-white" />
+                                            <FiChevronLeft className="h-4 w-4" />
                                         </button>
-                                        <div className="px-4 py-2 text-sm font-semibold text-white min-w-[140px] text-center tracking-wide">
+                                        <div className="min-w-[132px] px-2 text-center text-[13px] font-medium tabular-nums">
                                             {months[selectedMonth - 1]} {selectedYear}
                                         </div>
                                         <button
+                                            type="button"
+                                            aria-label="Next month"
                                             onClick={() => void changeView(() => navigateMonth("next"))}
                                             disabled={!canNavigateNext}
-                                            className="p-2 hover:bg-white/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded-r-lg"
+                                            className="rounded-r-[10px] p-2 transition-colors hover:bg-[#EAE6F3] disabled:cursor-not-allowed disabled:opacity-40"
                                         >
-                                            <FiChevronRight className="w-4 h-4 text-white" />
+                                            <FiChevronRight className="h-4 w-4" />
                                         </button>
                                     </div>
 
                                     {null}
                                 </>
                             ) : (
-                                <div className="inline-flex h-9 items-center rounded-lg bg-[#701CC0] text-white">
+                                <div className="inline-flex h-9 items-center rounded-[10px] bg-[#F4F2F8] text-[#374151]">
                                     <button
+                                        type="button"
+                                        aria-label="Previous year"
                                         onClick={() => void changeView(() => setSelectedYear(selectedYear - 1))}
                                         disabled={selectedYear <= 2020}
-                                        className="p-2 hover:bg-white/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded-l-lg"
+                                        className="rounded-l-[10px] p-2 transition-colors hover:bg-[#EAE6F3] disabled:cursor-not-allowed disabled:opacity-40"
                                     >
-                                        <FiChevronLeft className="w-4 h-4 text-white" />
+                                        <FiChevronLeft className="h-4 w-4" />
                                     </button>
-                                    <div className="px-4 py-2 text-sm font-semibold text-white min-w-[100px] text-center tracking-wide">
+                                    <div className="min-w-[72px] px-2 text-center text-[13px] font-medium tabular-nums">
                                         {selectedYear}
                                     </div>
                                     <button
+                                        type="button"
+                                        aria-label="Next year"
                                         onClick={() => void changeView(() => setSelectedYear(selectedYear + 1))}
                                         disabled={selectedYear >= currentYear}
-                                        className="p-2 hover:bg-white/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors rounded-r-lg"
+                                        className="rounded-r-[10px] p-2 transition-colors hover:bg-[#EAE6F3] disabled:cursor-not-allowed disabled:opacity-40"
                                     >
-                                        <FiChevronRight className="w-4 h-4 text-white" />
+                                        <FiChevronRight className="h-4 w-4" />
                                     </button>
                                 </div>
                             )}
@@ -726,7 +787,9 @@ const OutreachSection = () => {
                     ) : scope === "overview" ? (
                         <div className="pb-32">
                             {clientData.length === 0 ? (
-                                <div className="text-center py-12 text-gray-500">No client outreach logged for {months[selectedMonth - 1]} {selectedYear} yet.</div>
+                                <p className="py-12 text-center text-[13px] text-[#6B7280]">
+                                    No client outreach logged for {months[selectedMonth - 1]} {selectedYear} yet.
+                                </p>
                             ) : (() => {
                                 const totals = clientData.reduce(
                                     (acc, c) => {
@@ -749,78 +812,75 @@ const OutreachSection = () => {
                                 const leaderboard = [...clientData].sort((a, b) => b.replyRate - a.replyRate || b.sent - a.sent)
                                 return (
                                     <>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                                            <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
-                                                <p className="text-xs text-[#6B7280]">Total Attempts</p>
-                                                <p className="text-2xl font-bold text-[#111827]">{formatNumber(totals.sent)}</p>
-                                            </div>
-                                            <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
-                                                <p className="text-xs text-[#6B7280]">Total Replies</p>
-                                                <p className="text-2xl font-bold text-[#111827]">{formatNumber(totals.replied)} <span className="text-sm text-[#701CC0]">({calculatePercentage(totals.replied, totals.sent)}%)</span></p>
-                                            </div>
-                                            <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
-                                                <p className="text-xs text-[#6B7280]">Meetings Set</p>
-                                                <p className="text-2xl font-bold text-[#111827]">{formatNumber(totals.meetings)}</p>
-                                            </div>
-                                            <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
-                                                <p className="text-xs text-[#6B7280]">Total Revenue</p>
-                                                <p className="text-2xl font-bold text-[#111827]">{formatCurrency(totals.revenue)}</p>
-                                            </div>
+                                        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                                            <TrackerTile label="Total Attempts" value={formatNumber(totals.sent)} />
+                                            <TrackerTile
+                                                label="Total Replies"
+                                                value={formatNumber(totals.replied)}
+                                                hint={`${calculatePercentage(totals.replied, totals.sent)}% reply rate`}
+                                            />
+                                            <TrackerTile label="Meetings Set" value={formatNumber(totals.meetings)} />
+                                            <TrackerTile label="Total Revenue" value={formatCurrency(totals.revenue)} />
                                         </div>
 
-                                        <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5 mb-6">
-                                            <h3 className="text-lg font-semibold text-[#111827] mb-4">Conversion Funnel — All Clients</h3>
+                                        <TrackerCard title="Conversion Funnel" className="mb-4">
                                             <div className="space-y-3">
                                                 {funnel.map((stage, i) => (
                                                     <div key={stage.label}>
-                                                        <div className="flex justify-between items-center mb-1">
-                                                            <span className="text-sm text-[#6B7280]">{stage.label}</span>
-                                                            <span className="text-sm font-semibold text-[#111827]">
+                                                        <div className="mb-1 flex items-center justify-between text-[12px]">
+                                                            <span className="text-[#6B7280]">{stage.label}</span>
+                                                            <span className="font-semibold tabular-nums text-[#111827]">
                                                                 {formatNumber(stage.value)}
-                                                                {i > 0 && <span className="text-xs text-[#9CA3AF]"> ({calculatePercentage(stage.value, funnel[i - 1].value)}% of prev)</span>}
+                                                                {i > 0 && (
+                                                                    <span className="font-normal text-[#9CA3AF]">
+                                                                        {" "}
+                                                                        ({calculatePercentage(stage.value, funnel[i - 1].value)}% of previous)
+                                                                    </span>
+                                                                )}
                                                             </span>
                                                         </div>
-                                                        <div className="w-full bg-gray-100 rounded-full h-3">
-                                                            <div className="h-3 rounded-full transition-all" style={{ width: `${Math.max((stage.value / maxVal) * 100, 2)}%`, background: stage.color }}></div>
+                                                        <div className="h-2 w-full overflow-hidden rounded-full bg-[#F1EFF6]">
+                                                            <div
+                                                                className="h-2 rounded-full transition-all"
+                                                                style={{
+                                                                    width: `${Math.max((stage.value / maxVal) * 100, 2)}%`,
+                                                                    background: stage.color,
+                                                                }}
+                                                            />
                                                         </div>
                                                     </div>
                                                 ))}
                                             </div>
-                                        </div>
+                                        </TrackerCard>
 
-                                        <div className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white">
-                                            <div className="px-5 py-3 border-b border-[#EEF1F7] bg-[#FBFCFF]">
-                                                <h3 className="font-semibold text-[#111827]">Client Leaderboard</h3>
-                                            </div>
-                                            <div className="overflow-x-auto">
-                                                <table className="w-full text-sm">
-                                                    <thead>
-                                                        <tr className="text-left text-[#6B7280] border-b border-[#EEF1F7]">
-                                                            <th className="px-5 py-2 font-medium">Client</th>
-                                                            <th className="px-3 py-2 font-medium text-right">Attempts</th>
-                                                            <th className="px-3 py-2 font-medium text-right">Replies</th>
-                                                            <th className="px-3 py-2 font-medium text-right">Reply Rate</th>
-                                                            <th className="px-3 py-2 font-medium text-right">Meetings</th>
-                                                            <th className="px-3 py-2 font-medium text-right">Closed</th>
-                                                            <th className="px-5 py-2 font-medium text-right">Revenue</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {leaderboard.map((c) => (
-                                                            <tr key={c.clientId} className="border-b border-[#F3F4F6] hover:bg-[#FBFCFF]">
-                                                                <td className="px-5 py-2 font-medium text-[#111827]">{c.clientName}</td>
-                                                                <td className="px-3 py-2 text-right text-[#374151]">{formatNumber(c.sent)}</td>
-                                                                <td className="px-3 py-2 text-right text-[#374151]">{formatNumber(c.replied)}</td>
-                                                                <td className="px-3 py-2 text-right font-semibold text-[#701CC0]">{c.replyRate}%</td>
-                                                                <td className="px-3 py-2 text-right text-[#374151]">{formatNumber(c.meetingsSet)}</td>
-                                                                <td className="px-3 py-2 text-right text-[#374151]">{formatNumber(c.clientsClosed)}</td>
-                                                                <td className="px-5 py-2 text-right text-[#374151]">{formatCurrency(c.revenue)}</td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
+                                        <TrackerCard title="Client Leaderboard">
+                                            <PanelTable>
+                                                <PanelThead>
+                                                    <PanelTr>
+                                                        <PanelTh>Client</PanelTh>
+                                                        <PanelTh className="!text-right">Attempts</PanelTh>
+                                                        <PanelTh className="!text-right">Replies</PanelTh>
+                                                        <PanelTh className="!text-right">Reply Rate</PanelTh>
+                                                        <PanelTh className="!text-right">Meetings</PanelTh>
+                                                        <PanelTh className="!text-right">Closed</PanelTh>
+                                                        <PanelTh className="!text-right">Revenue</PanelTh>
+                                                    </PanelTr>
+                                                </PanelThead>
+                                                <PanelTbody>
+                                                    {leaderboard.map((c) => (
+                                                        <PanelTr key={c.clientId}>
+                                                            <PanelTd className="font-medium text-[#111827]">{c.clientName}</PanelTd>
+                                                            <PanelTd className="text-right tabular-nums">{formatNumber(c.sent)}</PanelTd>
+                                                            <PanelTd className="text-right tabular-nums">{formatNumber(c.replied)}</PanelTd>
+                                                            <PanelTd className="text-right font-semibold tabular-nums text-[#701CC0]">{c.replyRate}%</PanelTd>
+                                                            <PanelTd className="text-right tabular-nums">{formatNumber(c.meetingsSet)}</PanelTd>
+                                                            <PanelTd className="text-right tabular-nums">{formatNumber(c.clientsClosed)}</PanelTd>
+                                                            <PanelTd className="text-right tabular-nums">{formatCurrency(c.revenue)}</PanelTd>
+                                                        </PanelTr>
+                                                    ))}
+                                                </PanelTbody>
+                                            </PanelTable>
+                                        </TrackerCard>
                                     </>
                                 )
                             })()}
@@ -828,20 +888,21 @@ const OutreachSection = () => {
                     ) : scope === "client" ? (
                         <div className="pb-32">
                             {clients.length === 0 ? (
-                                <div className="text-center py-12 text-gray-500">No clients yet. Add clients to track per-client outreach.</div>
+                                <p className="py-12 text-center text-[13px] text-[#6B7280]">
+                                    No clients yet. Add one to track outreach against it.
+                                </p>
                             ) : (
                                 <>
-                                    <div className="mb-6 flex items-center gap-3">
-                                        <label className="text-sm font-medium text-[#6B7280]">Client</label>
-                                        <select
+                                    <div className="mb-4 w-full sm:max-w-xs">
+                                        <PanelFieldLabel>Client</PanelFieldLabel>
+                                        <PanelFieldSelect
                                             value={selectedClientId}
-                                            onChange={(e) => { const value = e.target.value; void changeView(() => setClientChoice(value)); }}
-                                            className="text-sm font-semibold text-[#111827] rounded-md border border-[#D7DDED] px-3 py-2 bg-white focus:border-[#701CC0] focus:ring-1 focus:ring-[#701CC0] focus:outline-none"
+                                            onChange={(value) => void changeView(() => setClientChoice(value))}
                                         >
                                             {clients.map((c) => (
                                                 <option key={c.id} value={c.id}>{c.name}</option>
                                             ))}
-                                        </select>
+                                        </PanelFieldSelect>
                                     </div>
 
                                     {(() => {
@@ -856,83 +917,72 @@ const OutreachSection = () => {
                                         ]
                                         return (
                                             <>
-                                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                                                    <div className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white">
-                                                        <div className="px-4 py-3 border-b border-[#EEF1F7] bg-[#FBFCFF]">
-                                                            <h3 className="font-semibold text-[#111827] flex items-center gap-2">
-                                                                <span className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-[#EEF2FF]">
-                                                                    <Image src="/assets/Socials/LinkedIn.png" alt="LinkedIn" width={16} height={16} className="w-4 h-4" />
+                                                <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+                                                    <TrackerCard
+                                                        title={
+                                                            <>
+                                                                <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-[#EEF2FF]">
+                                                                    <Image src="/assets/Socials/LinkedIn.png" alt="" width={14} height={14} className="h-3.5 w-3.5" />
                                                                 </span>
                                                                 LinkedIn Outreach
-                                                            </h3>
+                                                            </>
+                                                        }
+                                                    >
+                                                        <div className="grid grid-cols-3 gap-3">
+                                                            <TrackerTile label="Attempts" value={formatNumber(sent)} />
+                                                            <TrackerTile label="Replies" value={formatNumber(replied)} />
+                                                            <TrackerTile label="Reply Rate" value={`${replyRate}%`} />
                                                         </div>
-                                                        <div className="p-5 space-y-4">
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="text-sm text-[#6B7280] flex items-center gap-2"><FiTarget className="w-4 h-4 text-[#6B7280]" /> Attempts</span>
-                                                                <span className="text-sm font-semibold text-[#111827]">{formatNumber(sent)}</span>
-                                                            </div>
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="text-sm text-[#6B7280]">Replies</span>
-                                                                <span className="text-sm font-semibold text-[#111827]">{formatNumber(replied)}</span>
-                                                            </div>
-                                                            <div className="pt-3 border-t border-gray-200 flex justify-between items-center">
-                                                                <span className="text-xs text-[#6B7280]">Reply Rate</span>
-                                                                <span className="text-sm font-semibold text-[#701CC0]">{replyRate}%</span>
-                                                            </div>
-                                                            <p className="text-[11px] text-[#9CA3AF]">Auto-synced from the extension.</p>
-                                                        </div>
-                                                    </div>
+                                                        <p className="mt-3 text-[11.5px] text-[#9CA3AF]">
+                                                            Auto-synced from the extension.
+                                                        </p>
+                                                    </TrackerCard>
 
-                                                    <div className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white lg:col-span-2">
-                                                        <div className="px-4 py-3 border-b border-[#EEF1F7] bg-[#FBFCFF]">
-                                                            <h3 className="font-semibold text-[#111827]">Funnel (Manual Entry)</h3>
-                                                        </div>
-                                                        <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                    <TrackerCard title="Funnel" className="lg:col-span-2">
+                                                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                                                             {manualFields.map((f) => (
-                                                                <div key={f.key}>
-                                                                    <label className="text-sm text-[#6B7280] block mb-1">{f.label}</label>
-                                                                    <input
-                                                                        type="text"
-                                                                        className={`text-sm font-semibold text-[#111827] w-full rounded-md border px-2 py-1 bg-white ${isEditable ? "border-[#D7DDED] focus:border-[#701CC0] focus:ring-1 focus:ring-[#701CC0]" : "border-[#E5E7EB]"} focus:outline-none ${!isEditable ? 'cursor-not-allowed opacity-60' : ''}`}
-                                                                        value={getInputValue(clientEdits[f.key])}
-                                                                        onChange={(e) => handleClientStatChange(f.key, e.target.value)}
-                                                                        placeholder="0"
-                                                                        disabled={!isEditable || isUpdating}
-                                                                        readOnly={!isEditable}
-                                                                    />
-                                                                </div>
+                                                                <TrackerInput
+                                                                    key={f.key}
+                                                                    label={f.label}
+                                                                    value={getInputValue(clientEdits[f.key])}
+                                                                    onChange={(value) => handleClientStatChange(f.key, value)}
+                                                                    editable={isEditable}
+                                                                    busy={isUpdating}
+                                                                />
                                                             ))}
                                                         </div>
-                                                        <div className="px-5 pb-5 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                                            <div className="flex justify-between items-center">
-                                                                <span className="text-xs text-[#6B7280]">Attempts To Meetings</span>
-                                                                <span className="text-sm font-semibold text-[#701CC0]">{calculatePercentage(clientEdits.meetingsSet, sent)}%</span>
-                                                            </div>
-                                                            <div className="flex justify-between items-center">
-                                                                <span className="text-xs text-[#6B7280]">Meetings To Clients</span>
-                                                                <span className="text-sm font-semibold text-[#701CC0]">{calculatePercentage(clientEdits.clientsClosed, clientEdits.meetingsSet)}%</span>
-                                                            </div>
+                                                        <div className="mt-4 flex items-center justify-between gap-4 border-t border-[#EEF1F7] pt-3 text-[12px]">
+                                                            <span className="text-[#6B7280]">
+                                                                Attempts to meetings{" "}
+                                                                <span className="font-semibold text-[#701CC0]">
+                                                                    {calculatePercentage(clientEdits.meetingsSet, sent)}%
+                                                                </span>
+                                                            </span>
+                                                            <span className="text-[#6B7280]">
+                                                                Meetings to clients{" "}
+                                                                <span className="font-semibold text-[#701CC0]">
+                                                                    {calculatePercentage(clientEdits.clientsClosed, clientEdits.meetingsSet)}%
+                                                                </span>
+                                                            </span>
                                                         </div>
-                                                    </div>
+                                                    </TrackerCard>
                                                 </div>
 
-                                                <motion.div
-                                                    initial={{ opacity: 0, y: 20 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    transition={{ duration: 0.3, delay: 0.2 }}
-                                                    className="rounded-2xl bg-gradient-to-br from-[#701CC0] to-[#8F42FF] p-6 text-white"
+                                                <TrackerCard
+                                                    title={
+                                                        <>
+                                                            <FiTrendingUp className="h-4 w-4 text-[#701CC0]" />
+                                                            {(clients.find((c) => c.id === selectedClientId)?.name) || "Client"} — {months[selectedMonth - 1]} {selectedYear}
+                                                        </>
+                                                    }
                                                 >
-                                                    <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-                                                        <FiTrendingUp className="w-5 h-5" />
-                                                        {(clients.find((c) => c.id === selectedClientId)?.name) || "Client"} - {months[selectedMonth - 1]} {selectedYear}
-                                                    </h3>
-                                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                                                        <div><p className="text-white/80 text-sm mb-1">Attempts</p><p className="text-3xl font-bold">{formatNumber(sent)}</p></div>
-                                                        <div><p className="text-white/80 text-sm mb-1">Reply Rate</p><p className="text-3xl font-bold">{replyRate}%</p></div>
-                                                        <div><p className="text-white/80 text-sm mb-1">Meetings</p><p className="text-3xl font-bold">{formatNumber(clientEdits.meetingsSet)}</p></div>
-                                                        <div><p className="text-white/80 text-sm mb-1">Revenue</p><p className="text-3xl font-bold">{formatCurrency(clientEdits.revenue)}</p></div>
+                                                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                                                        <TrackerTile label="Attempts" value={formatNumber(sent)} />
+                                                        <TrackerTile label="Reply Rate" value={`${replyRate}%`} />
+                                                        <TrackerTile label="Meetings" value={formatNumber(clientEdits.meetingsSet)} />
+                                                        <TrackerTile label="Revenue" value={formatCurrency(clientEdits.revenue)} />
                                                     </div>
-                                                </motion.div>
+                                                </TrackerCard>
 
                                                 {!isEditable && (
                                                     <p className="text-center text-xs text-[#9CA3AF] mt-4">Past months are read-only.</p>
@@ -945,72 +995,28 @@ const OutreachSection = () => {
                         </div>
                     ) : viewMode === "yearly" ? (
                         <div className="pb-32">
-                            <div className="rounded-2xl bg-gradient-to-br from-[#701CC0] to-[#8F42FF] p-6 mb-6 text-white">
-                                <h2 className="text-2xl font-bold mb-2">{selectedYear} Year Summary</h2>
-                                <p className="text-white/80 text-sm">A complete overview to all marketing outreach methods and analytics.</p>
-                            </div>
-
                             {yearlySummary ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                                    <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <div className="p-2 bg-blue-100 rounded-lg">
-                                                <FiTarget className="w-5 h-5 text-blue-600" />
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-[#6B7280]">Total Attempts</p>
-                                                <p className="text-2xl font-bold text-[#111827]">{formatNumber(yearlySummary.totalAttempt)}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <div className="p-2 bg-green-100 rounded-lg">
-                                                <FiCalendar className="w-5 h-5 text-green-600" />
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-[#6B7280]">Total Meetings</p>
-                                                <p className="text-2xl font-bold text-[#111827]">{formatNumber(yearlySummary.totalMeetingsSet)}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <div className="p-2 bg-purple-100 rounded-lg">
-                                                <FiUsers className="w-5 h-5 text-purple-600" />
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-[#6B7280]">Clients Closed</p>
-                                                <p className="text-2xl font-bold text-[#111827]">{formatNumber(yearlySummary.totalClientsLosed)}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <div className="p-2 bg-yellow-100 rounded-lg">
-                                                <FiDollarSign className="w-5 h-5 text-yellow-600" />
-                                            </div>
-                                            <div>
-                                                <p className="text-xs text-[#6B7280]">Total Revenue</p>
-                                                <p className="text-2xl font-bold text-[#111827]">{formatCurrency(yearlySummary.totalRevenue)}</p>
-                                            </div>
-                                        </div>
-                                    </div>
+                                <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                                    <TrackerTile label="Total Attempts" value={formatNumber(yearlySummary.totalAttempt)} />
+                                    <TrackerTile label="Total Meetings" value={formatNumber(yearlySummary.totalMeetingsSet)} />
+                                    <TrackerTile label="Clients Closed" value={formatNumber(yearlySummary.totalClientsLosed)} />
+                                    <TrackerTile label="Total Revenue" value={formatCurrency(yearlySummary.totalRevenue)} />
                                 </div>
                             ) : (
-                                <div className="text-center py-12 text-gray-500">No data available for {selectedYear}</div>
+                                <p className="py-12 text-center text-[13px] text-[#6B7280]">
+                                    Nothing recorded for {selectedYear} yet.
+                                </p>
                             )}
 
                             {yearlySummary && (
-                                <div className="rounded-2xl border border-[#E4E0EC] bg-white p-5">
-                                    <h3 className="text-lg font-semibold text-[#111827] mb-4">Conversion Rates</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <TrackerCard title={`${selectedYear} Conversion Rates`}>
+                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                                         <div>
                                             <div className="flex justify-between items-center mb-2">
                                                 <span className="text-sm text-[#6B7280]">Attempts To Meetings</span>
                                                 <span className="text-lg font-bold text-[#701CC0]">{yearlySummary.attemptsToMeetingsPct}%</span>
                                             </div>
-                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                            <div className="h-2 w-full overflow-hidden rounded-full bg-[#F1EFF6]">
                                                 <div 
                                                     className="bg-[#701CC0] h-2 rounded-full transition-all"
                                                     style={{ width: `${Math.min(yearlySummary.attemptsToMeetingsPct, 100)}%` }}
@@ -1022,7 +1028,7 @@ const OutreachSection = () => {
                                                 <span className="text-sm text-[#6B7280]">Meetings To Clients</span>
                                                 <span className="text-lg font-bold text-[#701CC0]">{yearlySummary.meetingsToClientsPct}%</span>
                                             </div>
-                                            <div className="w-full bg-gray-200 rounded-full h-2">
+                                            <div className="h-2 w-full overflow-hidden rounded-full bg-[#F1EFF6]">
                                                 <div 
                                                     className="bg-[#701CC0] h-2 rounded-full transition-all"
                                                     style={{ width: `${Math.min(yearlySummary.meetingsToClientsPct, 100)}%` }}
@@ -1030,55 +1036,31 @@ const OutreachSection = () => {
                                             </div>
                                         </div>
                                     </div>
-                                </div>
+                                </TrackerCard>
                             )}
                         </div>
                     ) : (
                         <div className="pb-32">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                                {Object.keys(outreachConfig).map(key => renderOutreachCard(key as CardKey))}
+                            {/* Totals first, then the channels that make them up — the same order
+                                the dashboard reads in, and the opposite of what this page did. */}
+                            <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                                <TrackerTile label="Total Attempts" value={formatNumber(summary.attempts)} />
+                                <TrackerTile
+                                    label="Meetings Set"
+                                    value={formatNumber(summary.meetings)}
+                                    hint={`${calculatePercentage(summary.meetings, summary.attempts)}% of attempts`}
+                                />
+                                <TrackerTile
+                                    label="Clients Closed"
+                                    value={formatNumber(summary.clients)}
+                                    hint={`${calculatePercentage(summary.clients, summary.meetings)}% of meetings`}
+                                />
+                                <TrackerTile label="Revenue" value={formatCurrency(summary.revenue)} />
                             </div>
 
-                            
-                            <motion.div
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ duration: 0.3, delay: 0.2 }}
-                                className="rounded-2xl bg-gradient-to-br from-[#701CC0] to-[#8F42FF] p-6 text-white"
-                            >
-                                <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-                                    <FiTrendingUp className="w-5 h-5" />
-                                    Monthly Summary - {months[selectedMonth - 1]} {selectedYear}
-                                </h3>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                                    <div>
-                                        <p className="text-white/80 text-sm mb-1">Total Attempts</p>
-                                        <p className="text-3xl font-bold">{formatNumber(summary.attempts)}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-white/80 text-sm mb-1">Meetings Set</p>
-                                        <p className="text-3xl font-bold">{formatNumber(summary.meetings)}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-white/80 text-sm mb-1">Clients Closed</p>
-                                        <p className="text-3xl font-bold">{formatNumber(summary.clients)}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-white/80 text-sm mb-1">Revenue</p>
-                                        <p className="text-3xl font-bold">{formatCurrency(summary.revenue)}</p>
-                                    </div>
-                                </div>
-                                <div className="mt-6 pt-6 border-t border-white/20 grid grid-cols-2 gap-6">
-                                    <div>
-                                        <p className="text-white/80 text-sm mb-1">Attempts To Meetings</p>
-                                        <p className="text-2xl font-bold">{calculatePercentage(summary.meetings, summary.attempts)}%</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-white/80 text-sm mb-1">Meetings To Clients</p>
-                                        <p className="text-2xl font-bold">{calculatePercentage(summary.clients, summary.meetings)}%</p>
-                                    </div>
-                                </div>
-                            </motion.div>
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                                {Object.keys(outreachConfig).map(key => renderOutreachCard(key as CardKey))}
+                            </div>
                         </div>
                     )}
         </PanelPage>
