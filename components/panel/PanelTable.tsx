@@ -170,7 +170,7 @@ export const PanelSelect: React.FC<{
 /**
  * The dashboard's stat tile, shared.
  *
- * The dashboard, the Marketing Tracker and Project Tasks all show a headline count above their
+ * The dashboard, the Marketing Tracker and Project Management all show a headline count above their
  * detail, and each had drawn its own — a bordered white card, a figure on a purple gradient, a
  * label-and-value row. One tile, so a number looks the same wherever it is read.
  */

@@ -1,7 +1,7 @@
 /**
  * The boards every company starts with.
  *
- * Project Tasks began with a fixed set (a ProjectBoard enum, see 1070cbc "Completed the project
+ * Project Management began with a fixed set (a ProjectBoard enum, see 1070cbc "Completed the project
  * management system") and later became free-form rows, which left a new company with no boards at
  * all and a "New board" box as its entire empty state. These are seeded on first read instead, so
  * the page opens on the four teams the work is actually split between; a company can still add its

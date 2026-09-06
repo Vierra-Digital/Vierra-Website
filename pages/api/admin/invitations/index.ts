@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/api/withAuth";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { getSupabaseAdmin, deleteSupabaseAuthUser } from "@/lib/supabase/admin";
 import { resolveBaseUrl } from "@/lib/api/url";
 import { sendInviteEmail } from "@/lib/emailSender";
 
@@ -45,10 +45,29 @@ export default withAuth(
      */
     const existingUser = await prisma.user.findUnique({
       where: { email: normalizedEmail },
-      select: { id: true },
+      select: {
+        id: true,
+        company_memberships_company_memberships_user_idTousers: { select: { user_id: true } },
+        clients_clients_user_idTousers: { select: { id: true } },
+      },
     });
-    if (existingUser) {
+    // An account that belongs nowhere is a leftover from an invite that was rescinded before the
+    // cleanup in [id].ts existed. It is invisible in every list and must not block the address.
+    const takenByRealAccount =
+      Boolean(existingUser?.company_memberships_company_memberships_user_idTousers) ||
+      Boolean(existingUser?.clients_clients_user_idTousers);
+    if (takenByRealAccount) {
       return res.status(409).json({ message: "Someone with that email address already has an account." });
+    }
+    if (existingUser) {
+      // Clear the shell out of the way so generateLink mints a fresh invite rather than a second
+      // link for an identity nobody can reach.
+      try {
+        await deleteSupabaseAuthUser(existingUser.id);
+      } catch (cleanupError) {
+        console.error("admin/invitations POST stale identity", cleanupError);
+        return res.status(409).json({ message: "Someone with that email address already has an account." });
+      }
     }
     const existingInvite = await prisma.invitation.findFirst({
       where: { email: normalizedEmail, company_id: session.companyId, accepted_at: null },

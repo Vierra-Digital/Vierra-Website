@@ -117,8 +117,6 @@ export default function ProjectManagement() {
   const { data: session } = useSession();
   const [boards, setBoards] = useState<BoardInfo[]>([]);
   const [selectedBoard, setSelectedBoard] = useState<BoardInfo | null>(null);
-  const [newBoardName, setNewBoardName] = useState("");
-  const [creatingBoard, setCreatingBoard] = useState(false);
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<ProjectTask | null>(null);
@@ -181,31 +179,6 @@ export default function ProjectManagement() {
     }
   }, []);
 
-  const handleCreateBoard = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newBoardName.trim() || creatingBoard) return;
-    setCreatingBoard(true);
-    try {
-      const r = await panelFetch("/api/project/boards", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newBoardName.trim() }),
-      });
-      if (r.ok) {
-        const board: BoardInfo = await r.json();
-        setBoards((prev) => [...prev, board]);
-        setSelectedBoard(board);
-        setNewBoardName("");
-      } else {
-        const err = await r.json();
-        setActionError(err.message || "Failed to create board");
-      }
-    } catch {
-      setActionError("Failed to create board");
-    } finally {
-      setCreatingBoard(false);
-    }
-  };
 
   const fetchTasks = useCallback(async () => {
     if (!selectedBoard) return;
@@ -475,37 +448,26 @@ export default function ProjectManagement() {
     return (
       <div className={inter.className}>
         <PanelPage>
-          <PanelHeader title="Project Tasks" />
+          <PanelHeader title="Project Management" />
           <PanelCard>
           <div className="mx-auto max-w-md px-6 py-14 text-center">
             <div className="w-16 h-16 rounded-2xl bg-[#F8F0FF] flex items-center justify-center mx-auto mb-4">
               <FiLayers className="w-8 h-8 text-[#701CC0]" />
             </div>
-            <h3 className="text-lg font-semibold text-[#111827] mb-2">{actionError ? "Could not load boards" : "No Boards Yet"}</h3>{actionError && <p role="alert">{actionError} <button type="button" onClick={() => void fetchBoards()} className="underline">Retry</button></p>}
-            {isAdmin ? (
-              <>
-                <p className="text-sm text-[#6B7280] mb-4">Create your first project board to get started.</p>
-                <form onSubmit={handleCreateBoard} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newBoardName}
-                    onChange={(e) => setNewBoardName(e.target.value)}
-                    placeholder="Board name"
-                    className="flex-1 border border-[#E5E7EB] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#701CC0]"
-                  />
-                  <button
-                    type="submit"
-                    disabled={creatingBoard || !newBoardName.trim()}
-                    className="px-4 py-2 rounded-lg bg-[#701CC0] text-white text-sm font-medium disabled:opacity-50"
-                  >
-                    Create
-                  </button>
-                </form>
-              </>
-            ) : (
-              <p className="text-sm text-[#6B7280]">
-                Your company doesn&apos;t have any project boards yet. Ask an admin to create one.
+            <h3 className="mb-2 text-lg font-semibold text-[#111827]">
+              {actionError ? "Could not load boards" : "No Boards Yet"}
+            </h3>
+            {actionError ? (
+              <p role="alert" className="text-[13px] text-[#B42318]">
+                {actionError}{" "}
+                <button type="button" onClick={() => void fetchBoards()} className="font-medium underline underline-offset-2">
+                  Retry
+                </button>
               </p>
+            ) : (
+              // The four defaults are created on the first read of this company's boards, so
+              // landing here at all means that read failed rather than that none exist.
+              <p className="text-[13px] text-[#6B7280]">Reload to set up this company&apos;s boards.</p>
             )}
           </div>
           </PanelCard>
@@ -517,7 +479,7 @@ export default function ProjectManagement() {
   return (
     <div className={inter.className}>
       <PanelPage>
-          <PanelHeader title="Project Tasks">
+          <PanelHeader title="Project Management">
             <>
               <PanelSearch
                 id="task-search"
@@ -597,29 +559,6 @@ export default function ProjectManagement() {
                   {board.name}
                 </button>
               ))}
-              {isAdmin && (
-                <form
-                  onSubmit={handleCreateBoard}
-                  className="flex items-center gap-1.5"
-                  title="Create a new board"
-                >
-                  <input
-                    type="text"
-                    value={newBoardName}
-                    onChange={(e) => setNewBoardName(e.target.value)}
-                    placeholder="New board"
-                    className="h-9 w-28 rounded-lg border border-[#E4E0EC] px-2.5 text-[13px] focus:border-[#701CC0] focus:outline-none focus:ring-2 focus:ring-[#701CC0]/20"
-                  />
-                  <button
-                    type="submit"
-                    disabled={creatingBoard || !newBoardName.trim()}
-                    aria-label="Create board"
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#E4E0EC] bg-white text-[#374151] transition-colors hover:bg-[#FAF9FD] disabled:opacity-50"
-                  >
-                    <FiPlus className="w-4 h-4" />
-                  </button>
-                </form>
-              )}
               {isAdmin && (
                 <button
                   onClick={() => setShowAddModal(true)}

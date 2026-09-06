@@ -786,13 +786,51 @@ const InviteTeammateModal: React.FC<{
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState("")
     const [showSuccess, setShowSuccess] = useState(false)
+    /**
+     * null while nothing has been asked yet or an answer is in flight. Send Invite stays disabled
+     * until the address comes back free, so a taken one simply never enables the button — saying
+     * "that person already has an account" out loud would confirm who works here to anyone who can
+     * open this dialog.
+     */
+    const [emailAvailable, setEmailAvailable] = useState<boolean | null>(null)
 
-    // Everything but the mentor has to be answered. Strikes always holds a value, so it is the
-    // name, email, position and time zone that decide whether the invite can go.
+    useEffect(() => {
+        // Clearing the previous answer is the point of the effect: an address being retyped must
+        // not keep Send Invite enabled on the strength of the last one that checked out.
+        /* eslint-disable react-hooks/set-state-in-effect */
+        if (!isValidEmail(email)) {
+            setEmailAvailable(null)
+            return
+        }
+        // Debounced: this fires per keystroke otherwise, and the answer only matters once typing
+        // has settled. `cancelled` stops a slow reply for an older address landing on a newer one.
+        let cancelled = false
+        setEmailAvailable(null)
+        /* eslint-enable react-hooks/set-state-in-effect */
+        const timer = window.setTimeout(() => {
+            void fetch(`/api/admin/invitations/available?email=${encodeURIComponent(email)}`)
+                .then((response) => (response.ok ? response.json() : { available: false }))
+                .then((body) => {
+                    if (!cancelled) setEmailAvailable(Boolean(body?.available))
+                })
+                .catch(() => {
+                    if (!cancelled) setEmailAvailable(false)
+                })
+        }, 350)
+        return () => {
+            cancelled = true
+            window.clearTimeout(timer)
+        }
+    }, [email])
+
+    // Everything but the mentor has to be answered, and the address has to be free. Strikes
+    // always holds a value, so it is the name, email, position and time zone that decide whether
+    // the invite can go.
     const canSubmit =
         firstName.trim() !== "" &&
         lastName.trim() !== "" &&
         isValidEmail(email) &&
+        emailAvailable === true &&
         position !== "" &&
         timeZone !== ""
 

@@ -6,7 +6,7 @@ import ProfileImage from "@/components/ProfileImage"
 import { profileImageSrc } from "@/lib/profileImage"
 import { getInitialUserProfile } from "@/lib/profileImage.server"
 import Link from "next/link"
-import { FiLogOut, FiFolder, FiUsers } from "react-icons/fi"
+import { FiLogOut, FiFolder, FiUsers, FiBarChart2, FiSend, FiCreditCard } from "react-icons/fi"
 import { AiOutlineAppstore } from "react-icons/ai"
 import { HiOutlineDocumentText } from "react-icons/hi"
 import { CiSearch } from "react-icons/ci"
@@ -141,6 +141,21 @@ const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) =
                 Team
               </span>
             </div>
+            {([
+              [4, "Analytics", <FiBarChart2 key="a" />],
+              [5, "Campaign History", <FiSend key="c" />],
+              [6, "Billing History", <FiCreditCard key="b" />],
+            ] as const).map(([section, label, icon]) => (
+              <div
+                key={section}
+                id="panel-nav-item"
+                onClick={() => { setCurrentSection(section); setShowSettings(false); setIsSidebarOpen(false) }}
+                className={`w-[90%] flex h-[47px] flex-row items-center rounded-xl gap-x-[10px] pl-8 cursor-pointer ${currentSection === section ? "bg-white text-black" : "hover:bg-white hover:text-black"}`}
+              >
+                {icon}
+                <span className={`text-xs font-normal ${inter.className}`}>{label}</span>
+              </div>
+            ))}
           </div>
 
           <div className="w-full flex justify-center absolute bottom-6 left-0">
@@ -240,10 +255,23 @@ const ClientPage = ({ initialUserName, initialImageVersion }: ClientPageProps) =
               />
             ) : (
               <>
-                {currentSection === 0 && <ClientOverviewSection title="Dashboard" />}
+                {currentSection === 0 && (
+                  <div className="flex-1 flex justify-center px-6 pt-2">
+                    <div className="w-full max-w-6xl flex flex-col h-full">
+                      <div className="w-full flex justify-between items-center mb-2">
+                        <div>
+                          <h1 className={`text-2xl font-semibold text-[#111827] mt-6 mb-6 ${inter.className}`}>Dashboard</h1>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {currentSection === 1 && <FilesSection readOnly showOwnerInReadOnly />}
                 {currentSection === 2 && <LinkedInContextSection title="Context" />}
                 {currentSection === 3 && <ClientTeamSection />}
+                {currentSection === 4 && <ClientOverviewSection view="analytics" />}
+                {currentSection === 5 && <ClientOverviewSection view="campaigns" />}
+                {currentSection === 6 && <ClientOverviewSection view="billing" />}
               </>
             )}
           </div>

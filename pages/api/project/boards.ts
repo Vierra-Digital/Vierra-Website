@@ -3,6 +3,11 @@ import { withAuth } from "@/lib/api/withAuth";
 import { resolveTargetCompanyId } from "@/lib/api/targetCompany";
 import { DEFAULT_BOARD_NAMES } from "@/lib/projectBoards";
 
+/**
+ * Read-only. Boards are the four teams seeded on first read (lib/projectBoards.ts); creating more
+ * from the panel is how the original fixed set turned into a free-for-all, and left companies
+ * with a "New board" box as their entire empty state.
+ */
 export default withAuth(async (req, res, session) => {
   // A staff member who has not picked a client works on their own company's boards rather than
   // being refused, the same as the dashboard. A client session always resolves to its own company.
@@ -41,26 +46,6 @@ export default withAuth(async (req, res, session) => {
     }
   }
 
-  if (req.method === "POST") {
-    if (session.user.role !== "admin") {
-      return res.status(403).json({ message: "Only admins can create boards" });
-    }
-    const { name } = req.body ?? {};
-    if (!name || typeof name !== "string" || !name.trim()) {
-      return res.status(400).json({ message: "name is required" });
-    }
-    try {
-      const board = await prisma.projectBoard.create({
-        data: { company_id: companyId, name: name.trim() },
-        select: { id: true, name: true },
-      });
-      return res.status(201).json(board);
-    } catch (e) {
-      console.error("project/boards POST", e);
-      return res.status(500).json({ message: "Internal Server Error" });
-    }
-  }
-
-  res.setHeader("Allow", ["GET", "POST"]);
+  res.setHeader("Allow", ["GET"]);
   return res.status(405).json({ message: "Method Not Allowed" });
-}, { methods: ["GET", "POST"], roles: ["admin", "staff"] });
+}, { methods: ["GET"], roles: ["admin", "staff"] });

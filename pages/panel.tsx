@@ -21,6 +21,9 @@ import {
   FiUsers,
   FiFile,
   FiUserCheck,
+  FiBarChart2,
+  FiSend,
+  FiCreditCard,
 } from "react-icons/fi"
 import { RiArrowDropDownLine } from "react-icons/ri";
 import { useSession } from "@/lib/session-client"
@@ -146,7 +149,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   const [currentUserName, setCurrentUserName] = useState<string | null>(initialUserName)
   const [imageVersion, setImageVersion] = useState<number | string>(initialImageVersion)
   const [isClientViewMode, setIsClientViewMode] = useState(false)
-  const [viewModeSection, setViewModeSection] = useState<0 | 1 | 2 | 3>(0)
+  const [viewModeSection, setViewModeSection] = useState<0 | 1 | 2 | 3 | 4 | 5 | 6>(0)
   const [viewClient, setViewClient] = useState<{ id: string; name: string; email: string; companyId: string } | null>(null)
   const resolvedUserRole = ((session?.user as any)?.role ?? initialUserRole) as "admin" | "staff"
   const { activeClient, setActiveClient } = useActiveClient()
@@ -315,7 +318,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
    * Scoped to "client": a draft belonging to the client workspace should be settled before moving
    * within it, while a draft elsewhere in the panel is not this navigation's business.
    */
-  const navigateViewModeSection = (section: 0 | 1 | 2 | 3) => {
+  const navigateViewModeSection = (section: 0 | 1 | 2 | 3 | 4 | 5 | 6) => {
     void (async () => {
       if (!(await confirmDiscardDrafts("client"))) return
       setViewModeSection(section)
@@ -408,6 +411,22 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                     Files
                   </span>
                 </button>
+                {([
+                  [4, "Analytics", <FiBarChart2 key="a" className="w-4 h-4 shrink-0" />],
+                  [5, "Campaign History", <FiSend key="c" className="w-4 h-4 shrink-0" />],
+                  [6, "Billing History", <FiCreditCard key="b" className="w-4 h-4 shrink-0" />],
+                ] as const).map(([section, label, icon]) => (
+                  <button
+                    key={section}
+                    type="button"
+                    aria-current={viewModeSection === section && !showSettings ? "page" : undefined}
+                    onClick={() => navigateViewModeSection(section)}
+                    className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${viewModeSection === section ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}
+                  >
+                    {icon}
+                    <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>{label}</span>
+                  </button>
+                ))}
               </>
             ) : (
               <>
@@ -448,7 +467,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                 <button type="button" aria-current={currentSection === 6 && !showSettings ? "page" : undefined} onClick={() => navigateSection(6)} className={`w-[calc(100%-16px)] shrink-0 flex h-[34px] flex-row items-center rounded-lg gap-x-3 px-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white transition-colors duration-150 ${currentSection === 6 ? 'bg-white/[0.16] text-white font-medium' : 'text-white hover:bg-white/[0.09]'}`}>
                   <FiFolder className="w-4 h-4 shrink-0" />
                   <span className={`text-xs tracking-[-0.005em] ${inter.className}`}>
-                    Project Tasks
+                    Project Management
                   </span>
                 </button>
                 
@@ -586,11 +605,15 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
               </span>
               {isClientViewMode ? (
                     <>
-                      {viewModeSection === 0 && (
-                        <ClientOverviewSection
-                          companyId={viewClient?.companyId ?? null}
-                          title={viewClient?.name || "Client"}
-                        />
+                      {viewModeSection === 0 && <DashboardSection />}
+                      {viewModeSection === 4 && (
+                        <ClientOverviewSection view="analytics" companyId={viewClient?.companyId ?? null} />
+                      )}
+                      {viewModeSection === 5 && (
+                        <ClientOverviewSection view="campaigns" companyId={viewClient?.companyId ?? null} />
+                      )}
+                      {viewModeSection === 6 && (
+                        <ClientOverviewSection view="billing" companyId={viewClient?.companyId ?? null} />
                       )}
                       {viewModeSection === 1 && (
                         <FilesSection readOnly allowDelete showOwnerInReadOnly fileFilter={viewClient?.id} />

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react"
+import React, { useCallback, useMemo } from "react"
 import { inter } from "@/lib/fonts"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import { useFetch } from "@/hooks/useFetch"
@@ -40,13 +40,13 @@ type Overview = {
     billing: BillingRow[]
 }
 
-const TABS = [
-    { key: "analytics", label: "Analytics" },
-    { key: "campaigns", label: "Campaign History" },
-    { key: "billing", label: "Billing History" },
-] as const
+export type ClientOverviewView = "analytics" | "campaigns" | "billing"
 
-type TabKey = (typeof TABS)[number]["key"]
+const VIEW_TITLES: Record<ClientOverviewView, string> = {
+    analytics: "Analytics",
+    campaigns: "Campaign History",
+    billing: "Billing History",
+}
 
 const formatCurrency = (cents: number) =>
     (cents / 100).toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 })
@@ -65,6 +65,8 @@ const statusTone = (status: string): "positive" | "warning" | "info" | "neutral"
             : "neutral"
 
 type ClientOverviewSectionProps = {
+    /** Which of the three this instance is. Each is its own sidebar destination. */
+    view: ClientOverviewView
     /**
      * The client company to read. Omitted by the client's own page, where the session already
      * says which company it is; supplied by staff opening a client workspace, who could be
@@ -80,8 +82,7 @@ type ClientOverviewSectionProps = {
  * One component for both so the two cannot drift into showing different things — the client's own
  * page previously had a "Dashboard" heading with nothing underneath it at all.
  */
-const ClientOverviewSection: React.FC<ClientOverviewSectionProps> = ({ companyId = null, title = "Overview" }) => {
-    const [tab, setTab] = useState<TabKey>("analytics")
+const ClientOverviewSection: React.FC<ClientOverviewSectionProps> = ({ view, companyId = null, title }) => {
 
     const fetcher = useCallback(async () => {
         // A representative's own company comes from their session, so the parameter is only sent
@@ -107,25 +108,7 @@ const ClientOverviewSection: React.FC<ClientOverviewSectionProps> = ({ companyId
     return (
         <div className={inter.className}>
             <PanelPage>
-                <PanelHeader title={title}>
-                    <div className="inline-flex h-9 items-center gap-1 rounded-[10px] bg-[#F4F2F8] p-1">
-                        {TABS.map((entry) => (
-                            <button
-                                key={entry.key}
-                                type="button"
-                                onClick={() => setTab(entry.key)}
-                                aria-current={tab === entry.key ? "page" : undefined}
-                                className={`h-7 rounded-md px-3 text-[12px] font-medium transition-colors ${
-                                    tab === entry.key
-                                        ? "bg-white text-[#5B21B6] shadow-sm"
-                                        : "text-[#6B7280] hover:text-[#374151]"
-                                }`}
-                            >
-                                {entry.label}
-                            </button>
-                        ))}
-                    </div>
-                </PanelHeader>
+                <PanelHeader title={title ?? VIEW_TITLES[view]} />
 
                 {error ? (
                     <p role="alert" className="flex flex-wrap items-center gap-2 py-12 text-center text-[13px] text-[#B42318]">
@@ -142,7 +125,7 @@ const ClientOverviewSection: React.FC<ClientOverviewSectionProps> = ({ companyId
                     <div className="flex items-center justify-center py-12">
                         <LoadingSpinner label="Loading Account Data..." />
                     </div>
-                ) : tab === "analytics" ? (
+                ) : view === "analytics" ? (
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                         <PanelStat label="Campaigns" value={data.analytics.campaigns} />
                         <PanelStat
@@ -153,7 +136,7 @@ const ClientOverviewSection: React.FC<ClientOverviewSectionProps> = ({ companyId
                         <PanelStat label="Leads Generated" value={data.analytics.leads} />
                         <PanelStat label="Billed To Date" value={formatCurrency(data.analytics.billedCents)} />
                     </div>
-                ) : tab === "campaigns" ? (
+                ) : view === "campaigns" ? (
                     data.campaigns.length === 0 ? (
                         <p className="py-12 text-center text-[13px] text-[#6B7280]">No campaigns have run yet.</p>
                     ) : (
