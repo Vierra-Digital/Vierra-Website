@@ -171,6 +171,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         orderBy: { created_at: "desc" },
       });
       const nowForInvites = new Date();
+      /**
+       * invitations.mentor_id has no relation on the model — it was added by hand in
+       * prisma/manual — so the names are looked up in one go rather than included. Without this
+       * the Mentor column was blank on exactly the rows that had just been given one.
+       */
+      const inviteMentorIds = [
+        ...new Set(pendingInvites.map((i) => i.mentor_id).filter((id): id is string => Boolean(id))),
+      ];
+      const inviteMentors = inviteMentorIds.length
+        ? await prisma.user.findMany({
+            where: { id: { in: inviteMentorIds } },
+            select: { id: true, name: true, email: true },
+          })
+        : [];
+      const inviteMentorById = new Map(inviteMentors.map((m) => [m.id, m.name || m.email]));
       const shapedInvites = pendingInvites.map((invite) => ({
         id: `invite:${invite.id}`,
         name: [invite.first_name, invite.last_name].filter(Boolean).join(" ") || null,
@@ -183,7 +198,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         country: null,
         company_email: null,
         mentor: invite.mentor_id,
-        mentorName: null,
+        mentorName: invite.mentor_id ? inviteMentorById.get(invite.mentor_id) ?? null : null,
         strikes: invite.strikes,
         time_zone: invite.time_zone,
         status: "offline",

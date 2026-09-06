@@ -783,74 +783,20 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
        read as a pile of boxes. Rows here are explicit: profile, security and preferences share
        the top row, and the wide cards below span the width. */
     <div className="space-y-4">
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
-      {/* The avatar sits above the fields rather than beside them: a third of the row is too
-          narrow to put a 96px image next to a name and an email without either wrapping. */}
-      <div className={`rounded-2xl ${cardBg} border p-5`}>
-        <div className="flex flex-col gap-5">
-          <div className="relative flex-shrink-0 self-start" ref={avatarMenuRef}>
-            <div className="relative inline-block">
-              <ProfileImage
-                src={user.image}
-                alt={displayName}
-                name={displayName}
-                size={96}
-                className={`ring-2 rounded-full ${isPanel ? "ring-gray-200" : "ring-[#701CC0]/30"}`}
-                priority
-                quality={100}
-              />
-              <button
-                onClick={() => setShowAvatarMenu(!showAvatarMenu)}
-                className="absolute bottom-0 right-0 bg-[#701CC0] text-white rounded-full p-2 hover:bg-[#5f17a5] transition-colors shadow-lg"
-              >
-                <FiEdit3 className="w-4 h-4" />
-              </button>
-            </div>
-            {showAvatarMenu && (
-              <div className={`absolute top-full left-0 mt-2 w-48 rounded-xl shadow-xl border py-2 z-20 ${isDark ? "bg-[#2E0A4F] border-white/20" : "bg-white border-gray-100"}`}>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      handleImageUpload(file);
-                    }
-                    e.target.value = "";
-                  }}
-                  className="hidden"
-                  id="image-upload"
-                  disabled={isUpdating}
-                />
-                <label
-                  htmlFor="image-upload"
-                  className={`flex items-center gap-2 px-4 py-2.5 text-sm cursor-pointer transition-colors ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-gray-50 text-[#111827]"} ${isUpdating ? "opacity-50 cursor-not-allowed" : ""}`}
-                >
-                  <FiUpload className="w-4 h-4" />
-                  {isUpdating ? "Uploading..." : "Upload Image"}
-                </label>
-                {user.image && (
-                  <button
-                    onClick={handleImageReset}
-                    disabled={isUpdating}
-                    className={`flex items-center gap-2 px-4 py-2.5 text-sm w-full text-left transition-colors ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-gray-50 text-[#111827]"} ${isUpdating ? "opacity-50 cursor-not-allowed" : ""}`}
-                  >
-                    <FiRotateCcw className="w-4 h-4" />
-                    {isUpdating ? "Resetting..." : "Reset To Default"}
-                  </button>
-                )}
-              </div>
-            )}
+      {/* items-stretch, not items-start: the three cards in this row are meant to read as one
+          band, and start let each one shrink to whatever it happened to contain. */}
+      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
+      <div className={`h-full rounded-2xl ${cardBg} border p-5`}>
+        {/* Heading first, then the details, with the picture beside them — the picture is the
+            least of the three and was leading the card. */}
+        <div className="mb-4 flex items-center gap-2">
+          <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
+            <FiUser className="w-4 h-4 text-[#701CC0]" />
           </div>
-
+        <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Profile</h3>
+        </div>
+        <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
-                <FiUser className="w-4 h-4 text-[#701CC0]" />
-              </div>
-              <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Profile</h3>
-            </div>
-
             <div className="space-y-4">
               <div>
                 <label className={`mb-1 block text-[11px] font-medium ${textSecondary}`}>Full Name</label>
@@ -911,11 +857,66 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               </div>
             )}
           </div>
+          <div className="relative flex-shrink-0 self-start" ref={avatarMenuRef}>
+            <div className="relative inline-block">
+              <ProfileImage
+                src={user.image}
+                alt={displayName}
+                name={displayName}
+                size={96}
+                className={`ring-2 rounded-full ${isPanel ? "ring-gray-200" : "ring-[#701CC0]/30"}`}
+                priority
+                quality={100}
+              />
+              <button
+                onClick={() => setShowAvatarMenu(!showAvatarMenu)}
+                className="absolute bottom-0 right-0 bg-[#701CC0] text-white rounded-full p-2 hover:bg-[#5f17a5] transition-colors shadow-lg"
+              >
+                <FiEdit3 className="w-4 h-4" />
+              </button>
+            </div>
+            {showAvatarMenu && (
+              <div className={`absolute top-full left-0 mt-2 w-48 rounded-xl shadow-xl border py-2 z-20 ${isDark ? "bg-[#2E0A4F] border-white/20" : "bg-white border-gray-100"}`}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleImageUpload(file);
+                    }
+                    e.target.value = "";
+                  }}
+                  className="hidden"
+                  id="image-upload"
+                  disabled={isUpdating}
+                />
+                <label
+                  htmlFor="image-upload"
+                  className={`flex items-center gap-2 px-4 py-2.5 text-sm cursor-pointer transition-colors ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-gray-50 text-[#111827]"} ${isUpdating ? "opacity-50 cursor-not-allowed" : ""}`}
+                >
+                  <FiUpload className="w-4 h-4" />
+                  {isUpdating ? "Uploading..." : "Upload Image"}
+                </label>
+                {user.image && (
+                  <button
+                    onClick={handleImageReset}
+                    disabled={isUpdating}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-sm w-full text-left transition-colors ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-gray-50 text-[#111827]"} ${isUpdating ? "opacity-50 cursor-not-allowed" : ""}`}
+                  >
+                    <FiRotateCcw className="w-4 h-4" />
+                    {isUpdating ? "Resetting..." : "Reset To Default"}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
         </div>
       </div>
 
       
-        <div className={`rounded-2xl ${cardBg} border p-5`}>
+        <div className={`h-full rounded-2xl ${cardBg} border p-5`}>
           <div className="flex items-center gap-2 mb-5">
             <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
               <FiShield className="w-4 h-4 text-[#701CC0]" />
@@ -959,7 +960,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         </div>
 
         
-        <div className={`rounded-2xl ${cardBg} border p-5`}>
+        <div className={`h-full rounded-2xl ${cardBg} border p-5`}>
           <div className="flex items-center gap-2 mb-5">
             <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
               <FiSettings className="w-4 h-4 text-[#701CC0]" />
@@ -1184,25 +1185,14 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
         <SettingsCard
           title="Google Accounts"
           icon={<FaGoogle className="w-4 h-4 text-[#EA4335]" />}
-          description="Connected Gmail accounts, and which of their calendars count towards upcoming meetings."
+          description="Connected Google accounts, and which of their calendars count towards upcoming meetings."
           cardClass={`rounded-2xl ${cardBg} border p-5`}
           titleClass={textPrimary}
           descriptionClass={textSecondary}
           action={
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  loadGmailConnections();
-                  loadDetectedCalendars();
-                }}
-                disabled={gmailLoading || calendarSettingsLoading}
-                className={`h-8 rounded-lg border px-3 text-[12.5px] font-medium transition-colors disabled:opacity-50 ${
-                  isDark ? "border-white/15 text-white hover:bg-white/10" : "border-[#E4E0EC] text-[#374151] hover:bg-[#FAF9FD]"
-                }`}
-              >
-                {gmailLoading || calendarSettingsLoading ? "Refreshing…" : "Refresh"}
-              </button>
+              {/* No Refresh: the list loads on open and again after connecting or removing an
+                  account, which is every moment it could be out of date. */}
               <button
                 type="button"
                 onClick={() => window.open(`/api/gmail/initiate?from=${encodeURIComponent(gmailSettingsSource)}`, "_self")}
@@ -1214,8 +1204,11 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             </div>
           }
         >
-          {gmailAccounts.length === 0 ? (
-            <p className={`text-[13px] ${textSecondary}`}>No Gmail accounts connected yet.</p>
+          {gmailLoading && gmailAccounts.length === 0 ? (
+            /* Said "none connected" while the request was still out, which read as an answer. */
+            <p className={`text-[13px] ${textSecondary}`}>Loading accounts…</p>
+          ) : gmailAccounts.length === 0 ? (
+            <p className={`text-[13px] ${textSecondary}`}>No Google accounts connected yet.</p>
           ) : (
             <div className={`divide-y ${isDark ? "divide-white/10" : "divide-[#E6E2EE]"}`}>
               {gmailAccounts.map((account) => {
@@ -1266,21 +1259,19 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                       <p className={`mt-1.5 text-[12px] ${textSecondary}`}>Loading calendars…</p>
                     ) : calendars.length === 0 ? null : (
                       <ul className="mt-2 space-y-1">
-                        {calendars.map((calendar) => {
+                        {[...calendars]
+                          .sort(
+                            (a, b) =>
+                              Number(b.enabled) - Number(a.enabled) ||
+                              a.summary.localeCompare(b.summary)
+                          )
+                          .map((calendar) => {
                           const toggleKey = `${account.email}::${calendar.id}`;
                           return (
                             <li key={toggleKey} className="flex items-center justify-between gap-3 py-0.5 pl-1">
                               <div className="flex min-w-0 items-center gap-2">
                                 <FiCalendar className={`w-3.5 h-3.5 shrink-0 ${textSecondary}`} />
                                 <span className={`truncate text-[12.5px] ${textPrimary}`}>{calendar.summary}</span>
-                                {calendar.primary && (
-                                  <span className="shrink-0 rounded-full bg-[#F2E9FE] px-1.5 py-0.5 text-[10px] font-medium text-[#5F17A5]">
-                                    Primary
-                                  </span>
-                                )}
-                                <span className={`hidden shrink-0 text-[11px] sm:inline ${textSecondary}`}>
-                                  {calendar.timeZone}
-                                </span>
                               </div>
                               <Toggle
                                 checked={calendar.enabled}
@@ -1289,7 +1280,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                               />
                             </li>
                           );
-                        })}
+                          })}
                       </ul>
                     )}
                   </div>
@@ -1308,12 +1299,16 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Sign Out</h3>
             <p className={`text-[13px] ${textSecondary} mt-0.5`}>Ends your session on this device.</p>
           </div>
+          {/* Solid red, and the same height and radius as every other button in the panel. The
+              outlined version was a white box with a hairline that read as disabled next to the
+              filled buttons it sits among, for the one action on the page that ends the session. */}
           <button
+            type="button"
             onClick={() => signOut({ callbackUrl: "/login" })}
-            className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-red-200 bg-white px-3.5 py-2 text-[13px] font-medium text-red-600 transition-colors hover:bg-red-50"
+            className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[10px] bg-[#B42318] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#8f1c12] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#B42318]"
           >
-            <FiLogOut className="w-4 h-4" />
-            Log out
+            <FiLogOut className="h-4 w-4" />
+            Sign Out
           </button>
         </div>
       </div>

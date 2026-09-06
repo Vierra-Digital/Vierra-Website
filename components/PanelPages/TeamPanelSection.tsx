@@ -302,9 +302,9 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                     company_email: u.company_email,
                     mentor: u.mentor,
                     mentorName: u.mentorName ?? null,
-                    // Not applicable until the invite is accepted: there is no membership to
-                    // count strikes against yet.
-                    strikes: pending ? null : typeof u.strikes === "number" ? u.strikes : 0,
+                    // The invite carries the strike count the inviter set, so a pending row shows
+                    // it rather than a dash — blanking it was hiding an answer that had been given.
+                    strikes: typeof u.strikes === "number" ? u.strikes : pending ? null : 0,
                     time_zone: u.time_zone,
                     status: pending ? "pending" : u.status,
                     lastActiveAt: pending ? null : u.lastActiveAt,

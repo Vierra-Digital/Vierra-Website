@@ -96,7 +96,10 @@ const STATUS_DOTS: Record<ProjectTaskStatus, string> = {
   completed: "bg-[#10B981]",
 };
 
-/** Boards are now company-owned, free-form rows — no fixed enum to key icons off of. */
+/**
+ * Matched on the name rather than an id: the four defaults are seeded per company
+ * (lib/projectBoards.ts), so every company's "Design" is a different row with the same name.
+ */
 function boardIcon(name: string): React.ReactNode {
   const lower = name.toLowerCase();
   if (lower.includes("design")) return <FiLayers className="w-4 h-4" />;
@@ -529,32 +532,42 @@ export default function ProjectManagement() {
                   </PanelPopover>
                 )}
               </div>
-              {boards.map((board) => (
-                <button
-                  key={board.id}
-                  onClick={() => {
-                    void (async () => {
-                      setTasks([]);
-                      setSelectedBoard(board);
-                      void router
-                        .replace(
-                          { pathname: router.pathname, query: { ...router.query, board: board.id } },
-                          undefined,
-                          { shallow: true, scroll: false }
-                        )
-                        .catch(() => {});
-                    })();
+              {/* A picker, not a chip each. Four boards plus a search box, a filter and New Task
+                  filled the row edge to edge, and every board but one was a button you were not
+                  going to press. */}
+              <label className="relative inline-flex items-center">
+                <span className="sr-only">Board</span>
+                <span className="pointer-events-none absolute left-3 text-[#701CC0]">
+                  {selectedBoard ? boardIcon(selectedBoard.name) : null}
+                </span>
+                <select
+                  value={selectedBoard?.id ?? ""}
+                  onChange={(event) => {
+                    const board = boards.find((b) => b.id === event.target.value);
+                    if (!board) return;
+                    setTasks([]);
+                    setSelectedBoard(board);
+                    void router
+                      .replace(
+                        { pathname: router.pathname, query: { ...router.query, board: board.id } },
+                        undefined,
+                        { shallow: true, scroll: false }
+                      )
+                      .catch(() => {});
                   }}
-                  className={`inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg px-3.5 text-[13px] font-medium transition-colors ${
-                    selectedBoard?.id === board.id
-                      ? "bg-[#701CC0] text-white shadow-sm"
-                      : "border border-[#E4E0EC] bg-white text-[#374151] hover:border-[#D6CFE4] hover:bg-[#FAF9FD]"
-                  }`}
+                  className="h-9 appearance-none rounded-[10px] bg-[#F4F2F8] pl-10 pr-9 text-[13px] font-medium text-[#111827] ring-1 ring-inset ring-transparent transition-shadow focus:bg-white focus:outline-none focus:ring-[#701CC0]/35"
                 >
-                  {boardIcon(board.name)}
-                  {board.name}
-                </button>
-              ))}
+                  {boards.map((board) => (
+                    <option key={board.id} value={board.id}>
+                      {board.name}
+                    </option>
+                  ))}
+                </select>
+                <FiChevronDown
+                  className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9CA3AF]"
+                  aria-hidden
+                />
+              </label>
               {isAdmin && (
                 <button
                   onClick={() => setShowAddModal(true)}
@@ -585,9 +598,15 @@ export default function ProjectManagement() {
             {taskBusy ? "Saving" : ""}
           </p>
 
-          {/* Totals first, then the board — the order the dashboard and the tracker read in. */}
+          {/* These count the board that is open, after search and filters — the same set the
+              columns below are drawing. They are not company-wide, and the label says which board
+              so that is not left to be inferred from the picker above. */}
           <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <PanelStat label="Tasks" value={visibleTasks.length} />
+            <PanelStat
+              label="Tasks"
+              value={visibleTasks.length}
+              hint={selectedBoard ? `On ${selectedBoard.name}` : undefined}
+            />
             <PanelStat label="In Progress" value={tasksByStatus.ongoing.length} />
             <PanelStat label="Awaiting Review" value={tasksByStatus.under_review.length} />
             <PanelStat
@@ -729,10 +748,10 @@ export default function ProjectManagement() {
                         })}
                         {columnTasks.length === 0 && (
                           <div className="flex flex-col items-center justify-center py-10 text-center">
-                            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-[#F1EFF6]">
+                            <div className="tasks-empty-icon mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-[#F1EFF6]">
                               <FiList className="h-5 w-5 text-[#8B8598]" />
                             </div>
-                            <p className="text-[12px] text-[#8B8598]">Nothing here</p>
+                            <p className="text-[12px] text-[#8B8598]">Nothing Here</p>
                           </div>
                         )}
                       </div>
@@ -743,6 +762,30 @@ export default function ProjectManagement() {
               )}
             </div>
           </div>
+
+      {/* The same drift the Files empty state uses, so an empty column reads as waiting rather
+          than broken. Held still for anyone who asked not to be moved. */}
+      <style jsx>{`
+        .tasks-empty-icon {
+          animation: tasksEmptyFloat 2.4s ease-in-out infinite;
+        }
+
+        @keyframes tasksEmptyFloat {
+          0%,
+          100% {
+            transform: translateY(0);
+          }
+          50% {
+            transform: translateY(-4px);
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .tasks-empty-icon {
+            animation: none;
+          }
+        }
+      `}</style>
       </PanelPage>
 
       
