@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck, FiChevronDown } from "react-icons/fi";
+import { FiFilter, FiPlus, FiEdit3, FiTrash2, FiCheck, FiChevronDown, FiX } from "react-icons/fi";
 import Image from "next/image";
 import ProfileImage from "../ProfileImage";
 import { inter } from "@/lib/fonts";
@@ -644,6 +644,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                         </>
                     }
                     confirmLabel="Rescind Invite"
+                    danger={false}
                     onCancel={() => {
                         setShowRescindModal(false)
                         setInviteToRescind(null)
@@ -674,6 +675,53 @@ const FieldSelect: React.FC<{
 const POSITION_OPTIONS = ["Founder", "Leadership", "Business Advisor", "Developer", "Designer", "Outreach"]
 
 /**
+ * The zones a team is plausibly spread across, labelled by city rather than by IANA identifier.
+ * The value stored is still the identifier — "America/New_York" is what Date formatting needs —
+ * but nobody should have to type it, or remember whether it is New_York or New York.
+ */
+const TIME_ZONE_OPTIONS: Array<{ value: string; label: string }> = [
+    { value: "Pacific/Honolulu", label: "Honolulu (HST)" },
+    { value: "America/Anchorage", label: "Anchorage (AKT)" },
+    { value: "America/Los_Angeles", label: "Los Angeles (PT)" },
+    { value: "America/Denver", label: "Denver (MT)" },
+    { value: "America/Phoenix", label: "Phoenix (MST)" },
+    { value: "America/Chicago", label: "Chicago (CT)" },
+    { value: "America/New_York", label: "New York (ET)" },
+    { value: "America/Toronto", label: "Toronto (ET)" },
+    { value: "America/Mexico_City", label: "Mexico City (CST)" },
+    { value: "America/Bogota", label: "Bogotá (COT)" },
+    { value: "America/Sao_Paulo", label: "São Paulo (BRT)" },
+    { value: "America/Argentina/Buenos_Aires", label: "Buenos Aires (ART)" },
+    { value: "Europe/London", label: "London (GMT/BST)" },
+    { value: "Europe/Dublin", label: "Dublin (GMT/IST)" },
+    { value: "Europe/Lisbon", label: "Lisbon (WET)" },
+    { value: "Europe/Madrid", label: "Madrid (CET)" },
+    { value: "Europe/Paris", label: "Paris (CET)" },
+    { value: "Europe/Berlin", label: "Berlin (CET)" },
+    { value: "Europe/Warsaw", label: "Warsaw (CET)" },
+    { value: "Europe/Athens", label: "Athens (EET)" },
+    { value: "Europe/Istanbul", label: "Istanbul (TRT)" },
+    { value: "Europe/Moscow", label: "Moscow (MSK)" },
+    { value: "Africa/Lagos", label: "Lagos (WAT)" },
+    { value: "Africa/Johannesburg", label: "Johannesburg (SAST)" },
+    { value: "Africa/Nairobi", label: "Nairobi (EAT)" },
+    { value: "Asia/Dubai", label: "Dubai (GST)" },
+    { value: "Asia/Karachi", label: "Karachi (PKT)" },
+    { value: "Asia/Kolkata", label: "Kolkata (IST)" },
+    { value: "Asia/Dhaka", label: "Dhaka (BST)" },
+    { value: "Asia/Bangkok", label: "Bangkok (ICT)" },
+    { value: "Asia/Singapore", label: "Singapore (SGT)" },
+    { value: "Asia/Manila", label: "Manila (PHT)" },
+    { value: "Asia/Hong_Kong", label: "Hong Kong (HKT)" },
+    { value: "Asia/Shanghai", label: "Shanghai (CST)" },
+    { value: "Asia/Tokyo", label: "Tokyo (JST)" },
+    { value: "Asia/Seoul", label: "Seoul (KST)" },
+    { value: "Australia/Perth", label: "Perth (AWST)" },
+    { value: "Australia/Sydney", label: "Sydney (AET)" },
+    { value: "Pacific/Auckland", label: "Auckland (NZT)" },
+]
+
+/**
  * Invite dialog, with the staff detail it used to collect before invitations replaced direct
  * account creation: position, mentor, time zone and strikes. None of it can be written to a user
  * that does not exist yet, so it rides on the invitation row and is applied to the membership
@@ -693,6 +741,10 @@ const InviteTeammateModal: React.FC<{
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState("")
     const [showSuccess, setShowSuccess] = useState(false)
+
+    // Everything but the mentor has to be answered. Strikes always holds a value, so it is email,
+    // position and time zone that decide whether the invite can go.
+    const canSubmit = isValidEmail(email) && position !== "" && timeZone !== ""
 
     const submit = async () => {
         setSubmitting(true)
@@ -764,16 +816,23 @@ const InviteTeammateModal: React.FC<{
             label="Invite Staff"
             onClose={onClose}
         >
-                <div className="flex items-center gap-3 mb-6">
-                    <div className="w-12 h-12 rounded-full bg-[#701CC0]/10 flex items-center justify-center">
-                        <FiPlus className="w-6 h-6 text-[#701CC0]" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-[#111827]">Invite Staff</h3>
-            </div>
+                <header className="mb-5 flex items-center justify-between gap-4">
+                    <h2 className="text-[22px] font-semibold tracking-[-0.02em] text-[#111827]">Invite Staff</h2>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Close"
+                        className="rounded-lg p-2 text-[#6B7280] transition-colors hover:bg-red-50 hover:text-red-600"
+                    >
+                        <FiX className="h-5 w-5" />
+                    </button>
+                </header>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="sm:col-span-2">
-                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Email</label>
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                            Email <span className="text-[#B42318]">*</span>
+                        </label>
                         <input
                             type="email"
                             value={email}
@@ -789,14 +848,18 @@ const InviteTeammateModal: React.FC<{
                         />
                     </div>
                     <div>
-                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Role</label>
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                            Role <span className="text-[#B42318]">*</span>
+                        </label>
                         <FieldSelect value={role} onChange={(value) => setRole(value as "admin" | "staff")}>
                             <option value="staff">Staff</option>
                             <option value="admin">Admin</option>
                         </FieldSelect>
                     </div>
                     <div>
-                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Position</label>
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                            Position <span className="text-[#B42318]">*</span>
+                        </label>
                         <FieldSelect value={position} onChange={setPosition}>
                             <option value="">Not set</option>
                             {POSITION_OPTIONS.map((option) => (
@@ -807,7 +870,9 @@ const InviteTeammateModal: React.FC<{
                     <div>
                         {/* A picker, not the free-text box the edit dialog still uses: the column is a
                             uuid foreign key to a user, so a typed name could never have been stored. */}
-                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Mentor</label>
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                            Mentor <span className="font-normal normal-case tracking-normal text-[#9CA3AF]">(optional)</span>
+                        </label>
                         <FieldSelect value={mentorId} onChange={setMentorId}>
                             <option value="">None</option>
                             {mentorOptions.map((option) => (
@@ -816,7 +881,9 @@ const InviteTeammateModal: React.FC<{
                         </FieldSelect>
                     </div>
                     <div>
-                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Strikes</label>
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                            Strikes <span className="text-[#B42318]">*</span>
+                        </label>
                         <FieldSelect value={String(strikes)} onChange={(value) => setStrikes(Number(value))}>
                             {[0, 1, 2, 3].map((n) => (
                                 <option key={n} value={n}>{n}/3</option>
@@ -824,40 +891,33 @@ const InviteTeammateModal: React.FC<{
                         </FieldSelect>
                     </div>
                     <div className="sm:col-span-2">
-                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">Time Zone</label>
-                        <input
-                            type="text"
-                            value={timeZone}
-                            onChange={(e) => setTimeZone(e.target.value)}
-                            placeholder="America/New_York"
-                            className={FIELD}
-                        />
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                            Time Zone <span className="text-[#B42318]">*</span>
+                        </label>
+                        <FieldSelect value={timeZone} onChange={setTimeZone}>
+                            <option value="">Select a time zone</option>
+                            {TIME_ZONE_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                        </FieldSelect>
                     </div>
                 </div>
 
-                <p className="mt-3 text-[12px] text-[#6B7280]">
-                    Everything below the email is optional and applied when the invite is accepted.
-                </p>
-
                 {error && <div className="mt-4 text-sm text-red-600">{error}</div>}
 
-                <div className="flex justify-between items-center mt-6">
+                <div className="mt-6 flex justify-end gap-2">
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-medium"
+                        className="h-9 rounded-[10px] bg-[#F4F2F8] px-3.5 text-[13px] font-medium text-[#374151] transition-colors hover:bg-[#EAE6F3]"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={submit}
-                        disabled={submitting || !isValidEmail(email)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                            submitting || !isValidEmail(email)
-                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                : 'bg-[#701CC0] text-white hover:bg-[#5f17a5]'
-                        }`}
+                        disabled={submitting || !canSubmit}
+                        className="h-9 rounded-[10px] bg-[#701CC0] px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-[#5f17a5] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                        {submitting ? "Sending..." : "Send Invite"}
+                        {submitting ? "Sending…" : "Send Invite"}
                     </button>
                 </div>
         </Modal>
