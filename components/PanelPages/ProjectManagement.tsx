@@ -484,7 +484,7 @@ export default function ProjectManagement() {
               <PanelSearch
                 id="task-search"
                 label="Search Tasks"
-                placeholder="Search tasks"
+                placeholder="Search name or description"
                 value={taskSearch}
                 onChange={setTaskSearch}
               />
@@ -599,21 +599,12 @@ export default function ProjectManagement() {
           </p>
 
           {/* These count the board that is open, after search and filters — the same set the
-              columns below are drawing. They are not company-wide, and the label says which board
-              so that is not left to be inferred from the picker above. */}
+              columns below are drawing, not a company-wide total. */}
           <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <PanelStat
-              label="Tasks"
-              value={visibleTasks.length}
-              hint={selectedBoard ? `On ${selectedBoard.name}` : undefined}
-            />
+            <PanelStat label="Tasks" value={visibleTasks.length} />
             <PanelStat label="In Progress" value={tasksByStatus.ongoing.length} />
             <PanelStat label="Awaiting Review" value={tasksByStatus.under_review.length} />
-            <PanelStat
-              label="Overdue"
-              value={overdueCount}
-              hint={overdueCount === 0 ? "Nothing late" : "Past their deadline"}
-            />
+            <PanelStat label="Overdue" value={overdueCount} />
           </div>
 
           <div className="flex-1 min-h-0">

@@ -24,6 +24,7 @@ import {
   FiBarChart2,
   FiSend,
   FiCreditCard,
+  FiSettings,
 } from "react-icons/fi"
 import { RiArrowDropDownLine } from "react-icons/ri";
 import { useSession } from "@/lib/session-client"
@@ -151,7 +152,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   const [currentUserName, setCurrentUserName] = useState<string | null>(initialUserName)
   const [imageVersion, setImageVersion] = useState<number | string>(initialImageVersion)
   const [isClientViewMode, setIsClientViewMode] = useState(false)
-  const [viewModeSection, setViewModeSection] = useState<0 | 1 | 2 | 3 | 4 | 5 | 6>(0)
+  const [viewModeSection, setViewModeSection] = useState<0 | 1 | 2 | 3 | 4 | 5 | 6 | 7>(0)
   const [viewClient, setViewClient] = useState<{ id: string; name: string; email: string; companyId: string } | null>(null)
   const resolvedUserRole = ((session?.user as any)?.role ?? initialUserRole) as "admin" | "staff"
   const { activeClient, setActiveClient } = useActiveClient()
@@ -316,7 +317,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
    * Scoped to "client": a draft belonging to the client workspace should be settled before moving
    * within it, while a draft elsewhere in the panel is not this navigation's business.
    */
-  const navigateViewModeSection = (section: 0 | 1 | 2 | 3 | 4 | 5 | 6) => {
+  const navigateViewModeSection = (section: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7) => {
     setViewModeSection(section)
     setShowSettings(false)
     setIsSidebarOpen(false)
@@ -408,6 +409,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                   [4, "Analytics", <FiBarChart2 key="a" className="w-4 h-4 shrink-0" />],
                   [5, "Campaign History", <FiSend key="c" className="w-4 h-4 shrink-0" />],
                   [6, "Billing", <FiCreditCard key="b" className="w-4 h-4 shrink-0" />],
+                  [7, "Settings", <FiSettings key="s" className="w-4 h-4 shrink-0" />],
                 ] as const).map(([section, label, icon]) => (
                   <button
                     key={section}
@@ -607,6 +609,18 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                       )}
                       {viewModeSection === 6 && (
                         <ClientBillingSection companyId={viewClient?.companyId ?? null} />
+                      )}
+                      {/* The client's own settings page, to look at. readOnly hides every control
+                          that would change their account — a staff member must not rename them,
+                          replace their picture or set their password from here. */}
+                      {viewModeSection === 7 && (
+                        <UserSettingsPage
+                          readOnly
+                          variant="panel"
+                          userRole="user"
+                          billingCompanyId={viewClient?.companyId ?? null}
+                          user={{ name: viewClient?.name ?? null, email: viewClient?.email ?? null, image: null }}
+                        />
                       )}
                       {viewModeSection === 1 && (
                         <FilesSection readOnly allowDelete showOwnerInReadOnly fileFilter={viewClient?.id} />

@@ -26,6 +26,14 @@ interface UserSettingsPageProps {
   onClose?: () => void;
   variant?: "panel" | "dark";
   userRole?: string | null;
+  /**
+   * Renders someone else's settings for staff to look at: every control that would change the
+   * account is hidden, because a staff member must not rename a client, replace their picture or
+   * set their password from here. Read-only by construction rather than by asking nicely.
+   */
+  readOnly?: boolean;
+  /** Whose billing to read when this is somebody else's page. */
+  billingCompanyId?: string | null;
 }
 
 type GmailAccountConnection = {
@@ -113,7 +121,7 @@ type BillingSummary = {
   subscription: { cancelAtPeriodEnd: boolean; currentPeriodEnd: string | null } | null;
 };
 
-const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate, onImageUpdate, onClose, variant = "panel", userRole: userRoleProp = null }) => {
+const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate, onImageUpdate, onClose, variant = "panel", userRole: userRoleProp = null, readOnly = false, billingCompanyId = null }) => {
   const [name, setName] = useState(user.name || "");
   const [isEditingName, setIsEditingName] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -176,14 +184,18 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   }, [userRoleProp]);
 
   useEffect(() => {
-    // Representatives only: staff have no billing of their own to show here.
-    if (userRole !== "user") return;
+    // Representatives' own billing, or a client's when staff are looking at their page.
+    if (userRole !== "user" && !billingCompanyId) return;
     let cancelled = false;
     // Fetching is the effect's purpose and the pending flag has to flip before it starts, or the
     // card renders "no payment method on file" for a moment against data that has not arrived.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setBillingLoading(true);
-    void fetch("/api/client/billing")
+    void fetch(
+      billingCompanyId
+        ? `/api/client/billing?companyId=${encodeURIComponent(billingCompanyId)}`
+        : "/api/client/billing"
+    )
       .then((response) => (response.ok ? response.json() : null))
       .then((body) => {
         if (!cancelled) setBilling(body as BillingSummary | null);
@@ -197,7 +209,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
     return () => {
       cancelled = true;
     };
-  }, [userRole]);
+  }, [userRole, billingCompanyId]);
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -803,8 +815,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
           </div>
         <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Profile</h3>
         </div>
-        <div className="flex items-start gap-5">
-          <div className="order-1 min-w-0 flex-1">
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
             <div className="space-y-4">
               <div>
                 <label className={`mb-1 block text-[11px] font-medium ${textSecondary}`}>Full Name</label>
@@ -835,12 +847,14 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 ) : (
                   <div className="flex items-center gap-2">
                     <span className={`text-[13px] ${textPrimary}`}>{displayName}</span>
+                    {!readOnly && (
                     <button
                       onClick={() => setIsEditingName(true)}
                       className="text-[12.5px] font-medium text-[#701CC0] transition-colors hover:text-[#5f17a5]"
                     >
                       Edit
                     </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -865,17 +879,18 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               </div>
             )}
           </div>
-          <div className="relative order-2 shrink-0" ref={avatarMenuRef}>
+          <div className="relative shrink-0" ref={avatarMenuRef}>
             <div className="relative inline-block">
               <ProfileImage
                 src={user.image}
                 alt={displayName}
                 name={displayName}
-                size={72}
+                size={88}
                 className={`ring-2 rounded-full ${isPanel ? "ring-gray-200" : "ring-[#701CC0]/30"}`}
                 priority
                 quality={100}
               />
+              {!readOnly && (
               <button
                 type="button"
                 onClick={() => setShowAvatarMenu(!showAvatarMenu)}
@@ -885,6 +900,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               >
                 <FiEdit3 className="h-3.5 w-3.5" />
               </button>
+              )}
             </div>
             {showAvatarMenu && (
               <div className={`absolute top-full right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border py-1 shadow-xl ${isDark ? "bg-[#2E0A4F] border-white/20" : "bg-white border-[#E4E0EC]"}`}>
@@ -944,22 +960,23 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
               <Toggle
                 checked={settings.emailNotifications}
                 onChange={(v) => handleSettingsUpdate({ emailNotifications: v })}
-                disabled={isUpdating || isLoadingSettings}
+                disabled={readOnly || isUpdating || isLoadingSettings}
               />
             </div>
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className={`text-[13px] font-medium ${textPrimary}`}>Two-Factor Authentication</p>
-                <p className={`text-[12px] ${textSecondary}`}>Extra security layer.</p>
+                <p className={`text-[12px] ${textSecondary}`}>Coming soon.</p>
               </div>
               <Toggle
                 checked={settings.twoFactorEnabled}
                 onChange={(v) => handleSettingsUpdate({ twoFactorEnabled: v })}
-                disabled={isUpdating || isLoadingSettings}
+                disabled
               />
             </div>
             {/* A hairline is enough to separate an action from the toggles above it; the rule
                 plus a full row of padding read as a gap in the card. Sized like Add account. */}
+            {!readOnly && (
             <div className={`mt-1 border-t pt-3 ${isDark ? "border-white/10" : "border-[#EEF1F7]"}`}>
               <button
                 type="button"
@@ -970,6 +987,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 Change Password
               </button>
             </div>
+            )}
           </div>
         </div>
 
@@ -986,10 +1004,10 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             <div>
               <label className={`mb-1.5 block text-[11px] font-medium ${textSecondary}`}>Theme</label>
               <span className="relative block"><select
-                className={`h-9 w-full appearance-none rounded-[10px] border px-3 pr-9 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 ${inputBg} ${textPrimary}`}
+                className={`h-9 w-full appearance-none rounded-[10px] border px-3 pr-9 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 disabled:cursor-not-allowed disabled:opacity-60 ${inputBg} ${textPrimary}`}
                 value={settings.theme}
                 onChange={(e) => handleSettingsUpdate({ theme: e.target.value })}
-                disabled={isUpdating || isLoadingSettings}
+                disabled={readOnly || isUpdating || isLoadingSettings}
               >
                 <option value="light">Light</option>
                 <option value="dark">Dark</option>
@@ -1000,10 +1018,10 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             <div>
               <label className={`mb-1.5 block text-[11px] font-medium ${textSecondary}`}>Language</label>
               <span className="relative block"><select
-                className={`h-9 w-full appearance-none rounded-[10px] border px-3 pr-9 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 ${inputBg} ${textPrimary}`}
+                className={`h-9 w-full appearance-none rounded-[10px] border px-3 pr-9 text-[13px] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#701CC0]/35 disabled:cursor-not-allowed disabled:opacity-60 ${inputBg} ${textPrimary}`}
                 value={settings.language}
                 onChange={(e) => handleSettingsUpdate({ language: e.target.value })}
-                disabled={isUpdating || isLoadingSettings}
+                disabled={readOnly || isUpdating || isLoadingSettings}
               >
                 <option value="en">English</option>
                 <option value="es">Spanish</option>
@@ -1078,6 +1096,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                   </p>
                 </div>
 
+                {!readOnly && (
                 <button
                   type="button"
                   onClick={() => void openBillingPortal()}
@@ -1086,6 +1105,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 >
                   {openingPortal ? "Opening…" : "Manage Payment Method"}
                 </button>
+                )}
                 {billingPortalError && <p className="text-[13px] text-[#B42318]">{billingPortalError}</p>}
               </div>
             )}
@@ -1307,6 +1327,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
 
       {/* Sign out lives here, not on the nav rail: the rail is for navigation, and a destructive
           action sitting one row below it was easy to mis-click. */}
+      {!readOnly && (
       <div className={`rounded-2xl ${cardBg} border p-5`}>
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
@@ -1326,6 +1347,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 
@@ -1338,7 +1360,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             <h1 className="text-[30px] leading-[1.15] font-semibold tracking-[-0.025em] text-[#111827] mt-8 mb-6">
               Account Settings
             </h1>
-            <div className="pb-16">
+            <div className="pb-8">
               {isLoadingSettings ? cardsSkeleton : cardsContent}
             </div>
           </div>
