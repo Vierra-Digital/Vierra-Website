@@ -212,6 +212,12 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   }, [userRole, billingCompanyId]);
 
   useEffect(() => {
+    if (readOnly) {
+      // Nothing to load: the cards these values feed are hidden on someone else's page.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsLoadingSettings(false);
+      return;
+    }
     const loadSettings = async () => {
       try {
         const response = await fetch("/api/profile/getSettings");
@@ -226,7 +232,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       }
     };
     loadSettings();
-  }, []);
+  }, [readOnly]);
 
   const loadSocialConnections = async () => {
     setSocialLoading(true);
@@ -733,7 +739,8 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
   const textSecondary = isDark ? "text-white/70" : "text-[#6B7280]";
   const inputBg = isDark ? "bg-white/10 border-white/20 text-white placeholder-white/50" : "bg-white border-[#E5E7EB]";
   const pageBg = isDark ? "bg-transparent" : "bg-white";
-  const canManageGmailAccounts = ["user", "admin", "staff"].includes(userRole || "");
+  // Google accounts belong to whoever is signed in, so they are never part of someone else's page.
+  const canManageGmailAccounts = !readOnly && ["user", "admin", "staff"].includes(userRole || "");
   const gmailSettingsSource = userRole === "admin" || userRole === "staff" ? "panel-settings" : "settings";
   // The email panel's settings render on a dark card, where the light tint disappears entirely.
   const skeletonTint = isDark ? "bg-white/10" : "bg-[#F1EFF6]";
@@ -815,48 +822,23 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
           </div>
         <h3 className={`text-[15px] font-semibold ${textPrimary}`}>Profile</h3>
         </div>
-        <div className="flex items-start gap-3">
+        <div className="flex items-center gap-4">
           <div className="min-w-0 flex-1">
             <div className="space-y-4">
               <div>
                 <label className={`mb-1 block text-[11px] font-medium ${textSecondary}`}>Full Name</label>
-                {isEditingName ? (
-                  <div className="flex flex-wrap gap-2">
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className={`flex-1 min-w-[180px] rounded-xl px-4 py-2.5 border focus:outline-none focus:ring-2 focus:ring-[#701CC0] focus:border-transparent ${inputBg}`}
-                      placeholder="Enter your name"
-                      autoFocus
-                    />
+                <div className="flex items-center gap-2">
+                  <span className={`text-[13px] ${textPrimary}`}>{displayName}</span>
+                  {!readOnly && (
                     <button
-                      onClick={handleNameUpdate}
-                      disabled={isUpdating}
-                      className="px-4 py-2.5 bg-[#701CC0] text-white rounded-xl hover:bg-[#5f17a5] disabled:opacity-50 text-sm font-medium transition-colors"
-                    >
-                      {isUpdating ? "Saving..." : "Save"}
-                    </button>
-                    <button
-                      onClick={() => { setName(user.name || (user.email ? user.email.split("@")[0] : "") || ""); setIsEditingName(false); setUpdateMessage(null); }}
-                      className="px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 text-sm font-medium transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[13px] ${textPrimary}`}>{displayName}</span>
-                    {!readOnly && (
-                    <button
-                      onClick={() => setIsEditingName(true)}
+                      type="button"
+                      onClick={() => { setName(user.name || ""); setIsEditingName(true); }}
                       className="text-[12.5px] font-medium text-[#701CC0] transition-colors hover:text-[#5f17a5]"
                     >
                       Edit
                     </button>
-                    )}
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
               <div>
                 <label className={`mb-1 block text-[11px] font-medium ${textSecondary}`}>Email</label>
@@ -885,7 +867,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 src={user.image}
                 alt={displayName}
                 name={displayName}
-                size={88}
+                size={112}
                 className={`ring-2 rounded-full ${isPanel ? "ring-gray-200" : "ring-[#701CC0]/30"}`}
                 priority
                 quality={100}
@@ -896,14 +878,18 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 onClick={() => setShowAvatarMenu(!showAvatarMenu)}
                 aria-label="Change profile picture"
                 aria-expanded={showAvatarMenu}
-                className="absolute -bottom-0.5 -right-0.5 inline-flex h-7 w-7 items-center justify-center rounded-full bg-[#701CC0] text-white shadow-md transition-colors hover:bg-[#5f17a5]"
+                className="absolute bottom-0 right-0 inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#701CC0] text-white ring-2 ring-white transition-colors hover:bg-[#5f17a5]"
               >
-                <FiEdit3 className="h-3.5 w-3.5" />
+                <FiEdit3 className="h-4 w-4" />
               </button>
               )}
             </div>
             {showAvatarMenu && (
-              <div className={`absolute top-full right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border py-1 shadow-xl ${isDark ? "bg-[#2E0A4F] border-white/20" : "bg-white border-[#E4E0EC]"}`}>
+              <div
+                role="menu"
+                aria-label="Profile picture"
+                className={`absolute right-0 top-full z-20 mt-1.5 w-[188px] rounded-xl border p-1 shadow-[0_10px_28px_-8px_rgba(16,24,40,0.22)] ${isDark ? "border-white/20 bg-[#2E0A4F]" : "border-[#E4E0EC] bg-white"}`}
+              >
                 <input
                   type="file"
                   accept="image/*"
@@ -920,18 +906,18 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
                 />
                 <label
                   htmlFor="image-upload"
-                  className={`flex cursor-pointer items-center gap-2 px-3 py-2 text-[12.5px] transition-colors ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-[#F5F3F9] text-[#111827]"} ${isUpdating ? "cursor-not-allowed opacity-50" : ""}`}
+                  className={`flex h-8 cursor-pointer items-center gap-2.5 whitespace-nowrap rounded-md px-2.5 text-[13px] transition-colors ${isDark ? "text-white hover:bg-white/10" : "text-[#374151] hover:bg-[#F5F3F9]"} ${isUpdating ? "cursor-not-allowed opacity-45" : ""}`}
                 >
-                  <FiUpload className="h-3.5 w-3.5 shrink-0" />
+                  <FiUpload className={`h-3.5 w-3.5 shrink-0 ${isDark ? "" : "text-[#9CA3AF]"}`} />
                   {isUpdating ? "Uploading..." : "Upload Image"}
                 </label>
                 {user.image && (
                   <button
                     onClick={handleImageReset}
                     disabled={isUpdating}
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] transition-colors ${isDark ? "hover:bg-white/10 text-white" : "hover:bg-[#F5F3F9] text-[#111827]"} ${isUpdating ? "cursor-not-allowed opacity-50" : ""}`}
+                    className={`flex h-8 w-full items-center gap-2.5 whitespace-nowrap rounded-md px-2.5 text-left text-[13px] transition-colors ${isDark ? "text-white hover:bg-white/10" : "text-[#374151] hover:bg-[#F5F3F9]"} ${isUpdating ? "cursor-not-allowed opacity-45" : ""}`}
                   >
-                    <FiRotateCcw className="h-3.5 w-3.5 shrink-0" />
+                    <FiRotateCcw className={`h-3.5 w-3.5 shrink-0 ${isDark ? "" : "text-[#9CA3AF]"}`} />
                     {isUpdating ? "Resetting..." : "Reset To Default"}
                   </button>
                 )}
@@ -943,6 +929,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       </div>
 
       
+        {!readOnly && (
         <div className={`h-full rounded-2xl ${cardBg} border p-5`}>
           <div className="flex items-center gap-2 mb-5">
             <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
@@ -990,8 +977,10 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             )}
           </div>
         </div>
+        )}
 
         
+        {!readOnly && (
         <div className={`h-full rounded-2xl ${cardBg} border p-5`}>
           <div className="flex items-center gap-2 mb-5">
             <div className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-[#701CC0]/10">
@@ -1038,6 +1027,7 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {userRole === "user" && (
@@ -1432,6 +1422,45 @@ const UserSettingsPage: React.FC<UserSettingsPageProps> = ({ user, onNameUpdate,
       )}
 
       
+      {isEditingName && (
+        <Modal
+          zIndexClass="z-50"
+          backdropClassName="bg-black/50 backdrop-blur-sm"
+          cardClassName="bg-white rounded-2xl shadow-xl p-6 max-w-lg w-full mx-4"
+          label="Edit Name"
+          onClose={() => setIsEditingName(false)}
+        >
+          <PanelModalHeader title="Edit Name" onClose={() => setIsEditingName(false)} />
+
+          <div>
+            <PanelFieldLabel required>Full Name</PanelFieldLabel>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={PANEL_FIELD}
+              placeholder="Bidoof Sanchez"
+              autoFocus
+            />
+          </div>
+
+          {updateMessage?.type === "error" && (
+            <p role="alert" className="mt-4 text-[13px] text-[#B42318]">{updateMessage.text}</p>
+          )}
+
+          <PanelModalFooter
+            onCancel={() => {
+              setName(user.name || "");
+              setIsEditingName(false);
+              setUpdateMessage(null);
+            }}
+            onConfirm={() => void handleNameUpdate()}
+            confirmLabel={isUpdating ? "Saving…" : "Save Name"}
+            confirmDisabled={isUpdating || name.trim() === ""}
+          />
+        </Modal>
+      )}
+
       {showPasswordModal && (
         <Modal
           zIndexClass="z-50"

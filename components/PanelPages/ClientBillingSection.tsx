@@ -84,6 +84,9 @@ const money = (cents: number, currency = "usd") =>
 const date = (iso: string | null) =>
     iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "—"
 
+/** Stripe reports statuses lowercase; they are read here as words, not as API values. */
+const titleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice(1).replace(/_/g, " ")
+
 const INVOICE_TONES: Record<string, "positive" | "warning" | "danger" | "neutral"> = {
     paid: "positive",
     open: "warning",
@@ -266,7 +269,7 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                                 <PanelBadge
                                                     tone={data.subscription.status === "active" ? "positive" : "warning"}
                                                 >
-                                                    {data.subscription.status}
+                                                    {titleCase(data.subscription.status)}
                                                 </PanelBadge>
                                                 {data.subscription.amountCents !== null && (
                                                     <span className="text-[#111827]">
@@ -300,8 +303,20 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                             </PanelCard>
 
                             <PanelCard>
-                                <div className="border-b border-[#EEF1F7] bg-[#FBFCFF] px-4 py-3">
+                                <div className="flex items-center justify-between gap-3 border-b border-[#EEF1F7] bg-[#FBFCFF] px-4 py-3">
                                     <h3 className="text-[13px] font-semibold text-[#111827]">Payment Methods</h3>
+                                    {/* Beside what it changes, rather than only in the page header —
+                                        this is where someone looking at an expiring card is. */}
+                                    {canManage && (
+                                        <button
+                                            type="button"
+                                            onClick={() => void openPortal()}
+                                            disabled={openingPortal}
+                                            className="rounded text-[12.5px] font-medium text-[#701CC0] transition-colors hover:text-[#5f17a5] disabled:opacity-50"
+                                        >
+                                            {openingPortal ? "Opening…" : "Add or change"}
+                                        </button>
+                                    )}
                                 </div>
                                 <div className="p-4">
                                     {data.paymentMethods.length === 0 ? (
@@ -362,7 +377,7 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                                 <PanelTd className="text-[#6B7280]">{invoice.description ?? "Retainer"}</PanelTd>
                                                 <PanelTd>
                                                     <PanelBadge tone={INVOICE_TONES[invoice.status ?? ""] ?? "neutral"}>
-                                                        {invoice.status ?? "unknown"}
+                                                        {titleCase(invoice.status ?? "unknown")}
                                                     </PanelBadge>
                                                 </PanelTd>
                                                 <PanelTd className="whitespace-nowrap text-right font-medium tabular-nums">
@@ -460,7 +475,7 @@ const ClientBillingSection: React.FC<ClientBillingSectionProps> = ({ companyId =
                                                     </PanelTd>
                                                     <PanelTd>
                                                         <PanelBadge tone={PAYMENT_TONES[payment.status] ?? "neutral"}>
-                                                            {payment.status}
+                                                            {titleCase(payment.status)}
                                                         </PanelBadge>
                                                     </PanelTd>
                                                     <PanelTd className="text-right font-medium tabular-nums">

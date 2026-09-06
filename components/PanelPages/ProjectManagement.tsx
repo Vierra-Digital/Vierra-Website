@@ -122,6 +122,12 @@ export default function ProjectManagement() {
   const [selectedBoard, setSelectedBoard] = useState<BoardInfo | null>(null);
   const [tasks, setTasks] = useState<ProjectTask[]>([]);
   const [loading, setLoading] = useState(true);
+  /**
+   * Separate from the task loading flag. Boards are fetched first, and the empty state below is
+   * gated on boards.length — which is zero before the first response, so opening the page flashed
+   * "No Boards Yet" at everyone before the four defaults arrived.
+   */
+  const [boardsLoading, setBoardsLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState<ProjectTask | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -177,6 +183,8 @@ export default function ProjectManagement() {
       }
     } catch {
       setActionError("Could not load boards. Try again.");
+    } finally {
+      setBoardsLoading(false);
     }
   }, []);
 
@@ -444,6 +452,36 @@ export default function ProjectManagement() {
     } finally { busyRef.current = false; setTaskBusy(false); }
   };
 
+  if (boardsLoading) {
+    return (
+      <div className={inter.className}>
+        <PanelPage>
+          <PanelHeader title="Project Management" />
+          <div className="mb-4 grid grid-cols-2 gap-3 pb-2 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="rounded-xl bg-[#F1EFF6] px-3.5 py-3.5">
+                <div className="mb-2 h-2.5 w-20 animate-pulse rounded bg-[#E3DEEE]" />
+                <div className="h-[22px] w-10 animate-pulse rounded bg-[#E3DEEE]" />
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="overflow-hidden rounded-2xl border border-[#E4E0EC] bg-white">
+                <div className="h-[46px] border-b border-[#EEF1F7] bg-[#FBFCFF]" />
+                <div className="space-y-2 bg-[#FBFAFD] p-3">
+                  {[0, 1, 2].map((j) => (
+                    <div key={j} className="h-14 animate-pulse rounded-xl bg-[#F1EFF6]" />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </PanelPage>
+      </div>
+    );
+  }
+
   if (boards.length === 0) {
     return (
       <div className={inter.className}>
@@ -600,7 +638,7 @@ export default function ProjectManagement() {
 
           {/* These count the board that is open, after search and filters — the same set the
               columns below are drawing, not a company-wide total. */}
-          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="mb-6 grid grid-cols-2 gap-3 pb-2 lg:grid-cols-4">
             <PanelStat label="Tasks" value={visibleTasks.length} />
             <PanelStat label="In Progress" value={tasksByStatus.ongoing.length} />
             <PanelStat label="Awaiting Review" value={tasksByStatus.under_review.length} />
