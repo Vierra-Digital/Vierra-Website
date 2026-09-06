@@ -34,7 +34,6 @@ import {
 } from "react-icons/fi";
 import ProfileImage from "../ProfileImage";
 import Modal from "@/components/ui/Modal";
-import { useDraftGuard } from "@/hooks/useDraftGuard";
 import { useRouter } from "next/router";
 import { panelFetch } from "@/lib/panelFetch";
 import { PANEL_FIELD, PanelFieldLabel, PanelModalHeader } from "@/components/ui/PanelForm";
@@ -160,7 +159,6 @@ export default function ProjectManagement() {
     }
   }, [isFilterOpen]);
   const busyRef = useRef(false);
-  const canLeave = useDraftGuard(showAddModal && Boolean(addForm.name || addForm.description || addForm.checklistText || addForm.deadline || addForm.assignedTo.length), "New task", "6", taskBusy);
   const isAdmin = (session?.user as { role?: string })?.role === "admin";
 
   const fetchBoards = useCallback(async () => {
@@ -536,7 +534,6 @@ export default function ProjectManagement() {
                   key={board.id}
                   onClick={() => {
                     void (async () => {
-                      if (!(await canLeave())) return;
                       setTasks([]);
                       setSelectedBoard(board);
                       void router
@@ -795,7 +792,6 @@ export default function ProjectManagement() {
           boardMembers={boardMembers}
           onSubmit={handleAddTask}
           onClose={() => { void (async () => {
-            if (!(await canLeave())) return;
             setShowAddModal(false);
             setAddForm({ name: "", description: "", checklistText: "", assignedTo: [], deadline: "" });
           })(); }}
@@ -1282,11 +1278,9 @@ function EditTaskModal({
     task.deadline ? new Date(task.deadline).toISOString().slice(0, 10) : ""
   );
 
-  const [initial] = useState(() => JSON.stringify({ name, description, checklistText, status, assignedTo, deadline }));
-  const canClose = useDraftGuard(JSON.stringify({ name, description, checklistText, status, assignedTo, deadline }) !== initial, "Edit task", "6", busy);
   const closeEditor = () => {
     if (busy) return;
-    void (async () => { if (await canClose()) onClose(); })();
+    onClose();
   };
   const steps = [
     { number: 1, title: "Basic Info" },

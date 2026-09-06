@@ -7,7 +7,6 @@ import { LazyMotion, domAnimation } from "framer-motion";
 import { SessionProvider } from "@/lib/session-client";
 import { ActiveClientProvider } from "@/lib/activeClient";
 import ConsentBanner from "@/components/ConsentBanner";
-import DiscardChangesModal from "@/components/panel/DiscardChangesModal";
 
 // GA for pages-router routes (blog, careers, legal). App-router pages get it from
 // app/layout.tsx. Both use next/script so the tag is hydration-safe (no edge inject).
@@ -33,7 +32,6 @@ export default function App({ Component, pageProps }: AppProps) {
           <link rel="shortcut icon" href="/favicon.ico" />
         </Head>
         <Component {...pageProps} />
-        <DiscardChangesModal />
         {analyticsEnabled && <ConsentBanner />}
         {analyticsEnabled && (
           <>

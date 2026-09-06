@@ -3,7 +3,6 @@ import { inter } from "@/lib/fonts";
 import { PanelHeader } from "@/components/panel/PanelTable";
 import SuccessStatusModal from "@/components/ui/SuccessStatusModal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
-import { useDraftGuard } from "@/hooks/useDraftGuard";
 
 const NON_RESIZABLE_TEXT_KEYS = new Set(["website", "brandTone"]);
 
@@ -69,7 +68,6 @@ const LinkedInContextSection: React.FC<Props> = ({
   const [savedAnswers, setSavedAnswers] = useState("{}");
   const [revision, setRevision] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
-  useDraftGuard(JSON.stringify(editableAnswers) !== savedAnswers, "Client context", "client", saving);
 
   useEffect(() => {
     let active = true;

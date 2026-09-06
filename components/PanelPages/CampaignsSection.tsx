@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { FiPlus, FiX, FiCheck, FiTrash2 } from "react-icons/fi";
 import { Inter } from "next/font/google";
-import { useDraftGuard } from "@/hooks/useDraftGuard";
 import Modal from "@/components/ui/Modal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
@@ -397,10 +396,9 @@ const NewCampaignModal: React.FC<{ onClose: () => void; onDone: () => void }> = 
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [enrolledCount, setEnrolledCount] = useState<number | null>(null);
 
-  const canClose = useDraftGuard(Boolean(name || campaignId), "campaign wizard", "email", saving);
   const closeWizard = () => {
     if (mutationPending.current) return;
-    void (async () => { if (await canClose()) onClose(); })();
+    onClose();
   };
 
   // Lazy: only fetch Brevo's sender list once someone actually picks that provider, so a

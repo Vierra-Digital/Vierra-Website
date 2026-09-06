@@ -43,7 +43,6 @@ import ConfirmActionModal from "@/components/ui/ConfirmActionModal";
 import PromptModal, { type PromptField } from "@/components/ui/PromptModal";
 import { MODULES, orderModules, PAGE_SIZE } from "@/components/email/constants";
 import type { ContactVisibility } from "@/components/email/types";
-import { useDraftGuard, usePageLeaveGuard } from "@/hooks/useDraftGuard";
 import { useActiveClient } from "@/lib/activeClient";
 import { panelFetch } from "@/lib/panelFetch";
 
@@ -412,9 +411,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
   const providerPending = useRef(false);
   const accountPrefPending = useRef(false);
   const { activeClient } = useActiveClient();
-  const [companyBaseline, setCompanyBaseline] = useState("");
   const companyTarget = useRef<string | null>(null);
-  usePageLeaveGuard();
   const [contactTags, setContactTags] = useState<ContactTag[]>([]);
   const [contactVisibility, setContactVisibility] = useState<ContactVisibility>({
     showPhone: true,
@@ -644,10 +641,7 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
     );
   }, [activeAccountEmail, settings, contactVisibility, savedSettings, savedContactVisibility]);
 
-  const canChangeAccount = useDraftGuard(hasUnsavedSettingsChanges, "Email settings", "email-settings", saving);
-  useDraftGuard(Boolean(companyBaseline && JSON.stringify([companyMailingAddress, companyPrivacyPolicyUrl]) !== companyBaseline), "Company sending settings", "email-settings", companySettingsSaving);
-  useDraftGuard(Boolean(newProvider.smtpHost || newProvider.smtpUsername || newProvider.smtpPassword), "Domain mailbox setup", "email-settings");
-  useDraftGuard(Boolean(newBooking.title), "Booking link", "email-settings", savingBooking);
+  const canChangeAccount = async () => true;
   const loadAccounts = useCallback(async (): Promise<string> => {
     const response = await fetch("/api/gmail/status");
     const payload = await response.json().catch(() => ({}));
@@ -1015,7 +1009,6 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
       if (res.ok) {
         setCompanyMailingAddress(data?.mailingAddress || "");
         setCompanyPrivacyPolicyUrl(data?.privacyPolicyUrl || "");
-        setCompanyBaseline(JSON.stringify([data?.mailingAddress || "", data?.privacyPolicyUrl || ""]));
       }
     } catch {
       /* ignore */
@@ -1039,7 +1032,6 @@ const EmailSettingsPage: React.FC<PageProps> = ({ userRole }) => {
         }),
       });
       if (!res.ok) throw new Error("Failed to save.");
-      setCompanyBaseline(JSON.stringify([companyMailingAddress, companyPrivacyPolicyUrl]));
       setCompanySettingsStatus("Saved.");
     } catch {
       setCompanySettingsStatus("Failed to save — try again.");

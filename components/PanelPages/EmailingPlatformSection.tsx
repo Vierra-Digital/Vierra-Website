@@ -63,7 +63,6 @@ import { scoreTrackerImage } from "@/lib/email/trackerDetection";
 import { isSafeEmailHref, stripRemoteUrlsFromStyle, UNSAFE_EMAIL_TAG_SELECTOR } from "@/lib/email/htmlSafety";
 import type { ComposeRichEditorHandle } from "@/components/email/ComposeRichEditor";
 import { printComposeContent } from "@/components/email/printCompose";
-import { useDraftGuard, usePageLeaveGuard } from "@/hooks/useDraftGuard";
 import { prepareSendRequest, sendPanelEmail } from "@/lib/email/sendRequest";
 import { getJson } from "@/lib/email/panelApi";
 import { panelFetch } from "@/lib/panelFetch";
@@ -2583,8 +2582,6 @@ const EmailingPlatformSection: React.FC<EmailingPlatformSectionProps> = ({
   }, [loadBlockedSenders, selectedMessage?.accountEmail]);
 
   useEffect(() => { composeEditVersion.current += 1; }, [composeTo, composeCc, composeBcc, composeSubject, composeBody, composeBodyHtml, composeAccountEmail]);
-  usePageLeaveGuard();
-  useDraftGuard((isComposeOpen && Boolean(composeTo || composeSubject || composeBody || composeBodyHtml)) || Boolean(inlineComposeMode && inlineComposeIntroText), "Email draft", "email", sendingCompose || inlineComposeSending);
 
   const saveLocalDraft = useCallback(async (key: string, draft: LocalEmailDraft, options?: { keepalive?: boolean }) => {
     if (!key) return false;

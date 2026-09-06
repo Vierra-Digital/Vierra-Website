@@ -136,6 +136,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
     const [showRescindModal, setShowRescindModal] = useState(false)
     const [inviteToRescind, setInviteToRescind] = useState<{ id: string; email: string } | null>(null)
     const [rescindError, setRescindError] = useState("")
+    const [updateError, setUpdateError] = useState("")
     const [rescinding, setRescinding] = useState(false)
     const [searchTerm, setSearchTerm] = useState("")
     const [sortBy, setSortBy] = useState<"position" | "timeZone" | "strikes" | "status">("position")
@@ -249,14 +250,21 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
             if (!response.ok) {
                 throw new Error("Failed to update staff member")
             }
-            setRows(prev => prev.map(r => 
-                r.id === selectedStaff.id ? { ...r, ...updatedData } : r
-            ))
+            /**
+             * Reloaded rather than merged into the row we already have.
+             *
+             * The merge wrote back exactly the fields that were sent, and Mentor is not one of
+             * them: the dialog sends mentor_id, while the column renders the name the API resolves
+             * from it. Saving a mentor therefore changed nothing on screen until the next refetch,
+             * which read as the field not working at all. Reloading also means what the table
+             * shows is what was actually stored, rather than what we hoped would be.
+             */
+            await loadTeamData()
             setShowManageModal(false)
             setSelectedStaff(null)
         } catch (error) {
             console.error("Error updating staff:", error)
-            alert("Failed to update staff member. Please try again.")
+            setUpdateError("Could not save those changes. Try again.")
         }
     }
 
@@ -387,7 +395,6 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
     useEffect(() => {
         // Loading the team on mount; the loader flips its own loading state after awaiting.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadTeamData()
     }, [loadTeamData])
 
@@ -591,6 +598,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
 
             {showManageModal && selectedStaff && userRole === "admin" && (
                 <ManageStaffModal
+                    saveError={updateError}
                     staff={selectedStaff}
                     mentorOptions={rows
                         .filter((r) => !r.isPending)
@@ -1039,10 +1047,11 @@ const InviteTeammateModal: React.FC<{
  */
 const ManageStaffModal: React.FC<{
     staff: TeamRow
+    saveError?: string
     mentorOptions: Array<{ id: string; name: string; email: string }>
     onClose: () => void
     onUpdate: (data: Partial<TeamRow>) => void
-}> = ({ staff, mentorOptions, onClose, onUpdate }) => {
+}> = ({ staff, saveError = "", mentorOptions, onClose, onUpdate }) => {
     const [firstName, setFirstName] = useState(() => splitName(staff.name || "").first)
     const [lastName, setLastName] = useState(() => splitName(staff.name || "").last)
     const [email, setEmail] = useState(staff.email || "")
@@ -1176,6 +1185,8 @@ const ManageStaffModal: React.FC<{
                     </FieldSelect>
                 </div>
             </div>
+
+            {saveError && <p className="mt-4 text-[13px] text-[#B42318]">{saveError}</p>}
 
             <div className="mt-6 flex justify-end gap-2">
                 <button

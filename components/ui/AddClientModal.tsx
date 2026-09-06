@@ -3,7 +3,6 @@ import { EMAIL_REGEX } from "@/lib/utils";
 import { inter } from "@/lib/fonts";
 import { FiCheck } from 'react-icons/fi'
 import type { SessionItem } from "@/types/session";
-import { useDraftGuard } from "@/hooks/useDraftGuard";
 import Modal from "@/components/ui/Modal";
 import {
   PANEL_FIELD,
@@ -33,10 +32,9 @@ const AddClientModal: React.FC<AddClientModalProps> = ({ isOpen, onClose, onCrea
   const [err, setErr] = useState<string | null>(null);
   const pending = useRef(false);
   const [emailStatus, setEmailStatus] = useState("");
-  const canClose = useDraftGuard(isOpen && step < 3 && Object.values(clientData).some(Boolean), "new client", "1", submitting);
   const close = () => {
     if (pending.current) return;
-    void (async () => { if (await canClose()) onClose(); })();
+    onClose();
   };
   const [copied, setCopied] = useState(false);
 

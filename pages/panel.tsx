@@ -30,8 +30,6 @@ import { useSession } from "@/lib/session-client"
 import { useActivityHeartbeat } from "@/hooks/useActivityHeartbeat"
 import { useActiveClient } from "@/lib/activeClient"
 import { PANEL_SECTIONS, resolvePanelSection } from "@/lib/panel/navigation"
-import { confirmDiscardDrafts } from "@/lib/panel/drafts"
-import { usePageLeaveGuard } from "@/hooks/useDraftGuard"
 
 /**
  * The sections this file actually mounts. PANEL_SECTIONS is wider — it still carries ltv, blog and
@@ -177,22 +175,18 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
     )
   }, [router.isReady, router.query.section, resolvedUserRole])
 
-  usePageLeaveGuard()
 
   const navigateSection = (section: number) => {
-    void (async () => {
-      if (!(await confirmDiscardDrafts())) return
-      if (section === 10) setFilesVisitCount((count) => count + 1)
-      setShowSettings(false)
-      setIsSidebarOpen(false)
-      await router
-        .push(
-          { pathname: "/panel", query: { ...router.query, section: PANEL_SECTIONS[section] } },
-          undefined,
-          { shallow: true, scroll: false }
-        )
-        .catch(() => {})
-    })()
+    if (section === 10) setFilesVisitCount((count) => count + 1)
+    setShowSettings(false)
+    setIsSidebarOpen(false)
+    void router
+      .push(
+        { pathname: "/panel", query: { ...router.query, section: PANEL_SECTIONS[section] } },
+        undefined,
+        { shallow: true, scroll: false }
+      )
+      .catch(() => {})
   }
 
   const isAdmin = resolvedUserRole === "admin"
@@ -319,16 +313,12 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
    * within it, while a draft elsewhere in the panel is not this navigation's business.
    */
   const navigateViewModeSection = (section: 0 | 1 | 2 | 3 | 4 | 5 | 6) => {
-    void (async () => {
-      if (!(await confirmDiscardDrafts("client"))) return
-      setViewModeSection(section)
-      setShowSettings(false)
-      setIsSidebarOpen(false)
-    })()
+    setViewModeSection(section)
+    setShowSettings(false)
+    setIsSidebarOpen(false)
   }
 
   const enterClientViewMode = async (client: { id: string; name: string; email: string; companyId: string }) => {
-    if (!(await confirmDiscardDrafts())) return
     // Where to put the reader back when they return: the row they opened, and the scroll offset
     // the list was at. Without both, leaving a workspace dropped them at the top of an unfamiliar
     // list with focus on the body.
@@ -355,7 +345,6 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   }
 
   const exitClientViewMode = async () => {
-    if (!(await confirmDiscardDrafts("client"))) return
     restoreClientList()
     setIsClientViewMode(false)
     setViewClient(null)

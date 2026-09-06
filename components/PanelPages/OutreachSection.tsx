@@ -17,7 +17,6 @@ import {
     PanelTr,
 } from "@/components/panel/PanelTable"
 import { PANEL_FIELD, PanelFieldLabel, PanelFieldSelect } from "@/components/ui/PanelForm"
-import { useDraftGuard } from "@/hooks/useDraftGuard";
 import { panelFetch } from "@/lib/panelFetch"
 
 /** A titled card in the panel's shape, so every section here is bounded the same way. */
@@ -189,7 +188,6 @@ const OutreachSection = () => {
     const [savedNotice, setSavedNotice] = useState("");
     const writePending = useRef(false);
     const editVersion = useRef(0);
-    useDraftGuard(hasUnsavedChanges || clientDirty, "Marketing Tracker", "5", isUpdating);
     const clientSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const calculatePercentage = useCallback((numerator: number, denominator: number) => {
