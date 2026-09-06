@@ -503,7 +503,7 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                 emptyMessage={
                     searchTerm ? "No staff match your search." : "Teammates you invite will appear here."
                 }
-                emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" />}
+                emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" priority />}
                 emptyAction={
                     userRole === "admin" && !searchTerm ? (
                         <PanelButton variant="primary" onClick={() => setShowAddStaff(true)} icon={<FiPlus className="h-4 w-4" />}>

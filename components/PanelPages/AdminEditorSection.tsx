@@ -667,18 +667,8 @@ function UsersPanel() {
                 page={page}
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
-                emptyTitle={searchQuery ? "No Users Found" : "No Users Yet"}
-                emptyMessage={
-                    searchQuery ? "No users match your search." : "Users, clients and pending invites will appear here."
-                }
-                emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" />}
-                emptyAction={
-                    !searchQuery ? (
-                        <PanelButton variant="primary" onClick={() => setShowCreate(true)} icon={<Plus className="h-4 w-4" />}>
-                            Create User
-                        </PanelButton>
-                    ) : null
-                }
+                emptyTitle="No Users Found"
+                emptyImage={<Image src="/assets/no-client.png" alt="" width={176} height={176} className="h-auto w-44" priority />}
                 columns={[
                     {
                         key: "user",

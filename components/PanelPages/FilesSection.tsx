@@ -92,7 +92,7 @@ const FilesSection: React.FC<{
   }
 
   // Files had no paging at all, so a long list just ran on. Same page size as the other tables.
-  const PAGE_SIZE = 10
+  const PAGE_SIZE = 25
   const [currentPage, setCurrentPage] = useState(0)
 
   const handleDownload = (file: FileItem) => {

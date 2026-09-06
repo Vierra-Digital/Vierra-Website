@@ -294,14 +294,14 @@ export const PanelClearFilters: React.FC<{ onClick: () => void }> = ({ onClick }
  */
 export const PanelEmptyState: React.FC<{
   title: string
-  message: string
+  message?: string
   image?: React.ReactNode
   children?: React.ReactNode
 }> = ({ title, message, image, children }) => (
   <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
     {image ? <div className="panel-empty-float mb-6">{image}</div> : null}
     <h3 className="text-lg font-semibold text-[#111827]">{title}</h3>
-    <p className="mt-2 max-w-md text-sm text-[#6B7280]">{message}</p>
+    {message ? <p className="mt-2 max-w-md text-sm text-[#6B7280]">{message}</p> : null}
     {children ? <div className="mt-4">{children}</div> : null}
   </div>
 )
@@ -348,7 +348,7 @@ export function PanelDataTable<T>({
   pageSize: number
   onPageChange: (page: number) => void
   emptyTitle: string
-  emptyMessage: string
+  emptyMessage?: string
   emptyImage?: React.ReactNode
   emptyAction?: React.ReactNode
 }) {
