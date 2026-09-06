@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useRef } from "react"
+import React, { useState, useMemo, useRef, useEffect } from "react"
 import { inter } from "@/lib/fonts";
-import { FiFolder, FiTrash2, FiDownload, FiLock, FiUpload, FiFilter, FiChevronDown, FiRefreshCw } from "react-icons/fi"
+import { FiFolder, FiTrash2, FiDownload, FiLock, FiFilter, FiChevronDown } from "react-icons/fi"
 import LoadingSpinner from "@/components/ui/LoadingSpinner"
 import ConfirmActionModal from "@/components/ui/ConfirmActionModal"
 import {
@@ -15,7 +15,7 @@ import {
   PanelSelect,
 } from "@/components/panel/PanelTable"
 import { useFetch } from "@/hooks/useFetch"
-import { deletePanelFile, loadPanelFiles, uploadPanelFile, type PanelFile } from "@/lib/panel/files"
+import { deletePanelFile, loadPanelFiles, type PanelFile } from "@/lib/panel/files"
 
 
 const getNameWithoutExtension = (name: string) =>
@@ -26,6 +26,12 @@ type FilesSectionProps = {
   fileFilter?: string
   allowDelete?: boolean
   showOwnerInReadOnly?: boolean
+  /**
+   * Bumped by the panel each time Files becomes the visible section. The section stays mounted
+   * behind display:none, so without this the list a reader comes back to is the one they left —
+   * which is wrong the moment a PDF is filed here from the signer.
+   */
+  refreshTrigger?: number
 }
 
 // Scope the entire request and action state to this client. Late responses from the
@@ -39,8 +45,8 @@ const FilesContent: React.FC<FilesSectionProps> = ({
   fileFilter,
   allowDelete = false,
   showOwnerInReadOnly = false,
+  refreshTrigger = 0,
 }) => {
-  const canUpload = !readOnly || allowDelete
   const canDelete = !readOnly || allowDelete
   const showOwnerColumn = !readOnly || showOwnerInReadOnly
 
@@ -56,11 +62,7 @@ const FilesContent: React.FC<FilesSectionProps> = ({
   const [deleting, setDeleting] = useState(false)
   const deletePending = useRef(false)
   const [deleteError, setDeleteError] = useState("")
-  const [uploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState("")
-  const uploadPending = useRef(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const refreshButtonRef = useRef<HTMLButtonElement>(null)
+  const filterRef = useRef<HTMLDivElement>(null)
   const {
     data: filesData,
     setData: setFiles,
@@ -75,7 +77,6 @@ const FilesContent: React.FC<FilesSectionProps> = ({
     const q = search.trim().toLowerCase()
     return files.filter(f => f.name.toLowerCase().includes(q) && (!fileType || f.fileType === fileType) && (!owner || f.owner === owner)).sort((a, b) => sort === "type" ? a.fileType.localeCompare(b.fileType) || a.name.localeCompare(b.name) : a.name.localeCompare(b.name))
   }, [files, search, fileType, owner, sort])
-  const hasFilters = Boolean(search.trim() || fileType || owner)
   const clearFilters = () => { setSearch(""); setFileType(""); setOwner(""); setSort("name"); setCurrentPage(0); }
 
   // Clamped rather than reset from an effect (see ClientsSection's identical comment): searching
@@ -84,57 +85,24 @@ const FilesContent: React.FC<FilesSectionProps> = ({
   const totalPages = Math.max(1, Math.ceil(filteredFiles.length / pageSize))
   const page = Math.min(currentPage, totalPages - 1)
 
-  const handleUploadClick = () => { if (!uploadPending.current) fileInputRef.current?.click() }
-
-  const runUpload = async (file: File) => {
-    if (uploadPending.current) return
-    uploadPending.current = true
-    setUploading(true)
-    setUploadError("")
-    try {
-      await uploadPanelFile(file, fileFilter)
-      await fetchFiles()
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : "Could not upload this file. Try again.")
-    } finally {
-      uploadPending.current = false
-      setUploading(false)
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setShowFilters(false)
+      }
     }
-  }
+    if (showFilters) {
+      document.addEventListener("mousedown", handleClickOutside)
+      return () => document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [showFilters])
 
-  const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ""
-    if (file) await runUpload(file)
-  }
-
-  const dragCounter = useRef(0)
-  const [isDragging, setIsDragging] = useState(false)
-
-  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!canUpload || !e.dataTransfer.types.includes("Files")) return
-    e.preventDefault()
-    dragCounter.current += 1
-    setIsDragging(true)
-  }
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!canUpload || !e.dataTransfer.types.includes("Files")) return
-    e.preventDefault()
-  }
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    if (!canUpload) return
-    e.preventDefault()
-    dragCounter.current = Math.max(0, dragCounter.current - 1)
-    if (dragCounter.current === 0) setIsDragging(false)
-  }
-  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
-    if (!canUpload) return
-    e.preventDefault()
-    dragCounter.current = 0
-    setIsDragging(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file) await runUpload(file)
-  }
+  // Refetch when the panel says this section has been opened again.
+  useEffect(() => {
+    if (refreshTrigger > 0) void fetchFiles()
+    // fetchFiles is stable for a given fileFilter; refreshTrigger is the only intended cause.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshTrigger])
 
   const handleConfirmDelete = async () => {
     if (!fileToDelete || deletePending.current || loading) return
@@ -145,7 +113,7 @@ const FilesContent: React.FC<FilesSectionProps> = ({
       await deletePanelFile(fileToDelete.id)
       setFiles((prev) => (prev ?? []).filter((f) => f.id !== fileToDelete.id))
       setFileToDelete(null)
-      requestAnimationFrame(() => refreshButtonRef.current?.focus())
+      requestAnimationFrame(() => document.getElementById("files-search")?.focus())
     } catch (e) {
       setDeleteError(e instanceof Error ? e.message : "Could not delete this file. Try again.")
     } finally {
@@ -182,7 +150,7 @@ const FilesContent: React.FC<FilesSectionProps> = ({
               setCurrentPage(0)
             }}
           />
-          <div className="relative">
+          <div className="relative" ref={filterRef}>
             <PanelButton
               onClick={() => setShowFilters((v) => !v)}
               icon={<FiFilter className="h-4 w-4" />}
@@ -241,40 +209,8 @@ const FilesContent: React.FC<FilesSectionProps> = ({
               </PanelPopover>
             )}
           </div>
-          <PanelButton
-            onClick={() => void fetchFiles()}
-            disabled={loading || deleting}
-            icon={<FiRefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />}
-          >
-            {loading ? "Refreshing…" : "Refresh"}
-          </PanelButton>
-          {canUpload && (
-            <>
-              <input
-                ref={fileInputRef}
-                type="file"
-                onChange={handleFileSelected}
-                className="hidden"
-                aria-hidden="true"
-                tabIndex={-1}
-              />
-              <PanelButton
-                variant="primary"
-                onClick={handleUploadClick}
-                disabled={uploading}
-                icon={<FiUpload className="h-4 w-4" />}
-              >
-                {uploading ? "Uploading…" : "Upload File"}
-              </PanelButton>
-            </>
-          )}
         </PanelHeader>
 
-        {uploadError && (
-          <div role="alert" className="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-700">
-            {uploadError}
-          </div>
-        )}
         {error && (
           <div role="alert" className="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-700">
             <p>{error}</p>
@@ -290,21 +226,6 @@ const FilesContent: React.FC<FilesSectionProps> = ({
           </div>
         )}
 
-        {/* Drop anywhere over the table, not just on a target — the whole list is the affordance. */}
-        <div
-          className={`relative rounded-2xl ${isDragging ? "outline outline-2 outline-dashed outline-[#701CC0] outline-offset-4" : ""}`}
-          onDragEnter={handleDragEnter}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => void handleDrop(e)}
-        >
-          {isDragging && (
-            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-[#701CC0]/5">
-              <p className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-[#701CC0] shadow-sm">
-                Drop to upload
-              </p>
-            </div>
-          )}
           <PanelDataTable<PanelFile>
             rows={filteredFiles}
             getRowKey={(file) => file.id}
@@ -313,12 +234,8 @@ const FilesContent: React.FC<FilesSectionProps> = ({
             page={page}
             pageSize={pageSize}
             onPageChange={setCurrentPage}
-            emptyTitle={hasFilters ? "No Files Found" : "No Files Yet"}
-            emptyMessage={
-              hasFilters
-                ? "No files match your search."
-                : "Documents saved to this workspace will appear here."
-            }
+            emptyTitle="No Files Found"
+            emptyMessage="No files match your search."
             emptyImage={
               <div className="relative flex h-14 w-14 items-center justify-center">
                 <div className="files-empty-ping absolute inset-0 rounded-full bg-[#E9D5FF]" />
@@ -328,11 +245,6 @@ const FilesContent: React.FC<FilesSectionProps> = ({
               </div>
             }
             emptyImageGapClassName="mb-3"
-            emptyAction={
-              hasFilters ? (
-                <PanelButton onClick={clearFilters}>Clear All Filters</PanelButton>
-              ) : null
-            }
             columns={[
               {
                 key: "name",
@@ -412,7 +324,6 @@ const FilesContent: React.FC<FilesSectionProps> = ({
               },
             ]}
           />
-        </div>
 
         {canDelete && (
           <ConfirmActionModal

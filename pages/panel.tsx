@@ -115,6 +115,13 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   const router = useRouter()
   const [showSettings, setShowSettings] = useState(false)
   const [navigationNotice, setNavigationNotice] = useState("")
+  /**
+   * Sections stay mounted behind display:none so returning to one is instant, which also means it
+   * shows whatever it last loaded. Files is the one where that is visibly wrong — a PDF filed from
+   * the signer belongs in the list the moment the reader opens it — so each visit bumps this and
+   * the section refetches.
+   */
+  const [filesVisitCount, setFilesVisitCount] = useState(0)
   const clientListScrollRef = useRef(0)
   const clientListReturnIdRef = useRef("")
   const [currentSection, setCurrentSection] = useState(0);
@@ -168,6 +175,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
   const navigateSection = (section: number) => {
     void (async () => {
       if (!(await confirmDiscardDrafts())) return
+      if (section === 10) setFilesVisitCount((count) => count + 1)
       setShowSettings(false)
       setIsSidebarOpen(false)
       await router
@@ -635,7 +643,7 @@ const PanelPage = ({ initialUserRole, initialUserName, initialImageVersion }: Pa
                       )}
                       {visitedSections.has(10) && (
                         <div key={`section-10-${sectionEpoch[10] || 0}`} style={{ display: currentSection === 10 ? undefined : "none" }}>
-                          <FilesSection />
+                          <FilesSection refreshTrigger={filesVisitCount} />
                         </div>
                       )}
                     </>
