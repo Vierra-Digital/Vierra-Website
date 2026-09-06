@@ -2,11 +2,35 @@ import React, { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
-type DailyStat = { date: string; emailsSent: number; opens: number; clicks: number; replies: number };
+type DailyStat = {
+  date: string;
+  emailsSent: number;
+  opens: number;
+  clicks: number;
+  replies: number;
+  bounces: number;
+  unsubscribes: number;
+};
 type Stats = {
   daily: DailyStat[];
-  totals: { emailsSent: number; opens: number; clicks: number; contacts: number; replied: number };
-  rates: { openRate: number; clickRate: number; replyRate: number };
+  totals: {
+    emailsSent: number;
+    opens: number;
+    clicks: number;
+    bounces: number;
+    unsubscribes: number;
+    contacts: number;
+    replied: number;
+    booked: number;
+  };
+  rates: {
+    openRate: number;
+    clickRate: number;
+    replyRate: number;
+    bounceRate: number;
+    unsubscribeRate: number;
+    bookingRate: number;
+  };
 };
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
@@ -100,11 +124,17 @@ const AnalyticsTab: React.FC<{ campaignId: string }> = ({ campaignId }) => {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
         <RateCard label="Emails Sent" value={String(stats.totals.emailsSent)} sub={`last ${days}d`} />
-        <RateCard label="Open Rate" value={pct(stats.rates.openRate)} sub="pixel tracking not yet wired for campaigns" />
-        <RateCard label="Click Rate" value={pct(stats.rates.clickRate)} sub="pixel tracking not yet wired for campaigns" />
+        <RateCard label="Open Rate" value={pct(stats.rates.openRate)} sub={`${stats.totals.opens} opens`} />
+        <RateCard label="Click Rate" value={pct(stats.rates.clickRate)} sub={`${stats.totals.clicks} clicks`} />
         <RateCard label="Reply Rate" value={pct(stats.rates.replyRate)} sub={`${stats.totals.replied}/${stats.totals.contacts} contacts`} />
+        <RateCard label="Booking Rate" value={pct(stats.rates.bookingRate)} sub={`${stats.totals.booked}/${stats.totals.contacts} contacts`} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <RateCard label="Bounce Rate" value={pct(stats.rates.bounceRate)} sub={`${stats.totals.bounces} bounced`} />
+        <RateCard label="Unsubscribe Rate" value={pct(stats.rates.unsubscribeRate)} sub={`${stats.totals.unsubscribes} opted out`} />
       </div>
 
       <div className="bg-white rounded-lg border border-[#E5E7EB] p-4">

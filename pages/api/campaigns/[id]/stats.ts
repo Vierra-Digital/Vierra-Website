@@ -35,13 +35,16 @@ export default withAuth(async (req, res) => {
   rangeStart.setHours(0, 0, 0, 0);
   rangeStart.setDate(rangeStart.getDate() - (days - 1));
 
-  const [dailyRows, leadStatusGroups, contactTotal] = await Promise.all([
+  const [dailyRows, leadStatusGroups, contactTotal, bookedContacts] = await Promise.all([
     prisma.campaignDailyStat.findMany({
       where: { campaign_id: campaignId, date: { gte: rangeStart } },
       orderBy: { date: "asc" },
     }),
     prisma.campaignContact.groupBy({ by: ["lead_status"], where: { campaign_id: campaignId }, _count: true }),
     prisma.campaignContact.count({ where: { campaign_id: campaignId } }),
+    // Distinct contacts with a booking, not a booking count — a rebooked/rescheduled contact
+    // should still only count once toward "did this campaign land a meeting with them".
+    prisma.campaignContact.count({ where: { campaign_id: campaignId, bookings: { some: {} } } }),
   ]);
 
   const byDate = new Map(dailyRows.map((row) => [dateKey(row.date), row]));
@@ -56,23 +59,39 @@ export default withAuth(async (req, res) => {
       opens: row?.opens ?? 0,
       clicks: row?.clicks ?? 0,
       replies: row?.replies ?? 0,
+      bounces: row?.bounces ?? 0,
+      unsubscribes: row?.unsubscribes ?? 0,
     };
   });
 
   const totalSent = daily.reduce((sum, d) => sum + d.emailsSent, 0);
   const totalOpens = daily.reduce((sum, d) => sum + d.opens, 0);
   const totalClicks = daily.reduce((sum, d) => sum + d.clicks, 0);
+  const totalBounces = daily.reduce((sum, d) => sum + d.bounces, 0);
+  const totalUnsubscribes = daily.reduce((sum, d) => sum + d.unsubscribes, 0);
   const leadStatusCounts = Object.fromEntries(leadStatusGroups.map((g) => [g.lead_status, g._count]));
   const repliedCount = contactTotal - (leadStatusCounts["no_response"] ?? 0);
 
   res.setHeader("Cache-Control", "private, max-age=30");
   res.status(200).json({
     daily,
-    totals: { emailsSent: totalSent, opens: totalOpens, clicks: totalClicks, contacts: contactTotal, replied: repliedCount },
+    totals: {
+      emailsSent: totalSent,
+      opens: totalOpens,
+      clicks: totalClicks,
+      bounces: totalBounces,
+      unsubscribes: totalUnsubscribes,
+      contacts: contactTotal,
+      replied: repliedCount,
+      booked: bookedContacts,
+    },
     rates: {
       openRate: totalSent > 0 ? totalOpens / totalSent : 0,
       clickRate: totalSent > 0 ? totalClicks / totalSent : 0,
       replyRate: contactTotal > 0 ? repliedCount / contactTotal : 0,
+      bounceRate: totalSent > 0 ? totalBounces / totalSent : 0,
+      unsubscribeRate: totalSent > 0 ? totalUnsubscribes / totalSent : 0,
+      bookingRate: contactTotal > 0 ? bookedContacts / contactTotal : 0,
     },
     leadStatusCounts,
   });
