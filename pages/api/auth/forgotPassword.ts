@@ -1,7 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/lib/prisma";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { sendPasswordResetEmail } from "@/lib/emailSender";
+import { sendPasswordResetLink } from "@/lib/auth/passwordReset";
 import { resolveBaseUrl } from "@/lib/api/url";
 import { isValidEmail } from "@/lib/utils";
 import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
@@ -13,9 +12,10 @@ const RATE_WINDOW_MS = 15 * 60 * 1000;
  * Self-service "Forgot password?" from the login page. Replaces the old client-side
  * supabase.auth.resetPasswordForEmail() call — that handed the whole email (template + delivery)
  * to Supabase's own SMTP config, which was misconfigured in the dashboard and failing DMARC (see
- * the chat this shipped from). This route instead mints the link server-side and sends it through
- * our own branded template + the Gmail-API system sender (lib/email/systemSender.ts), same as the
- * admin-triggered reset in pages/api/admin/userPassword.ts.
+ * the chat this shipped from). This route mints the link and sends the email through
+ * lib/auth/passwordReset.ts's sendPasswordResetLink — the same helper the admin-triggered reset in
+ * pages/api/admin/userPassword.ts calls, so both flows share one implementation rather than two
+ * copies that could drift.
  *
  * Always responds with the same generic success message regardless of whether the email matches
  * an account — Supabase's own resetPasswordForEmail behaved the same way, and this route must not
@@ -41,17 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const user = await prisma.user.findFirst({ where: { email }, select: { id: true, email: true, name: true } });
     if (user?.email) {
       const baseUrl = resolveBaseUrl(req);
-      const admin = getSupabaseAdmin();
-      const { data: linkData } = await admin.auth.admin.generateLink({
-        type: "recovery",
-        email: user.email,
-        // Server-minted recovery links redirect with tokens in a URL hash fragment (never a
-        // server-visible ?code=), so this must point straight at the page that reads
-        // window.location.hash itself — see app/set-password/page.tsx.
-        options: { redirectTo: `${baseUrl}/set-password` },
-      });
-      const resetLink = (linkData as any)?.properties?.action_link ?? `${baseUrl}/set-password`;
-      await sendPasswordResetEmail(user.email, user.name || "", resetLink, true);
+      await sendPasswordResetLink(user, baseUrl, true);
     }
     return res.status(200).json(generic);
   } catch (err) {
