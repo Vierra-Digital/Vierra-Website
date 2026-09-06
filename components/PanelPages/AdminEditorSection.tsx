@@ -707,16 +707,7 @@ function UsersPanel() {
                         key: "role",
                         header: "Role",
                         cell: (u) => (
-                            <div className="flex flex-wrap items-center gap-1.5">
-                                <PanelBadge tone={ROLE_TONES[normalizeRole(u.role)]}>{ROLE_LABELS[normalizeRole(u.role)]}</PanelBadge>
-                                {u.pendingInvite ? (
-                                    <PanelBadge tone={u.pendingInvite.expired ? "danger" : "warning"}>
-                                        {u.pendingInvite.expired ? "Invite expired" : "Invited"}
-                                    </PanelBadge>
-                                ) : (
-                                    u.hasAccount === false && !u.isSessionOnly && <PanelBadge tone="neutral">No account</PanelBadge>
-                                )}
-                            </div>
+                            <PanelBadge tone={ROLE_TONES[normalizeRole(u.role)]}>{ROLE_LABELS[normalizeRole(u.role)]}</PanelBadge>
                         ),
                     },
                     ...(showCompanyColumn
@@ -727,7 +718,9 @@ function UsersPanel() {
                         header: "Last Login",
                         cell: (u) =>
                             u.pendingInvite ? (
-                                <span className="text-[12px] text-[#9CA3AF]">Invited {formatRelative(u.pendingInvite.invitedAt, now)}</span>
+                                <span className={`text-[12px] ${u.pendingInvite.expired ? "text-[#B42318]" : "text-[#9CA3AF]"}`}>
+                                    {u.pendingInvite.expired ? "Invite expired" : `Invited ${formatRelative(u.pendingInvite.invitedAt, now)}`}
+                                </span>
                             ) : u.lastLoginAt ? (
                                 /* Time first, address underneath and muted: the address is why the column
                                    is worth a join, but it is reference detail, and `whitespace-nowrap`
@@ -772,7 +765,7 @@ function UsersPanel() {
                                             disabled={resetSending[u.id]}
                                             icon={<KeyRound className="w-4 h-4" />}
                                         >
-                                            {resetSending[u.id] ? "Sending…" : "Send reset email"}
+                                            {resetSending[u.id] ? "Sending…" : "Send Email Reset"}
                                         </RowActionMenuItem>
                                     )}
                                     {canManageAccount && !u.isPlatformAdmin && (
