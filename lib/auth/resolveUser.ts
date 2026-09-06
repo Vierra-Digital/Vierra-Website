@@ -89,7 +89,7 @@ export async function resolveUser(supabase: SupabaseClient, authUser: SupabaseUs
   // invite ever grants "admin" (no in-app path writes that role anywhere).
   const { data: invitation } = await admin
     .from("invitations")
-    .select("id, company_id, position, mentor_id, time_zone, strikes")
+    .select("id, company_id, first_name, last_name, position, mentor_id, time_zone, strikes")
     .eq("email", normalizedEmail)
     .is("accepted_at", null)
     .gt("expires_at", new Date().toISOString())
@@ -100,6 +100,8 @@ export async function resolveUser(supabase: SupabaseClient, authUser: SupabaseUs
     const inv = invitation as {
       id: string;
       company_id: string;
+      first_name: string | null;
+      last_name: string | null;
       position: string | null;
       mentor_id: string | null;
       time_zone: string | null;
@@ -121,6 +123,13 @@ export async function resolveUser(supabase: SupabaseClient, authUser: SupabaseUs
         strikes: inv.strikes ?? 0,
       });
       if (!membershipError) {
+        // The inviter said who this is; the account itself has no name until the person sets one.
+        // Only filled in when it is still blank, so an invite never overwrites a name its owner
+        // has already chosen.
+        const invitedName = [inv.first_name, inv.last_name].filter(Boolean).join(" ").trim();
+        if (invitedName && !name) {
+          await admin.from("users").update({ name: invitedName }).eq("id", authUser.id);
+        }
         if (inv.time_zone) {
           // Time zone lives on user_preferences, not the membership.
           await admin
@@ -130,7 +139,12 @@ export async function resolveUser(supabase: SupabaseClient, authUser: SupabaseUs
         await admin.from("invitations").update({ accepted_at: new Date().toISOString() }).eq("id", inv.id);
         return {
           kind: "member",
-          user: { id: authUser.id, email, role: "staff", name },
+          user: {
+            id: authUser.id,
+            email,
+            role: "staff",
+            name: name ?? ([inv.first_name, inv.last_name].filter(Boolean).join(" ").trim() || null),
+          },
           companyId: inv.company_id,
         };
       }

@@ -12,7 +12,7 @@ export default withAuth(
     if (req.method === "GET") {
       const { data, error } = await admin
         .from("invitations")
-        .select("id, email, role, expires_at, accepted_at, created_at, position, mentor_id, time_zone, strikes")
+        .select("id, email, role, expires_at, accepted_at, created_at, first_name, last_name, position, mentor_id, time_zone, strikes")
         .eq("company_id", session.companyId)
         .is("accepted_at", null)
         .order("created_at", { ascending: false });
@@ -23,7 +23,7 @@ export default withAuth(
     // `role` is deliberately not read: master's role model v2 makes every invite "staff" on
     // acceptance, so a role sent by the client would be ignored anyway. The rest is the staff
     // detail this branch added, carried on the invitation until it is accepted.
-    const { email, position, mentorId, timeZone, strikes } = req.body ?? {};
+    const { email, firstName, lastName, position, mentorId, timeZone, strikes } = req.body ?? {};
     if (!email || typeof email !== "string") {
       return res.status(400).json({ message: "email is required" });
     }
@@ -69,12 +69,14 @@ export default withAuth(
         token,
         invited_by: session.user.id,
         expires_at: expiresAt,
+        first_name: asText(firstName),
+        last_name: asText(lastName),
         position: asText(position),
         mentor_id: asText(mentorId),
         time_zone: asText(timeZone),
         strikes: strikeCount,
       })
-      .select("id, email, role, expires_at, accepted_at, created_at, position, mentor_id, time_zone, strikes")
+      .select("id, email, role, expires_at, accepted_at, created_at, first_name, last_name, position, mentor_id, time_zone, strikes")
       .single();
     if (error) return res.status(500).json({ message: "Failed to record invitation" });
 

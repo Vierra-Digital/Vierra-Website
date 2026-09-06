@@ -284,14 +284,18 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                         const invitations = await invRes.json()
                         pendingRows = (invitations as any[]).map((inv: any) => ({
                             id: inv.id,
-                            name: inv.email,
+                            // The invite carries what the inviter filled in, so a pending row reads
+                            // like the rest of the table rather than repeating the email twice and
+                            // showing a dash where real answers exist. The Pending badge is what
+                            // marks it, not a placeholder in every column.
+                            name: [inv.first_name, inv.last_name].filter(Boolean).join(" ") || inv.email,
                             email: inv.email,
                             image: null,
-                            position: "Invited",
+                            position: inv.position || "Invited",
                             country: "—",
                             company_email: null,
                             mentor: null,
-                            time_zone: "—",
+                            time_zone: inv.time_zone || null,
                             strikes: null,
                             status: "pending",
                             lastActiveAt: null,
@@ -532,7 +536,11 @@ const TeamPanelSection: React.FC<{ userRole?: string }> = ({ userRole }) => {
                         header: "Position",
                         cell: (r) => (r.position ? <PanelBadge tone={positionTone(r.position)}>{r.position}</PanelBadge> : <PanelEmptyCell />),
                     },
-                    { key: "time_zone", header: "Time Zone", cell: (r) => r.time_zone || <PanelEmptyCell /> },
+                    {
+                        key: "time_zone",
+                        header: "Time Zone",
+                        cell: (r) => (r.time_zone ? timeZoneLabel(r.time_zone) : <PanelEmptyCell />),
+                    },
                     { key: "mentor", header: "Mentor", cell: (r) => r.mentor || <PanelEmptyCell /> },
                     {
                         key: "strikes",
@@ -676,47 +684,99 @@ const POSITION_OPTIONS = ["Founder", "Leadership", "Business Advisor", "Develope
  * The value stored is still the identifier — "America/New_York" is what Date formatting needs —
  * but nobody should have to type it, or remember whether it is New_York or New York.
  */
-const TIME_ZONE_OPTIONS: Array<{ value: string; label: string }> = [
-    { value: "Pacific/Honolulu", label: "Honolulu (HST)" },
-    { value: "America/Anchorage", label: "Anchorage (AKT)" },
-    { value: "America/Los_Angeles", label: "Los Angeles (PT)" },
-    { value: "America/Denver", label: "Denver (MT)" },
-    { value: "America/Phoenix", label: "Phoenix (MST)" },
-    { value: "America/Chicago", label: "Chicago (CT)" },
-    { value: "America/New_York", label: "New York (ET)" },
-    { value: "America/Toronto", label: "Toronto (ET)" },
-    { value: "America/Mexico_City", label: "Mexico City (CST)" },
-    { value: "America/Bogota", label: "Bogotá (COT)" },
-    { value: "America/Sao_Paulo", label: "São Paulo (BRT)" },
-    { value: "America/Argentina/Buenos_Aires", label: "Buenos Aires (ART)" },
-    { value: "Europe/London", label: "London (GMT/BST)" },
-    { value: "Europe/Dublin", label: "Dublin (GMT/IST)" },
-    { value: "Europe/Lisbon", label: "Lisbon (WET)" },
-    { value: "Europe/Madrid", label: "Madrid (CET)" },
-    { value: "Europe/Paris", label: "Paris (CET)" },
-    { value: "Europe/Berlin", label: "Berlin (CET)" },
-    { value: "Europe/Warsaw", label: "Warsaw (CET)" },
-    { value: "Europe/Athens", label: "Athens (EET)" },
-    { value: "Europe/Istanbul", label: "Istanbul (TRT)" },
-    { value: "Europe/Moscow", label: "Moscow (MSK)" },
-    { value: "Africa/Lagos", label: "Lagos (WAT)" },
-    { value: "Africa/Johannesburg", label: "Johannesburg (SAST)" },
-    { value: "Africa/Nairobi", label: "Nairobi (EAT)" },
-    { value: "Asia/Dubai", label: "Dubai (GST)" },
-    { value: "Asia/Karachi", label: "Karachi (PKT)" },
-    { value: "Asia/Kolkata", label: "Kolkata (IST)" },
-    { value: "Asia/Dhaka", label: "Dhaka (BST)" },
-    { value: "Asia/Bangkok", label: "Bangkok (ICT)" },
-    { value: "Asia/Singapore", label: "Singapore (SGT)" },
-    { value: "Asia/Manila", label: "Manila (PHT)" },
-    { value: "Asia/Hong_Kong", label: "Hong Kong (HKT)" },
-    { value: "Asia/Shanghai", label: "Shanghai (CST)" },
-    { value: "Asia/Tokyo", label: "Tokyo (JST)" },
-    { value: "Asia/Seoul", label: "Seoul (KST)" },
-    { value: "Australia/Perth", label: "Perth (AWST)" },
-    { value: "Australia/Sydney", label: "Sydney (AET)" },
-    { value: "Pacific/Auckland", label: "Auckland (NZT)" },
+/**
+ * The abbreviation here is a fallback, not the first choice. Where the platform knows a letter
+ * code it is derived instead, because the code is not a fixed property of the zone — New York is
+ * EST for half the year and EDT for the other half. ICU only carries letter codes for US zones
+ * though; everywhere else it answers with a GMT offset, and "Tokyo (JST)" beats "Tokyo (GMT+9)".
+ */
+const TIME_ZONE_OPTIONS: Array<{ value: string; city: string; abbr: string }> = [
+    { value: "Pacific/Honolulu", city: "Honolulu", abbr: "HST" },
+    { value: "America/Anchorage", city: "Anchorage", abbr: "AKT" },
+    { value: "America/Los_Angeles", city: "Los Angeles", abbr: "PT" },
+    { value: "America/Denver", city: "Denver", abbr: "MT" },
+    { value: "America/Phoenix", city: "Phoenix", abbr: "MST" },
+    { value: "America/Chicago", city: "Chicago", abbr: "CT" },
+    { value: "America/New_York", city: "New York", abbr: "ET" },
+    { value: "America/Toronto", city: "Toronto", abbr: "ET" },
+    { value: "America/Mexico_City", city: "Mexico City", abbr: "CST" },
+    { value: "America/Bogota", city: "Bogotá", abbr: "COT" },
+    { value: "America/Sao_Paulo", city: "São Paulo", abbr: "BRT" },
+    { value: "America/Argentina/Buenos_Aires", city: "Buenos Aires", abbr: "ART" },
+    { value: "Europe/London", city: "London", abbr: "GMT/BST" },
+    { value: "Europe/Dublin", city: "Dublin", abbr: "GMT/IST" },
+    { value: "Europe/Lisbon", city: "Lisbon", abbr: "WET" },
+    { value: "Europe/Madrid", city: "Madrid", abbr: "CET" },
+    { value: "Europe/Paris", city: "Paris", abbr: "CET" },
+    { value: "Europe/Berlin", city: "Berlin", abbr: "CET" },
+    { value: "Europe/Warsaw", city: "Warsaw", abbr: "CET" },
+    { value: "Europe/Athens", city: "Athens", abbr: "EET" },
+    { value: "Europe/Istanbul", city: "Istanbul", abbr: "TRT" },
+    { value: "Europe/Moscow", city: "Moscow", abbr: "MSK" },
+    { value: "Africa/Lagos", city: "Lagos", abbr: "WAT" },
+    { value: "Africa/Johannesburg", city: "Johannesburg", abbr: "SAST" },
+    { value: "Africa/Nairobi", city: "Nairobi", abbr: "EAT" },
+    { value: "Asia/Dubai", city: "Dubai", abbr: "GST" },
+    { value: "Asia/Karachi", city: "Karachi", abbr: "PKT" },
+    { value: "Asia/Kolkata", city: "Kolkata", abbr: "IST" },
+    { value: "Asia/Dhaka", city: "Dhaka", abbr: "BST" },
+    { value: "Asia/Bangkok", city: "Bangkok", abbr: "ICT" },
+    { value: "Asia/Singapore", city: "Singapore", abbr: "SGT" },
+    { value: "Asia/Manila", city: "Manila", abbr: "PHT" },
+    { value: "Asia/Hong_Kong", city: "Hong Kong", abbr: "HKT" },
+    { value: "Asia/Shanghai", city: "Shanghai", abbr: "CST" },
+    { value: "Asia/Tokyo", city: "Tokyo", abbr: "JST" },
+    { value: "Asia/Seoul", city: "Seoul", abbr: "KST" },
+    { value: "Australia/Perth", city: "Perth", abbr: "AWST" },
+    { value: "Australia/Sydney", city: "Sydney", abbr: "AET" },
+    { value: "Pacific/Auckland", city: "Auckland", abbr: "NZT" },
 ]
+
+/**
+ * The zone's abbreviation as of now — "EST" in January, "EDT" in July. Zones with no letter
+ * abbreviation come back as a GMT offset ("GMT+5:30"), which is what the platform has to offer
+ * and still reads correctly in the label.
+ */
+const timeZoneAbbreviation = (timeZone: string, now = new Date()) => {
+    try {
+        return (
+            new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "short" })
+                .formatToParts(now)
+                .find((part) => part.type === "timeZoneName")?.value ?? ""
+        )
+    } catch {
+        // An unknown or malformed zone throws rather than returning anything useful.
+        return ""
+    }
+}
+
+/**
+ * users.name is a single column, and the dialogs ask for the halves separately. Splitting at the
+ * first space and rejoining with one round-trips exactly — "Mary Jane Watson" comes back as
+ * itself — so nothing is lost by editing through two fields.
+ */
+const splitName = (full: string) => {
+    const trimmed = full.trim().replace(/\s+/g, " ")
+    const space = trimmed.indexOf(" ")
+    return space === -1
+        ? { first: trimmed, last: "" }
+        : { first: trimmed.slice(0, space), last: trimmed.slice(space + 1) }
+}
+
+/** "America/New_York" reads as "New York (EST)". Falls back to the last path segment. */
+const timeZoneLabel = (timeZone: string, now = new Date()) => {
+    const option = TIME_ZONE_OPTIONS.find((entry) => entry.value === timeZone)
+    const city = option?.city ?? timeZone.split("/").pop()?.replace(/_/g, " ") ?? timeZone
+    const derived = timeZoneAbbreviation(timeZone, now)
+    // A derived code is preferred only when it is a code. Outside the US the platform answers with
+    // an offset like "GMT+5:30", and the curated letters read better than that. Bare "GMT" is
+    // excluded with the offsets: London derives it in winter but an offset in summer, so taking it
+    // would relabel those zones twice a year.
+    const isCode = /^[A-Z]{2,}$/.test(derived) && derived !== "GMT"
+    const abbreviation = isCode ? derived : option?.abbr ?? derived
+    return abbreviation ? `${city} (${abbreviation})` : city
+}
+
 
 /**
  * Invite dialog, with the staff detail it used to collect before invitations replaced direct
@@ -732,15 +792,22 @@ const InviteTeammateModal: React.FC<{
     const [email, setEmail] = useState("")
     const [position, setPosition] = useState("")
     const [mentorId, setMentorId] = useState("")
+    const [firstName, setFirstName] = useState("")
+    const [lastName, setLastName] = useState("")
     const [timeZone, setTimeZone] = useState("")
     const [strikes, setStrikes] = useState(0)
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState("")
     const [showSuccess, setShowSuccess] = useState(false)
 
-    // Everything but the mentor has to be answered. Strikes always holds a value, so it is email,
-    // position and time zone that decide whether the invite can go.
-    const canSubmit = isValidEmail(email) && position !== "" && timeZone !== ""
+    // Everything but the mentor has to be answered. Strikes always holds a value, so it is the
+    // name, email, position and time zone that decide whether the invite can go.
+    const canSubmit =
+        firstName.trim() !== "" &&
+        lastName.trim() !== "" &&
+        isValidEmail(email) &&
+        position !== "" &&
+        timeZone !== ""
 
     const submit = async () => {
         setSubmitting(true)
@@ -749,7 +816,7 @@ const InviteTeammateModal: React.FC<{
             const response = await fetch("/api/admin/invitations", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, position, mentorId, timeZone, strikes }),
+                body: JSON.stringify({ firstName, lastName, email, position, mentorId, timeZone, strikes }),
             })
             if (!response.ok) {
                 const errorData = await response.json()
@@ -825,6 +892,32 @@ const InviteTeammateModal: React.FC<{
                 </header>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                            First Name <span className="text-[#B42318]">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            value={firstName}
+                            onChange={(e) => setFirstName(e.target.value)}
+                            className={FIELD}
+                            placeholder="Jordan"
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                            Last Name <span className="text-[#B42318]">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            value={lastName}
+                            onChange={(e) => setLastName(e.target.value)}
+                            className={FIELD}
+                            placeholder="Reyes"
+                            required
+                        />
+                    </div>
                     <div className="sm:col-span-2">
                         <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
                             Email <span className="text-[#B42318]">*</span>
@@ -882,7 +975,9 @@ const InviteTeammateModal: React.FC<{
                         <FieldSelect value={timeZone} onChange={setTimeZone}>
                             <option value="">Select A Time Zone</option>
                             {TIME_ZONE_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>{option.label}</option>
+                                <option key={option.value} value={option.value}>
+                                    {timeZoneLabel(option.value)}
+                                </option>
                             ))}
                         </FieldSelect>
                     </div>
@@ -923,7 +1018,8 @@ const ManageStaffModal: React.FC<{
     onClose: () => void
     onUpdate: (data: Partial<TeamRow>) => void
 }> = ({ staff, mentorOptions, onClose, onUpdate }) => {
-    const [name, setName] = useState(staff.name || "")
+    const [firstName, setFirstName] = useState(() => splitName(staff.name || "").first)
+    const [lastName, setLastName] = useState(() => splitName(staff.name || "").last)
     const [email, setEmail] = useState(staff.email || "")
     const [position, setPosition] = useState(staff.position || "")
     const [mentorId, setMentorId] = useState(staff.mentor || "")
@@ -933,11 +1029,17 @@ const ManageStaffModal: React.FC<{
 
     // Same rule as the invite dialog: everything but the mentor has to be answered. An existing
     // member with no position or time zone therefore has to be completed before the edit saves.
-    const canSubmit = name.trim() !== "" && isValidEmail(email) && position !== "" && timeZone !== ""
+    const canSubmit =
+        firstName.trim() !== "" &&
+        lastName.trim() !== "" &&
+        isValidEmail(email) &&
+        position !== "" &&
+        timeZone !== ""
 
     const handleSave = async () => {
         setIsSubmitting(true)
         try {
+            const name = `${firstName.trim()} ${lastName.trim()}`.trim()
             await onUpdate({ name, email, position, mentor: mentorId || null, time_zone: timeZone || null, strikes })
             onClose()
         } catch (error) {
@@ -968,11 +1070,27 @@ const ManageStaffModal: React.FC<{
             </header>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="sm:col-span-2">
+                <div>
                     <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
-                        Name <span className="text-[#B42318]">*</span>
+                        First Name <span className="text-[#B42318]">*</span>
                     </label>
-                    <input type="text" value={name} onChange={(e) => setName(e.target.value)} className={FIELD} />
+                    <input
+                        type="text"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        className={FIELD}
+                    />
+                </div>
+                <div>
+                    <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
+                        Last Name <span className="text-[#B42318]">*</span>
+                    </label>
+                    <input
+                        type="text"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        className={FIELD}
+                    />
                 </div>
                 <div className="sm:col-span-2">
                     <label className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8B8598]">
@@ -1026,7 +1144,9 @@ const ManageStaffModal: React.FC<{
                     <FieldSelect value={timeZone} onChange={setTimeZone}>
                         <option value="">Select A Time Zone</option>
                         {TIME_ZONE_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
+                            <option key={option.value} value={option.value}>
+                                {timeZoneLabel(option.value)}
+                            </option>
                         ))}
                     </FieldSelect>
                 </div>
