@@ -35,17 +35,39 @@ export default withAuth(async (req, res) => {
   rangeStart.setHours(0, 0, 0, 0);
   rangeStart.setDate(rangeStart.getDate() - (days - 1));
 
-  const [dailyRows, leadStatusGroups, contactTotal, bookedContacts] = await Promise.all([
-    prisma.campaignDailyStat.findMany({
-      where: { campaign_id: campaignId, date: { gte: rangeStart } },
-      orderBy: { date: "asc" },
-    }),
-    prisma.campaignContact.groupBy({ by: ["lead_status"], where: { campaign_id: campaignId }, _count: true }),
-    prisma.campaignContact.count({ where: { campaign_id: campaignId } }),
-    // Distinct contacts with a booking, not a booking count — a rebooked/rescheduled contact
-    // should still only count once toward "did this campaign land a meeting with them".
-    prisma.campaignContact.count({ where: { campaign_id: campaignId, bookings: { some: {} } } }),
-  ]);
+  const [dailyRows, leadStatusGroups, contactTotal, bookedContacts, steps, sentByStep, openedByStep, clickedByStep] =
+    await Promise.all([
+      prisma.campaignDailyStat.findMany({
+        where: { campaign_id: campaignId, date: { gte: rangeStart } },
+        orderBy: { date: "asc" },
+      }),
+      prisma.campaignContact.groupBy({ by: ["lead_status"], where: { campaign_id: campaignId }, _count: true }),
+      prisma.campaignContact.count({ where: { campaign_id: campaignId } }),
+      // Distinct contacts with a booking, not a booking count — a rebooked/rescheduled contact
+      // should still only count once toward "did this campaign land a meeting with them".
+      prisma.campaignContact.count({ where: { campaign_id: campaignId, bookings: { some: {} } } }),
+      prisma.campaignStep.findMany({
+        where: { campaign_id: campaignId },
+        orderBy: { step_order: "asc" },
+        select: { id: true, step_order: true, name: true },
+      }),
+      prisma.emailOutboundMessage.groupBy({
+        by: ["step_id"],
+        where: { campaign_id: campaignId, step_id: { not: null } },
+        _count: true,
+      }),
+      // No groupBy for "distinct messages with an OPEN event, by step" — count distinct messages,
+      // not events (a message opened three times still counts once), so this fetches the message
+      // rows themselves and reduces to per-step counts below rather than grouping event rows.
+      prisma.emailOutboundMessage.findMany({
+        where: { campaign_id: campaignId, step_id: { not: null }, email_tracking_events: { some: { event_type: "OPEN" } } },
+        select: { step_id: true },
+      }),
+      prisma.emailOutboundMessage.findMany({
+        where: { campaign_id: campaignId, step_id: { not: null }, email_tracking_events: { some: { event_type: "CLICK" } } },
+        select: { step_id: true },
+      }),
+    ]);
 
   const byDate = new Map(dailyRows.map((row) => [dateKey(row.date), row]));
   const daily = Array.from({ length: days }, (_, i) => {
@@ -72,6 +94,37 @@ export default withAuth(async (req, res) => {
   const leadStatusCounts = Object.fromEntries(leadStatusGroups.map((g) => [g.lead_status, g._count]));
   const repliedCount = contactTotal - (leadStatusCounts["no_response"] ?? 0);
 
+  // Per-step engagement — where the sequence loses people. Sent/opened/clicked only: attributing
+  // a reply to one specific step would mean inferring it from timing (nothing records which step
+  // a reply was "to"), which is a real design call rather than a straightforward count, so it's
+  // deliberately left out here rather than guessed at.
+  const sentCountByStep = new Map(sentByStep.map((row) => [row.step_id as string, row._count]));
+  const countByStep = (rows: { step_id: string | null }[]) => {
+    const counts = new Map<string, number>();
+    for (const row of rows) {
+      if (!row.step_id) continue;
+      counts.set(row.step_id, (counts.get(row.step_id) ?? 0) + 1);
+    }
+    return counts;
+  };
+  const openedCountByStep = countByStep(openedByStep);
+  const clickedCountByStep = countByStep(clickedByStep);
+  const stepBreakdown = steps.map((step) => {
+    const sent = sentCountByStep.get(step.id) ?? 0;
+    const opened = openedCountByStep.get(step.id) ?? 0;
+    const clicked = clickedCountByStep.get(step.id) ?? 0;
+    return {
+      stepId: step.id,
+      stepOrder: step.step_order,
+      name: step.name,
+      sent,
+      opened,
+      clicked,
+      openRate: sent > 0 ? opened / sent : 0,
+      clickRate: sent > 0 ? clicked / sent : 0,
+    };
+  });
+
   res.setHeader("Cache-Control", "private, max-age=30");
   res.status(200).json({
     daily,
@@ -94,5 +147,6 @@ export default withAuth(async (req, res) => {
       bookingRate: contactTotal > 0 ? bookedContacts / contactTotal : 0,
     },
     leadStatusCounts,
+    stepBreakdown,
   });
 }, { methods: ["GET"] });
