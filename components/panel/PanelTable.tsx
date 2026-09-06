@@ -19,11 +19,20 @@ import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react"
 
 const CONTROL_HEIGHT = "h-9"
 
-/** Page frame: the scroll container, gutters and max width every list page sits in. */
+/**
+ * Page frame: gutters and max width. Deliberately not a scroll container.
+ *
+ * It used to be one — `flex-1 overflow-y-auto overflow-x-hidden` — nested inside #right-side-body
+ * in pages/panel.tsx, which is already `h-full overflow-y-auto`. The inner box had no height to
+ * resolve `h-full` against, so it collapsed to whatever the content currently measured, and
+ * anything taller than that overflowed it: an open filter popover was cut off mid-list, and the
+ * empty state was tall enough that switching between "no results" and results flashed a scrollbar
+ * on and off. One scroller, owned by the panel.
+ */
 export const PanelPage: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="w-full h-full bg-white text-[#111014] flex flex-col">
-    <div className="flex-1 px-8 lg:px-14 pt-1 overflow-y-auto overflow-x-hidden">
-      <div className="mx-auto w-full max-w-[1680px] flex flex-col h-full pb-16">{children}</div>
+  <div className="w-full bg-white text-[#111014]">
+    <div className="px-8 lg:px-14 pt-1">
+      <div className="mx-auto w-full max-w-[1680px] pb-16">{children}</div>
     </div>
   </div>
 )
