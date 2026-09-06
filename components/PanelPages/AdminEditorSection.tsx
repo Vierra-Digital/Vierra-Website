@@ -180,7 +180,7 @@ function UsersPanel() {
     const [sortBy, setSortBy] = useState<"name" | "email" | "role" | "session">("role")
     const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
     const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false)
-    const [notice, setNotice] = useState<string>("")
+    const [resetResult, setResetResult] = useState<{ success: boolean; email: string | null } | null>(null)
 
     // Session-side state, carried over wholesale from the view this page absorbed.
     const [expiring, setExpiring] = useState<boolean>(false)
@@ -237,7 +237,7 @@ function UsersPanel() {
         if (sessionResult.status === "fulfilled") {
             setSessions(Array.isArray(sessionResult.value) ? sessionResult.value : [])
         } else {
-            setNotice("Sessions could not be loaded, so the session column is empty.")
+            setError("Sessions could not be loaded, so the session column is empty.")
         }
         setLoading(false)
     }, [])
@@ -272,7 +272,7 @@ function UsersPanel() {
         }
     }, [load])
 
-    const sendPasswordReset = async (userId: string) => {
+    const sendPasswordReset = async (userId: string, email: string | null) => {
         setResetSending((prev) => ({ ...prev, [userId]: true }))
         setError("")
         try {
@@ -282,15 +282,16 @@ function UsersPanel() {
                 body: JSON.stringify({ id: userId }),
             })
             if (r.ok) {
-                setNotice("Password reset link sent.")
+                setResetResult({ success: true, email })
             } else {
                 // A non-ok response used to fall through silently, so a failed send looked identical
                 // to a successful one — the admin had no way to know the email never went out.
                 const body = await r.json().catch(() => ({}))
                 setError(body?.message || `Could not send the reset link (HTTP ${r.status}).`)
+                setResetResult({ success: false, email })
             }
         } catch {
-            setError("Could not send the reset link — the request failed.")
+            setResetResult({ success: false, email })
         } finally {
             setResetSending((prev) => ({ ...prev, [userId]: false }))
         }
@@ -747,7 +748,7 @@ function UsersPanel() {
                                 <RowActionMenu label={`Manage ${u.name || u.email || "user"}`}>
                                     {canManageAccount && (
                                         <RowActionMenuItem
-                                            onClick={() => sendPasswordReset(u.id)}
+                                            onClick={() => sendPasswordReset(u.id, u.email)}
                                             disabled={resetSending[u.id]}
                                             icon={<KeyRound className="w-4 h-4" />}
                                         >
@@ -825,7 +826,6 @@ function UsersPanel() {
             />
 
             {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
-            {notice && !error && <div className="mt-3 text-sm text-[#6B7280]">{notice}</div>}
 
             <ConfirmActionModal
                 isOpen={deleteModalOpen}
@@ -848,6 +848,13 @@ function UsersPanel() {
                     setUserToDelete(null)
                     setDeleteError("")
                 }}
+            />
+
+            <PasswordResetModal
+                isOpen={resetResult !== null}
+                success={resetResult?.success ?? false}
+                email={resetResult?.email ?? null}
+                onClose={() => setResetResult(null)}
             />
 
             <UpdateSessionsModal
@@ -886,6 +893,74 @@ function UsersPanel() {
                 }}
             />
         </PanelPage>
+    )
+}
+
+/** Result of sending a reset link — the same success/failure sheet the other one-shot actions use. */
+const PasswordResetModal: React.FC<{
+    isOpen: boolean
+    success: boolean
+    email: string | null
+    onClose: () => void
+}> = ({ isOpen, success, email, onClose }) => {
+    if (!isOpen) return null
+
+    return (
+        <Modal
+            zIndexClass="z-50"
+            backdropClassName="bg-black/50 backdrop-blur-sm"
+            cardClassName="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
+            label="Password Reset"
+            onClose={onClose}
+        >
+            <div className="flex flex-col items-center text-center">
+                {success ? (
+                    <>
+                        <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
+                            <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-30 animate-ping" />
+                            <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
+                                    <FiCheck className="h-6 w-6" />
+                                </span>
+                            </span>
+                        </div>
+                        <h3 className="text-xl font-semibold text-[#111827] mb-2">Reset Email Sent!</h3>
+                        <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
+                            {email ? (
+                                <>
+                                    A password reset link is on its way to{" "}
+                                    <span className="font-medium text-[#111827]">{email}</span>.
+                                </>
+                            ) : (
+                                "A password reset link has been sent."
+                            )}
+                        </p>
+                    </>
+                ) : (
+                    <>
+                        <div className="relative mb-4 inline-flex h-16 w-16 items-center justify-center">
+                            <span className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+                                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500 text-white">
+                                    <XCircle className="h-6 w-6" />
+                                </span>
+                            </span>
+                        </div>
+                        <h3 className="text-xl font-semibold text-[#111827] mb-2">Failed To Send Reset Email</h3>
+                        <p className={`text-sm text-[#6B7280] mb-6 ${inter.className}`}>
+                            The reset link could not be sent. Please try again.
+                        </p>
+                    </>
+                )}
+                <button
+                    className={`w-full rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                        success ? "bg-[#701CC0] text-white hover:bg-[#5f17a5]" : "bg-red-600 text-white hover:bg-red-700"
+                    }`}
+                    onClick={onClose}
+                >
+                    Done
+                </button>
+            </div>
+        </Modal>
     )
 }
 
